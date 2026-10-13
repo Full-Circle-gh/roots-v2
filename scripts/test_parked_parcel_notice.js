@@ -42,7 +42,9 @@ const Database = require('better-sqlite3');
 const ROOT = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
-let ROUTES = read('routes/retail.js');
+// routes/retail.js and what moved out of it: notifyCustomer now sits in
+// lib/customer-notify.js (decisions §477).
+let ROUTES = require('./test-support/retail-source').retailSource();
 const VOCAB  = read('docs/tacet-delivery-vocabulary.md');
 const DECIDE = read('docs/tacet-consolidation-decisions.md');
 const MINIAPP = read('miniapp/pages/notifications/notifications.js');

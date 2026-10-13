@@ -151,7 +151,7 @@ const { getWeChatAccessToken, refreshWeChatAccessTokenAfter, isWxTokenError } = 
 const { callWxSecWithTokenRetry, isRiskyText, refuseContent, submitImageSecCheck } = require('../lib/wx-content-gate');
 // The store-settings reader and the loyalty rules (points and Roots Club
 // tiers), moved to lib/ (decisions §477).
-const { cfgValue } = require('../lib/store-config');
+const { cfgValue, loadConfig } = require('../lib/store-config');
 const {
   DEFAULT_ROOTS_CLUB_TIERS, tierMultiplierFor, reconcileTier,
   pointsEarnedFor, pointsEarnBaseAmount, nextEarnExpiry, sweepExpiredPoints, pointsRedeemRate,
@@ -173,6 +173,10 @@ const {
   ADDRESS_PUBLIC_COLS, normalizeChinaAddress, geocodeAddressAsync,
   autoTranslateAddressCn, addressHasLatin, provinceForCity,
 } = require('../lib/addresses');
+// The whole-config loader (above, with cfgValue), the page-layout whitelist and
+// show_on defaults, and the customer's in-app inbox, moved to lib/ (decisions §477).
+const { ALLOWED_PAGES, SHOW_ON_VALUES, withShowOn } = require('../lib/page-layout');
+const { notifCategoryEnabled, notifyCustomer } = require('../lib/customer-notify');
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
 // than crashing — the image endpoint just skips the resize branch when null.
@@ -455,16 +459,6 @@ const MEDIA_INLINE_MIME = new Set([
 ]);
 
 // ─── Storefront config ──────────────────────────────────────────────────
-// Keys whose prefix is in this set are FILTERED OUT of the public
-// /api/retail/config response — they hold third-party API secrets
-// (kd100 key, JD app_secret, etc.) and must never reach the mini app.
-// 'reviews.topup' is operator-only: publishing it would announce, to anyone
-// who opens /api/retail/config, that the store seeds its own reviews.
-// 'reviews.reward' is deliberately NOT private — it is an offer to the
-// customer, and the mini app reads the amount straight from here.
-// `kitchen.` — §432: the kitchen group's WeCom webhook is a licence to post
-// into that group, and the public config is served to anyone who asks.
-const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.', 'reviews.topup', 'kitchen.'];
 
 // §436 — staff group-bot URLs (WeCom webhooks, secret in `key=`). The server
 // and the admin config still read them, so they are not private; they are
@@ -521,33 +515,6 @@ function shopSqlShift() {
   const shift = businessDate.sqlDayShiftForShop(tdb());
   _tzMemo.set(tid, { at: now, shift });
   return shift;
-}
-function loadConfig() {
-  const rows = tdb().prepare('SELECT key, value_json FROM storefront_config').all();
-  const out = { version: 0 };
-  for (const { key, value_json } of rows) {
-    if (PRIVATE_CONFIG_PREFIXES.some(p => key.startsWith(p))) continue;
-    let v; try { v = JSON.parse(value_json); } catch { v = value_json; }
-    setPath(out, key.split('.'), v);
-  }
-  const t = tdb().prepare("SELECT COALESCE(MAX(strftime('%s', updated_at)), 0) AS t FROM storefront_config").get();
-  out.version = Number(t?.t || 0);
-  // Every published page layout leaves here with `show_on` explicit on each
-  // block (see SHOW_ON_DEFAULTS), so the mini app and the web shop filter on
-  // one value rather than each guessing a type's default.
-  for (const page of ALLOWED_PAGES) {
-    if (out[page] && Array.isArray(out[page].layout)) out[page].layout = withShowOn(out[page].layout);
-  }
-  return out;
-}
-function setPath(obj, path, value) {
-  let cur = obj;
-  for (let i = 0; i < path.length - 1; i++) {
-    const seg = path[i];
-    if (cur[seg] == null || typeof cur[seg] !== 'object' || Array.isArray(cur[seg])) cur[seg] = {};
-    cur = cur[seg];
-  }
-  cur[path[path.length - 1]] = value;
 }
 
 // Canonical display-currency object from a (possibly partial/absent) stored
@@ -8123,37 +8090,6 @@ function notifyTrackingScenario(orderId, scenario) {
 }
 
 // ─── In-app notification center ───────────────────────────────────────────
-// Operator switch (Broadcasts page → Automatic notifications) that mutes a
-// whole category of system-generated notifications. Off means neither the
-// in-app row nor the WeChat push is created. Categories with no explicit entry
-// — notably 'broadcast', which is always operator-initiated — stay enabled.
-function notifCategoryEnabled(cat) {
-  try {
-    const cats = loadConfig().notifications?.categories;
-    if (cats && Object.prototype.hasOwnProperty.call(cats, cat)) return cats[cat] !== false;
-  } catch (e) { /* fall through to enabled */ }
-  return true;
-}
-
-// Persistent per-customer inbox (orders / refunds / invoices for v1), written
-// from the same server events that fire the WeChat push. Surfaced in the mini
-// app's Notifications page. Best-effort — never throws into the caller.
-function notifyCustomer(customerId, n) {
-  if (!customerId || !n || !n.category || !n.type) return;
-  if (!notifCategoryEnabled(n.category)) return;   // operator muted this category
-  try {
-    tdb().prepare(
-      `INSERT INTO retail_notifications
-         (customer_id, category, type, title_en, title_cn, body_en, body_cn, ref_type, ref_id)
-       VALUES (?,?,?,?,?,?,?,?,?)`
-    ).run(
-      customerId, n.category, n.type,
-      n.title_en || '', n.title_cn || '',
-      n.body_en || null, n.body_cn || null,
-      n.ref_type || null, n.ref_id != null ? String(n.ref_id) : null
-    );
-  } catch (e) { console.warn('[notify]', e.message); }
-}
 
 // Resolve an order's customer + order_no, then write a notification. `build`
 // receives the order row {customer_id, order_no} and returns the fields.
@@ -35521,49 +35457,6 @@ const ALLOWED_BLOCK_TYPES = new Set([
   'wechat_oa',                        // replaced 2026-05-19 by wecom_contact
   'sticker_collage', 'progress_dots', // decorative gimmicks, removed 2026-05-30
 ]);
-
-// CMS-editable pages. Each has its own `<page>.layout` (live) and
-// `cms.draft.<page>_layout` (draft) entries in storefront_config. Add a
-// new page by appending to this whitelist — no schema change needed.
-// `about` is a hardcoded mini app page (/pages/about/about), not CMS-driven —
-// brand identity, intentionally pinned in code.
-const ALLOWED_PAGES = new Set(['home', 'promotions', 'membership', 'categories', 'onboarding']);
-
-// ── Where a block shows: `show_on` ─────────────────────────────────────────
-// One layout feeds two customer surfaces — the WeChat mini app and the web
-// shop (public/shop.html). `show_on` on a block says which of them draw it:
-//   'both'    — the default for nearly every type
-//   'miniapp' — the mini app only (the web shop skips it)
-//   'web'     — the web shop only (the mini app skips it)
-// The four types that default to 'miniapp' lead somewhere the web shop does
-// not have yet: shop.html's ctaRoute() answers wallet / notifications / order
-// targets with "coming soon", so a points, top-up, notification or order
-// tracker block on the website is a promise the site cannot keep. The default
-// is applied on the way OUT (readLayout for the editor, loadConfig for the
-// customer surfaces, the two draft overlays) and never written back: publish,
-// revert and brand-publish copy the STORED layout (readLayoutStored), so a
-// block that never had the field keeps following this table if the table
-// changes. A layout published before the field existed therefore behaves the
-// same as one saved after it, and the four renderers (mini app, shop.html,
-// storefront.html, the editor canvas) read one explicit value instead of each
-// carrying a copy of this table. The editor
-// carries the same four-type table for a block added and not yet saved; the
-// test `scripts/test_cms_show_on.js` holds the two copies equal.
-// Decided by Ash 2026-09-26 — docs/tacet-consolidation-decisions.md §272.
-const SHOW_ON_VALUES = new Set(['both', 'miniapp', 'web']);
-const SHOW_ON_DEFAULTS = Object.freeze({
-  order_tracker: 'miniapp', notification_bar: 'miniapp',
-  points_widget: 'miniapp', top_up: 'miniapp',
-});
-function showOnFor(block) {
-  if (block && SHOW_ON_VALUES.has(block.show_on)) return block.show_on;
-  return (block && SHOW_ON_DEFAULTS[block.type]) || 'both';
-}
-// Returns a copy of the layout with `show_on` explicit on every block.
-function withShowOn(layout) {
-  if (!Array.isArray(layout)) return layout;
-  return layout.map(b => (b && typeof b === 'object') ? { ...b, show_on: showOnFor(b) } : b);
-}
 
 // Onboarding gating modes. See /api/retail/config surfacing above + the
 // /onboarding-settings admin endpoints below.
