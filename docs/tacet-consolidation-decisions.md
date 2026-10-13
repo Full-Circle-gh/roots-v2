@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.523
+# Tacet shared-core consolidation — decisions record, v4.524
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,9 +22,11 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-13 · v4.523 — **§475 · A MANAGER APPROVES A TILL DISCOUNT WITH THEIR PIN — DECIDED BY ASH:** *"pin"*, then *"go"* to the design put to him: each manager sets a 4–6 digit PIN on their own account; at a till signed in as staff, the cashier picks the manager by name and the manager types the PIN; the discount is recorded under the manager. Five wrong PINs lock that manager's PIN for fifteen minutes. A manager signed in themselves needs no PIN, as §474 had it. See §475.
+2026-10-13 · v4.524 — **§475 · A MANAGER APPROVES A TILL DISCOUNT WITH THEIR PIN — DECIDED BY ASH:** *"pin"*, then *"go"* to the design put to him: each manager sets a 4–6 digit PIN on their own account; at a till signed in as staff, the cashier picks the manager by name and the manager types the PIN; the discount is recorded under the manager. Five wrong PINs lock that manager's PIN for fifteen minutes. A manager signed in themselves needs no PIN, as §474 had it. See §475.
 
-2026-10-13 · v4.522 — **§474 · A MANAGER CAN TAKE UP TO 20% OFF A TILL SALE, WITH A REASON — DECIDED BY ASH:** *"if I want to give more discount manually in the till I can't do it right now"*, with a photo of a till bill carrying the Ramada Staff 10%, then *"go, managers only, max 20%, reasoozn required"* to the proposal. A **Discount** button on the till (5 / 10 / 15 / 20% or a typed amount, a reason from Damaged / Friends & family / Complaint / Other, a note required for Other), behind a new capability `till:discount` that the manager presets carry and the shop floor does not. It comes off the goods **after** the voucher and **before** tax, is stored in its own columns beside `voucher_amount` with its reason and the giver's name, prints on the receipt, shows on the order on desktop and phone, and is counted on the dashboard by person and reason. **Reverses** the till's "no price override at the counter" (the `till:use` note in `lib/capabilities.js`), for this one bounded act. See §474.
+2026-10-13 · v4.523 — **§474 · A MANAGER CAN TAKE UP TO 20% OFF A TILL SALE, WITH A REASON — DECIDED BY ASH:** *"if I want to give more discount manually in the till I can't do it right now"*, with a photo of a till bill carrying the Ramada Staff 10%, then *"go, managers only, max 20%, reasoozn required"* to the proposal. A **Discount** button on the till (5 / 10 / 15 / 20% or a typed amount, a reason from Damaged / Friends & family / Complaint / Other, a note required for Other), behind a new capability `till:discount` that the manager presets carry and the shop floor does not. It comes off the goods **after** the voucher and **before** tax, is stored in its own columns beside `voucher_amount` with its reason and the giver's name, prints on the receipt, shows on the order on desktop and phone, and is counted on the dashboard by person and reason. **Reverses** the till's "no price override at the counter" (the `till:use` note in `lib/capabilities.js`), for this one bounded act. See §474.
+
+2026-10-13 · v4.522 — **§476 · THE DEFAULT PRIMARY BUTTON IS INK, NOT AMBER — DECIDED BY ASH:** *"go,ink"*, to the recommendation in the 2026-10-13 page audit. `.btn-primary` stops painting `--brass` (Tacet amber) and fills Ink at weight 500; Dusk stays the per-page choice it already is. Numbered §476 because §474 and §475 are held by open PRs #1144 and #1146.
 
 2026-10-13 · v4.521 — **§473 · A PICK-ANY QUESTION CAN LET ONE ANSWER BE PICKED MORE THAN ONCE (§153 AMENDED) — DECIDED BY ASH:** *"can't select 2 items that are the same for example 2 medjool boats"*, with a photo of the till's *Small Bites Selection* sheet (*At least 2*), then three choices put to him: a switch per question, a − n + counter on each answer, everywhere at once. A new `allow_repeat` column on `retail_product_options`, 0 on every existing row, so nothing already authored changes. With it on, a pick-any question counts every pick toward its floor and ceiling, charges each one and takes each one off a linked shelf. A repeat is stored on the order line as the same entry written twice, so money, stock and cost need no second rule; printers fold it into *Medjool Boats ×2*. Two Chinese strings composed by Claude; see the vocabulary's v1.330. Schema: one added column. No change to `.gitignore` or CI. See §473.
 
@@ -31058,3 +31060,39 @@ the paid sale recorded under the manager. Eight Chinese strings composed by
 Claude (vocabulary v1.332). Schema: one column on `tenant_users`, added the way
 that table's other columns are, in `routes/backend-auth.js`. No change to
 `.gitignore` or CI.
+
+## §476 — THE DEFAULT PRIMARY BUTTON IS INK, NOT AMBER
+
+**Numbered §476, not §474.** §474 and §475 are held by two PRs open when this
+one was written (#1144, #1146).
+
+**Decided by Ash, 2026-10-13:** *"go,ink"*, to the question put with the
+page-by-page design audit of the same day: what should the shared
+`.btn-primary` become once it stops being amber?
+
+**Why it had to change.** `.btn-primary` fills with `--brass`, which the
+rebrand pointed at `--td-amber`. Amber is Tacet's warning colour
+(`tacet-design-system.md` §1), never a button. The audit counted 13 amber
+buttons in Settings, 9 in the setup guide, and more on Media, Feedback and
+the Delivery drawers — every page not yet rebuilt.
+
+**Why not Dusk.** Dusk means *Tacet did this for you*, one per screen at
+most (`tacet-desktop-patterns.md` §1.8), and an A4 Console carries none.
+Making the base class Dusk would have put 13 Dusk buttons on Settings alone.
+
+**The rule.**
+
+1. **The base `.btn-primary` is Ink fill, Paper text, weight 500.** It is the
+   neutral "this is the main action here" button, with no claim about who is
+   acting.
+2. **Dusk is opted into per page,** by a page-scoped class on the one element
+   that earns it — the shape Orders, Customers, Voting and Sales already use.
+   Nothing that is Dusk today changes.
+3. **Pages rebuilt later still choose properly:** the header create action is
+   Dusk (§1.7), a Console save is Secondary (§2 A4). Rule 1 is the floor for
+   pages not yet rebuilt, not the answer for them.
+
+**Where it runs.** One rule in `public/retail-admin.css`. Done as one of the
+shared-style PRs that follow the audit (the page title, table header, label,
+card and button bases), each its own PR. No change to `.gitignore` or CI.
+
