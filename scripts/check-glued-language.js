@@ -73,9 +73,10 @@ const REPO = path.join(__dirname, '..');
    159 → 135 the same day: Settings' mixed help paragraphs became
    data-lang-block pairs (the splitter skips those by design).
    135 → 127: the same for Settings → Delivery.
-   127 → 125: the Share cards tip, likewise. */
+   127 → 125: the Share cards tip, likewise.
+   125 → 119: the Team lead paragraph, likewise. */
 const BUDGET = 0;
-const ORPHAN_BUDGET = 125;
+const ORPHAN_BUDGET = 119;
 
 const CJK = /[一-鿿]/;
 const VOID = new Set(['br', 'img', 'input', 'hr', 'meta', 'link', 'source',
