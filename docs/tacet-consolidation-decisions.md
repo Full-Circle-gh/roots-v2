@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.524
+# Tacet shared-core consolidation — decisions record, v4.525
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-13 · v4.525 — **§477 · THE HELPERS `retail.js` SHARES ACROSS AREAS MOVE INTO `lib/`, ONE GROUP PER PR, BEFORE THE BIG AREAS MOVE — DECIDED BY ASH:** *"go for it"*, to the plan put after admin orders was recorded. Customers could not move cleanly: its endpoints lean on 28 helpers that orders and checkout share. Those helpers leave `routes/retail.js` for `lib/` modules in groups, smallest first, each a pure move that keeps all 239 recorded answers (§472). First group: the WeChat access token and the content checks. §474–§476 went to #1144 and #1148. No string, no schema, no change to `.gitignore` or CI. See §477.
 
 2026-10-13 · v4.524 — **§475 · A MANAGER APPROVES A TILL DISCOUNT WITH THEIR PIN — DECIDED BY ASH:** *"pin"*, then *"go"* to the design put to him: each manager sets a 4–6 digit PIN on their own account; at a till signed in as staff, the cashier picks the manager by name and the manager types the PIN; the discount is recorded under the manager. Five wrong PINs lock that manager's PIN for fifteen minutes. A manager signed in themselves needs no PIN, as §474 had it. See §475.
 
@@ -31096,3 +31098,46 @@ Making the base class Dusk would have put 13 Dusk buttons on Settings alone.
 shared-style PRs that follow the audit (the page title, table header, label,
 card and button bases), each its own PR. No change to `.gitignore` or CI.
 
+## §477 — THE HELPERS `retail.js` SHARES ACROSS AREAS MOVE INTO `lib/`, ONE GROUP PER PR
+
+**Decided by Ash, 2026-10-13:** *"go for it"*, to the plan put to him once
+admin orders had been recorded (§472).
+
+**Why.** §470 moves areas out of `routes/retail.js` and hands each part the
+helpers it still needs. That works for small areas: feedback needed 7. The
+customers area needs 36, and 28 of them are helpers that orders and checkout
+use too. Handing 28 functions into a part is a split in name only, so the
+shared helpers move first, into modules any file can `require`.
+
+**The rules.**
+
+1. **One group per PR, smallest first.** A group is a set of helpers that
+   belong together: following each helper's own dependencies decides what is
+   in it, not a guess. The planned order is: the WeChat access token and
+   content checks; points; customer display and notifications; addresses and
+   geocoding; counter vouchers.
+2. **Each move is a pure move.** Function bodies are byte for byte what they
+   were. `retail.js` loads the module where the definitions used to be listed,
+   so every caller in it is unchanged. Nothing outside the group changes in the
+   same PR. A part that receives a moved helper by hand-in keeps doing so until
+   that part is next touched.
+3. **The recorded answers are the gate.** Every move keeps all 239 answers in
+   `scripts/test_retail_golden.js` identical, unchanged and not re-recorded,
+   plus the fast shard.
+4. **A module holds its own state.** Where a helper keeps a cache, the cache
+   moves with it, so there is still exactly one.
+5. **One source for a shared value.** Where two groups need the same constant,
+   it moves to a small module of its own instead of being copied.
+
+**The first group.** Following `isRiskyText`, `refuseContent` and
+`submitImageSecCheck` down their dependencies gives 13 statements:
+
+- `lib/wx-access-token.js`: `getWeChatAccessToken`,
+  `refreshWeChatAccessTokenAfter`, `isWxTokenError`, the error-code set, the
+  per-app token cache and the forced-refresh cooldown;
+- `lib/wx-content-gate.js`: `wxSecToken`, `callWxSecWithTokenRetry`,
+  `isRiskyText`, `refuseContent`, `submitImageSecCheck`;
+- `lib/public-origin.js`: `WECHAT_PAY_NOTIFY_URL` and `PAY_NOTIFY_ORIGIN`, which
+  the payment code and the image check both read.
+
+No string, no schema, no change to `.gitignore` or CI.
