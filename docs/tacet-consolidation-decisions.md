@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.522
+# Tacet shared-core consolidation — decisions record, v4.524
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-13 · v4.524 — **§475 · A MANAGER APPROVES A TILL DISCOUNT WITH THEIR PIN — DECIDED BY ASH:** *"pin"*, then *"go"* to the design put to him: each manager sets a 4–6 digit PIN on their own account; at a till signed in as staff, the cashier picks the manager by name and the manager types the PIN; the discount is recorded under the manager. Five wrong PINs lock that manager's PIN for fifteen minutes. A manager signed in themselves needs no PIN, as §474 had it. See §475.
+
+2026-10-13 · v4.523 — **§474 · A MANAGER CAN TAKE UP TO 20% OFF A TILL SALE, WITH A REASON — DECIDED BY ASH:** *"if I want to give more discount manually in the till I can't do it right now"*, with a photo of a till bill carrying the Ramada Staff 10%, then *"go, managers only, max 20%, reasoozn required"* to the proposal. A **Discount** button on the till (5 / 10 / 15 / 20% or a typed amount, a reason from Damaged / Friends & family / Complaint / Other, a note required for Other), behind a new capability `till:discount` that the manager presets carry and the shop floor does not. It comes off the goods **after** the voucher and **before** tax, is stored in its own columns beside `voucher_amount` with its reason and the giver's name, prints on the receipt, shows on the order on desktop and phone, and is counted on the dashboard by person and reason. **Reverses** the till's "no price override at the counter" (the `till:use` note in `lib/capabilities.js`), for this one bounded act. See §474.
 
 2026-10-13 · v4.522 — **§476 · THE DEFAULT PRIMARY BUTTON IS INK, NOT AMBER — DECIDED BY ASH:** *"go,ink"*, to the recommendation in the 2026-10-13 page audit. `.btn-primary` stops painting `--brass` (Tacet amber) and fills Ink at weight 500; Dusk stays the per-page choice it already is. Numbered §476 because §474 and §475 are held by open PRs #1144 and #1146.
 
@@ -30932,6 +30936,130 @@ Meituan and Eleme, which carry no choice ids.
 Held by `scripts/test_option_repeats.js`. Two Chinese strings composed by
 Claude (vocabulary v1.330). Schema: one added column, through `addColumn`. No
 change to `.gitignore` or CI.
+
+## §474 — A MANAGER CAN TAKE UP TO 20% OFF A TILL SALE, WITH A REASON
+
+**Decided by Ash, 2026-10-13:** *"if I want to give more discount manually in
+the till I can't do it right now . I need the option to do it"*, with a photo
+of a till bill showing *Ramada Staff −¥4.30*. A proposal was put to him (a
+button with quick percentages, a required reason, a capability, its own line on
+the order), with a warning against the easier build — letting the cashier type
+over a price or the total, which leaves no record of how much was given away,
+by whom or why. He answered *"go, managers only, max 20%, reasoozn required"*.
+
+**What it reverses.** The till was built with no price override on purpose
+(the `till:use` note in `lib/capabilities.js`: *"prices come from
+products.sell_price and the cashier cannot type over them"*). That stays true
+for prices. What changes is that a manager can take a bounded discount off the
+bill, and it is recorded as a discount, not as a different price.
+
+**The rules.**
+
+1. **Managers only.** A new capability, `till:discount`, money-marked. The
+   `admin`/`manager` presets carry it through `ALL_KEYS`, `store_manager` lists
+   it, `staff` does not. Live tenants get it by a once-only backfill onto their
+   `admin`, `manager` and `store_manager` role rows
+   (`migrateTillDiscountCap`, ledger `grant_till_discount_to_managers_v1`). The
+   owner always may.
+2. **The server checks it whatever `rbac_enforce` says, and fails closed.**
+   This is the one capability check that does not follow the layer's fail-open
+   rule (`manualDiscountDenied` in `routes/retail.js`). Ash's condition was
+   "managers only", a hidden button is not a permission, and every tenant today
+   runs with enforcement off. A refused discount costs nothing: the sale can
+   still be rung at the shelf price.
+3. **At most 20%, of the goods after any voucher, before tax.** The voucher
+   (§426) is the shop's standing promotion and comes off first. The hand
+   discount is a decision about what is left. Tax is worked on what was
+   charged. A typed amount is held to the same 20% as a percentage, so ¥40 off
+   a ¥43 bill cannot walk past the limit.
+4. **A reason is required.** One of `damaged`, `friends_family`, `complaint`,
+   `other`. `other` needs a note in the cashier's own words (up to 120
+   characters).
+5. **The till only.** The same marks as the §426 voucher: a counter sale from
+   the till with a store. Never on the admin's New order, and never beside a
+   typed grand total, which already says what the customer pays.
+6. **Its own record.** `retail_orders.manual_discount_amount` (registered in
+   `lib/money-columns.js` as a source amount), `_reason`, `_note`, and `_by`, the
+   giver's display name as text, because tenant and kitchen user ids collide
+   (v4.85). Kept apart from `voucher_amount` because they answer different
+   questions, and the reports count them apart.
+7. **Where it shows.** The till's bill (*Discount 10% · Damaged −¥4.30*, under
+   the voucher), the printed receipt (*Discount*), the order on desktop (the
+   money subline, a *Till discount* tile with the reason, note and name, and the
+   money-gap check) and on the phone, and the dashboard: a *Till discounts* list
+   by person and reason, the revenue composition's hover, and the AI digest.
+
+**The arithmetic lives once.** `lib/till-discount.js` is the authority; the
+till carries a copy for the glass and the server works the figure out again
+from what is posted.
+
+**Not changed.** Prices. A recalled QR order (the till does not offer the
+button on one: the customer priced it on their own phone). A held bill does not
+keep its discount: holding clears it, and it is given again when the bill comes
+back. The mini app's own order screen does not show the line yet; a customer
+who was given one sees the lower total.
+
+**Open, for Ash.** The till is often signed in under one account for the whole
+shift. The button only shows when that account holds `till:discount`. If the
+counter tablet runs on a shop-floor login, a manager cannot give a discount
+there without signing in. **Closed by §475**, in the same PR: a manager
+approves with their PIN.
+
+Three existing suites pinned what this changes and were updated, not skipped:
+`test_tenant_roles.js` (24 money-moving capabilities of 119, and the store
+manager's seven), `test_till_hold.js` (the till's click selector now ends in
+the discount's three attributes), and the New order forms' refusal maps
+(`test_phone_order.js`, `verify-fulfilment-types.js`), which now give
+`manual_discount_till_only` a home and a sentence although neither form can
+trigger it — the rule those maps exist for.
+
+Held by `scripts/test_till_manual_discount.js` (fast shard). Six Chinese
+strings composed by Claude (vocabulary v1.331). Schema: four added columns,
+through `addColumn`. One new capability and its backfill. No change to
+`.gitignore` or CI.
+
+## §475 — A MANAGER APPROVES A TILL DISCOUNT WITH THEIR PIN
+
+**Decided by Ash, 2026-10-13:** *"pin"*, to §474's open item (the counter
+tablet is often signed in as a shop-floor account, so the Discount button never
+showed there), then *"go"* to this design.
+
+**The rules.**
+
+1. **Each manager sets their own PIN**, 4 to 6 digits, under Account →
+   Security (desktop `backend-account.html`, phone `m.html`), beside Change
+   password. The current password is required, as for a password change.
+   Only someone who may give a till discount (`till:discount`, or the owner)
+   can set one. Stored bcrypt-hashed in `tenant_users.till_pin`; `/me` says
+   only whether one is set (`hasTillPin`).
+2. **At a till whose operator cannot give a discount**, the Discount button
+   shows when at least one manager has a PIN. The sheet adds the managers by
+   name; the cashier picks one and the manager types the PIN. Apply checks it
+   (`POST /api/retail-admin/till-pin/check`), and the sale sends it again and
+   the server checks again.
+3. **The discount is recorded under the manager**, in
+   `manual_discount_by`, and in the activity log beside the cashier who rang
+   the sale.
+4. **A name, then a PIN — not a PIN alone.** A PIN alone would have to be
+   unique across the business, and refusing one because a colleague uses it
+   tells the person choosing it that colleague's PIN.
+5. **Five wrong PINs lock that manager's PIN for fifteen minutes**, whoever is
+   typing (`lib/till-pin.js`). Counted in the server process; a restart clears
+   it.
+6. **A wrong PIN is a 400, not a 403.** The till reads every 403 as "you are
+   signed out" and would tell the cashier to sign in again.
+7. **Nothing else moves.** The 20% limit, the reason and every refusal of
+   §474 apply unchanged; a manager signed in themselves needs no PIN.
+
+**Not built.** Removing a PIN from the screens (the server accepts an empty
+one; a manager can change theirs at any time). A list of who tried a PIN.
+
+Held by `scripts/test_till_pin.js` (fast shard, 33 checks) and driven in
+Chromium: a staff-signed-in till, a wrong PIN refused, the right one applied,
+the paid sale recorded under the manager. Eight Chinese strings composed by
+Claude (vocabulary v1.332). Schema: one column on `tenant_users`, added the way
+that table's other columns are, in `routes/backend-auth.js`. No change to
+`.gitignore` or CI.
 
 ## §476 — THE DEFAULT PRIMARY BUTTON IS INK, NOT AMBER
 

@@ -332,7 +332,7 @@ function bill(ctx) {
      /if \(S\.lines\.length && !S\.heldId\) \{ S\.leaveOpen = true;/.test(src));
   ok('reset forgets the bill on screen', /function reset\(\) \{\n[^\n]*S\.heldId = null/.test(src));
   ok('Hold sits under Mark paid', /id="pay"[^\n]*\n\s*<button class="hold" id="hold"[^>]*data-hold="ask"/.test(src));
-  ok('taps reach Hold and the held rows', /\[data-hold\],\[data-held\]'\)/.test(src));
+  ok('taps reach Hold and the held rows', /\[data-hold\],\[data-held\][\],\[a-z-]*'\)/.test(src));
 }
 
 // ---- 16. §461 — a held bill takes its shelf lines on the server while it is held

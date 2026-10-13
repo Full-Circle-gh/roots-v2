@@ -4089,6 +4089,15 @@ function dashRenderGeo() {
   })));
 }
 
+// §474 — the four reasons a till discount is given for, as the till offers
+// them. The stored value is the key; an unknown one prints as it was stored.
+// Plain text: dashBarList escapes it.
+function tillDiscountReasonLabel(r) {
+  const L = { damaged: ['Damaged', '破损'], friends_family: ['Friends & family', '亲友'],
+              complaint: ['Complaint', '投诉'], other: ['Other', '其他'] }[r];
+  return L ? cuT(L[0], L[1]) : String(r || '');
+}
+
 function dashRenderMarketing() {
   const v = (DASH_DATA.marketing && DASH_DATA.marketing.vouchers) || [];
   const p = (DASH_DATA.marketing && DASH_DATA.marketing.points) || {};
@@ -4099,6 +4108,17 @@ function dashRenderMarketing() {
     + '</div>';
   html += '<div class="db-group-h">Vouchers · 优惠券</div>';
   html += v.length ? dashBarList(v.map(x => ({ k: x.code || '—', kSub: `${dashNum(x.uses)} ${cuT('uses','次')}`, value: '−' + dashMoney(x.discount), valueSub: `${dashMoney(x.revenue)} ${cuT('rev','营收')}`, frac: x.uses }))) : '<div class="db-muted">No vouchers redeemed · 无优惠券核销</div>';
+  // §474 — the hand discounts managers gave at the till: who, why, how much.
+  // Drawn only when there is one, so a shop that never uses it sees no new row.
+  const md = (DASH_DATA.marketing && DASH_DATA.marketing.manualDiscounts) || [];
+  if (md.length) {
+    html += '<div class="db-group-h">Till discounts · 收银台折扣</div>';
+    html += dashBarList(md.map(x => ({
+      k: x.by_name || '—',
+      kSub: `${tillDiscountReasonLabel(x.reason)} · ${dashNum(x.uses)} ${cuT('uses','次')}`,
+      value: '−' + dashMoney(x.discount), frac: x.discount,
+    })));
+  }
   $('#db-marketing').innerHTML = html;
 }
 
@@ -4226,6 +4246,7 @@ function dashRenderComposition() {
   const delivery = Number(c.delivery_fee || 0);
   const balance  = Number(c.balance_total || 0);   // store credit spent on orders
   const discount = Number(c.voucher_total || 0) + Number(c.points_total || 0);
+  const tillDisc = Number(c.manual_discount_total || 0);   // §474 — a manager's, by hand
   const net      = Number(c.net_total || 0);       // order.total = cash residual only
   const tuRecv   = Number(tp.received || 0);        // real top-up cash in (already in revenue)
   const tuUsed   = Number(tp.redeemed != null ? tp.redeemed : balance);  // store credit redeemed
@@ -4238,6 +4259,7 @@ function dashRenderComposition() {
   // discounts − store credit); a top-up line makes prepaid cash visible.
   const deductParts = [];
   if (discount > 0) deductParts.push(cuT(`${dashMoney(discount)} in voucher and point discounts`, `优惠券与积分让利 ${dashMoney(discount)}`));
+  if (tillDisc > 0) deductParts.push(cuT(`${dashMoney(tillDisc)} in till discounts`, `收银台折扣 ${dashMoney(tillDisc)}`));
   if (balance > 0)  deductParts.push(cuT(`${dashMoney(balance)} paid from store credit`, `门店储值抵扣 ${dashMoney(balance)}`));
   const netTitle = deductParts.length
     ? escapeAttr(cuT(`after ${deductParts.join(' and ')}`, `已扣除 ${deductParts.join('、')}`))
@@ -4584,6 +4606,7 @@ function dashAiDigest() {
     revenue_composition: D.composition ? {
       products: r2(D.composition.product_total), delivery_fees: r2(D.composition.delivery_fee),
       voucher_discounts: r2(D.composition.voucher_total), point_discounts: r2(D.composition.points_total),
+      till_discounts: r2(D.composition.manual_discount_total),
       store_credit_used: r2(D.composition.balance_total), net: r2(D.composition.net_total),
     } : null,
     wallet: D.topups ? { topups_received: r2(D.topups.received), store_credit_redeemed: r2(D.topups.redeemed) } : null,

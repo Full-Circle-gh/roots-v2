@@ -4981,6 +4981,20 @@ addColumn('retail_orders', 'refund_cash_amount', 'REAL');
 // it as its own line and the money checks can account for it. 0 on every
 // order not settled on an international card.
 addColumn('retail_orders', 'card_surcharge_fee', 'REAL DEFAULT 0');
+// §474 — a discount a manager gives by hand at the till, ¥. Off the goods
+// AFTER any voucher and BEFORE tax, so it is already out of `total`, exactly as
+// voucher_amount is. Kept apart from voucher_amount because the two answer
+// different questions: a voucher is a promotion the shop set up, this is a
+// person's decision at the counter, and the reports count them separately.
+// The reason is one of a short fixed list (MANUAL_DISCOUNT_REASONS in
+// routes/retail.js); the note is the cashier's own words and is required only
+// for 'other'. `_by` is the operator's display name as it was at the time,
+// stored as text because tenant and kitchen user ids collide (decisions v4.85).
+// 0 / NULL on every order without one.
+addColumn('retail_orders', 'manual_discount_amount', 'REAL DEFAULT 0');
+addColumn('retail_orders', 'manual_discount_reason', 'TEXT');
+addColumn('retail_orders', 'manual_discount_note', 'TEXT');
+addColumn('retail_orders', 'manual_discount_by', 'TEXT');
 
 // ── Unfinished "New order" forms ───────────────────────────────────────────────
 // A SEPARATE TABLE, deliberately NOT a 'draft' value on retail_orders.status.
