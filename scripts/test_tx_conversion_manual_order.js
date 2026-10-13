@@ -65,7 +65,7 @@ const SCHEMA_SRC = fs.readFileSync(path.join(ROOT, 'schema.sql'), 'utf8');
 // up as a green assertion that never ran, not as an error. §24 records exactly
 // that mistake ("an anchor must contain no line ending at all"); normalising
 // once here is the version of that rule this suite can enforce mechanically.
-const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8').replace(/\r\n/g, '\n');
+const RETAIL_SRC = require('./test-support/retail-source').retailSource();
 
 const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 

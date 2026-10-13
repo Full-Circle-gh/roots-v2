@@ -159,7 +159,7 @@ const { openTablesDb, addTables, addForkedStoreProducts } = require('./test-supp
 const { withTransaction } = require('../lib/db-transaction');
 const DB_SRC = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
 const SCHEMA_SRC = fs.readFileSync(path.join(ROOT, 'schema.sql'), 'utf8');
-const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8').replace(/\r\n/g, '\n');
+const RETAIL_SRC = require('./test-support/retail-source').retailSource();
 const HANDLER_ANCHOR =
   "router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), async (req, res) => {";
 
@@ -367,7 +367,7 @@ async function place(taxCfg, body) {
     yes(withNo.indexOf('Tax no. GB123456789') > 0, 'the seller’s registration number prints beside the tax');
     const noTaxButNumber = feie.renderOrder('receipt', base, items, 'Shop', [], { taxNumber: 'GB123456789' });
     is(/Tax no\./.test(noTaxButNumber), false, 'and not on an order that carried no tax');
-    const ret = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+    const ret = require('./test-support/retail-source').retailSource();
     is((ret.match(/taxNumber: taxSettings\(\)\.number/g) || []).length, 3,
        'all three print call sites hand it over — a field nothing reads is a field that lies');
   }

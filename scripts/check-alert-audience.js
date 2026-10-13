@@ -49,8 +49,11 @@ const ALLOWED = new Map([
     'watches whether the app is serving at all; a box that is down or '
     + 'overloaded is not any one merchant\'s problem'],
   [path.join('routes', 'retail.js'),
-    'two deliberate platform sites, both commented: a server-log pointer, and '
-    + 'a merchant\'s setup REQUEST addressed to the platform'],
+    'one deliberate platform site, commented: a merchant\'s setup REQUEST '
+    + 'addressed to the platform'],
+  [path.join('lib', 'loyalty.js'),
+    'one deliberate platform site, commented: reconcileTier\'s server-log '
+    + 'pointer, moved here from routes/retail.js with the loyalty rules (§477)'],
   [path.join('lib', 'alert-latch.js'),
     'names the pattern in a comment; raises nothing'],
   [path.join('scripts', 'check-alert-audience.js'),

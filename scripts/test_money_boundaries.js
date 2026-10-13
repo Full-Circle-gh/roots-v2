@@ -86,7 +86,7 @@ section('2 · a purchase order posts whole cents');
 // ── §3 · what accumulates ─────────────────────────────────────────────────
 section('3 · a lifetime total that is added to for years');
 {
-  const src = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+  const src = require('./test-support/retail-source').retailSource();
   const adds = src.match(/lifetime_spend = COALESCE\(lifetime_spend, 0\) \+ \?/g) || [];
   is(adds.length, 0, 'no lifetime total is added to inside SQL any more');
   const subs = src.match(/lifetime_spend = MAX\(0, COALESCE\(lifetime_spend, 0\) - \?\)/g) || [];
@@ -97,7 +97,11 @@ section('3 · a lifetime total that is added to for years');
     'and a refund still cannot drive a lifetime total below zero');
   // The read has to be inside the transaction that writes it, or two orders
   // landing together would each add to the same "before".
-  const at = src.indexOf("SELECT COALESCE(lifetime_spend, 0) AS s");
+  // The order's read, inside awardOrderPoints: found by name, so the check does
+  // not depend on which file comes first now the loyalty rules live in
+  // lib/loyalty.js (decisions §477). It was the first occurrence on the day
+  // this was written.
+  const at = src.indexOf("SELECT COALESCE(lifetime_spend, 0) AS s", src.indexOf('function awardOrderPoints('));
   const around = src.slice(at - 900, at);
   yes(/tdb\(\)\.transaction\(/.test(around),
     'the read it adds to happens inside the transaction that writes the result');
