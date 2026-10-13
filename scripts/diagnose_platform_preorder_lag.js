@@ -106,3 +106,39 @@ const cols = want.filter(c => hoursCols.includes(c));
 console.log('columns read: ' + cols.join(', '));
 if (cols.length) for (const r of all(`SELECT ${cols.join(', ')} FROM retail_stores`)) console.log('  ' + JSON.stringify(r));
 console.log('retail_stores columns: ' + hoursCols.join(', '));
+
+// ── Second pass: for each Meituan pre-order, every stock ledger row that names
+// it, and what was then pushed to Meituan for those products. Settles whether
+// the shelf actually dropped at read time and whether Meituan's own listing
+// followed.
+console.log('');
+console.log('══ meituan pre-orders · ledger and push ══');
+const preRows = all(`
+  SELECT o.id, o.order_no, i.meituan_order_no, i.imported_at, o.channel_preorder_at, o.store_id
+    FROM meituan_order_import i
+    JOIN retail_orders o ON o.id = i.retail_order_id
+   WHERE o.channel_preorder_at IS NOT NULL
+     AND o.placed_at >= datetime('now', ?)
+   ORDER BY o.placed_at`, `-${DAYS} days`);
+for (const p of preRows) {
+  if (p.ERROR) { console.log('ERROR: ' + p.ERROR); break; }
+  console.log(`-- ${p.order_no} (meituan ${p.meituan_order_no}) read ${p.imported_at} UTC, booked ${p.channel_preorder_at} UTC`);
+  const led = all(`
+    SELECT id, ${SH('created_at')} AS at_sh, product_id, delta, balance_after, reason, ref_table, ref_id, note
+      FROM retail_stock_ledger
+     WHERE note LIKE ? OR note LIKE ? OR (ref_table = 'retail_orders' AND ref_id = ?)
+     ORDER BY id`, `%${p.meituan_order_no}%`, `%${p.order_no}%`, p.id);
+  for (const l of led) console.log('   ledger ' + JSON.stringify(l));
+  if (!led.length) console.log('   ledger: NO ROWS name this order');
+  const pids = [...new Set(led.map(l => l.product_id).filter(Boolean))];
+  if (pids.length) {
+    const q = all(`
+      SELECT id, product_id, new_qty, status, ${SH('created_at')} AS queued_sh, ${SH('processed_at')} AS pushed_sh, last_error
+        FROM meituan_sync_queue
+       WHERE product_id IN (${pids.map(() => '?').join(',')})
+         AND created_at BETWEEN datetime(?, '-10 minutes') AND datetime(?, '+30 minutes')
+       ORDER BY id`, ...pids, p.imported_at, p.channel_preorder_at || p.imported_at);
+    for (const r of q) console.log('   push   ' + JSON.stringify(r));
+    if (!q.length) console.log('   push: nothing queued for these products between read and booked time (note: queue product_id may be a store_products id)');
+  }
+}
