@@ -314,6 +314,12 @@ function internalStatusForChannel(desc) {
   const d = String(desc || '');
   if (!d) return null;
   if (/退款|退货/.test(d))                                        return 'refunded';
+  // 配送已取消 cancels the DELIVERY, not the order: Meituan drops the rider and
+  // sends another. Live 2026-10-13 on a 预订单 (MT20261013234620): a rider was
+  // called at 14:21 for a 17:40 booking, dropped twice, re-sent at 17:01. Read
+  // as a void, the order went to Cancelled and its stock came back until 17:01.
+  // A real cancel names the order (订单取消), so no claim here.
+  if (/(配送|骑手|运单|跑腿)\S*取消|取消(配送|骑手|运单|跑腿)/.test(d) && !/订单|交易/.test(d)) return null;
   if (/取消|已关闭|交易关闭/.test(d))                             return 'cancelled';
   // 用户已收餐 / 已收餐 is the 外卖 wording for 已收货 — the customer has it.
   // 妥投/已妥投/签收成功 are Meituan's courier-delivery synonyms for the same event.
@@ -379,6 +385,8 @@ function isConfirmedVoid(desc) {
   if (!d) return false;
   // Pending / under-review / negotiating → not settled, never restock.
   if (/申请|待处理|处理中|审核|退款中|退货中|协商|部分退款/.test(d)) return false;
+  // A dropped rider (配送已取消) leaves the order live — see internalStatusForChannel.
+  if (/(配送|骑手|运单|跑腿)\S*取消|取消(配送|骑手|运单|跑腿)/.test(d) && !/订单|交易|退款/.test(d)) return false;
   // Settled cancels and completed refunds.
   return /已取消|交易取消|订单取消|已关闭|交易关闭|已退款|退款成功|退款完成|全额退款/.test(d);
 }
