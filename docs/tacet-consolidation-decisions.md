@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.518
+# Tacet shared-core consolidation — decisions record, v4.519
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-13 · v4.519 — **§471 · THE DEAD TRANSACTION COUNT IN `test_tx_conversion_batch2.js` IS REMOVED, NOT REBUILT — ASKED BY ASH**, to the item §470 found and left open. The check counted the transactions in `routes/retail.js` still on the old form by running `scripts/diagnose_async_conversion_scope.js`, and expected 30. **That script was deleted on purpose** on 2026-08-23 in *"Scrap the Postgres migration completely"* (`533f1244`), by name, as the AST conversion-count authority. Since then the check has printed *"count check SKIPPED"* on every run, main included. The number measured how far the async conversion had got, and that conversion is cancelled, so there is nothing for it to count toward. The seven named routes that must stay on the old form are still checked one by one. No string, no schema, no change to `.gitignore` or CI. See §471.
 
 2026-10-13 · v4.518 — **§470 · `routes/retail.js` IS SPLIT BY AREA, ONE AREA PER PR, WITH NO CHANGE IN BEHAVIOUR — DECIDED BY ASH:** *"Split retail.js up"*, then *"start"* to the plan put to him. The file is 43,320 lines and 402 endpoints. Each area moves into its own file under `routes/retail/`, mounted inside `retail.js` at the spot the area left, so no request is answered by a different handler. Polls and voting go first, as the pilot. Held by `scripts/test_retail_split_routes.js`, which fails if a moved endpoint and one left behind could answer the same request. No string, no schema, no change to `.gitignore` or CI. See §470.
 
@@ -30761,5 +30763,55 @@ counts the old-style transactions left in `retail.js` by running
 `scripts/diagnose_async_conversion_scope.js`. That script is no longer in the
 repo, so the check has been reporting itself as skipped. The vote handler's
 transaction is one of the 30 it would count, and it now lives in the polls part.
+*Closed in §471: the check is removed, because the script was retired on purpose.*
+
+No string, no schema, no change to `.gitignore` or CI.
+
+## §471 — THE DEAD TRANSACTION COUNT IN `test_tx_conversion_batch2.js` IS REMOVED, NOT REBUILT
+
+**Asked by Ash, 2026-10-13**, to close the item §470 found: restore
+`scripts/diagnose_async_conversion_scope.js` and make it count across
+`retail.js` and its parts, or, if it was retired on purpose, remove the check
+and say so here.
+
+**It was retired on purpose.** `git log --all` on the script shows four
+commits, the last being `533f1244`, *"Scrap the Postgres migration
+completely"* (2026-08-24 +0800, the §24 ADDENDUM dated 2026-08-23). That
+commit's message lists *"the AST conversion authority"* among the 52 files
+deleted, and the ADDENDUM names it again as *"the AST conversion-count
+authority"*. It was not lost by accident.
+
+**What the check was for.** Section 12 of `scripts/test_tx_conversion_batch2.js`
+asserted that 30 `db.transaction()` blocks were left in `routes/retail.js`,
+read from that script's AST count. Its own comment called it the tripwire for
+a conversion nobody intended, a number meant to move with each conversion
+batch. With the conversion cancelled there are no batches, so the number has
+nothing to move toward. Since the script went, the check printed *"count check
+SKIPPED"* on every run, main included, and guarded nothing.
+
+**What was done.** The count and the function that ran the script are removed.
+A comment stands in their place saying why, and pointing here. The rest of
+section 12 is unchanged and still runs. It reads `retail.js` and every
+`routes/retail/` part as one text, so it follows the §470 split. It checks that
+the ten converted handlers are async and use `withTransaction`, that none of
+them calls `tdb()` or awaits inside its transaction, and that the seven named
+routes and the checkout's `.immediate()` are still on the old form.
+
+**Why not restore it.** Rebuilding the script would bring back about 900 lines
+of migration tooling to guard a number that no longer means anything. A grep
+count is ruled out by the test's own history: it matched a comment and was off
+by one, and a regex comment-stripper returned 0 against an actual 39.
+
+**Found while doing this, not fixed here:**
+
+- `scripts/test-support/tx-detection-fixture.js` existed only for the deleted
+  script's `--self-test` and is now read by nothing. It is still listed in
+  the `scripts/diagnose_deployed_tree.js` manifest, whose `MANIFEST_COMMIT`
+  is already marked stale.
+- Two comments in `lib/` still name the deleted script as the authority for
+  their figures: `lib/db-transaction.js` (*"26 of the 56 … the other 30"*) and
+  `lib/express-async-guard.js` (*"207 of routes/retail.js's 327 handlers"*).
+  Both are dated statements, and both are now out of date. A `lib/` edit
+  ships to production, so they are left for a PR of their own.
 
 No string, no schema, no change to `.gitignore` or CI.
