@@ -989,18 +989,30 @@
   section.active { display: block; animation: tab-fade-in 1.004s cubic-bezier(.16, 1, .3, 1); }
   @media (prefers-reduced-motion: reduce) { section.active { animation: none; } }
 
-  /* Tacet section label. Was a Full Circle marker (IBM Plex Mono + Aged Brass);
-     retargeted to the canonical Tacet eyebrow (--f-sans + muted graphite, mirrors
-     .pu2-eyebrow) so every un-migrated tab drops the dead brand look at once.
-     Size/margins unchanged → no reflow. Migrated tabs already override this. */
+  /* Base h2. Was a Full Circle marker (IBM Plex Mono + Aged Brass), then the
+     Tacet eyebrow — 11px, UPPERCASE, .14em, Graphite. That eyebrow became every
+     un-rebuilt page's TITLE, because those pages open with a bare <h2>: Settings
+     panels, Snippets, Feedback, Media, About, Social, Legal, FAQ, Leaderboard.
+     §1.6 bans uppercase and §1.7 retired the section-label eyebrow (audit
+     2026-10-13, P1). So the base drops the caps and the tracking, and…
+
+     …the h2 that IS a page's title — the first heading straight under a tab
+     section or a Settings sub-panel — takes the §1.7 page title: 24px/500, Ink,
+     -.01em, the same values `.td-head h2` carries. Scoped to direct children on
+     purpose: Delivery's sub-view headings sit inside `.dlv-view`, not straight
+     under the panel, and must not jump to 24px. Type selectors only, so any
+     page's own class or #tab rule still wins. */
   h2 {
     font-family: var(--f-sans);
     font-size: 11px; font-weight: 500;
-    letter-spacing: .14em; text-transform: uppercase;
+    letter-spacing: 0; text-transform: none;
     color: var(--td-text2);
     margin: var(--s6) 0 var(--s3);
   }
   h2:first-child { margin-top: var(--s2); }
+  main > section > h2, .sub-panel > h2 {
+    font-size: 24px; letter-spacing: -.01em; color: var(--td-text);
+  }
   h3 { font-size: 14px; font-weight: 600; margin-bottom: var(--s2); }
 
   .row { display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap; }
