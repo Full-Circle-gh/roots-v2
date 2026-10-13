@@ -52,7 +52,10 @@ function it(name, fn) {
   catch (e) { console.log(`  ✗ ${name}\n      ${e.message}`); fail++; }
 }
 const ROOT = path.join(__dirname, '..');
-const RETAIL_JS = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+// routes/retail.js and the parts split out of it (§470), read as one text, so a
+// route is found wherever it now lives. The feedback routes are in
+// routes/retail/feedback.js.
+const RETAIL_JS = require('./test-support/retail-source').retailSource();
 const DASH_JS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '03-dashboard.js'), 'utf8');
 const DATABASE_JS = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
 const SCHEMA_SQL = fs.readFileSync(path.join(ROOT, 'schema.sql'), 'utf8');

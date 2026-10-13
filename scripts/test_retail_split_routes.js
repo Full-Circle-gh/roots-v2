@@ -38,6 +38,18 @@ require(path.join(ROOT, 'routes', 'backend-auth.js'));
 const retail = require(path.join(ROOT, 'routes', 'retail.js'));
 
 const PARTS = {
+  'routes/retail/feedback.js': [
+    'POST /api/retail/feedback',
+    'GET /api/retail/feedback',
+    'GET /api/retail/feedback/:id',
+    'POST /api/retail/feedback/:id/reply',
+    'GET /api/retail-admin/feedback',
+    'GET /api/retail-admin/feedback/unseen-count',
+    'GET /api/retail-admin/feedback/:id',
+    'POST /api/retail-admin/feedback/:id/handled',
+    'POST /api/retail-admin/feedback/:id/unhandle',
+    'POST /api/retail-admin/feedback/:id/reply',
+  ],
   'routes/retail/polls.js': [
     'GET /api/retail/polls',
     'GET /api/retail/polls/public',
