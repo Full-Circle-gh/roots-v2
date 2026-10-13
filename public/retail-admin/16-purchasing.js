@@ -480,14 +480,15 @@
       invoices:  [T('Invoices', '发票'),   T('Which suppliers still owe you a 发票, and for how much. Record one and match it to the lines it covers.', '哪些供应商还未开票、金额多少。登记发票并与对应采购明细匹配。')],
       reorder:   [T('Reorder', '补货'),      T('Products running low across your stores, grouped by who you’d order them from.', '各门店库存偏低的商品,按常用供应商归类。')],
     };
-    const [title, sub] = meta[active] || meta.orders;
+    // [title, purpose line]. The purpose line is no longer drawn: §1.7 cut it
+    // (it described the tab and never changed). Kept in the table as the
+    // plain statement of what each tab is for.
+    const [title] = meta[active] || meta.orders;
     const tabs = PU_TABS.map(([key, label]) =>
       `<button class="pu2-tab${active === key ? ' on' : ''}" onclick="puTab('${key}')">${esc(label())}</button>`).join('');
     return `
       <div class="pu2-pagehead">
-        <div class="pu2-eyebrow">${esc(T('Purchasing', '采购'))}</div>
         <h1 class="pu2-title">${esc(title)}</h1>
-        <p class="pu2-sub">${esc(sub)}</p>
       </div>
       <nav class="pu2-subnav">${tabs}</nav>`;
   }
@@ -544,7 +545,7 @@
              press it. `data-feat="production"` matches the Materials and Recipes
              rail rows — a tenant that makes nothing never sees it. */
           _mrLines.length ? `<button class="pu2-btn" data-cap="purchasing:edit" data-feat="production" onclick="puMrOpen()"><span class="pu2-ic">${I.box}</span>${esc(T('From the kitchen', '厨房申请'))} <span class="n pu2-num">${_mrLines.length}</span></button>` : ''}
-        <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewOrder()"><span class="pu2-ic">${I.plus}</span>${esc(T('New order', '新建采购单'))}</button>
+        <button class="pu2-btn primary dusk" data-cap="purchasing:edit" onclick="puNewOrder()"><span class="pu2-ic">${I.plus}</span>${esc(T('New order', '新建采购单'))}</button>
       </div>
 
       <div class="pu2-card">
@@ -3160,7 +3161,7 @@
         <div class="pu2-empty-ico">${I.box}</div>
         <h3>${esc(T('No invoices yet', '暂无发票'))}</h3>
         <p>${esc(T('When a supplier sends a 发票, record it here and match it to the lines it covers. Until then, anything you’ve ordered shows as awaiting one.', '供应商开票后,在此登记并与对应采购明细匹配。在此之前,已下单内容会显示为待开票。'))}</p>
-        <button class="pu2-btn primary" data-cap="purchasing:invoices" onclick="puInvNew()"><span class="pu2-ic">${I.plus}</span>${esc(T('Add invoice', '添加发票'))}</button>
+        <button class="pu2-btn primary dusk" data-cap="purchasing:invoices" onclick="puInvNew()"><span class="pu2-ic">${I.plus}</span>${esc(T('Add invoice', '添加发票'))}</button>
       </div></div>`;
       try { applyCapGates(); } catch (_) {}
       return;
@@ -4096,7 +4097,7 @@
       <div class="pu2-head">
         <span class="spacer"></span>
         <button class="pu2-btn" data-cap="purchasing:edit" onclick="puImportOpen()"><span class="pu2-ic">${I.up}</span>${esc(T('Import CSV', '导入 CSV'))}</button>
-        <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewSupplier()"><span class="pu2-ic">${I.plus}</span>${esc(T('New supplier', '新建供应商'))}</button>
+        <button class="pu2-btn primary dusk" data-cap="purchasing:edit" onclick="puNewSupplier()"><span class="pu2-ic">${I.plus}</span>${esc(T('New supplier', '新建供应商'))}</button>
       </div>
 
       <div class="pu2-toolbar">

@@ -10659,8 +10659,6 @@
   /* Tacet page-head + sub-nav — the pane's own header, replacing the old
      hardcoded Full Circle .pa-pagetitle brass title in the HTML wrapper. */
   #prod-view-purchasing .pu2-pagehead { margin: 2px 0 0; }
-  #prod-view-purchasing .pu2-eyebrow { font: 500 11px var(--f-sans); letter-spacing: .14em; text-transform: uppercase;
-    color: var(--td-text2); margin: 0 0 6px; }
   #prod-view-purchasing .pu2-title { font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--td-text);
     text-transform: none; margin: 0 0 5px; }
   #prod-view-purchasing .pu2-sub { font-size: 13.5px; color: var(--td-text2); max-width: 64ch; margin: 0; }
@@ -10692,7 +10690,7 @@
   #prod-view-purchasing .pu2-statline { display: flex; align-items: baseline; gap: 22px; flex-wrap: wrap; margin: 18px 0 4px; }
   #prod-view-purchasing .pu2-stat { appearance: none; background: none; border: none; padding: 0;
     font: 400 13.5px var(--f-sans); color: var(--td-text2); display: inline-flex; align-items: baseline; gap: 6px; }
-  #prod-view-purchasing .pu2-stat b { font-size: 19px; font-weight: 600; color: var(--td-text); }
+  #prod-view-purchasing .pu2-stat b { font-size: 19px; font-weight: 500; color: var(--td-text); }
   #prod-view-purchasing .pu2-stat.link { cursor: pointer; }
   #prod-view-purchasing .pu2-stat.link:hover { color: var(--td-text); }
   #prod-view-purchasing .pu2-stat.link.on b { text-decoration: underline; text-underline-offset: 4px; }
@@ -10721,6 +10719,9 @@
     transition: border-color .2s cubic-bezier(.16,1,.3,1), background .2s cubic-bezier(.16,1,.3,1); }
   #prod-view-purchasing .pu2-btn:hover { border-color: var(--td-text2); }
   #prod-view-purchasing .pu2-btn.primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  /* Each tab's header create action is the page's one Dusk (§1.8 rule 1); every
+     other primary in Purchasing — drawers, the order steps, dialogs — stays Ink. */
+  #prod-view-purchasing .pu2-btn.primary.dusk { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
   #prod-view-purchasing .pu2-btn.primary:hover { background: #232f47; }
   :root[data-theme="light"] #prod-view-purchasing .pu2-btn.primary:hover { background: #232f47; }
   #prod-view-purchasing .pu2-btn.ghost { border-color: transparent; color: var(--td-text2); }
@@ -10753,14 +10754,14 @@
   #prod-view-purchasing .pu2-card { background: var(--td-surface, #fff); border: 1px solid var(--td-border);
     border-radius: 14px; box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04); }
   #prod-view-purchasing .pu2-tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
-  #prod-view-purchasing .pu2-tbl th { text-align: left; font: 500 11px var(--f-sans); letter-spacing: .08em;
-    text-transform: uppercase; color: var(--td-text2); padding: 14px 16px 10px; border-bottom: 1px solid var(--td-border); }
+  #prod-view-purchasing .pu2-tbl th { text-align: left; font: 500 11px var(--f-sans); letter-spacing: 0;
+    text-transform: none; color: var(--td-text2); padding: 14px 16px 10px; border-bottom: 1px solid var(--td-border); }
   #prod-view-purchasing .pu2-tbl td { padding: 13px 16px; border-bottom: 1px solid var(--td-border); vertical-align: middle; }
   #prod-view-purchasing .pu2-tbl tr:last-child td { border-bottom: none; }
   #prod-view-purchasing .pu2-tbl tbody tr[onclick] { cursor: pointer; transition: background .2s cubic-bezier(.16,1,.3,1); }
   #prod-view-purchasing .pu2-tbl tbody tr[onclick]:hover { background: var(--td-raised); }
   #prod-view-purchasing .pu2-tbl .right { text-align: right; }
-  #prod-view-purchasing .pu2-kicker { font: 500 11px var(--f-sans); letter-spacing: .1em; text-transform: uppercase;
+  #prod-view-purchasing .pu2-kicker { font: 500 11px var(--f-sans); letter-spacing: 0; text-transform: none;
     color: var(--td-text2); margin: 30px 0 12px; }
 
   /* empty states */
@@ -10876,7 +10877,7 @@
   #prod-view-purchasing .pu2-suprow:last-child { border-bottom: none; }
   #prod-view-purchasing .pu2-suprow.best { background: var(--td-sage-tint); }
   #prod-view-purchasing .pu2-suprow .sname { font-weight: 500; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-  #prod-view-purchasing .pu2-suprow .lab { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--td-text2); }
+  #prod-view-purchasing .pu2-suprow .lab { font-size: 10.5px; text-transform: none; letter-spacing: 0; color: var(--td-text2); }
   #prod-view-purchasing .pu2-suprow .val { font-size: 13.5px; color: var(--td-text); margin-top: 2px; }
   #prod-view-purchasing .pu2-suprow .val.cheap { color: var(--td-sage-ink); }
   #prod-view-purchasing .pu2-suprow.manual { color: var(--td-text2); }
@@ -10935,7 +10936,7 @@
   /* Bills — KPI tiles + outstanding-by-supplier + recorded ledger */
   #prod-view-purchasing .pu2-metricrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 20px 0 8px; }
   #prod-view-purchasing .pu2-metric { padding: 15px 18px; }
-  #prod-view-purchasing .pu2-metric .lab { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--td-text2); }
+  #prod-view-purchasing .pu2-metric .lab { font-size: 11px; text-transform: none; letter-spacing: 0; color: var(--td-text2); }
   #prod-view-purchasing .pu2-metric .big { font-size: 22px; font-weight: 500; margin-top: 6px; }
   #prod-view-purchasing .pu2-metric .big.bad { color: var(--td-brick-ink); }
   #prod-view-purchasing .pu2-metric .foot { font-size: 12px; color: var(--td-text2); margin-top: 3px; }
@@ -11038,7 +11039,7 @@
   #prod-view-purchasing .pu2-fgrid.three { grid-template-columns: 1fr 1fr 1fr; }
   #prod-view-purchasing .pu2-alloc-head { display: flex; align-items: center; margin: 20px 0 8px; }
   #prod-view-purchasing .pu2-alloclist { border: 1px solid var(--td-border); border-radius: 10px; overflow: hidden; }
-  #prod-view-purchasing .pu2-pogrp { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--td-text2);
+  #prod-view-purchasing .pu2-pogrp { font-size: 11px; text-transform: none; letter-spacing: 0; color: var(--td-text2);
     padding: 10px 14px 4px; background: var(--td-raised); }
   #prod-view-purchasing .pu2-allocrow { display: grid; grid-template-columns: 26px 1fr auto 110px; align-items: center; gap: 12px;
     padding: 11px 14px; border-top: 1px solid var(--td-border); }
@@ -11175,7 +11176,7 @@
      moves ONE line. The chip goes dark the moment a line is dragged, because
      the list is then no longer what the chip says it is. */
   #prod-view-purchasing .pu2-sortbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 18px; }
-  #prod-view-purchasing .pu2-sortbar .lbl { font: 500 11px var(--f-sans); letter-spacing: .1em; text-transform: uppercase;
+  #prod-view-purchasing .pu2-sortbar .lbl { font: 500 11px var(--f-sans); letter-spacing: 0; text-transform: none;
     color: var(--td-text2); margin-right: 3px; }
   #prod-view-purchasing .pu2-sortchip { appearance: none; display: inline-flex; align-items: center; gap: 5px;
     font: 400 12.5px var(--f-sans); color: var(--td-text2); background: var(--td-surface, #fff);
@@ -11224,7 +11225,7 @@
     font-style: italic; font-weight: 400; }
   /* And the other half of the pair: a real count reads as deliberate. Scoped to
      inputs that have a placeholder to show, so an empty box is never bolded. */
-  #prod-view-purchasing .pu2-qty input:not(:placeholder-shown) { font-weight: 600; }
+  #prod-view-purchasing .pu2-qty input:not(:placeholder-shown) { font-weight: 500; }
   #prod-view-purchasing .pu2-qty.warn { border-color: var(--td-amber); }
   #prod-view-purchasing .pu2-costwrap { display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--td-border);
     border-radius: 8px; padding: 5px 10px; background: var(--td-surface, #fff); color: var(--td-text2); }
@@ -11236,7 +11237,7 @@
      freight on this order" and "nobody has said". */
   #prod-view-purchasing .pu2-cost::placeholder { color: var(--td-text2); opacity: .45;
     font-style: italic; font-weight: 400; }
-  #prod-view-purchasing .pu2-cost:not(:placeholder-shown) { font-weight: 600; }
+  #prod-view-purchasing .pu2-cost:not(:placeholder-shown) { font-weight: 500; }
   #prod-view-purchasing .pu2-costunit { font-size: 11.5px; white-space: nowrap; }
   /* The unit is a label on a catalogue line (it comes off the master record and
      must not be changed here) and a control on a typed one (nothing else knows
@@ -12876,8 +12877,6 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 
   /* ── page head ── */
   #tab-materials .mat-pagehead { margin: 2px 0 0; }
-  #tab-materials .mat-eyebrow { font: 500 11px var(--f-sans); letter-spacing: .14em;
-    text-transform: uppercase; color: var(--td-text2); margin: 0 0 6px; }
   #tab-materials .mat-title { font-size: 24px; margin: 0 0 5px; }
   #tab-materials .mat-sub { font-size: 13.5px; color: var(--td-text2); max-width: 64ch; margin: 0; }
 
@@ -12894,8 +12893,8 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     display: inline-flex; align-items: baseline; gap: 8px;
     transition: color .2s cubic-bezier(.16,1,.3,1), border-color .2s cubic-bezier(.16,1,.3,1); }
   #tab-materials .mat-srctab:hover { color: var(--td-text); }
-  #tab-materials .mat-srctab.on { color: var(--td-text); border-bottom-color: var(--td-text); font-weight: 600; }
-  #tab-materials .mat-srctab b { font-weight: 600; font-size: 12.5px; color: var(--td-text2); }
+  #tab-materials .mat-srctab.on { color: var(--td-text); border-bottom-color: var(--td-text); font-weight: 500; }
+  #tab-materials .mat-srctab b { font-weight: 500; font-size: 12.5px; color: var(--td-text2); }
   #tab-materials .mat-srctab.on b { color: var(--td-text); }
 
   /* ── "Made" — the one fact the list could not previously show: this row was
@@ -12920,7 +12919,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     transition: color .2s cubic-bezier(.16,1,.3,1), border-color .2s cubic-bezier(.16,1,.3,1); }
   #tab-materials .mat-chip:hover { color: var(--td-text); border-color: var(--td-text2); }
   #tab-materials .mat-chip.on { color: var(--td-paper); background: var(--td-text); border-color: var(--td-text); }
-  #tab-materials .mat-chip b { font-weight: 600; font-size: 12.5px; }
+  #tab-materials .mat-chip b { font-weight: 500; font-size: 12.5px; }
 
   /* ── filters ── */
   #tab-materials .mat-filters { display: flex; align-items: center; gap: 10px;
@@ -12952,7 +12951,10 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-materials .mat-btn:hover, #tab-materials-record .mat-btn:hover { border-color: var(--td-text2); }
   #tab-materials .mat-btn.primary, #tab-materials-record .mat-btn.primary {
     background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
-  #tab-materials .mat-btn.primary:hover, #tab-materials-record .mat-btn.primary:hover { background: #232f47; }
+  #tab-materials .mat-btn.primary:hover, #tab-materials-record .mat-btn.primary:hover { opacity: .88; }
+  /* The list's header create action is the page's one Dusk (§1.8 rule 1). */
+  #tab-materials .mat-btn.primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
+  #tab-materials .mat-btn.primary:hover { opacity: 1; background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
   #tab-materials .mat-btn.ghost, #tab-materials-record .mat-btn.ghost {
     border-color: transparent; color: var(--td-text2); }
   #tab-materials .mat-btn.ghost:hover, #tab-materials-record .mat-btn.ghost:hover {
@@ -13121,7 +13123,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      here would read as "zero", which is the one thing it never means. */
   #tab-materials-record .mat-costline { margin-top: 16px; padding-top: 14px;
     border-top: 1px solid var(--td-border); font-size: 13.5px; color: var(--td-text2); }
-  #tab-materials-record .mat-costline b { font-size: 17px; font-weight: 600; color: var(--td-text); margin-left: 6px; }
+  #tab-materials-record .mat-costline b { font-size: 17px; font-weight: 500; color: var(--td-text); margin-left: 6px; }
   #tab-materials-record .mat-costwhy { color: var(--td-amber-ink); }
   /* The division that produced the figure beside it — ¥9.27 ÷ 1000. Numerals
      only, so it carries no copy and needs no Chinese, and quiet enough to read
@@ -13212,8 +13214,6 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 
   /* ── page head ── */
   #tab-recipes .rcp-pagehead { margin: 2px 0 0; }
-  #tab-recipes .rcp-eyebrow { font: 500 11px var(--f-sans); letter-spacing: .14em;
-    text-transform: uppercase; color: var(--td-text2); margin: 0 0 6px; }
   #tab-recipes .rcp-title { font-size: 24px; margin: 0 0 5px; }
   #tab-recipes .rcp-sub { font-size: 13.5px; color: var(--td-text2); max-width: 64ch; margin: 0; }
 
@@ -13270,7 +13270,10 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes .rcp-btn:hover, #tab-recipes-record .rcp-btn:hover { border-color: var(--td-text2); }
   #tab-recipes .rcp-btn.primary, #tab-recipes-record .rcp-btn.primary {
     background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
-  #tab-recipes .rcp-btn.primary:hover, #tab-recipes-record .rcp-btn.primary:hover { background: #232f47; }
+  #tab-recipes .rcp-btn.primary:hover, #tab-recipes-record .rcp-btn.primary:hover { opacity: .88; }
+  /* The list's header create action is the page's one Dusk (§1.8 rule 1). */
+  #tab-recipes .rcp-btn.primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
+  #tab-recipes .rcp-btn.primary:hover { opacity: 1; background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
   #tab-recipes .rcp-btn.ghost, #tab-recipes-record .rcp-btn.ghost {
     border-color: transparent; color: var(--td-text2); }
   #tab-recipes .rcp-btn.ghost:hover, #tab-recipes-record .rcp-btn.ghost:hover {
@@ -13759,7 +13762,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     position: sticky; top: var(--rcp-headh, 0px); z-index: 3;
     display: flex; align-items: center; gap: 10px; padding: 0 0 8px;
     background: var(--td-surface, #fff); border-bottom: 1px solid var(--td-border);
-    font: 500 11px var(--f-sans); letter-spacing: .08em; text-transform: uppercase;
+    font: 500 11px var(--f-sans); letter-spacing: 0; text-transform: none;
     color: var(--td-text2); }
   /* letter-spacing and uppercase are a Latin small-caps idiom: 原料 uppercased
      is 原料, and the tracking that suits QTY only loosens Han characters. The
@@ -13873,7 +13876,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-step { display: flex; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--td-border); }
   #tab-recipes-record .rcp-step:last-child { border-bottom: none; }
   #tab-recipes-record .rcp-step-n { flex: none; width: 26px; height: 26px; border-radius: 50%;
-    background: var(--td-raised); color: var(--td-text2); font-size: 12.5px; font-weight: 600;
+    background: var(--td-raised); color: var(--td-text2); font-size: 12.5px; font-weight: 500;
     display: flex; align-items: center; justify-content: center; margin-top: 2px; }
   #tab-recipes-record .rcp-step-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
   #tab-recipes-record .rcp-step-acts { flex: none; display: flex; flex-direction: column; gap: 4px; }
@@ -13889,7 +13892,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     padding-top: 14px; border-top: 1px solid var(--td-border); }
   #tab-recipes-record .rcp-bkrow { display: flex; align-items: baseline; justify-content: space-between;
     font-size: 13.5px; color: var(--td-text2); }
-  #tab-recipes-record .rcp-bkrow b { color: var(--td-text); font-weight: 600;
+  #tab-recipes-record .rcp-bkrow b { color: var(--td-text); font-weight: 500;
     font-variant-numeric: tabular-nums; }
   #tab-recipes-record .rcp-bkrow.total { border-top: 1px solid var(--td-border); padding-top: 9px; margin-top: 2px; }
   #tab-recipes-record .rcp-bkrow.total b { font-size: 16px; }

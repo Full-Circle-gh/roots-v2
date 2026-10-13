@@ -296,9 +296,11 @@
   function chrome() {
     return `
       <div class="rcp-pagehead">
-        <div class="rcp-eyebrow">${esc(T('Production', '生产'))}</div>
         <h1 class="rcp-title">${esc(T('Recipes', '食谱'))}</h1>
-        <p class="rcp-sub">${esc(T('What you make and what it costs — ingredient lines, steps, batch cost. Cost-only: recipes here don’t track quantity or stock, and aren’t connected to Products yet.', '你制作的东西及其成本 —— 原料明细、步骤、批量成本。仅计成本:食谱不追踪数量或库存,也尚未与产品关联。'))}</p>
+        ${/* Only the limit stays: a statement of what the page does NOT do is
+              honesty (§1.17), not the purpose line §1.7 cut. Both halves are
+              lifted from the live sentence. */''}
+        <p class="rcp-sub">${esc(T('Cost-only: recipes here don’t track quantity or stock, and aren’t connected to Products yet.', '仅计成本:食谱不追踪数量或库存,也尚未与产品关联。'))}</p>
       </div>`;
   }
 

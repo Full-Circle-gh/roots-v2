@@ -221,16 +221,9 @@
   function chrome() {
     return `
       <div class="mat-pagehead">
-        <div class="mat-eyebrow">${esc(T('Production', '生产'))}</div>
         <h1 class="mat-title">${esc(T('Materials', '物料'))}</h1>
-        ${/* The second sentence explains a column that is not on the page for
-              an operator without materials:costs. Telling somebody how a
-              number they cannot see is worked out is worse than saying
-              nothing — it describes the page they were not given. The first
-              sentence, which says what a material IS, holds for everyone. */''}
-        <p class="mat-sub">${esc(showMoney()
-          ? T('Everything you buy and hold but don’t sell — food, packaging, equipment, supplies. What each one costs per unit is worked out from the pack price.', '你采购并库存但不出售的物品 — 食品、包装、设备、耗材。每单位成本由整包价格自动折算。')
-          : T('Everything you buy and hold but don’t sell — food, packaging, equipment, supplies.', '你采购并库存但不出售的物品 — 食品、包装、设备、耗材。'))}</p>
+        ${/* No purpose line under the title (§1.7: it described the page and never
+              changed). The title stands alone. */''}
       </div>`;
   }
 
@@ -453,7 +446,7 @@
                one: put the whole list back. -->
           <div style="margin-top:14px">${blank
             ? `<button class="mat-btn" type="button" onclick="matClearFilters()">${esc(T('Clear the filters', '清除筛选'))}</button>`
-            : `<button class="mat-btn primary" type="button" data-cap="materials:edit" onclick="matRecordNew()"><span class="mat-ic">${I.plus}</span>${esc(T('Add your first material', '新建第一条物料'))}</button>`}</div>
+            : `<button class="mat-btn" type="button" data-cap="materials:edit" onclick="matRecordNew()"><span class="mat-ic">${I.plus}</span>${esc(T('Add your first material', '新建第一条物料'))}</button>`}</div>
         </div>`;
     }
     // Both money columns are REMOVED for an operator without materials:costs —
