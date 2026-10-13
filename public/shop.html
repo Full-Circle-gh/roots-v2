@@ -1059,7 +1059,7 @@
     /* At the ceiling, the tick-boxes NOT already on go quiet and stop taking
        taps. The ones that are on stay live — untick is how you change your mind,
        and a customer stuck at the cap with nothing clickable is a dead sheet. */
-    .op-choice[disabled]{opacity:.38;cursor:default;}
+    .op-choice[disabled],.op-choice.op-off{opacity:.38;cursor:default;}
     /* A stock-backed extra whose shelf is empty (addon_available:false) —
        the mini app's op-extra-oos pill, in the size picker's words. */
     .op-oos{flex:none;font-family:var(--bf-toni);font-size:11px;letter-spacing:.06em;color:var(--olive);
@@ -1071,6 +1071,15 @@
     .op-box{flex:none;width:20px;height:20px;border:2px solid var(--ink);border-radius:5px;display:flex;
       align-items:center;justify-content:center;font-size:13px;color:var(--oat);line-height:1;}
     .op-extra.on .op-box{background:var(--oat);color:var(--ink);}
+    /* An answer that may be picked more than once (allow_repeat): a − n +
+       counter where the tick-box would be. The row is a div, not a button, so
+       the two steppers can be real buttons; each is a 32px target. */
+    .op-ct{flex:none;display:flex;align-items:center;border:2px solid var(--ink);border-radius:6px;margin:-6px 0;}
+    .op-ct button{width:32px;height:32px;padding:0;border:0;background:none;color:inherit;font:inherit;
+      font-size:18px;line-height:1;cursor:pointer;}
+    .op-ct button[disabled]{opacity:.38;cursor:default;}
+    .op-n{min-width:22px;text-align:center;font-family:var(--bf-bear);font-size:16px;}
+    .op-rep.on .op-ct{color:var(--oat);border-color:var(--oat);}
     /* The answer's picture: its linked product's photo, small and square. */
     .op-ci{flex:none;width:44px;height:44px;border-radius:6px;object-fit:cover;background:rgba(0,0,0,.06);margin:-4px 0;}
     .op-ci+.op-cl{flex:1;}
@@ -6180,6 +6189,13 @@ async function renderProduct(id){
     // the page, so the numbers here are already the ones checkout will apply.
     // 0 means no limit, which is every group authored before this existed.
     const limOf=o=>({min:Number(o&&o.min_choices)||0,max:Number(o&&o.max_choices)||0});
+    // A pick-any group whose answers may be picked more than once: two Medjool
+    // Boats is the boat's id twice in sel, and every pick counts toward the
+    // limits and the price. Only 'multi' can repeat; a radio is one answer.
+    const isRep=o=>!!o&&o.type==='multi'&&Number(o.allow_repeat)===1;
+    // Repeats go out side by side, in the order the answers are listed — the
+    // mini app's rule (m.html onwChosenOpts), so one order reads the same.
+    const inOrder=(o,ids)=>(o.choices||[]).flatMap(c=>ids.filter(x=>x===c.id));
     // "Choose 2" under the question — the numerals do the work, so a group that
     // says it in its own title (爽脆配菜) is not contradicted, just confirmed.
     function limHint(l){
@@ -6220,23 +6236,34 @@ async function renderProduct(id){
       // Keep the group's QUESTION beside each picked answer so the cart + checkout
       // receipt read "Heat up?: Yes", not a bare, ambiguous "Yes". Spread onto the
       // choice so `c.id` below still resolves.
+      // One entry per PICK: a repeated answer is pushed once for each time it
+      // was picked, which is how `choices` carries "2× Medjool Boats".
       popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c&&!choiceOut(c)) chosen.push({...c,question:pick(o.question_en,o.question_cn)});}));
+      // …and the label folds them back: "Small Bites: Medjool Boats ×2", not the
+      // same answer written twice. Repeats sit side by side, so a run is a fold.
+      const folded=[];
+      chosen.forEach(c=>{const v=pick(c.label_en,c.label_cn); if(!v)return;
+        const last=folded[folded.length-1];
+        if(last&&last.id===c.id&&last.q===c.question){ last.n++; return; }
+        folded.push({id:c.id,q:c.question,s:c.question?c.question+': '+v:v,n:1}); });
       cartAdd({product_id:p.id,qty,choices:chosen.map(c=>Number(c.id)),
         name:pick(p.name_en,p.name_cn),price:unit(),image:thumb(p),
-        optLabel:chosen.map(c=>{const v=pick(c.label_en,c.label_cn); if(!v)return''; return c.question?c.question+': '+v:v;}).filter(Boolean).join(' · '),ship_from_supplier:!!p.ship_from_supplier,
+        optLabel:folded.map(x=>x.n>1?x.s+' ×'+x.n:x.s).join(' · '),ship_from_supplier:!!p.ship_from_supplier,
         cart_notice:p.cart_notice});
       const said=state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱';
       if(!cnShowNext(said))toast(said);
       return true;
     }
 
-    // Build one options bottom-sheet (single=radio, multi=tick-box) reusing the
-    // size-picker shell. opts:{title,multi,btnLabel(),onConfirm(close)}.
+    // Build one options bottom-sheet (single=radio, multi=tick-box, or a − n +
+    // counter where the group allows repeats) reusing the size-picker shell.
+    // opts:{title,multi,btnLabel(),onConfirm(close)}.
     function buildSheet(groups,o){
       const mask=document.createElement('div'); mask.className='sl-vpmask';
       const rows=groups.map(g=>{const gl=limOf(g),gh=o.multi?limHint(gl):'';
         const atCap=()=>!!(gl.max&&selIds(g).length>=gl.max);
         const gImg=(g.choices||[]).some(c=>c.image_url);
+        const rep=o.multi&&isRep(g);
         return `<div class="op-group">
         <div class="op-q">${esc(pick(g.question_en,g.question_cn))}${g.is_required?' <span class="op-req">*</span>':''}</div>
         ${gh?`<div class="op-lim">${esc(gh)}</div>`:''}
@@ -6245,6 +6272,13 @@ async function renderProduct(id){
           // The linked product's photo beside the answer (lib/choice-photo.js);
           // the others in a group that has any keep an empty frame so names line up.
           const img=gImg?(c.image_url?`<img class="op-ci" src="${esc(c.image_url)}&w=160" alt="" loading="lazy" decoding="async">`:'<span class="op-ci"></span>'):'';
+          // Repeatable: the row (or +) adds one, − takes one back. The counter's
+          // state is drawn by paintRep, which the tap handler calls again after
+          // every change; a sold-out row shows its pill and no counter.
+          if(rep) return `<div class="op-choice op-extra op-rep${out?' sold-out':''}" data-oid="${g.id}" data-cid="${c.id}"${out?' data-oos="1"':''}>
+            ${img}<span class="op-cl">${esc(pick(c.label_en,c.label_cn))}</span>
+            ${out?`<span class="op-oos">${state.lang==='cn'?'售罄':'Sold out'}</span>`
+              :`${d?`<span class="op-cd">+${money(d)}</span>`:''}<span class="op-ct"><button type="button" data-step="-1">−</button><span class="op-n"></span><button type="button" data-step="1">+</button></span>`}</div>`;
           return `<button type="button" class="op-choice${o.multi?' op-extra':''}${on?' on':''}${out?' sold-out':''}" data-oid="${g.id}" data-cid="${c.id}"${out?' data-oos="1"':''}${(out||(!on&&atCap()))?' disabled':''}>
             ${o.multi?'<span class="op-box">'+(on?'✓':'')+'</span>':''}
             ${img}<span class="op-cl">${esc(pick(c.label_en,c.label_cn))}</span>
@@ -6258,12 +6292,34 @@ async function renderProduct(id){
       document.body.appendChild(mask);
       const close=()=>mask.remove();
       const updFoot=()=>{const a=mask.querySelector('[data-add]'); if(a)a.textContent=o.btnLabel();};
+      // Draw a repeatable group's counters from sel: each row's n, its − (off at
+      // 0), and the cap across the WHOLE group — at the ceiling every + goes
+      // off and the rows with no picks go quiet; rows with picks stay live so
+      // − can still take one back. Sold-out rows stay quiet whatever happens.
+      const paintRep=(gEl,g)=>{ const ids=selIds(g), max=limOf(g).max, full=!!(max&&ids.length>=max);
+        gEl.querySelectorAll('.op-rep').forEach(r=>{ const cid=Number(r.dataset.cid);
+          const n=ids.filter(x=>x===cid).length, out=!!r.dataset.oos;
+          r.classList.toggle('on',n>0); r.classList.toggle('op-off',out||(full&&!n));
+          const nEl=r.querySelector('.op-n'); if(nEl) nEl.textContent=n;
+          const dn=r.querySelector('[data-step="-1"]'), up=r.querySelector('[data-step="1"]');
+          if(dn) dn.disabled=!n; if(up) up.disabled=out||full; }); };
+      groups.forEach((g,i)=>{ if(o.multi&&isRep(g)) paintRep(mask.querySelectorAll('.op-group')[i],g); });
       mask.addEventListener('click',e=>{
         if(e.target===mask||e.target.closest('[data-x]')){ close(); return; }
         const ch=e.target.closest('.op-choice');
         // A disabled row takes no tap. A browser usually drops the click itself;
         // this is for the one that gets through, and for a sold-out row above all.
         if(ch&&(ch.disabled||ch.dataset.oos)) return;
+        // A repeatable row: − removes one occurrence, the row or + adds one.
+        // Refused, not clamped: no add past the ceiling or on a sold-out answer.
+        if(ch&&ch.classList.contains('op-rep')){ const oid=ch.dataset.oid, cid=Number(ch.dataset.cid);
+          const g=groups.find(x=>String(x.id)===String(oid)); if(!g) return;
+          const st=e.target.closest('[data-step]'); if(st&&st.disabled) return;
+          const arr=selIds(g).slice(), max=limOf(g).max;
+          if(st&&st.dataset.step==='-1'){ const i=arr.lastIndexOf(cid); if(i<0) return; arr.splice(i,1); }
+          else { if(max&&arr.length>=max) return; arr.push(cid); }
+          sel[g.id]=inOrder(g,arr);
+          paintRep(ch.closest('.op-group'),g); updFoot(); refreshBar(); return; }
         if(ch){ const oid=ch.dataset.oid, cid=Number(ch.dataset.cid);
           if(o.multi){ const arr=sel[oid]||(sel[oid]=[]); const i=arr.indexOf(cid);
             const g=groups.find(x=>String(x.id)===String(oid)), max=limOf(g).max;

@@ -628,6 +628,17 @@ button{font:inherit;color:inherit;margin:0}
 .opt-c.out{border-style:dashed;opacity:.65}
 .opt-c.out .ol{color:var(--td-text2)}
 .opt-c .od.out{color:var(--td-brick-ink);background:var(--td-brick-tint);border-radius:var(--r-pill);padding:1px 8px;font-size:12px}
+/* A repeatable answer's − n + counter. The row is the +; the − is its own
+   target, wide enough for a thumb. */
+.opt-rep{cursor:pointer}
+.opt-ct{flex:none;display:flex;align-items:center;gap:2px;margin-left:10px}
+.opt-dec,.opt-inc{
+  width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--td-border);border-radius:var(--r-pill);
+  font-size:18px;line-height:1;color:var(--td-text);
+}
+.opt-dec.off,.opt-inc.off{opacity:.3}
+.opt-n{min-width:24px;text-align:center;font-size:15px;font-variant-numeric:tabular-nums}
 .opt-err{
   margin-top:10px;font-size:13px;text-align:center;
   color:var(--td-brick-ink);background:var(--td-brick-tint);
@@ -3131,10 +3142,24 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   function optsHtml(opts) {
     if (!opts || !opts.length) return '';
     var h = '';
+    var seen = {};
     for (var i = 0; i < opts.length; i++) {
       var o = opts[i] || {};
+      // A REPEATED PICK (two Medjool Boats) is the same entry written again; it
+      // reads as one row with a count, the way the line's own quantity does —
+      // counted where it first appears, wherever its repeats sit (a recalled
+      // phone order may carry A, B, A).
+      var n = 1;
+      if (o.choice_id != null) {
+        var key = o.choice_id + '|' + (o.label || '');
+        if (seen[key]) continue;
+        seen[key] = 1;
+        for (var k = i + 1; k < opts.length; k++)
+          if (opts[k] && opts[k].choice_id === o.choice_id && (opts[k].label || '') === (o.label || '')) n++;
+      }
       var a = cuT(o.label || o.label_en || '', o.label_cn || o.label || o.label_en || '');
       if (!a) continue;
+      if (n > 1) a += ' \u00d7' + n;
       var q = cuT(o.question_en || '', o.question_cn || o.question_en || '');
       h += '<div class="lno">' + esc(q ? q + ': ' + a : a) + '</div>';
     }
@@ -4106,6 +4131,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (!c || c.out) return;                       // sold out is not an answer
     var cur = S.opts.sel[oid] || [];
     if (!o.multi) { S.opts.sel[oid] = (cur.length === 1 && cur[0] === cid) && !o.req ? [] : [cid]; }
+    // ONE ANSWER MAY BE PICKED AGAIN (o.rep): a tap is one more, never a toggle,
+    // and the ceiling counts every pick. Taking one back is the counter's −.
+    else if (o.rep) {
+      if (o.max && cur.length >= o.max) return;
+      cur.push(cid);
+      S.opts.sel[oid] = cur;
+    }
     else {
       var at = cur.indexOf(cid);
       if (at >= 0) cur.splice(at, 1);
@@ -4115,6 +4147,23 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     }
     S.opts.err = '';
     render();
+  }
+
+  // The counter's −: takes back ONE pick of this answer, the last one made.
+  function untickOpt(oid, cid) {
+    if (!S.opts) return;
+    var cur = S.opts.sel[oid] || [];
+    var at = cur.lastIndexOf(cid);
+    if (at < 0) return;
+    cur.splice(at, 1);
+    S.opts.sel[oid] = cur;
+    S.opts.err = '';
+    render();
+  }
+  function pickCount(oid, cid) {
+    var cur = (S.opts && S.opts.sel[oid]) || [], n = 0;
+    for (var i = 0; i < cur.length; i++) if (cur[i] === cid) n++;
+    return n;
   }
 
   // The first question that is not answered yet, or null. Drives both the
@@ -4168,9 +4217,35 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
          + (o.req ? '<i class="req">' + esc(T('optRequired')) + '</i>' : '')
          + (lim ? '<i class="lim">' + esc(lim) + '</i>' : '')
          + '</div>';
+      // How many picks this question holds, for the + that would break a ceiling.
+      var held = (S.opts.sel[o.id] || []).length;
       (o.choices || []).forEach(function (c) {
         var on = (S.opts.sel[o.id] || []).indexOf(c.id) >= 0;
         var d = Number(c.d) || 0;
+        var money1 = c.out ? '<span class="od out">' + esc(T('outOfStock')) + '</span>'
+                   : (d ? '<span class="od">' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + '</span>' : '');
+        /* A REPEATABLE ANSWER IS A − n + COUNTER, not a tick-box. The row itself
+           is the +, so the habit of tapping the answer still works; the − sits
+           inside it and only once there is something to take back. Divs, not
+           buttons, because a button may not hold a button. */
+        if (o.rep) {
+          var n = pickCount(o.id, c.id);
+          var full = !!(o.max && held >= o.max);
+          h += '<div class="srow opt-c opt-rep' + (n ? ' on' : '') + (c.out ? ' out' : '') + '" role="button"'
+             + (c.out ? ' aria-disabled="true"' : ' data-opt="tick" data-o="' + o.id + '" data-c="' + c.id + '"')
+             + '>'
+             + '<span class="ol">' + esc(cuT(c.en, c.cn)) + '</span>'
+             + money1
+             + (c.out && !n ? '' :
+                '<span class="opt-ct">'
+                + (n ? '<span class="opt-dec" role="button" data-opt="dec" data-o="' + o.id + '" data-c="' + c.id + '">\u2212</span>'
+                     : '<span class="opt-dec off" data-opt="none">\u2212</span>')
+                + '<span class="opt-n">' + n + '</span>'
+                + '<span class="opt-inc' + (full || c.out ? ' off' : '') + '">+</span>'
+                + '</span>')
+             + '</div>';
+          return;
+        }
         h += '<button class="srow opt-c' + (on ? ' on' : '') + (c.out ? ' out' : '') + '" type="button"'
            + (c.out ? ' disabled' : ' data-opt="tick" data-o="' + o.id + '" data-c="' + c.id + '"')
            + '>'
@@ -4178,8 +4253,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
            + '<span class="ol">' + esc(cuT(c.en, c.cn)) + '</span>'
            // Sold out replaces the money it would have crowded, exactly as a
            // sold-out tile replaces its price with the reason.
-           + (c.out ? '<span class="od out">' + esc(T('outOfStock')) + '</span>'
-                    : (d ? '<span class="od">' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + '</span>' : ''))
+           + money1
            + '</button>';
       });
     });
@@ -4206,7 +4280,15 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (!S.opts) return [];
     var out = [];
     (S.opts.p.options || []).forEach(function (o) {
-      (S.opts.sel[o.id] || []).forEach(function (cid) {
+      // Repeats are posted in the order the answers are LISTED, not tapped, so
+      // two Medjool Boats sit side by side and read as one row with a count.
+      var ids = (S.opts.sel[o.id] || []).slice();
+      if (o.rep) {
+        var rank = {};
+        (o.choices || []).forEach(function (x, i) { rank[x.id] = i; });
+        ids.sort(function (a, b) { return rank[a] - rank[b]; });
+      }
+      ids.forEach(function (cid) {
         var c = (o.choices || []).filter(function (x) { return x.id === cid; })[0];
         if (!c) return;
         // The SAME shape routes/shop-menu.js snapshots and renderLines draws.
@@ -4348,6 +4430,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         if (oa === 'add') return commitOpts();
         if (oa === 'tick') {
           return tickOpt(Number(t.getAttribute('data-o')), Number(t.getAttribute('data-c')));
+        }
+        if (oa === 'dec') {
+          return untickOpt(Number(t.getAttribute('data-o')), Number(t.getAttribute('data-c')));
         }
         return;
       }

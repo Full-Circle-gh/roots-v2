@@ -1771,7 +1771,7 @@ function answersRefusal(answers) {
 // Mini App Backend editor a read + write path so options can actually be authored.
 function loadProductOptions(productId) {
   const options = tdb().prepare(
-    `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order
+    `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices, allow_repeat, sort_order
        FROM retail_product_options WHERE product_id = ?
       ORDER BY sort_order ASC, id ASC`
   ).all(productId);
@@ -1861,11 +1861,15 @@ function sanitiseProductOptions(input) {
     // against the choices being saved in the same breath, so a ceiling of 5 on a
     // three-choice group is stored as "no ceiling" rather than as a number that
     // silently never binds. See lib/option-limits.js for the whole rule.
+    // ONE ANSWER PICKED MORE THAN ONCE (two Medjool Boats) — pick-any only,
+    // since a radio is one answer by construction. It also changes what the
+    // limits can mean, so it is read before they are normalised.
+    const allow_repeat = (type === 'multi' && o && o.allow_repeat) ? 1 : 0;
     const limits = normaliseLimits(type, o && o.min_choices, o && o.max_choices,
-      choices.length, o && o.is_required);
+      choices.length, o && o.is_required, allow_repeat);
     return {
       question_en, question_cn, type, is_required: limits.is_required,
-      min_choices: limits.min_choices, max_choices: limits.max_choices, choices,
+      min_choices: limits.min_choices, max_choices: limits.max_choices, allow_repeat, choices,
     };
   })
     // The `o.type === 'text'` arm keeps a choice-less text option from being
@@ -1901,8 +1905,8 @@ function writeProductOptions(handle, productId, clean) {
   ).run(productId);
   handle.prepare('DELETE FROM retail_product_options WHERE product_id = ?').run(productId);
   const insOpt = handle.prepare(
-    `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order)
-     VALUES (?,?,?,?,?,?,?,?)`
+    `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, min_choices, max_choices, allow_repeat, sort_order)
+     VALUES (?,?,?,?,?,?,?,?,?)`
   );
   const insChoice = handle.prepare(
     `INSERT INTO retail_product_option_choices (option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order)
@@ -1910,7 +1914,7 @@ function writeProductOptions(handle, productId, clean) {
   );
   clean.forEach((o, oi) => {
     const optId = insOpt.run(productId, o.question_en, o.question_cn || null, o.type,
-      o.is_required, o.min_choices, o.max_choices, oi).lastInsertRowid;
+      o.is_required, o.min_choices, o.max_choices, o.allow_repeat ? 1 : 0, oi).lastInsertRowid;
     o.choices.forEach((c, ci) => insChoice.run(optId, c.label_en, c.label_cn || null, c.price_delta, c.is_default, c.stock_product_id, ci));
   });
 }
@@ -3708,7 +3712,7 @@ router.get('/api/retail/products/:id', (req, res) => {
   product.reviews_recent = mergedRecentReviews(id, 3);
 
   const options = tdb().prepare(
-    `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order
+    `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices, allow_repeat, sort_order
        FROM retail_product_options WHERE product_id = ?
       ORDER BY sort_order ASC, id ASC`
   ).all(id);
@@ -3771,7 +3775,8 @@ router.get('/api/retail/products/:id', (req, res) => {
     // measures pickability the same way, agrees with the page it served.
     const cs = choicesByOpt[o.id] || [];
     const lim = optionLimits.effectiveLimits(o, cs.filter(c => c.addon_available !== false).length);
-    return { ...o, min_choices: lim.min, max_choices: lim.max, choices: cs };
+    return { ...o, min_choices: lim.min, max_choices: lim.max,
+             allow_repeat: (o.type === 'multi' && o.allow_repeat) ? 1 : 0, choices: cs };
   });
 
   // Variant siblings — every purchasable product in the same variant_group_id
@@ -24065,7 +24070,7 @@ function snapshotBody(json) {
 // is being preserved.
 function productOptionsSnapshot(db, id) {
   const opts = db.prepare(
-    `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices
+    `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices, allow_repeat
        FROM retail_product_options WHERE product_id = ?
       ORDER BY sort_order ASC, id ASC`
   ).all(id);
@@ -24090,6 +24095,7 @@ function productOptionsSnapshot(db, id) {
     question_en: o.question_en || '', question_cn: o.question_cn || '',
     type: o.type, is_required: o.is_required ? 1 : 0,
     min_choices: Number(o.min_choices) || 0, max_choices: Number(o.max_choices) || 0,
+    allow_repeat: o.allow_repeat ? 1 : 0,
     choices: byOpt.get(o.id) || [],
   }));
 }
@@ -25672,13 +25678,13 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
     // product and is carried through unchanged — the copy draws that extra from
     // the same stock the source did.
     const srcOpts = tdb().prepare(
-      `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order
+      `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices, allow_repeat, sort_order
          FROM retail_product_options WHERE product_id = ? ORDER BY sort_order ASC, id ASC`
     ).all(id);
     if (srcOpts.length) {
       const insOpt = tdb().prepare(
-        `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order)
-         VALUES (?,?,?,?,?,?,?,?)`
+        `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, min_choices, max_choices, allow_repeat, sort_order)
+         VALUES (?,?,?,?,?,?,?,?,?)`
       );
       const getChoices = tdb().prepare(
         `SELECT label_en, label_cn, price_delta, is_default, stock_product_id, sort_order
@@ -25690,7 +25696,7 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
       );
       for (const o of srcOpts) {
         const newOptId = insOpt.run(copyId, o.question_en, o.question_cn, o.type, o.is_required,
-          o.min_choices || 0, o.max_choices || 0, o.sort_order).lastInsertRowid;
+          o.min_choices || 0, o.max_choices || 0, o.allow_repeat ? 1 : 0, o.sort_order).lastInsertRowid;
         for (const c of getChoices.all(o.id)) {
           insChoice.run(newOptId, c.label_en, c.label_cn, c.price_delta, c.is_default, c.stock_product_id, c.sort_order);
         }
@@ -39039,14 +39045,23 @@ function priceCart(items, customerId) {
     let optionDelta = 0;
     if (Array.isArray(it.choices) && it.choices.length) {
       const placeholders = it.choices.map(() => '?').join(',');
-      const choices = tdb().prepare(
-        `SELECT c.price_delta, o.product_id
+      const byId = new Map(tdb().prepare(
+        `SELECT c.id, c.price_delta, o.product_id, o.type, o.allow_repeat
            FROM retail_product_option_choices c
            JOIN retail_product_options o ON o.id = c.option_id
           WHERE c.id IN (${placeholders})`
-      ).all(...it.choices);
-      for (const c of choices) {
+      ).all(...it.choices).map(c => [c.id, c]));
+      // PER POSTED ID, not per row the lookup returned: two Medjool Boats are
+      // one row and two charges. A repeat on a tick-box question is the same
+      // box written twice and charged once — the rule resolveAnswers applies at
+      // checkout, so this preview cannot quote a different total.
+      const seen = new Set();
+      for (const raw of it.choices) {
+        const c = byId.get(parseInt(raw, 10));
+        if (!c) continue;
         if (c.product_id !== pid) return { error: 'choice_wrong_product', subtotal: 0, totalQty: 0 };
+        if (seen.has(c.id) && !(c.type === 'multi' && c.allow_repeat)) continue;
+        seen.add(c.id);
         optionDelta += Number(c.price_delta) || 0;
       }
     }
@@ -40244,8 +40259,13 @@ function deriveAddonLineMoney(items, nowMs) {
       const rows = tdb().prepare(
         `SELECT id, price_delta FROM retail_product_option_choices
           WHERE id IN (${choiceIds.map(() => '?').join(',')})`).all(...choiceIds);
-      if (rows.length !== choiceIds.length) return null;   // a choice went away
-      for (const c of rows) optionDelta += Number(c.price_delta) || 0;
+      // PER ENTRY, not per row: the staged options are resolveAnswers' snapshot,
+      // where two Medjool Boats are the same choice written twice and charged
+      // twice. The lookup returns one row per DISTINCT id, so that is what the
+      // went-away check compares against.
+      const deltaById = new Map(rows.map(c => [c.id, Number(c.price_delta) || 0]));
+      if (deltaById.size !== new Set(choiceIds).size) return null;   // a choice went away
+      for (const cid of choiceIds) optionDelta += deltaById.get(cid);
     }
     const eff = flashsales.effectivePriceFor(p, p.price, nowMs);
     const unit = eff.price + optionDelta;
