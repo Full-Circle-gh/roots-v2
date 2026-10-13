@@ -67,9 +67,11 @@ const REPO = path.join(__dirname, '..');
    same stretches went unread. A new panel landing in one of those stretches
    "added" three orphans that were its own JavaScript. Literals are now found by
    acorn (parsedTemplateLiterals); 161 is the backlog as it really stands, and
-   the ratchet starts again from there. */
+   the ratchet starts again from there.
+   161 → 159 on 2026-10-13: the Top-up packages table lost its two Chinese-only
+   title headers (标题(英文) / 标题(中文)) with the columns they named. */
 const BUDGET = 0;
-const ORPHAN_BUDGET = 161;
+const ORPHAN_BUDGET = 159;
 
 const CJK = /[一-鿿]/;
 const VOID = new Set(['br', 'img', 'input', 'hr', 'meta', 'link', 'source',
