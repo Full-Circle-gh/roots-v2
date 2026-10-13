@@ -277,7 +277,7 @@ it('Pick one ⇄ Pick any: to a free pick drops every charge, link and limit', a
   same(h.w(0).body.options[0], { question_en: 'Add extras?', question_cn: '加点配料?', type: 'single', is_required: 0, min_choices: 0, max_choices: 0, allow_repeat: 0,
     choices: [{ label_en: 'Pickles', label_cn: '腌菜', price_delta: 0, is_default: 0, stock_product_id: null }] });
 });
-it('§471 Repeats allowed: a pick-any question sends allow_repeat, a pick-one never does', async () => {
+it('§473 Repeats allowed: a pick-any question sends allow_repeat, a pick-one never does', async () => {
   const h = await opened({ row: WITH(DRESSING(), EXTRAS()) });
   h.CMD.peOptRepeat(0); h.CMD.peOptRepeat(1); h.flush();
   same(h.w(0).body.options.map(o => o.allow_repeat), [0, 1]);

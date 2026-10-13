@@ -42953,7 +42953,7 @@ function peOptCard(){
     const lim=o.type==='multi'?`<span style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text-secondary)" title="${T('0 in a box means no limit','填 0 表示不限')}">${T('Pick','选')}${limBox('min_choices',T('Fewest they must pick (0 = no limit)','至少选几项(0 = 不限)'))}–${limBox('max_choices',T('Most they can pick (0 = no limit)','最多选几项(0 = 不限)'))}${T('','项')}</span>`:'';
     const req=`<button onclick="APP.cmd('peOptReq',${oi})" ${dis} aria-pressed="${!!o.is_required}" title="${T('Customer must choose before adding to cart','加入购物车前必须选择')}" style="display:flex;align-items:center;gap:8px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;color:var(--text-primary);font-size:14px">
         <span style="flex:none;width:20px;height:20px;border-radius:6px;border:1.75px solid ${o.is_required?'var(--text-primary)':'var(--border-strong)'};background:${o.is_required?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${o.is_required?ic('check',13,2.5):''}</span>${T('Required','必选')}</button>`;
-    /* §471 — the same answer picked more than once (two Medjool Boats). Pick-any only. */
+    /* §473 — the same answer picked more than once (two Medjool Boats). Pick-any only. */
     const rep=o.type!=='multi'?'':`<button onclick="APP.cmd('peOptRepeat',${oi})" ${dis} aria-pressed="${!!o.allow_repeat}" title="${T('The same choice can be picked more than once','同一项可选多次')}" style="display:flex;align-items:center;gap:8px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;color:var(--text-primary);font-size:14px">
         <span style="flex:none;width:20px;height:20px;border-radius:6px;border:1.75px solid ${o.allow_repeat?'var(--text-primary)':'var(--border-strong)'};background:${o.allow_repeat?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${o.allow_repeat?ic('check',13,2.5):''}</span>${T('Repeats allowed','可重复选')}</button>`;
     const choices=o.type==='text'?'':(o.choices.length?o.choices.map((c,ci)=>{
@@ -43024,7 +43024,7 @@ reg('peOptReq', oi=>{
   if(!a.o.is_required&&a.o.type==='multi'&&Number(a.o.min_choices)>0) a.o.min_choices=0;
   peOptTouched(true);
 });
-/* §471 optRepeat: repeats on or off; the server re-normalises the limits against it. */
+/* §473 optRepeat: repeats on or off; the server re-normalises the limits against it. */
 reg('peOptRepeat', oi=>{
   const a=peOptAt(oi); if(!a||a.o.type!=='multi') return;
   a.o.allow_repeat=a.o.allow_repeat?0:1;
@@ -51015,7 +51015,7 @@ function mapOrderRow(r){
    one. Kept as an EN/CN pair rather than resolved here, because the operator can
    flip language after the order was mapped. */
 function itemOpts(it){
-  // Two Medjool Boats are one row with a count (§471) — optFold's rule, kept
+  // Two Medjool Boats are one row with a count (§473) — optFold's rule, kept
   // inline because this is read on its own by the screens that map an order.
   const arr=[], first={};
   (Array.isArray(it.options)?it.options:[]).forEach(o=>{

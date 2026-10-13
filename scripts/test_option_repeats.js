@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * One answer of a "Pick any" question, picked more than once (§471).
+ * One answer of a "Pick any" question, picked more than once (§473).
  *
  *   node scripts/test_option_repeats.js
  *
  * Reported by Ash from the till: "can't select 2 items that are the same for
  * example 2 medjool boats". §153 had said a repeated choice id counts once,
- * on purpose. §471 keeps that for every question as it was and adds a switch,
+ * on purpose. §473 keeps that for every question as it was and adds a switch,
  * `allow_repeat`, under which every pick counts.
  *
  * What this locks down:

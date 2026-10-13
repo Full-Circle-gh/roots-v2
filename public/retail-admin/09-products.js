@@ -4472,7 +4472,7 @@ function optLoad(id) {
         type: o.type || 'single', is_required: o.is_required ? 1 : 0,
         // How many of a pick-any group may be ticked; 0 on both = no limit.
         min_choices: Number(o.min_choices) || 0, max_choices: Number(o.max_choices) || 0,
-        // The same answer may be picked more than once (§471): 2× Medjool Boats.
+        // The same answer may be picked more than once (§473): 2× Medjool Boats.
         allow_repeat: o.allow_repeat ? 1 : 0,
         choices: (o.choices || []).map(c => ({
           label_en: c.label_en || '', label_cn: c.label_cn || '',
@@ -4567,7 +4567,7 @@ function optRender() {
         typeSel(oi, o.type) +
         limBoxes(oi, o) +
         `<label class="opt-req" title="${cuT('Customer must choose before adding to cart', '加入购物车前必须选择')}"><input type="checkbox"${o.is_required ? ' checked' : ''} onchange="optReq(${oi}, this.checked)"> ${cuT('Required', '必选')}</label>` +
-        // §471 — ONE ANSWER, PICKED MORE THAN ONCE: two Medjool Boats in a bites
+        // §473 — ONE ANSWER, PICKED MORE THAN ONCE: two Medjool Boats in a bites
         // box. Pick-any only; the customer gets a − n + counter on each answer.
         (o.type === 'multi' ? `<label class="opt-req" title="${cuT('The same choice can be picked more than once', '同一项可选多次')}"><input type="checkbox"${o.allow_repeat ? ' checked' : ''} onchange="optRepeat(${oi}, this.checked)"> ${cuT('Repeats allowed', '可重复选')}</label>` : '') +
         // A labelled button at the far end of the row, not a bare ✕: the ✕ sat
@@ -4677,7 +4677,7 @@ function optLimit(oi, key, val) {
     if (box) box.checked = !!o.is_required;
   }
 }
-// §471 — repeats on or off. Re-rendered so the limit boxes pick up their new
+// §473 — repeats on or off. Re-rendered so the limit boxes pick up their new
 // ceiling; the server re-normalises the limits against the flag on save.
 function optRepeat(oi, on) {
   const o = OPT[oi]; if (!o) return;

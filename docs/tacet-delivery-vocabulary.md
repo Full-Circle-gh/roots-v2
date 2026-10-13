@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.330 · 2026-10-13 · §471 ONE ANSWER PICKED MORE THAN ONCE — 2 STRINGS COMPOSED BY CLAUDE (`Repeats allowed · 可重复选`, `The same choice can be picked more than once · 同一项可选多次`), BUILT ON THE LIVE 多选 / 必选 / 单选 AND THE LIVE 可重复; THE COUNTER AND `×2` NEED NO WORDS.** See *One answer picked more than once (§471)*.
+**v1.330 · 2026-10-13 · §473 ONE ANSWER PICKED MORE THAN ONCE — 2 STRINGS COMPOSED BY CLAUDE (`Repeats allowed · 可重复选`, `The same choice can be picked more than once · 同一项可选多次`), BUILT ON THE LIVE 多选 / 必选 / 单选 AND THE LIVE 可重复; THE COUNTER AND `×2` NEED NO WORDS.** See *One answer picked more than once (§473)*.
 
 **v1.329 · 2026-10-12 · §466 HIDING A CATEGORY FROM THE MINI APP — 4 STRINGS COMPOSED BY CLAUDE, EACH THE LIVE §288 QR-MENU STRING WITH `二维码菜单` SWAPPED FOR THE LIVE `小程序`; THE MINI-APP HINT EXTENDED WITH THE QR HINT'S OWN LIVE CLAUSE.** See *Hiding a category from the mini app (§466)*.
 
@@ -13944,7 +13944,7 @@ register. Products → Categories on the desktop (`public/retail-admin/01-core.j
 (`已隐藏`). `下架`: means unpublished, which is a product's state and a
 different act — a hidden category's products stay published.
 
-## One answer picked more than once (§471)
+## One answer picked more than once (§473)
 
 **Composed by Claude, 2026-10-13, under the 2026-09-06 amendment.** Operator
 register. The product editor's option row, desktop

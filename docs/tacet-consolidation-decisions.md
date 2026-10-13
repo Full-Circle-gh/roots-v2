@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.519
+# Tacet shared-core consolidation — decisions record, v4.521
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,7 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-13 · v4.519 — **§471 · A PICK-ANY QUESTION CAN LET ONE ANSWER BE PICKED MORE THAN ONCE (§153 AMENDED) — DECIDED BY ASH:** *"can't select 2 items that are the same for example 2 medjool boats"*, with a photo of the till's *Small Bites Selection* sheet (*At least 2*), then three choices put to him: a switch per question, a − n + counter on each answer, everywhere at once. A new `allow_repeat` column on `retail_product_options`, 0 on every existing row, so nothing already authored changes. With it on, a pick-any question counts every pick toward its floor and ceiling, charges each one and takes each one off a linked shelf. A repeat is stored on the order line as the same entry written twice, so money, stock and cost need no second rule; printers fold it into *Medjool Boats ×2*. Two Chinese strings composed by Claude; see the vocabulary's v1.330. Schema: one added column. No change to `.gitignore` or CI. See §471.
+2026-10-13 · v4.521 — **§473 · A PICK-ANY QUESTION CAN LET ONE ANSWER BE PICKED MORE THAN ONCE (§153 AMENDED) — DECIDED BY ASH:** *"can't select 2 items that are the same for example 2 medjool boats"*, with a photo of the till's *Small Bites Selection* sheet (*At least 2*), then three choices put to him: a switch per question, a − n + counter on each answer, everywhere at once. A new `allow_repeat` column on `retail_product_options`, 0 on every existing row, so nothing already authored changes. With it on, a pick-any question counts every pick toward its floor and ceiling, charges each one and takes each one off a linked shelf. A repeat is stored on the order line as the same entry written twice, so money, stock and cost need no second rule; printers fold it into *Medjool Boats ×2*. Two Chinese strings composed by Claude; see the vocabulary's v1.330. Schema: one added column. No change to `.gitignore` or CI. See §473.
 
 2026-10-13 · v4.518 — **§470 · `routes/retail.js` IS SPLIT BY AREA, ONE AREA PER PR, WITH NO CHANGE IN BEHAVIOUR — DECIDED BY ASH:** *"Split retail.js up"*, then *"start"* to the plan put to him. The file is 43,320 lines and 402 endpoints. Each area moves into its own file under `routes/retail/`, mounted inside `retail.js` at the spot the area left, so no request is answered by a different handler. Polls and voting go first, as the pilot. Held by `scripts/test_retail_split_routes.js`, which fails if a moved endpoint and one left behind could answer the same request. No string, no schema, no change to `.gitignore` or CI. See §470.
 
@@ -30766,7 +30766,11 @@ transaction is one of the 30 it would count, and it now lives in the polls part.
 
 No string, no schema, no change to `.gitignore` or CI.
 
-## §471 — A PICK-ANY QUESTION CAN LET ONE ANSWER BE PICKED MORE THAN ONCE (§153 AMENDED)
+## §473 — A PICK-ANY QUESTION CAN LET ONE ANSWER BE PICKED MORE THAN ONCE (§153 AMENDED)
+
+**Numbered §473, not §471.** §471 and §472 are held by two PRs that were open,
+unmerged, when this one merged (#1136, #1137). Taking the next free number
+keeps both of their citations valid whichever order they land in.
 
 **Decided by Ash, 2026-10-13:** *"can't select 2 items that are the same for
 example 2 medjool boats"*, with a photo of the till's option sheet for *Small
