@@ -1,0 +1,768 @@
+[
+  {
+    "req": "GET /api/retail/polls [anon]",
+    "status": 401,
+    "body": {
+      "success": false,
+      "error": "missing_token"
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/voting/config [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "intro_en": "Every poll closes Sundays. Voting earns {pts} pts.",
+        "intro_cn": "每周日截止,投票得 {pts} 积分。",
+        "show_counts": true
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/polls [admin]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "need_at_least_two_options"
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/polls [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "question_en": "Next flavour?",
+        "question_cn": "下一个口味?",
+        "explainer_en": null,
+        "explainer_cn": null,
+        "category_en": null,
+        "category_cn": null,
+        "status": "open",
+        "closes_at": null,
+        "reward_points": 7,
+        "is_featured": 0,
+        "sort_order": 0,
+        "total_votes": 0,
+        "winner_option_id": null,
+        "created_at": "<T>",
+        "updated_at": "<T>",
+        "display_min_total": 0,
+        "options": [
+          {
+            "id": 1,
+            "label_en": "Mango",
+            "label_cn": "芒果",
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 0,
+            "votes": 0
+          },
+          {
+            "id": 2,
+            "label_en": "Lime",
+            "label_cn": "青柠",
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 1,
+            "votes": 0
+          }
+        ]
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/polls [admin]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "question_required"
+    }
+  },
+  {
+    "req": "GET /api/retail/polls [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "question_en": "Next flavour?",
+          "question_cn": "下一个口味?",
+          "explainer_en": null,
+          "explainer_cn": null,
+          "category_en": null,
+          "category_cn": null,
+          "status": "open",
+          "closes_at": null,
+          "reward_points": 7,
+          "is_featured": 0,
+          "sort_order": 0,
+          "total_votes": 0,
+          "winner_option_id": null,
+          "created_at": "<T>",
+          "updated_at": "<T>",
+          "display_min_total": 0,
+          "options": [
+            {
+              "id": 1,
+              "label_en": "Mango",
+              "label_cn": "芒果",
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 0,
+              "votes": 0
+            },
+            {
+              "id": 2,
+              "label_en": "Lime",
+              "label_cn": "青柠",
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 1,
+              "votes": 0
+            }
+          ],
+          "my_vote_option_id": null,
+          "real_total_votes": 0
+        }
+      ]
+    }
+  },
+  {
+    "req": "GET /api/retail/polls/public [anon]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "question_en": "Next flavour?",
+          "question_cn": "下一个口味?",
+          "explainer_en": null,
+          "explainer_cn": null,
+          "category_en": null,
+          "category_cn": null,
+          "status": "open",
+          "closes_at": null,
+          "reward_points": 7,
+          "is_featured": 0,
+          "sort_order": 0,
+          "total_votes": 0,
+          "winner_option_id": null,
+          "created_at": "<T>",
+          "updated_at": "<T>",
+          "display_min_total": 0,
+          "options": [
+            {
+              "id": 1,
+              "label_en": "Mango",
+              "label_cn": "芒果",
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 0,
+              "votes": 0
+            },
+            {
+              "id": 2,
+              "label_en": "Lime",
+              "label_cn": "青柠",
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 1,
+              "votes": 0
+            }
+          ],
+          "my_vote_option_id": null,
+          "real_total_votes": 0
+        }
+      ]
+    }
+  },
+  {
+    "req": "GET /api/retail/polls/1 [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "question_en": "Next flavour?",
+        "question_cn": "下一个口味?",
+        "explainer_en": null,
+        "explainer_cn": null,
+        "category_en": null,
+        "category_cn": null,
+        "status": "open",
+        "closes_at": null,
+        "reward_points": 7,
+        "is_featured": 0,
+        "sort_order": 0,
+        "total_votes": 0,
+        "winner_option_id": null,
+        "created_at": "<T>",
+        "updated_at": "<T>",
+        "display_min_total": 0,
+        "options": [
+          {
+            "id": 1,
+            "label_en": "Mango",
+            "label_cn": "芒果",
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 0,
+            "votes": 0
+          },
+          {
+            "id": 2,
+            "label_en": "Lime",
+            "label_cn": "青柠",
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 1,
+            "votes": 0
+          }
+        ],
+        "my_vote_option_id": null,
+        "real_total_votes": 0
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/polls/999 [customer]",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "not_found"
+    }
+  },
+  {
+    "req": "POST /api/retail/polls/1/vote [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "poll": {
+          "id": 1,
+          "question_en": "Next flavour?",
+          "question_cn": "下一个口味?",
+          "explainer_en": null,
+          "explainer_cn": null,
+          "category_en": null,
+          "category_cn": null,
+          "status": "open",
+          "closes_at": null,
+          "reward_points": 7,
+          "is_featured": 0,
+          "sort_order": 0,
+          "total_votes": 1,
+          "winner_option_id": null,
+          "created_at": "<T>",
+          "updated_at": "<T>",
+          "display_min_total": 0,
+          "options": [
+            {
+              "id": 1,
+              "label_en": "Mango",
+              "label_cn": "芒果",
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 0,
+              "votes": 1
+            },
+            {
+              "id": 2,
+              "label_en": "Lime",
+              "label_cn": "青柠",
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 1,
+              "votes": 0
+            }
+          ],
+          "my_vote_option_id": 1,
+          "real_total_votes": 1
+        },
+        "awarded_points": 7,
+        "points_balance": 7
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/polls/1/vote [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "already_voted": true,
+        "poll": {
+          "id": 1,
+          "question_en": "Next flavour?",
+          "question_cn": "下一个口味?",
+          "explainer_en": null,
+          "explainer_cn": null,
+          "category_en": null,
+          "category_cn": null,
+          "status": "open",
+          "closes_at": null,
+          "reward_points": 7,
+          "is_featured": 0,
+          "sort_order": 0,
+          "total_votes": 1,
+          "winner_option_id": null,
+          "created_at": "<T>",
+          "updated_at": "<T>",
+          "display_min_total": 0,
+          "options": [
+            {
+              "id": 1,
+              "label_en": "Mango",
+              "label_cn": "芒果",
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 0,
+              "votes": 1
+            },
+            {
+              "id": 2,
+              "label_en": "Lime",
+              "label_cn": "青柠",
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 1,
+              "votes": 0
+            }
+          ],
+          "my_vote_option_id": 1,
+          "real_total_votes": 1
+        }
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/polls/1/vote [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "bad_option"
+    }
+  },
+  {
+    "req": "POST /api/retail/polls/1/vote [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "bad_request"
+    }
+  },
+  {
+    "req": "POST /api/retail/polls/1/vote [anon]",
+    "status": 401,
+    "body": {
+      "success": false,
+      "error": "missing_token"
+    }
+  },
+  {
+    "req": "GET /api/retail/polls/public [anon]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "question_en": "Next flavour?",
+          "question_cn": "下一个口味?",
+          "explainer_en": null,
+          "explainer_cn": null,
+          "category_en": null,
+          "category_cn": null,
+          "status": "open",
+          "closes_at": null,
+          "reward_points": 7,
+          "is_featured": 0,
+          "sort_order": 0,
+          "total_votes": 1,
+          "winner_option_id": null,
+          "created_at": "<T>",
+          "updated_at": "<T>",
+          "display_min_total": 0,
+          "options": [
+            {
+              "id": 1,
+              "label_en": "Mango",
+              "label_cn": "芒果",
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 0,
+              "votes": 1
+            },
+            {
+              "id": 2,
+              "label_en": "Lime",
+              "label_cn": "青柠",
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 1,
+              "votes": 0
+            }
+          ],
+          "my_vote_option_id": null,
+          "real_total_votes": 1
+        }
+      ]
+    }
+  },
+  {
+    "req": "GET /api/retail/voting/config [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "intro_en": "Every poll closes Sundays. Voting earns {pts} pts.",
+        "intro_cn": "每周日截止,投票得 {pts} 积分。",
+        "show_counts": true
+      }
+    }
+  },
+  {
+    "req": "PUT /api/retail-admin/voting/config [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "intro_en": "Vote by Sunday",
+        "intro_cn": "周日前投票",
+        "show_counts": false
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/voting/config [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "intro_en": "Vote by Sunday",
+        "intro_cn": "周日前投票",
+        "show_counts": false
+      }
+    }
+  },
+  {
+    "req": "PUT /api/retail-admin/polls/1 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "question_en": "Next flavour?",
+        "question_cn": "下一个口味?",
+        "explainer_en": null,
+        "explainer_cn": null,
+        "category_en": null,
+        "category_cn": null,
+        "status": "open",
+        "closes_at": null,
+        "reward_points": 7,
+        "is_featured": 1,
+        "sort_order": 0,
+        "total_votes": 1,
+        "winner_option_id": null,
+        "created_at": "<T>",
+        "updated_at": "<T>",
+        "display_min_total": 50,
+        "options": [
+          {
+            "id": 1,
+            "label_en": "Mango",
+            "label_cn": "芒果",
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 0,
+            "votes": 1
+          },
+          {
+            "id": 2,
+            "label_en": "Lime",
+            "label_cn": "青柠",
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 1,
+            "votes": 0
+          }
+        ]
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/polls/1 [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "question_en": "Next flavour?",
+        "question_cn": "下一个口味?",
+        "explainer_en": null,
+        "explainer_cn": null,
+        "category_en": null,
+        "category_cn": null,
+        "status": "open",
+        "closes_at": null,
+        "reward_points": 7,
+        "is_featured": 1,
+        "sort_order": 0,
+        "total_votes": 50,
+        "winner_option_id": null,
+        "created_at": "<T>",
+        "updated_at": "<T>",
+        "display_min_total": 50,
+        "options": [
+          {
+            "id": 1,
+            "label_en": "Mango",
+            "label_cn": "芒果",
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 0,
+            "votes": 50
+          },
+          {
+            "id": 2,
+            "label_en": "Lime",
+            "label_cn": "青柠",
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 1,
+            "votes": 0
+          }
+        ],
+        "my_vote_option_id": 1,
+        "real_total_votes": 1
+      }
+    }
+  },
+  {
+    "req": "PUT /api/retail-admin/polls/1 [admin]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "bad_status"
+    }
+  },
+  {
+    "req": "PUT /api/retail-admin/polls/1 [admin]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "bad_winner_option"
+    }
+  },
+  {
+    "req": "PUT /api/retail-admin/polls/1 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "question_en": "Next flavour?",
+        "question_cn": "下一个口味?",
+        "explainer_en": null,
+        "explainer_cn": null,
+        "category_en": null,
+        "category_cn": null,
+        "status": "closed",
+        "closes_at": null,
+        "reward_points": 7,
+        "is_featured": 1,
+        "sort_order": 0,
+        "total_votes": 1,
+        "winner_option_id": 1,
+        "created_at": "<T>",
+        "updated_at": "<T>",
+        "display_min_total": 50,
+        "options": [
+          {
+            "id": 1,
+            "label_en": "Mango!",
+            "label_cn": null,
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 0,
+            "votes": 1
+          },
+          {
+            "id": 2,
+            "label_en": "Lime",
+            "label_cn": null,
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 1,
+            "votes": 0
+          },
+          {
+            "id": 3,
+            "label_en": "Yuzu",
+            "label_cn": null,
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 2,
+            "votes": 0
+          }
+        ]
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/polls [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "question_en": "Next flavour?",
+          "question_cn": "下一个口味?",
+          "explainer_en": null,
+          "explainer_cn": null,
+          "category_en": null,
+          "category_cn": null,
+          "status": "closed",
+          "closes_at": null,
+          "reward_points": 7,
+          "is_featured": 1,
+          "sort_order": 0,
+          "total_votes": 1,
+          "winner_option_id": 1,
+          "created_at": "<T>",
+          "updated_at": "<T>",
+          "display_min_total": 50,
+          "options": [
+            {
+              "id": 1,
+              "label_en": "Mango!",
+              "label_cn": null,
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 0,
+              "votes": 1
+            },
+            {
+              "id": 2,
+              "label_en": "Lime",
+              "label_cn": null,
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 1,
+              "votes": 0
+            },
+            {
+              "id": 3,
+              "label_en": "Yuzu",
+              "label_cn": null,
+              "color_hex": null,
+              "image_url": null,
+              "sort_order": 2,
+              "votes": 0
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/polls/1 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "question_en": "Next flavour?",
+        "question_cn": "下一个口味?",
+        "explainer_en": null,
+        "explainer_cn": null,
+        "category_en": null,
+        "category_cn": null,
+        "status": "closed",
+        "closes_at": null,
+        "reward_points": 7,
+        "is_featured": 1,
+        "sort_order": 0,
+        "total_votes": 1,
+        "winner_option_id": 1,
+        "created_at": "<T>",
+        "updated_at": "<T>",
+        "display_min_total": 50,
+        "options": [
+          {
+            "id": 1,
+            "label_en": "Mango!",
+            "label_cn": null,
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 0,
+            "votes": 1
+          },
+          {
+            "id": 2,
+            "label_en": "Lime",
+            "label_cn": null,
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 1,
+            "votes": 0
+          },
+          {
+            "id": 3,
+            "label_en": "Yuzu",
+            "label_cn": null,
+            "color_hex": null,
+            "image_url": null,
+            "sort_order": 2,
+            "votes": 0
+          }
+        ]
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/polls/999 [admin]",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "not_found"
+    }
+  },
+  {
+    "req": "DELETE /api/retail-admin/polls/999 [admin]",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "not_found"
+    }
+  },
+  {
+    "req": "DELETE /api/retail-admin/polls/1 [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/polls [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": []
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/polls [anon]",
+    "status": 401,
+    "body": {
+      "error": "Not authenticated"
+    }
+  }
+]

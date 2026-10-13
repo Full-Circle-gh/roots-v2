@@ -24,6 +24,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 2026-10-13 · v4.521 — **§473 · A PICK-ANY QUESTION CAN LET ONE ANSWER BE PICKED MORE THAN ONCE (§153 AMENDED) — DECIDED BY ASH:** *"can't select 2 items that are the same for example 2 medjool boats"*, with a photo of the till's *Small Bites Selection* sheet (*At least 2*), then three choices put to him: a switch per question, a − n + counter on each answer, everywhere at once. A new `allow_repeat` column on `retail_product_options`, 0 on every existing row, so nothing already authored changes. With it on, a pick-any question counts every pick toward its floor and ceiling, charges each one and takes each one off a linked shelf. A repeat is stored on the order line as the same entry written twice, so money, stock and cost need no second rule; printers fold it into *Medjool Boats ×2*. Two Chinese strings composed by Claude; see the vocabulary's v1.330. Schema: one added column. No change to `.gitignore` or CI. See §473.
 
+2026-10-13 · v4.520 — **§472 · A SPLIT AREA'S ANSWERS ARE RECORDED, AND A MOVE MUST REPRODUCE THEM — DECIDED BY ASH:** *"next"*, to the proposal to keep the side-by-side request check as a permanent test before customers or products move. `scripts/test_retail_golden.js` sends a fixed list of requests per area to the real router over a seeded scratch database and compares every status and body with `scripts/test-support/golden/retail-<area>.json`. Polls, feedback and reviews are recorded, 75 requests, **from the code as it stood before any split** (`f7a687a`), and today's code matches all 75. **This adds a step for every session:** an area is recorded on main before it moves, and a deliberate change to a recorded answer is re-recorded with `--update <area>` in the same commit. No string, no schema, no change to `.gitignore` or CI. See §472.
+
 2026-10-13 · v4.519 — **§471 · THE DEAD TRANSACTION COUNT IN `test_tx_conversion_batch2.js` IS REMOVED, NOT REBUILT — ASKED BY ASH**, to the item §470 found and left open. The check counted the transactions in `routes/retail.js` still on the old form by running `scripts/diagnose_async_conversion_scope.js`, and expected 30. **That script was deleted on purpose** on 2026-08-23 in *"Scrap the Postgres migration completely"* (`533f1244`), by name, as the AST conversion-count authority. Since then the check has printed *"count check SKIPPED"* on every run, main included. The number measured how far the async conversion had got, and that conversion is cancelled, so there is nothing for it to count toward. The seven named routes that must stay on the old form are still checked one by one. No string, no schema, no change to `.gitignore` or CI. See §471.
 
 2026-10-13 · v4.518 — **§470 · `routes/retail.js` IS SPLIT BY AREA, ONE AREA PER PR, WITH NO CHANGE IN BEHAVIOUR — DECIDED BY ASH:** *"Split retail.js up"*, then *"start"* to the plan put to him. The file is 43,320 lines and 402 endpoints. Each area moves into its own file under `routes/retail/`, mounted inside `retail.js` at the spot the area left, so no request is answered by a different handler. Polls and voting go first, as the pilot. Held by `scripts/test_retail_split_routes.js`, which fails if a moved endpoint and one left behind could answer the same request. No string, no schema, no change to `.gitignore` or CI. See §470.
@@ -30815,6 +30817,54 @@ by one, and a regex comment-stripper returned 0 against an actual 39.
   `lib/express-async-guard.js` (*"207 of routes/retail.js's 327 handlers"*).
   Both are dated statements, and both are now out of date. A `lib/` edit
   ships to production, so they are left for a PR of their own.
+
+No string, no schema, no change to `.gitignore` or CI.
+
+## §472 — A SPLIT AREA'S ANSWERS ARE RECORDED, AND A MOVE MUST REPRODUCE THEM
+
+**Decided by Ash, 2026-10-13:** *"next"*, to the proposal put after reviews
+went live: keep the side-by-side request check as a permanent test before
+customers or products move.
+
+**Why.** The §470 guard proves no request changes hands. It cannot prove the
+hand gives the same answer. For reviews, that was checked by hand: the same 23
+requests were sent to main and to the branch and compared. Only 6 suites call a
+review endpoint at all, so the existing tests could not be relied on, and the
+areas still to move (customers, products, orders) carry money and stock.
+
+**What it is.** `scripts/test_retail_golden.js`, in the fast shard, under two
+seconds:
+
+1. For each area, a fixed list of requests (signed-in customer, admin, or
+   signed out) goes to the real `routes/retail.js` router over one seeded
+   scratch database, in a fixed order.
+2. Every status and body is compared with
+   `scripts/test-support/golden/retail-<area>.json`. Timestamps are the only
+   thing normalised.
+3. Any request to a host other than the local test server fails the suite, so
+   a recording can never depend on WeChat or any other outside service.
+
+**What is recorded.** Polls (30 requests), feedback (22) and reviews (23). The
+recordings were made on `f7a687a`, the code before any area moved, and the code
+on main after all three moves gives the same 75 answers. That is a check of
+#1132, #1134 and #1135 after the fact, not just from now on.
+
+**The rules this adds for every session:**
+
+1. **Record before moving.** Before an area moves out of `retail.js`, its
+   requests are added and recorded on main, and committed on their own. The
+   move must then pass without re-recording.
+2. **Re-record only on purpose.** A change that is meant to alter what callers
+   of a recorded endpoint see is re-recorded with
+   `node scripts/test_retail_golden.js --update <area>`, and the new file is
+   committed with the change. The diff of the recording is then the reviewer's
+   view of what changed for callers.
+3. **Never re-record to make a move pass.** A move that changes an answer is a
+   bug in the move.
+
+**Proved able to fail.** One error code changed in a moved file failed 1 check.
+One error code changed in a helper left in `retail.js` failed the 5 requests
+that use it.
 
 No string, no schema, no change to `.gitignore` or CI.
 

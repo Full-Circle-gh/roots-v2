@@ -23,8 +23,9 @@
  *      file also answers;
  *   4. every path is plain text and :params, the only shapes rule 3 can judge.
  *
- * Adding a part: move the area, mount it where the area started, and add its
- * endpoints to PARTS in the order they are registered.
+ * Adding a part: first record the area's answers on main with
+ * scripts/test_retail_golden.js (§472), then move the area, mount it where the
+ * area started, and add its endpoints to PARTS in the order they are registered.
  */
 'use strict';
 

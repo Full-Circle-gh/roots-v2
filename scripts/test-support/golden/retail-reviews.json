@@ -1,0 +1,455 @@
+[
+  {
+    "req": "GET /api/retail/reviews/pending [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": []
+    }
+  },
+  {
+    "req": "GET /api/retail/reviews/pending [anon]",
+    "status": 401,
+    "body": {
+      "success": false,
+      "error": "missing_token"
+    }
+  },
+  {
+    "req": "GET /api/retail/products/1/reviews [anon]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "rating": 4,
+          "comment": "nice",
+          "created_at": "<T>",
+          "reply": null,
+          "reply_at": null,
+          "customer_name": "Golden",
+          "customer_avatar": null,
+          "tags": [],
+          "photos": []
+        },
+        {
+          "id": 2,
+          "rating": 2,
+          "comment": "",
+          "created_at": "<T>",
+          "reply": null,
+          "reply_at": null,
+          "customer_name": "Golden",
+          "customer_avatar": null,
+          "tags": [],
+          "photos": []
+        },
+        {
+          "id": -1,
+          "rating": 5,
+          "comment": "seeded",
+          "created_at": "<T>",
+          "reply": null,
+          "reply_at": null,
+          "customer_name": "S",
+          "customer_avatar": null,
+          "tags": [],
+          "photos": []
+        }
+      ],
+      "meta": {
+        "total": 3,
+        "limit": 20,
+        "offset": 0
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/products/1/reviews?page=2&limit=1 [anon]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "rating": 4,
+          "comment": "nice",
+          "created_at": "<T>",
+          "reply": null,
+          "reply_at": null,
+          "customer_name": "Golden",
+          "customer_avatar": null,
+          "tags": [],
+          "photos": []
+        }
+      ],
+      "meta": {
+        "total": 3,
+        "limit": 1,
+        "offset": 0
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/products/999999/reviews [anon]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [],
+      "meta": {
+        "total": 0,
+        "limit": 20,
+        "offset": 0
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/review-photos [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "url": "/api/retail/media/1",
+        "sec_status": "skipped"
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/review-photos [anon]",
+    "status": 401,
+    "body": {
+      "success": false,
+      "error": "missing_token"
+    }
+  },
+  {
+    "req": "POST /api/retail/products/1/reviews [customer]",
+    "status": 403,
+    "body": {
+      "success": false,
+      "error": "not_eligible"
+    }
+  },
+  {
+    "req": "POST /api/retail/products/1/reviews [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "missing_fields"
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/reviews [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "source": "real",
+          "id": 1,
+          "rating": 4,
+          "comment": "nice",
+          "is_visible": 1,
+          "created_at": "<T>",
+          "reply": null,
+          "reply_at": null,
+          "dismissed_at": null,
+          "product_id": 1,
+          "order_id": 1,
+          "customer_id": 1,
+          "product_name_en": "Golden Bread",
+          "product_name_cn": null,
+          "customer_name": "Golden",
+          "customer_avatar": null,
+          "order_no": "GLD1",
+          "tags": [],
+          "photos": []
+        },
+        {
+          "source": "real",
+          "id": 2,
+          "rating": 2,
+          "comment": "",
+          "is_visible": 1,
+          "created_at": "<T>",
+          "reply": null,
+          "reply_at": null,
+          "dismissed_at": null,
+          "product_id": 1,
+          "order_id": 2,
+          "customer_id": 1,
+          "product_name_en": "Golden Bread",
+          "product_name_cn": null,
+          "customer_name": "Golden",
+          "customer_avatar": null,
+          "order_no": "GLD2",
+          "tags": [],
+          "photos": []
+        },
+        {
+          "source": "synthetic",
+          "id": 1,
+          "rating": 5,
+          "comment": "seeded",
+          "is_visible": 1,
+          "created_at": "<T>",
+          "reply": null,
+          "reply_at": null,
+          "dismissed_at": null,
+          "product_id": 1,
+          "order_id": null,
+          "customer_id": null,
+          "product_name_en": "Golden Bread",
+          "product_name_cn": null,
+          "customer_name": "S",
+          "customer_avatar": null,
+          "order_no": null,
+          "tags": [],
+          "photos": []
+        }
+      ],
+      "meta": {
+        "total": 3,
+        "limit": 50,
+        "offset": 0,
+        "summary": {
+          "visible": 3,
+          "hidden": 0,
+          "total": 3,
+          "needs_reply": 1,
+          "oldest_unanswered": "<T>",
+          "waiting_low": 0,
+          "low": 1,
+          "new_week": 3,
+          "seeded": 1
+        }
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/reviews?status=waiting [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "source": "real",
+          "id": 1,
+          "rating": 4,
+          "comment": "nice",
+          "is_visible": 1,
+          "created_at": "<T>",
+          "reply": null,
+          "reply_at": null,
+          "dismissed_at": null,
+          "product_id": 1,
+          "order_id": 1,
+          "customer_id": 1,
+          "product_name_en": "Golden Bread",
+          "product_name_cn": null,
+          "customer_name": "Golden",
+          "customer_avatar": null,
+          "order_no": "GLD1",
+          "tags": [],
+          "photos": []
+        },
+        {
+          "source": "real",
+          "id": 2,
+          "rating": 2,
+          "comment": "",
+          "is_visible": 1,
+          "created_at": "<T>",
+          "reply": null,
+          "reply_at": null,
+          "dismissed_at": null,
+          "product_id": 1,
+          "order_id": 2,
+          "customer_id": 1,
+          "product_name_en": "Golden Bread",
+          "product_name_cn": null,
+          "customer_name": "Golden",
+          "customer_avatar": null,
+          "order_no": "GLD2",
+          "tags": [],
+          "photos": []
+        },
+        {
+          "source": "synthetic",
+          "id": 1,
+          "rating": 5,
+          "comment": "seeded",
+          "is_visible": 1,
+          "created_at": "<T>",
+          "reply": null,
+          "reply_at": null,
+          "dismissed_at": null,
+          "product_id": 1,
+          "order_id": null,
+          "customer_id": null,
+          "product_name_en": "Golden Bread",
+          "product_name_cn": null,
+          "customer_name": "S",
+          "customer_avatar": null,
+          "order_no": null,
+          "tags": [],
+          "photos": []
+        }
+      ],
+      "meta": {
+        "total": 3,
+        "limit": 50,
+        "offset": 0,
+        "summary": {
+          "visible": 3,
+          "hidden": 0,
+          "total": 3,
+          "needs_reply": 1,
+          "oldest_unanswered": "<T>",
+          "waiting_low": 0,
+          "low": 1,
+          "new_week": 3,
+          "seeded": 1
+        }
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/reviews [anon]",
+    "status": 401,
+    "body": {
+      "error": "Not authenticated"
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/reviews/unseen-count?since=2020-01-01 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "count": 2,
+        "latest": "<T>"
+      }
+    }
+  },
+  {
+    "req": "PATCH /api/retail-admin/reviews/1 [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/reviews/dismiss-waiting [admin]",
+    "status": 409,
+    "body": {
+      "success": false,
+      "error": "queue_changed",
+      "data": {
+        "expected": 99,
+        "actual": 1
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/reviews/dismiss-waiting [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "dismissed": 1,
+        "low_rated": 0
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/reviews/1/undismiss [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "DELETE /api/retail-admin/reviews/1 [admin]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "only_synthetic_deletable"
+    }
+  },
+  {
+    "req": "DELETE /api/retail-admin/reviews/1?source=synthetic [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/reviews/reward [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "enabled": false,
+        "points": 20,
+        "max_per_order": 1,
+        "grants": 0,
+        "points_given": 0
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/reviews/topup [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "enabled": false,
+        "min_reviews": 3,
+        "max_per_run": 50,
+        "span_days": 45,
+        "products": 0,
+        "reviews": 0,
+        "uncapped": 0,
+        "available": true
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/reviews/topup/run [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "added": 0
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/products/1/reviews [anon]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 2,
+          "rating": 2,
+          "comment": "",
+          "created_at": "<T>",
+          "reply": null,
+          "reply_at": null,
+          "customer_name": "Golden",
+          "customer_avatar": null,
+          "tags": [],
+          "photos": []
+        }
+      ],
+      "meta": {
+        "total": 1,
+        "limit": 20,
+        "offset": 0
+      }
+    }
+  }
+]
