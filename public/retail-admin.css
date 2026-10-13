@@ -5359,16 +5359,22 @@
     background: var(--bg-input);
     color: var(--text-1);
   }
+  /* Field labels — the design system's input label: 13px Inter 500, sentence
+     case, Ink (tacet-design-system.md §5). Were the Full Circle micro-label
+     (11px/600, UPPERCASE, .06em, --text-3) on every page not yet rebuilt; the
+     product editor and product page editor already overrode them to exactly
+     these values (#pd-editor / .ppg), which is now the default (audit
+     2026-10-13, P3). */
   label.inline {
-    font-size: 11px; font-weight: 600;
-    letter-spacing: .06em; text-transform: uppercase;
-    color: var(--text-3);
+    font-size: 13px; font-weight: 500;
+    letter-spacing: 0; text-transform: none;
+    color: var(--td-text);
   }
   label.stacked {
     display: block;
-    font-size: 11px; font-weight: 600;
-    letter-spacing: .06em; text-transform: uppercase;
-    color: var(--text-3);
+    font-size: 13px; font-weight: 500;
+    letter-spacing: 0; text-transform: none;
+    color: var(--td-text);
     margin-bottom: 6px;
   }
   .field { margin-bottom: var(--s4); }
