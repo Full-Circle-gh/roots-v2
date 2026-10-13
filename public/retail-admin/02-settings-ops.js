@@ -766,7 +766,7 @@ function _opsStoreForm(s) {
         ${isEdit
           ? `<div data-as-foot="store.${s.id}" style="flex:1"></div>
              <button class="btn" onclick="_opsStoreClose()">Close · 关闭</button>`
-          : `<button class="btn btn-primary" onclick="_opsStoreSave(null)">Save · 保存</button>
+          : `<button class="btn" onclick="_opsStoreSave(null)">Save · 保存</button>
              <button class="btn" onclick="_opsStoreClose()">Cancel · 取消</button>`}
       </div>
     </div>`;
@@ -900,7 +900,7 @@ function _opsStoreStaffRender(store, staff) {
         <div><label class="field-label">Login · 登录名 <span style="color:var(--text-3);font-weight:400">— letters/numbers . _ -</span></label><input type="text" id="oss_user" placeholder="yuexiu.stock" style="font-family:monospace"></div>
         <div style="grid-column:1 / -1"><label class="field-label">Password · 密码 <span style="color:var(--text-3);font-weight:400">— at least 10 characters · 至少 10 位</span></label><input type="text" id="oss_pw" placeholder="••••••••••"></div>
       </div>
-      <div style="margin-top:12px"><button class="btn btn-primary" onclick="_opsStoreStaffAdd(${store.id})">+ Add stock staff · 添加库存员</button></div>
+      <div style="margin-top:12px"><button class="btn" onclick="_opsStoreStaffAdd(${store.id})">+ Add stock staff · 添加库存员</button></div>
     </div>`;
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }

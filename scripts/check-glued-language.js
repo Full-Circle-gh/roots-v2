@@ -69,9 +69,11 @@ const REPO = path.join(__dirname, '..');
    acorn (parsedTemplateLiterals); 161 is the backlog as it really stands, and
    the ratchet starts again from there.
    161 → 159 on 2026-10-13: the Top-up packages table lost its two Chinese-only
-   title headers (标题(英文) / 标题(中文)) with the columns they named. */
+   title headers (标题(英文) / 标题(中文)) with the columns they named.
+   159 → 135 the same day: Settings' mixed help paragraphs became
+   data-lang-block pairs (the splitter skips those by design). */
 const BUDGET = 0;
-const ORPHAN_BUDGET = 159;
+const ORPHAN_BUDGET = 135;
 
 const CJK = /[一-鿿]/;
 const VOID = new Set(['br', 'img', 'input', 'hr', 'meta', 'link', 'source',
