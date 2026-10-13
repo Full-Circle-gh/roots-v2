@@ -74,9 +74,10 @@ const REPO = path.join(__dirname, '..');
    data-lang-block pairs (the splitter skips those by design).
    135 → 127: the same for Settings → Delivery.
    127 → 125: the Share cards tip, likewise.
-   125 → 119: the Team lead paragraph, likewise. */
+   125 → 119: the Team lead paragraph, likewise.
+   119 → 112: content pages' purpose lines cut, Legal/About labels paired. */
 const BUDGET = 0;
-const ORPHAN_BUDGET = 119;
+const ORPHAN_BUDGET = 112;
 
 const CJK = /[一-鿿]/;
 const VOID = new Set(['br', 'img', 'input', 'hr', 'meta', 'link', 'source',
