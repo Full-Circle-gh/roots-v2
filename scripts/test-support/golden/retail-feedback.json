@@ -13,16 +13,6 @@
     "body": {
       "success": true,
       "data": {
-        "id": 1
-      }
-    }
-  },
-  {
-    "req": "POST /api/retail/feedback [customer]",
-    "status": 200,
-    "body": {
-      "success": true,
-      "data": {
         "id": 2
       }
     }
@@ -43,7 +33,7 @@
       "data": [
         {
           "id": 1,
-          "message": "The cart button does nothing",
+          "message": "Seeded: the menu is slow",
           "photos": [],
           "created_at": "<T>",
           "reply_count": 0,
@@ -52,7 +42,7 @@
         },
         {
           "id": 2,
-          "message": "Photo attached",
+          "message": "The cart button does nothing",
           "photos": [
             "/api/retail/media/1"
           ],
@@ -73,10 +63,40 @@
         "id": 1,
         "customer_id": 1,
         "customer_name": "Golden",
+        "page_context": "menu",
+        "app_version": null,
+        "created_at": "<T>",
+        "photos": [],
+        "kind": "bug",
+        "initiated_by": "customer",
+        "handled": false,
+        "messages": [
+          {
+            "id": 0,
+            "author": "customer",
+            "author_name": null,
+            "body": "Seeded: the menu is slow",
+            "created_at": "<T>"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/feedback/2 [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 2,
+        "customer_id": 1,
+        "customer_name": "Golden",
         "page_context": "cart",
         "app_version": "1.2.3",
         "created_at": "<T>",
-        "photos": [],
+        "photos": [
+          "/api/retail/media/1"
+        ],
         "kind": "bug",
         "initiated_by": "customer",
         "handled": false,
@@ -121,6 +141,33 @@
           "id": 1,
           "customer_id": 1,
           "customer_name": "Golden",
+          "message": "Seeded: the menu is slow",
+          "page_context": "menu",
+          "app_version": null,
+          "created_at": "<T>",
+          "kind": "bug",
+          "initiated_by": "customer",
+          "root_author_name": null,
+          "last_customer_msg_at": "<T>",
+          "last_admin_msg_at": null,
+          "admin_read_at": null,
+          "handled_at": null,
+          "nickname": "Golden",
+          "customer_avatar": null,
+          "reply_count": 0,
+          "last_body": "Seeded: the menu is slow",
+          "last_author": "customer",
+          "last_author_name": null,
+          "last_at": "<T>",
+          "needs_reply": true,
+          "photos": [],
+          "replied": false,
+          "handled": false
+        },
+        {
+          "id": 2,
+          "customer_id": 1,
+          "customer_name": "Golden",
           "message": "The cart button does nothing",
           "page_context": "cart",
           "app_version": "1.2.3",
@@ -136,33 +183,6 @@
           "customer_avatar": null,
           "reply_count": 0,
           "last_body": "The cart button does nothing",
-          "last_author": "customer",
-          "last_author_name": null,
-          "last_at": "<T>",
-          "needs_reply": true,
-          "photos": [],
-          "replied": false,
-          "handled": false
-        },
-        {
-          "id": 2,
-          "customer_id": 1,
-          "customer_name": "Golden",
-          "message": "Photo attached",
-          "page_context": null,
-          "app_version": null,
-          "created_at": "<T>",
-          "kind": "bug",
-          "initiated_by": "customer",
-          "root_author_name": null,
-          "last_customer_msg_at": "<T>",
-          "last_admin_msg_at": null,
-          "admin_read_at": null,
-          "handled_at": null,
-          "nickname": "Golden",
-          "customer_avatar": null,
-          "reply_count": 0,
-          "last_body": "Photo attached",
           "last_author": "customer",
           "last_author_name": null,
           "last_at": "<T>",
@@ -191,9 +211,9 @@
           "id": 2,
           "customer_id": 1,
           "customer_name": "Golden",
-          "message": "Photo attached",
-          "page_context": null,
-          "app_version": null,
+          "message": "The cart button does nothing",
+          "page_context": "cart",
+          "app_version": "1.2.3",
           "created_at": "<T>",
           "kind": "bug",
           "initiated_by": "customer",
@@ -205,7 +225,7 @@
           "nickname": "Golden",
           "customer_avatar": null,
           "reply_count": 0,
-          "last_body": "Photo attached",
+          "last_body": "The cart button does nothing",
           "last_author": "customer",
           "last_author_name": null,
           "last_at": "<T>",
@@ -225,18 +245,20 @@
     }
   },
   {
-    "req": "GET /api/retail-admin/feedback/1 [admin]",
+    "req": "GET /api/retail-admin/feedback/2 [admin]",
     "status": 200,
     "body": {
       "success": true,
       "data": {
-        "id": 1,
+        "id": 2,
         "customer_id": 1,
         "customer_name": "Golden",
         "page_context": "cart",
         "app_version": "1.2.3",
         "created_at": "<T>",
-        "photos": [],
+        "photos": [
+          "/api/retail/media/1"
+        ],
         "kind": "bug",
         "initiated_by": "customer",
         "handled": false,
@@ -253,14 +275,14 @@
     }
   },
   {
-    "req": "POST /api/retail-admin/feedback/1/reply [admin]",
+    "req": "POST /api/retail-admin/feedback/2/reply [admin]",
     "status": 200,
     "body": {
       "success": true
     }
   },
   {
-    "req": "POST /api/retail-admin/feedback/1/reply [admin]",
+    "req": "POST /api/retail-admin/feedback/2/reply [admin]",
     "status": 400,
     "body": {
       "success": false,
@@ -268,18 +290,20 @@
     }
   },
   {
-    "req": "GET /api/retail/feedback/1 [customer]",
+    "req": "GET /api/retail/feedback/2 [customer]",
     "status": 200,
     "body": {
       "success": true,
       "data": {
-        "id": 1,
+        "id": 2,
         "customer_id": 1,
         "customer_name": "Golden",
         "page_context": "cart",
         "app_version": "1.2.3",
         "created_at": "<T>",
-        "photos": [],
+        "photos": [
+          "/api/retail/media/1"
+        ],
         "kind": "bug",
         "initiated_by": "customer",
         "handled": false,
@@ -303,7 +327,7 @@
     }
   },
   {
-    "req": "POST /api/retail/feedback/1/reply [customer]",
+    "req": "POST /api/retail/feedback/2/reply [customer]",
     "status": 200,
     "body": {
       "success": true
@@ -327,6 +351,33 @@
           "id": 1,
           "customer_id": 1,
           "customer_name": "Golden",
+          "message": "Seeded: the menu is slow",
+          "page_context": "menu",
+          "app_version": null,
+          "created_at": "<T>",
+          "kind": "bug",
+          "initiated_by": "customer",
+          "root_author_name": null,
+          "last_customer_msg_at": "<T>",
+          "last_admin_msg_at": null,
+          "admin_read_at": null,
+          "handled_at": null,
+          "nickname": "Golden",
+          "customer_avatar": null,
+          "reply_count": 0,
+          "last_body": "Seeded: the menu is slow",
+          "last_author": "customer",
+          "last_author_name": null,
+          "last_at": "<T>",
+          "needs_reply": true,
+          "photos": [],
+          "replied": false,
+          "handled": false
+        },
+        {
+          "id": 2,
+          "customer_id": 1,
+          "customer_name": "Golden",
           "message": "The cart button does nothing",
           "page_context": "cart",
           "app_version": "1.2.3",
@@ -345,38 +396,11 @@
           "last_author": "customer",
           "last_author_name": null,
           "last_at": "<T>",
-          "needs_reply": false,
-          "photos": [],
-          "replied": true,
-          "handled": false
-        },
-        {
-          "id": 2,
-          "customer_id": 1,
-          "customer_name": "Golden",
-          "message": "Photo attached",
-          "page_context": null,
-          "app_version": null,
-          "created_at": "<T>",
-          "kind": "bug",
-          "initiated_by": "customer",
-          "root_author_name": null,
-          "last_customer_msg_at": "<T>",
-          "last_admin_msg_at": null,
-          "admin_read_at": null,
-          "handled_at": null,
-          "nickname": "Golden",
-          "customer_avatar": null,
-          "reply_count": 0,
-          "last_body": "Photo attached",
-          "last_author": "customer",
-          "last_author_name": null,
-          "last_at": "<T>",
           "needs_reply": true,
           "photos": [
             "/api/retail/media/1"
           ],
-          "replied": false,
+          "replied": true,
           "handled": false
         }
       ],
