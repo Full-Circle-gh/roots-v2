@@ -71,9 +71,10 @@ const REPO = path.join(__dirname, '..');
    161 → 159 on 2026-10-13: the Top-up packages table lost its two Chinese-only
    title headers (标题(英文) / 标题(中文)) with the columns they named.
    159 → 135 the same day: Settings' mixed help paragraphs became
-   data-lang-block pairs (the splitter skips those by design). */
+   data-lang-block pairs (the splitter skips those by design).
+   135 → 127: the same for Settings → Delivery. */
 const BUDGET = 0;
-const ORPHAN_BUDGET = 135;
+const ORPHAN_BUDGET = 127;
 
 const CJK = /[一-鿿]/;
 const VOID = new Set(['br', 'img', 'input', 'hr', 'meta', 'link', 'source',
