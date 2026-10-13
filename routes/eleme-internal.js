@@ -128,6 +128,11 @@ function internalStatusForChannel(desc) {
   // interpret must produce no claim at all.
   if (/^(valid|invalid|normal|unknown|default)$/i.test(d)) return null;
   if (/退款|退货/.test(d))                                          return 'refunded';
+  // 配送已取消 cancels the DELIVERY, not the order — the platform drops the rider
+  // and sends another. Same rule, and the same live case, as the Meituan twin
+  // (MT20261013234620): read as a void, a live 预订单 went to Cancelled and its
+  // stock came back until the next rider. A real cancel names the order.
+  if (/(配送|骑手|运单|跑腿)\S*取消|取消(配送|骑手|运单|跑腿)/.test(d) && !/订单|交易/.test(d)) return null;
   if (/取消|已关闭|交易关闭/.test(d))                                return 'cancelled';
   if (/已完成|交易完成|已送达|已收货|已收餐|订单完成|已签收|妥投/.test(d)) return 'delivered';
   // Rider now HOLDS the order and is en route to the customer. Before the rider
@@ -170,6 +175,8 @@ function internalStatusForChannel(desc) {
       if (/REFUNDING|APPLY|APPLIED|REQUEST|AUDIT|PENDING|PROCESS|PART/.test(u)) return null;
       return 'refunded';
     }
+    // A cancelled DELIVERY (rider dropped) is not a cancelled order — see above.
+    if (/CANCEL/.test(u) && /DELIVER|RIDER|KNIGHT|CARRIER|DISPATCH|SHIP/.test(u) && !/ORDER/.test(u)) return null;
     if (/CANCEL|CLOSE/.test(u))                                     return 'cancelled';
     // SIGNED and DONE are anchored to a token boundary on purpose: unanchored,
     // RIDER_AS-SIGNED and ABAN-DONE-D both read as a delivered order.
@@ -259,6 +266,8 @@ function isConfirmedVoid(desc) {
   const d = String(desc || '');
   if (!d) return false;
   if (/申请|待处理|处理中|审核|退款中|退货中|协商|部分退款/.test(d)) return false;
+  // A dropped rider (配送已取消) leaves the order live — see internalStatusForChannel.
+  if (/(配送|骑手|运单|跑腿)\S*取消|取消(配送|骑手|运单|跑腿)/.test(d) && !/订单|交易|退款/.test(d)) return false;
   return /已取消|交易取消|订单取消|已关闭|交易关闭|已退款|退款成功|退款完成|全额退款|已撤销/.test(d);
 }
 

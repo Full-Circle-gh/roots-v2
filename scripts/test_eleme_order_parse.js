@@ -875,5 +875,45 @@ section('P · the live payload: stage from the header, ETA from planDeliverTime'
   ok('...and the ETA falls back to nothing rather than a wrong field', o2.eta === null, o2.eta);
 }
 
+
+// ── Q. A dropped rider is not a cancelled order ─────────────────────────────
+// Live 2026-10-13, MT20261013234620, a 预订单 booked for 17:40: Meituan called a
+// rider at 14:21, then sent 配送已取消 twice and a new rider at 17:01. Both
+// channels read 配送已取消 as a void, so the order went to Cancelled and its stock
+// came back until 17:01 — staff saw a pre-order "deduct at 出餐时间". The real
+// order cancel on file is worded 订单取消, and that must still void.
+section('Q · 配送已取消 keeps the order and its stock (both channels)');
+{
+  const liftFrom = (relPath, name) => {
+    const src = fs.readFileSync(path.join(__dirname, '..', relPath), 'utf8');
+    const start = src.indexOf('function ' + name + '(');
+    if (start === -1) throw new Error('could not find ' + name + ' in ' + relPath);
+    let depth = 0, i = src.indexOf('{', start);
+    const open = i;
+    for (; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') { depth--; if (depth === 0) break; }
+    }
+    // eslint-disable-next-line no-new-func
+    return new Function('return function ' + name + '(desc) ' + src.slice(open, i + 1))();
+  };
+  for (const rel of ['routes/meituan-internal.js', 'routes/eleme-internal.js']) {
+    const isVoid = liftFrom(rel, 'isConfirmedVoid');
+    const statusOf = liftFrom(rel, 'internalStatusForChannel');
+    for (const leg of ['配送已取消', '配送取消', '骑手已取消', '运单已取消', '取消配送']) {
+      ok(`${rel}: "${leg}" does NOT restock`, isVoid(leg) === false, isVoid(leg));
+      ok(`${rel}: "${leg}" is not Cancelled`, statusOf(leg) !== 'cancelled', statusOf(leg));
+    }
+    for (const real of ['订单取消', '订单已取消', '已取消', '交易取消']) {
+      ok(`${rel}: "${real}" still restocks`, isVoid(real) === true, isVoid(real));
+      ok(`${rel}: "${real}" is still Cancelled`, statusOf(real) === 'cancelled', statusOf(real));
+    }
+    ok(`${rel}: a dropped rider with a settled refund still restocks`, isVoid('配送已取消，退款成功') === true);
+  }
+  const elStatus = liftFrom('routes/eleme-internal.js', 'internalStatusForChannel');
+  ok('eleme: DELIVERY_CANCELLED is not Cancelled', elStatus('DELIVERY_CANCELLED') !== 'cancelled', elStatus('DELIVERY_CANCELLED'));
+  ok('eleme: ORDER_CANCELLED is still Cancelled', elStatus('ORDER_CANCELLED') === 'cancelled', elStatus('ORDER_CANCELLED'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
