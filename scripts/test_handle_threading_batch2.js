@@ -66,7 +66,7 @@ const { isMirroredChannel } = require('../lib/fulfilment');
 const SABOTAGE = process.env.HT2_SABOTAGE === '1';
 const ROOT = path.join(__dirname, '..');
 const DB_SRC = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
-const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+const RETAIL_SRC = require('./test-support/retail-source').retailSource();
 const INV_SRC = fs.readFileSync(path.join(ROOT, 'lib', 'inventory.js'), 'utf8');
 
 const TABLES = ['retail_orders', 'retail_order_items', 'retail_shipments',

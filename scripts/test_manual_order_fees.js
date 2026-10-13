@@ -51,7 +51,7 @@ const MUTANT = process.env.MOF_MUTANT === '1';
 const ROOT = path.join(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 const DB_SRC = read('database.js');
-const RETAIL_SRC = read('routes/retail.js');
+const RETAIL_SRC = require('./test-support/retail-source').retailSource();
 
 let pass = 0, fail = 0;
 function it(name, fn) {

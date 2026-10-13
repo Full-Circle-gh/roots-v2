@@ -51,7 +51,7 @@ const { openTablesDb, driver } = require('./test-support/memory-db');
 
 const ROOT = path.join(__dirname, '..');
 const DB_SRC = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
-const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+const RETAIL_SRC = require('./test-support/retail-source').retailSource();
 const SABOTAGE = process.env.RT_SABOTAGE === '1';
 
 let pass = 0, fail = 0;
