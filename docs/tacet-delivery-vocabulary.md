@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.334 · 2026-10-13 · ABOUT PAGE EDITOR — 1 STRING COMPOSED BY CLAUDE (`Every section is hidden from customers until you write it — nothing is filled in for you.`), KEPT WHEN THE PAGE'S PURPOSE LINE WAS CUT; `Body — Chinese · 中文正文` COPIES LEGAL'S LIVE `中文正文`.** See *About page editor — the one line kept*.
+
 **v1.333 · 2026-10-13 · SETTINGS → CUSTOMER SERVICE — 2 STRINGS COMPOSED BY CLAUDE (`WeCom — recommended · 企业微信 — 推荐`, `WeChat customer service — public account · 微信客服 — 公众号客服`), EACH TWO LIVE TERMS JOINED; THE MODE PICKER'S OPTIONS STOP RENDERING BOTH LANGUAGES.** See *Settings → Customer service mode picker*.
 
 **v1.332 · 2026-10-13 · §475 A MANAGER'S TILL PIN — 8 STRINGS COMPOSED BY CLAUDE, ALL BUILT ON `PIN 码` AND THE LIVE 经理 / 收银台 / 折扣 / 新密码 SHAPES; `两次输入的 PIN 码不一致` AND `请填写所有字段` LIFTED FROM THE PASSWORD SHEET; THE LOCKOUT SENTENCE COPIED WHOLE.** See *A manager's till PIN (§475)*.
@@ -14085,4 +14087,29 @@ half that says the whole thing — the old Chinese half was only `推荐` /
 
 - Keeping `企业微信` inside the English half: that is what made the splitter refuse the option.
 - `企业微信(推荐)` with full-width brackets: nothing else in the panel brackets a recommendation; the dash matches the English.
+
+## About page editor — the one line kept
+
+**Composed by Claude, 2026-10-13, under the 2026-09-06 amendment.** Operator
+register. The hint under the About page title (`public/retail-admin.html`,
+`#tab-about`). The 2026-10-13 audit cut the page's purpose line (§1.7), but its
+third sentence was not a description: it says the page fills in nothing on its
+own, which is what an operator needs to know before trusting the preview
+(§1.17). That sentence had never been given a Chinese half — the old Chinese
+covered only the first two sentences — so it needed one.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Every section is hidden from customers until you write it — nothing is filled in for you.` / `每个栏目在你填写之前都不会向顾客显示 —— 系统不会替你填写任何内容。` | About page, under the title | `栏目` is this editor's own word for a section (`栏目引题`, live in the same page). `向顾客显示` follows the live `顾客会看到…`. The ` —— ` matches the old hint's own dash. |
+
+### Copied whole
+
+`Body — Chinese · 中文正文`: `中文正文` is Legal's live label for the same field; the English half mirrors the live `Body — English · 正文(英文)` above it.
+
+### Rejected
+
+- `正文(中文)`, by analogy with the live `正文(英文)`: `中文正文` is already live for the same thing on Legal, and one word per thing wins.
+- `板块` for a section: nothing in this editor uses it.
 

@@ -6115,11 +6115,6 @@
   <!-- ─── COPY / SNIPPETS ─── -->
   <section id="tab-snippets">
     <h2>Mini-app copy · 小程序文案</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      <span data-lang-block="en">Short text labels shown on fixed mini-app screens (cart, checkout, profile, order tracking, etc).<br>
-      Customers see one language at a time based on their WeChat preference — fill in both the English and the Chinese.</span><span data-lang-block="cn">显示在小程序固定页面（购物车、结算、个人中心、订单追踪等）上的短文案标签。<br>
-      顾客会根据微信语言偏好一次只看到一种语言——请同时填写英文和中文。</span>
-    </div>
     <div id="snippets-mount"></div>
     <div style="margin-top: var(--s5); display: flex; align-items: center; gap: var(--s4); position: sticky; bottom: 0; background: var(--bg-app); padding: var(--s3) 0;">
       <!-- §279: the page saves itself. -->
@@ -8101,10 +8096,6 @@
   <!-- ─── FEEDBACK ─── -->
   <section id="tab-feedback" data-feat="feedback">
     <h2>Customer feedback · 顾客反馈</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4);">
-      Bug reports and feedback customers send from the mini app’s “Found a bug?” form. Newest first.
-      Tap a report to read it and reply — the customer is notified and can reply back. · 顾客在小程序“报告问题”表单提交的反馈,最新在前。点击可查看并回复,顾客会收到通知并可继续回复。
-    </div>
 
     <div id="fb-summary" class="muted" style="font-size: 12px; margin-bottom: var(--s4);"></div>
 
@@ -8183,6 +8174,7 @@
         font: inherit; font-size: 13px; background: var(--bg-elev-1, #fff); color: var(--text-1);
       }
     </style>
+    <div class="muted" style="font-size: 12px; margin-top: var(--s4); line-height: 1.6;">Tap a report to read it and reply — the customer is notified and can reply back. · 点击可查看并回复,顾客会收到通知并可继续回复。</div>
   </section>
 
   <!-- ─── LEADERBOARD ─── -->
@@ -8198,7 +8190,7 @@
       .lb-card h3 { margin: 0 0 4px; font-size: 14px; }
       .lb-card .muted { font-size: 11px; line-height: 1.55; }
       .lb-field { display: flex; flex-direction: column; gap: 4px; margin-top: 14px; }
-      .lb-field label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+      .lb-field label { font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--text-3); }
       .lb-field input[type="text"],
       .lb-field input[type="number"],
       .lb-field textarea,
@@ -8233,7 +8225,7 @@
       .lb-status-pill {
         display: inline-flex; align-items: center; gap: 5px;
         padding: 1px 8px; border-radius: 999px;
-        font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+        font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none;
       }
       .lb-status-pill.on  { background: rgba(128, 196, 98, .14); color: #80c462; }
       .lb-status-pill.off { background: var(--bg-elev-2); color: var(--text-3); }
@@ -8272,9 +8264,6 @@
     </style>
 
     <h2>Leaderboard · 排行榜 <span id="lb-current-pill" class="lb-status-pill off" style="vertical-align: middle; font-size: 11px;">Off</span></h2>
-    <p class="muted" style="font-size: 12px; max-width: 720px; margin: 0 0 var(--s4);">
-      Configure the public Roots Club leaderboard shown in the mini app. Pick the metric, period, how many top members to show, and how their names appear. Enable the toggle to make it visible to customers. · 配置小程序中展示的 Roots Club 公开排行榜。选择统计指标、周期、显示的上榜人数,以及成员名称的展示方式。打开开关即可向顾客显示。
-    </p>
 
     <div class="lb-layout">
       <div>
@@ -8866,8 +8855,7 @@
   <!-- ─── MEDIA LIBRARY ─── -->
   <section id="tab-media">
     <h2>Media · 媒体库</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;"><span data-lang-block="en">All images uploaded for the mini app — banners, product photos, FAQ icons, anywhere in the CMS. Drag &amp; drop files onto the grid (or paste from clipboard) to upload. Drag a card onto a folder in the sidebar to move it. Click a card to edit alt text, tags, and folder. The <b>used-where</b> badge is a quick "safe to delete?" hint.</span><span data-lang-block="cn">为小程序上传的全部图片 —— 横幅、产品图、常见问题图标,以及 CMS 中的任何位置。将文件拖放到网格上(或从剪贴板粘贴)即可上传。将卡片拖到侧栏的文件夹上即可移动。点击卡片可编辑替代文字、标签和所属文件夹。<b>引用位置</b>徽标可快速判断“是否可安全删除”。</span></div>
-
+    
     <div class="ml-layout">
       <aside class="ml-side">
         <div class="ml-side-h">Folders · 文件夹</div>
@@ -8926,6 +8914,7 @@
         </div>
       </div>
     </div>
+    <div class="muted" style="font-size: 12px; margin-top: var(--s4); line-height: 1.6;"><span data-lang-block="en">Drag &amp; drop files onto the grid (or paste from clipboard) to upload. Drag a card onto a folder in the sidebar to move it. Click a card to edit alt text, tags, and folder. The <b>used-where</b> badge is a quick "safe to delete?" hint.</span><span data-lang-block="cn">将文件拖放到网格上(或从剪贴板粘贴)即可上传。将卡片拖到侧栏的文件夹上即可移动。点击卡片可编辑替代文字、标签和所属文件夹。<b>引用位置</b>徽标可快速判断“是否可安全删除”。</span></div>
   </section>
 
   <!-- Move-to popover for bulk move -->
@@ -9036,12 +9025,7 @@
   <!-- ─── ABOUT PAGE (NO. 11 · WHO WE ARE) ─── -->
   <section id="tab-about">
     <h2>About page · 关于我们</h2>
-    <p class="hint" style="margin-bottom: 16px;">
-      Edit the content of the customer-facing About / Story page (Me → About).
-      Bilingual fields: fill both EN and CN — the customer sees their preferred language.
-      Every section is hidden from customers until you write it — nothing is filled in for you.
-      · 编辑面向顾客的“关于 / 故事”页内容(我的 → 关于)。双语字段:中英文都要填写 —— 顾客会看到自己偏好的语言。
-    </p>
+    <p class="hint" style="margin-bottom: 16px;"><span data-lang-block="en">Every section is hidden from customers until you write it — nothing is filled in for you.</span><span data-lang-block="cn">每个栏目在你填写之前都不会向顾客显示 —— 系统不会替你填写任何内容。</span></p>
 
     <div class="about-editor">
       <!-- Hero image -->
@@ -9081,7 +9065,7 @@
             <span class="ab-help">Wrap a word with **double asterisks** to make it bold (e.g. **plant-based food**). · 用 **双星号** 包住词语即可加粗(例如 **plant-based food**)。</span>
           </label>
           <label class="ab-field">
-            <span class="ab-label">Body — 中文</span>
+            <span class="ab-label">Body — Chinese · 中文正文</span>
             <textarea id="about-manifesto-cn" rows="5"></textarea>
             <span class="ab-help">Leave blank to hide the Chinese paragraph. · 留空则隐藏中文段落。</span>
           </label>
@@ -9249,7 +9233,7 @@
       }
       .about-block > summary {
         padding: 12px 16px;
-        font-weight: 600;
+        font-weight: 500;
         font-size: 14px;
         cursor: pointer;
         list-style: none;
@@ -9261,12 +9245,12 @@
       .about-block[open] > summary::before { content: '▾ '; }
       .about-block-body { padding: 14px 16px 18px; }
       .ab-field { display: block; margin-bottom: 12px; }
-      .ab-label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2, #888); margin-bottom: 4px; }
+      .ab-label { display: block; font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-2, #888); margin-bottom: 4px; }
       .ab-help { display: block; font-size: 11px; color: var(--text-3, #888); margin-top: 4px; }
       .ab-row { display: flex; gap: 12px; }
       .ab-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
       .about-stats-table, .about-bullets-table { width: 100%; border-collapse: collapse; }
-      .about-stats-table th, .about-bullets-table th { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; text-align: left; padding: 4px 6px; color: var(--text-3, #888); }
+      .about-stats-table th, .about-bullets-table th { font-size: 10px; text-transform: none; letter-spacing: 0; text-align: left; padding: 4px 6px; color: var(--text-3, #888); }
       .about-stats-table td, .about-bullets-table td { padding: 3px 6px; }
       .about-stats-table input, .about-bullets-table input { width: 100%; font-size: 13px; }
       .ab-photo-preview { width: 160px; height: 200px; border: 1.5px solid var(--ink, #1a1a17); background: #CCD900; overflow: hidden; position: relative; }
@@ -9275,7 +9259,7 @@
          the founder photo's 160×200 frame a landscape picture is cropped to a
          portrait and the operator is shown something the customer never sees. */
       .ab-hero-preview { width: 320px; height: 160px; }
-      .ab-photo-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; letter-spacing: .15em; color: rgba(0,0,0,.55); text-transform: uppercase; }
+      .ab-photo-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; letter-spacing: 0; color: rgba(0,0,0,.55); text-transform: none; }
       .ab-photo-actions { display: flex; gap: 8px; margin-top: 8px; }
       .about-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
     </style>
@@ -11994,9 +11978,6 @@
        read by routes/retail.js (getSocialConfig). -->
   <section id="tab-social" data-feat="socialProof">
           <h2>Social proof · 社交证明</h2>
-          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
-            Five live engagement widgets that surface real customer activity in the mini app. Toggle any of them off to hide the widget instantly across all customers (no WeChat republish needed). Tuning numbers control how aggressive each one is. · 五个实时互动组件,在小程序中呈现真实的顾客活动。关闭任意组件可立即对所有顾客隐藏(无需重新发布微信小程序)。调节数值用于控制每个组件触发的积极程度。
-          </div>
 
           <!-- Checkout upsell pop-up — the "before you pay" offer popup. Gates the
                server /checkout/offers tiers; saves to storefront_config 'checkout.upsell'.
@@ -12263,6 +12244,7 @@
       <!-- §279: the page saves itself. -->
       <div data-as-foot="social_proof" style="flex:1"></div>
     </div>
+    <div class="muted" style="font-size: 12px; margin-top: var(--s4); line-height: 1.6;"><span data-lang-block="en">Turning a widget off hides it for every customer at once — no WeChat republish needed.</span><span data-lang-block="cn">关闭任意组件可立即对所有顾客隐藏(无需重新发布微信小程序)。</span></div>
   </section>
 
   <!-- ─── LEGAL PAGES ─── (moved out of Settings into the Content group 2026-06-08;
@@ -12274,7 +12256,7 @@
     <div class="group-card">
       <div class="group-card-head">
         <h3>Privacy policy · 隐私政策</h3>
-        <div class="muted">Required by WeChat for any mini-program that collects user info (we do — phone, address, openid). Linked from the Me tab and shown on first-launch onboarding. The customer's WeChat language picks EN or 中. · 微信要求任何收集用户信息的小程序都必须提供(我们会收集手机号、地址、openid)。在"我的"页有入口,并在首次启动引导时展示。顾客的微信语言决定显示英文还是中文。</div>
+        <div class="muted">Required by WeChat for any mini-program that collects user info (we do — phone, address, openid). Linked from the Me tab and shown on first-launch onboarding. The customer's WeChat language picks English or Chinese. · 微信要求任何收集用户信息的小程序都必须提供(我们会收集手机号、地址、openid)。在"我的"页有入口,并在首次启动引导时展示。顾客的微信语言决定显示英文还是中文。</div>
       </div>
       <div class="illus-row">
         <div class="mini-phone">
@@ -12300,7 +12282,7 @@
                       style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
           </div>
           <div class="field" style="margin-bottom: 0">
-            <label for="cfg-legal-privacy-cn" class="stacked">中文正文</label>
+            <label for="cfg-legal-privacy-cn" class="stacked">Chinese body · 中文正文</label>
             <textarea id="cfg-legal-privacy-cn" placeholder="收集的信息、用途、储存方式、删除方式。每段用双行分隔。"
                       style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
           </div>
@@ -12337,7 +12319,7 @@
                       style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
           </div>
           <div class="field" style="margin-bottom: 0">
-            <label for="cfg-legal-terms-cn" class="stacked">中文正文</label>
+            <label for="cfg-legal-terms-cn" class="stacked">Chinese body · 中文正文</label>
             <textarea id="cfg-legal-terms-cn" placeholder="订单规则、退款、食品安全。每段用双行分隔。"
                       style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
           </div>
@@ -12355,11 +12337,6 @@
        2026-06-08; keeps its own loadFaq(), and saves itself since §279). -->
   <section id="tab-faq" data-feat="faq">
     <h2>FAQ &amp; help centre · 常见问题与帮助中心</h2>
-    <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
-      Powers the <b>Me → Help &amp; FAQ</b> screen in the mini app. Each question stores both EN and 中文 — the customer's language picks one. Changes appear in the mini app within ~60s (config cache TTL).
-      The contact bar at the bottom of the FAQ screen reuses the WeChat customer-service settings (Settings → Customer service) and the optional phone number set there.
-      · 驱动小程序中的<b>"我的 → 帮助与常见问题"</b>页面。每个问题同时录入中英文,由顾客的语言决定显示哪一种;改动约 60 秒内(配置缓存 TTL)在小程序中生效。常见问题页底部的联系栏复用微信客服设置(设置 → 客户服务)及其中可选的电话号码。
-    </div>
 
     <!-- Categories -->
     <div class="group-card">
@@ -12402,6 +12379,7 @@
       <!-- §279: the FAQ saves itself. -->
       <div data-as-foot="faq" style="flex:1"></div>
     </div>
+    <div class="muted" style="font-size: 12px; margin-top: var(--s4); line-height: 1.6;"><span data-lang-block="en">Changes appear in the mini app within about 60 seconds. The contact bar at the bottom of the FAQ screen reuses the WeChat customer-service settings (Settings → Customer service) and the optional phone number set there.</span><span data-lang-block="cn">改动约 60 秒内在小程序中生效。常见问题页底部的联系栏复用微信客服设置(设置 → 客户服务)及其中可选的电话号码。</span></div>
   </section>
 
   <!-- Embedded editors — the Mini App Editor (/cms) and Product Page Editor
