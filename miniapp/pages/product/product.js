@@ -233,6 +233,7 @@ Page({
     optionsExtra: [],      // 'multi' groups → second (paid extras) sheet
     selectedChoices: {},   // { [option_id]: choice_id (single) | [choice_id] (multi) }
     choiceSel: {},         // { [choice_id]: true } — flat map for the WXML "on" state
+    choiceCount: {},       // { [choice_id]: n } — picks per choice, for a repeat group's counter
     choiceCap: {},         // { [choice_id]: true } — rows a pick-any ceiling has closed
     bundle: null,          // "buy together" set (resolved item cards) or null
     whatsInside: null,     // bundle PRODUCT component list ("what's inside") or null
@@ -546,6 +547,10 @@ Page({
       // before serving the page, so these ARE the numbers checkout applies.
       // 0 means no limit, which is every group authored before this existed.
       lim_hint: o.type === 'multi' ? optionText.limHint(o, L) : '',
+      // A PICK-ANY GROUP THAT TAKES THE SAME ANSWER MORE THAN ONCE ("2× Medjool
+      // Boats"). Its rows count with − n + instead of ticking; every pick is one
+      // more id in selectedChoices, so the limits above count each one.
+      allow_repeat: o.type === 'multi' && !!Number(o.allow_repeat),
       // A picture beside each choice: its linked product's photo, served by the
       // server per choice. Once one choice in a group has one, the rest keep an
       // empty frame so the names line up.
@@ -571,6 +576,7 @@ Page({
         // Pre-picked defaults obey the ceiling too: three tick-boxes all marked
         // default on a "choose 2" group would open the sheet already over the
         // cap, with the extra one un-untickable-into-legality by any single tap.
+        // A repeat group's default is picked once; the counter takes it from there.
         const pre = o.choices.filter(c => c.is_default && !c.sold_out).map(c => c.id);
         const cap = Number(o.max_choices) || 0;
         selected[o.id] = cap ? pre.slice(0, cap) : pre;
@@ -1018,6 +1024,7 @@ Page({
       optionsExtra,
       selectedChoices: selected,
       choiceSel: this._buildChoiceSel(selected),
+      choiceCount: this._buildChoiceCount(selected),
       choiceCap: this._buildChoiceCap(selected, options),
       hasVariants,
       oosLabel: L === 'cn' ? '售罄' : 'SOLD OUT',
@@ -1075,7 +1082,7 @@ Page({
     const optionId = e.currentTarget.dataset.optionId;
     const choiceId = e.currentTarget.dataset.choiceId;
     const selected = { ...this.data.selectedChoices, [optionId]: choiceId };
-    this.setData({ selectedChoices: selected, choiceSel: this._buildChoiceSel(selected) });
+    this.setData({ selectedChoices: selected, choiceSel: this._buildChoiceSel(selected), choiceCount: this._buildChoiceCount(selected) });
     // setData updates this.data synchronously, so the total reads the new pick.
     if (this.data.opShow) this.setData({ opAddLabel: this._sheetBtnLabel() });
   },
@@ -1084,25 +1091,63 @@ Page({
     if (e.currentTarget.dataset.soldOut) return;
     const optionId = e.currentTarget.dataset.optionId;
     const choiceId = e.currentTarget.dataset.choiceId;
-    const cur = Array.isArray(this.data.selectedChoices[optionId]) ? this.data.selectedChoices[optionId].slice() : [];
+    const o = this._optById(optionId);
+    // A repeat group's row is not a tick: its − and + do the picking.
+    if (o && o.allow_repeat) return;
+    const cur = this._selArr(optionId);
     const i = cur.indexOf(choiceId);
     if (i >= 0) cur.splice(i, 1);
     else {
       // The row is already dimmed at the ceiling; refuse the tap anyway rather
       // than trust the paint. An over-full line is refused at checkout, so
       // letting it through here would only move the failure somewhere worse.
-      const o = (this.data.options || []).find(x => String(x.id) === String(optionId));
       const max = Number(o && o.max_choices) || 0;
       if (max && cur.length >= max) return;
       cur.push(choiceId);
     }
+    this._setExtras(optionId, cur);
+  },
+  // Repeat group (allow_repeat): + adds one more of this choice, − takes one
+  // back. Every pick counts toward the group's ceiling, so + is refused there,
+  // and on a sold-out choice, whatever the paint says.
+  extraInc(e) {
+    const d = e.currentTarget.dataset;
+    if (d.soldOut) return;
+    const o = this._optById(d.optionId);
+    if (!o || !o.allow_repeat) return;
+    const cur = this._selArr(d.optionId);
+    const max = Number(o.max_choices) || 0;
+    if (max && cur.length >= max) return;
+    cur.push(d.choiceId);
+    this._setExtras(d.optionId, cur);
+  },
+  extraDec(e) {
+    const d = e.currentTarget.dataset;
+    const cur = this._selArr(d.optionId);
+    const i = cur.lastIndexOf(d.choiceId);
+    if (i < 0) return;
+    cur.splice(i, 1);
+    this._setExtras(d.optionId, cur);
+  },
+  _optById(optionId) {
+    return (this.data.options || []).find(x => String(x.id) === String(optionId));
+  },
+  // A copy of a pick-any group's picks, safe to change.
+  _selArr(optionId) {
+    const v = this.data.selectedChoices[optionId];
+    return Array.isArray(v) ? v.slice() : [];
+  },
+  _setExtras(optionId, cur) {
     const selected = { ...this.data.selectedChoices, [optionId]: cur };
     this.setData({
       selectedChoices: selected,
       choiceSel: this._buildChoiceSel(selected),
+      choiceCount: this._buildChoiceCount(selected),
       choiceCap: this._buildChoiceCap(selected),
-      exAddLabel: this._sheetBtnLabel(),
     });
+    // AFTER the write: the total reads this.data, which a label built inside
+    // the same setData would have read one tap stale.
+    this.setData({ exAddLabel: this._sheetBtnLabel() });
   },
   // Flatten selectedChoices ({opt: id | [id]}) → { [choice_id]: true } so the
   // WXML can mark a row selected without array lookups.
@@ -1111,6 +1156,16 @@ Page({
     Object.keys(selected || {}).forEach(k => {
       const v = selected[k];
       (Array.isArray(v) ? v : (v != null ? [v] : [])).forEach(id => { m[id] = true; });
+    });
+    return m;
+  },
+  // { [choice_id]: n } — how many times each choice is picked, for the − n +
+  // counter on a repeat group's rows. choiceSel can only say yes or no.
+  _buildChoiceCount(selected) {
+    const m = {};
+    Object.keys(selected || {}).forEach(k => {
+      const v = selected[k];
+      (Array.isArray(v) ? v : (v != null ? [v] : [])).forEach(id => { m[id] = (m[id] || 0) + 1; });
     });
     return m;
   },
@@ -1201,6 +1256,8 @@ Page({
   // { choice_id: true } for the rows a ceiling has closed — unticked choices in
   // a group already holding its maximum. Ticked rows are never capped: untick is
   // how a customer changes their mind, and a sheet with nothing tappable is dead.
+  // A repeat group at its ceiling marks EVERY row: there it closes only the +,
+  // and the − stays live for the same reason.
   // `opts` defaults to what is already on the page; the load path passes the
   // freshly built list, which setData has not written back yet.
   _buildChoiceCap(selected, opts) {
@@ -1211,15 +1268,23 @@ Page({
       const sel = selected[o.id];
       const cur = Array.isArray(sel) ? sel : (sel != null ? [sel] : []);
       if (cur.length < max) return;
-      (o.choices || []).forEach(c => { if (cur.indexOf(c.id) < 0) m[c.id] = true; });
+      (o.choices || []).forEach(c => { if (o.allow_repeat || cur.indexOf(c.id) < 0) m[c.id] = true; });
     });
     return m;
   },
 
-  // Chosen choice-ids for an option group (scalar→[id], array as-is).
+  // Chosen choice-ids for an option group (scalar→[id], array as-is), one entry
+  // per pick. A repeat group's come back in the order its choices are listed,
+  // repeats side by side ("Boats, Boats, Figs"), whatever order they were
+  // tapped in. Any other group never repeats an id: the server would count it
+  // once, so the cart must not bill it twice.
   _selIds(o) {
     const sel = this.data.selectedChoices[o.id];
-    return Array.isArray(sel) ? sel : (sel != null ? [sel] : []);
+    const ids = Array.isArray(sel) ? sel : (sel != null ? [sel] : []);
+    if (!o.allow_repeat) return ids.filter((id, i) => ids.indexOf(id) === i);
+    const out = [];
+    (o.choices || []).forEach(c => ids.forEach(id => { if (id === c.id) out.push(id); }));
+    return out;
   },
 
   // Validate required options, price in the chosen deltas (skipping any sold-out

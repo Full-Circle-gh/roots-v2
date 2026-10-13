@@ -416,14 +416,23 @@
             <view wx:if="{{opt.lim_hint}}" class="op-lim f-toni">{{opt.lim_hint}}</view>
             <view class="op-choices">
               <view wx:for="{{opt.choices}}" wx:for-item="ch" wx:key="id"
-                    class="op-choice op-extra {{choiceSel[ch.id] ? 'on' : ''}} {{ch.sold_out ? 'sold-out' : ''}} {{choiceCap[ch.id] ? 'capped' : ''}}"
+                    class="op-choice op-extra {{choiceSel[ch.id] ? 'on' : ''}} {{ch.sold_out ? 'sold-out' : ''}} {{choiceCap[ch.id] && !opt.allow_repeat ? 'capped' : ''}}"
                     data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}" data-sold-out="{{ch.sold_out}}" bindtap="toggleExtra">
-                <view class="op-extra-box">{{choiceSel[ch.id] ? '✓' : ''}}</view>
+                <view wx:if="{{!opt.allow_repeat}}" class="op-extra-box">{{choiceSel[ch.id] ? '✓' : ''}}</view>
                 <image wx:if="{{ch.img}}" class="op-choice-img" src="{{ch.img}}" mode="aspectFill" lazy-load="{{true}}"></image>
                 <view wx:elif="{{opt.has_img}}" class="op-choice-img"></view>
                 <text class="op-choice-label f-bear">{{ch.label}}</text>
                 <text wx:if="{{ch.sold_out}}" class="op-extra-oos f-toni">{{oosLabel}}</text>
                 <text wx:elif="{{ch.delta_text}}" class="op-choice-delta f-toni">{{ch.delta_text}}</text>
+                <!-- A repeat group counts instead of ticking: − n +. The + goes
+                     quiet at the group's ceiling and on a sold-out choice. -->
+                <view wx:if="{{opt.allow_repeat}}" class="op-count">
+                  <view class="op-count-btn {{choiceCount[ch.id] ? '' : 'off'}}"
+                        data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}" catchtap="extraDec">−</view>
+                  <text class="op-count-n f-bear">{{choiceCount[ch.id] || 0}}</text>
+                  <view class="op-count-btn {{choiceCap[ch.id] || ch.sold_out ? 'off' : ''}}"
+                        data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}" data-sold-out="{{ch.sold_out}}" catchtap="extraInc">+</view>
+                </view>
               </view>
             </view>
           </view>

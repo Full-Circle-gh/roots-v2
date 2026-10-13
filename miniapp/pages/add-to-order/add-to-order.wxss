@@ -304,6 +304,8 @@
   font-size: calc(26rpx * var(--font-scale));
   color: var(--olive);
 }
+/* A repeat group's − n +, after the price; the round steps are the shared .step. */
+.op-c-step { margin-left: 16rpx; }
 .op-foot {
   display: flex;
   align-items: center;

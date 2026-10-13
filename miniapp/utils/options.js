@@ -37,22 +37,39 @@ function valueOf(o, L) {
 }
 
 // One option → "Name: Value", or a bare "Value" when the name is unknown.
+// `n` > 1 is how many times it was picked, read as "Value ×2".
 // Returns '' when there's no value to show, so the caller can filter it out.
-function formatOne(o, L) {
+function formatOne(o, L, n) {
   if (!o) return '';
   // Legacy rows stored options as plain strings (no question, no choice id).
   if (typeof o === 'string') return o.trim();
-  const value = valueOf(o, L);
+  let value = valueOf(o, L);
   if (!value) return '';
+  if (n > 1) value += ' ×' + n;
   const name = nameOf(o, L);
   return name ? name + ': ' + value : value;
 }
 
 // An options array → the display string. '' for an empty/missing array, so the
 // existing `wx:if="{{item.display_options}}"` guards keep hiding the row.
+// A REPEAT PICK IS THE SAME ENTRY WRITTEN TWICE (same choice_id), from a group
+// that takes one answer more than once. It folds into one "Label ×2", placed
+// where that choice first appears. An entry with no choice_id never folds.
 function format(options, L) {
   if (!Array.isArray(options)) return '';
-  return options.map(o => formatOne(o, L)).filter(Boolean).join(SEP);
+  const rows = [];
+  const byId = {};
+  options.forEach(o => {
+    // The label must agree too: a ticket that read "Mango ×3" for three
+    // different bites would be worse than one bite written twice.
+    const id = o && typeof o === 'object' && o.choice_id != null && o.choice_id !== ''
+      ? String(o.choice_id) + '|' + String(o.label != null ? o.label : (o.label_en || '')) : null;
+    if (id != null && byId[id]) { byId[id].n += 1; return; }
+    const row = { o, n: 1 };
+    if (id != null) byId[id] = row;
+    rows.push(row);
+  });
+  return rows.map(r => formatOne(r.o, L, r.n)).filter(Boolean).join(SEP);
 }
 
 // "Choose 2" under a pick-any question — how many of a group may be ticked, in

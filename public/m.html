@@ -15072,9 +15072,26 @@ function onwOptsLimit(o){
   if(o.max) return T('Up to ','最多 ')+o.max+n;
   return '';
 }
+/* A REPEATED PICK — two Medjool Boats — is the same entry written twice on a
+   line. Folded into its first appearance with a count n, the rule
+   lib/product-options.js groupRepeats states. No choice_id, no fold. */
+function optFold(opts){
+  const out=[], first={};
+  (Array.isArray(opts)?opts:[]).forEach(o=>{
+    const cid=o&&o.choice_id!=null?o.choice_id+'|'+(o.label||''):null;
+    if(cid!=null&&first[cid]){ first[cid].n=(first[cid].n||1)+1; return; }
+    const copy=o&&typeof o==='object'?Object.assign({},o):o;
+    if(cid!=null) first[cid]=copy;
+    out.push(copy);
+  });
+  return out;
+}
 function onwChosenOpts(){
   const x=state.onw.opt, out=[]; if(!x) return out;
-  (x.p.options||[]).forEach(o=>(x.sel[o.id]||[]).forEach(cid=>{
+  // Repeats go out side by side, in the order the answers are listed.
+  const ids=o=>{ const a=(x.sel[o.id]||[]).slice(); if(!o.rep) return a;
+    const r=new Map((o.choices||[]).map((y,i)=>[y.id,i])); return a.sort((p,q)=>r.get(p)-r.get(q)); };
+  (x.p.options||[]).forEach(o=>ids(o).forEach(cid=>{
     const c=(o.choices||[]).find(y=>y.id===cid); if(!c) return;
     out.push({option_id:o.id,choice_id:c.id,label:c.en,label_cn:c.cn,
               question_en:o.q_en,question_cn:o.q_cn,delta:Number(c.d)||0});
@@ -15083,8 +15100,8 @@ function onwChosenOpts(){
 }
 /* "Heat up?: Yes" under the line's name — the till's own line (optsHtml). */
 function onwOptsText(opts){
-  return (opts||[]).map(o=>{
-    const a=T(o.label||'',o.label_cn||o.label||''), q=T(o.question_en||'',o.question_cn||o.question_en||'');
+  return optFold(opts).map(o=>{
+    const a=T(o.label||'',o.label_cn||o.label||'')+(o.n>1?' \u00d7'+o.n:''), q=T(o.question_en||'',o.question_cn||o.question_en||'');
     return a?(q?q+': '+a:a):'';
   }).filter(Boolean);
 }
@@ -15104,6 +15121,16 @@ function onwOptHtml(){
       <div style="display:flex;flex-wrap:wrap;gap:8px">${(o.choices||[]).map(c=>{
         const on=(x.sel[o.id]||[]).includes(c.id), d=Number(c.d)||0;
         const tail=c.out?T('Out of stock','缺货'):(d?(d>0?'+':'\u2212')+money(CUR,Math.abs(d)):'');
+        // A REPEATABLE ANSWER is a − n + row — the line stepper's own buttons.
+        if(o.rep){
+          const n=(x.sel[o.id]||[]).filter(y=>y===c.id).length;
+          const noAdd=c.out||(o.max&&(x.sel[o.id]||[]).length>=o.max);
+          return `<div style="flex:1 1 100%;display:flex;align-items:center;gap:12px">
+            <span style="flex:1;min-width:0">${escAttr(T(c.en,c.cn))}${tail?` <span class="num" style="color:var(--text-secondary)">${tail}</span>`:''}</span>
+            <button class="stepbtn" ${n?`onclick="APP.cmd('onwOptUntick',${Number(o.id)},${Number(c.id)})"`:'disabled'} aria-label="${T('Less','减少')}">${ic('minus',20)}</button>
+            <span class="num" style="min-width:30px;text-align:center;font-size:18px;font-weight:500">${n}</span>
+            <button class="stepbtn" ${noAdd?'disabled':`onclick="APP.cmd('onwOptTick',${Number(o.id)},${Number(c.id)})"`} aria-label="${T('More','增加')}">${ic('plus',20)}</button></div>`;
+        }
         return `<button class="chip ${on?'on':''}" ${c.out?'disabled style="opacity:.5"':`onclick="APP.cmd('onwOptTick',${Number(o.id)},${Number(c.id)})"`}><span>${escAttr(T(c.en,c.cn))}</span>${tail?`<span class="num" style="color:var(--text-secondary)">${tail}</span>`:''}</button>`;
       }).join('')}</div>`;
   });
@@ -15639,6 +15666,8 @@ reg('onwOptTick', (oid,cid)=>{
   if(!c||c.out) return;
   const cur=x.sel[oid]||[];
   if(!q.multi) x.sel[oid]=(cur.length===1&&cur[0]===cid&&!q.req)?[]:[cid];
+  // A repeatable answer (q.rep): + is one more pick, never a toggle.
+  else if(q.rep){ if(q.max&&cur.length>=q.max) return; cur.push(cid); x.sel[oid]=cur; }
   else {
     const at=cur.indexOf(cid);
     if(at>=0) cur.splice(at,1);
@@ -15647,6 +15676,13 @@ reg('onwOptTick', (oid,cid)=>{
     x.sel[oid]=cur;
   }
   x.err=false; render();
+});
+// The counter's −: takes back one pick of this answer.
+reg('onwOptUntick', (oid,cid)=>{
+  const x=state.onw.opt; if(!x) return;
+  const cur=x.sel[Number(oid)]||[], at=cur.lastIndexOf(Number(cid));
+  if(at<0) return;
+  cur.splice(at,1); x.err=false; render();
 });
 reg('onwOptClose', ()=>{ state.onw.opt=null; render(); });
 reg('onwOptAdd', ()=>{
@@ -42866,6 +42902,7 @@ function peOptsDraft(list){
   return list.map(o=>({question_en:String((o&&o.question_en)||''),question_cn:String((o&&o.question_cn)||''),
     type:(o&&o.type)||'single', is_required:o&&o.is_required?1:0,
     min_choices:Number(o&&o.min_choices)||0, max_choices:Number(o&&o.max_choices)||0,
+    allow_repeat:o&&o.allow_repeat?1:0,
     choices:((o&&o.choices)||[]).map(c=>({label_en:String((c&&c.label_en)||''),label_cn:String((c&&c.label_cn)||''),
       price_delta:Number(c&&c.price_delta)||0, is_default:c&&c.is_default?1:0,
       stock_product_id:(c&&c.stock_product_id)?Number(c.stock_product_id):null}))}));
@@ -42881,7 +42918,8 @@ function peOptBody(opts){
       ? {min:Math.max(0,Math.floor(Number(o.min_choices)||0)),max:Math.max(0,Math.floor(Number(o.max_choices)||0))}
       : {min:0,max:0};
     return {question_en:String(o.question_en||'').trim(),question_cn:String(o.question_cn||'').trim(),type,
-      is_required:(o.is_required||lim.min>0)?1:0,min_choices:lim.min,max_choices:lim.max,choices};
+      is_required:(o.is_required||lim.min>0)?1:0,min_choices:lim.min,max_choices:lim.max,
+      allow_repeat:(type==='multi'&&o.allow_repeat)?1:0,choices};
   }).filter(o=>(o.question_en||o.question_cn)&&(o.type==='text'||o.choices.length));
 }
 const peOptBlank=()=>({label_en:'',label_cn:'',price_delta:0,is_default:0,stock_product_id:null});
@@ -42915,6 +42953,9 @@ function peOptCard(){
     const lim=o.type==='multi'?`<span style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text-secondary)" title="${T('0 in a box means no limit','填 0 表示不限')}">${T('Pick','选')}${limBox('min_choices',T('Fewest they must pick (0 = no limit)','至少选几项(0 = 不限)'))}–${limBox('max_choices',T('Most they can pick (0 = no limit)','最多选几项(0 = 不限)'))}${T('','项')}</span>`:'';
     const req=`<button onclick="APP.cmd('peOptReq',${oi})" ${dis} aria-pressed="${!!o.is_required}" title="${T('Customer must choose before adding to cart','加入购物车前必须选择')}" style="display:flex;align-items:center;gap:8px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;color:var(--text-primary);font-size:14px">
         <span style="flex:none;width:20px;height:20px;border-radius:6px;border:1.75px solid ${o.is_required?'var(--text-primary)':'var(--border-strong)'};background:${o.is_required?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${o.is_required?ic('check',13,2.5):''}</span>${T('Required','必选')}</button>`;
+    /* §473 — the same answer picked more than once (two Medjool Boats). Pick-any only. */
+    const rep=o.type!=='multi'?'':`<button onclick="APP.cmd('peOptRepeat',${oi})" ${dis} aria-pressed="${!!o.allow_repeat}" title="${T('The same choice can be picked more than once','同一项可选多次')}" style="display:flex;align-items:center;gap:8px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;color:var(--text-primary);font-size:14px">
+        <span style="flex:none;width:20px;height:20px;border-radius:6px;border:1.75px solid ${o.allow_repeat?'var(--text-primary)':'var(--border-strong)'};background:${o.allow_repeat?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${o.allow_repeat?ic('check',13,2.5):''}</span>${T('Repeats allowed','可重复选')}</button>`;
     const choices=o.type==='text'?'':(o.choices.length?o.choices.map((c,ci)=>{
       const def=`<button onclick="APP.cmd('peOptDefault',${oi},${ci})" ${dis} aria-pressed="${!!c.is_default}" aria-label="${o.type==='single'?T('Default pick','默认选项'):T('Pre-selected','默认勾选')}" title="${o.type==='single'?T('Default pick','默认选项'):T('Pre-selected','默认勾选')}"
           style="flex:none;width:22px;height:22px;border-radius:${o.type==='single'?'50%':'6px'};border:1.75px solid ${c.is_default?'var(--text-primary)':'var(--border-strong)'};background:${c.is_default&&o.type!=='single'?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer">${c.is_default?(o.type==='single'?'<span style="width:10px;height:10px;border-radius:50%;background:var(--text-primary)"></span>':ic('check',13,2.5)):''}</button>`;
@@ -42941,7 +42982,7 @@ function peOptCard(){
         <input value="${escAttr(o.question_en)}" placeholder="${T('Question EN (e.g. Choose your dressing)','问题(英文,如:选择酱料)')}" style="flex:1;min-width:0" ${dis} oninput="APP.cmd('peOptQ',${oi},'question_en',this.value)">
         ${sm(`APP.cmd('peOptMove',${oi},-1)`,'chevron-up',T('Move up','上移'),oi===0)}${sm(`APP.cmd('peOptMove',${oi},1)`,'chevron-down',T('Move down','下移'),oi===opts.length-1)}${sm(`APP.cmd('peOptRemove',${oi})`,'x',T('Remove this option','移除此选项'),false)}</div>
       <input value="${escAttr(o.question_cn)}" placeholder="${T('Question 中文','问题(中文)')}" ${dis} oninput="APP.cmd('peOptQ',${oi},'question_cn',this.value)">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${typeSel}${req}</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${typeSel}${req}${rep}</div>
       ${lim}
       ${o.type==='multi'?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Pick-any extras. Link each to a product so it draws from that product’s stock and sells out when it runs low.','多选加项。将每项关联到商品,即可占用该商品库存,售罄时自动隐藏。')}</span>`:''}
       ${o.type==='text'?'':`<div>${choices}</div>${edit?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 14px" onclick="APP.cmd('peOptChoiceAdd',${oi})">${T('+ Add choice','+ 添加选项')}</button>`:''}`}</div>`;
@@ -42972,7 +43013,7 @@ reg('peOptC', (oi,ci,k,v)=>{
 reg('peOptType', (oi,v)=>{
   const a=peOptAt(oi); if(!a||(v!=='single'&&v!=='multi')) return;
   a.o.type=v;
-  if(v!=='multi'){ a.o.min_choices=0; a.o.max_choices=0; }
+  if(v!=='multi'){ a.o.min_choices=0; a.o.max_choices=0; a.o.allow_repeat=0; }
   if(v==='single') a.o.choices.forEach(c=>{ c.price_delta=0; c.stock_product_id=null; });
   peOptTouched(true);
 });
@@ -42981,6 +43022,12 @@ reg('peOptReq', oi=>{
   const a=peOptAt(oi); if(!a) return;
   a.o.is_required=a.o.is_required?0:1;
   if(!a.o.is_required&&a.o.type==='multi'&&Number(a.o.min_choices)>0) a.o.min_choices=0;
+  peOptTouched(true);
+});
+/* §473 optRepeat: repeats on or off; the server re-normalises the limits against it. */
+reg('peOptRepeat', oi=>{
+  const a=peOptAt(oi); if(!a||a.o.type!=='multi') return;
+  a.o.allow_repeat=a.o.allow_repeat?0:1;
   peOptTouched(true);
 });
 /* optLimit: a whole number, 0 = no limit; a floor of 1 or more is Required. */
@@ -50968,10 +51015,19 @@ function mapOrderRow(r){
    one. Kept as an EN/CN pair rather than resolved here, because the operator can
    flip language after the order was mapped. */
 function itemOpts(it){
-  const arr=Array.isArray(it.options)?it.options:[];
+  // Two Medjool Boats are one row with a count (§473) — optFold's rule, kept
+  // inline because this is read on its own by the screens that map an order.
+  const arr=[], first={};
+  (Array.isArray(it.options)?it.options:[]).forEach(o=>{
+    const cid=o&&o.choice_id!=null?o.choice_id+'|'+(o.label||''):null;
+    if(cid!=null&&first[cid]){ first[cid].n=(first[cid].n||1)+1; return; }
+    const copy=o&&typeof o==='object'?Object.assign({},o):o;
+    if(cid!=null) first[cid]=copy;
+    arr.push(copy);
+  });
   const side=cn=>arr.map(o=>{
     if(!o) return '';
-    const val=cn?(o.label_cn||o.label||''):(o.label||o.label_cn||'');
+    const val=(cn?(o.label_cn||o.label||''):(o.label||o.label_cn||''))+(o.n>1?' \u00d7'+o.n:'');
     if(!val) return '';
     const q=cn?(o.question_cn||o.question_en||''):(o.question_en||o.question_cn||'');
     return q?(q+': '+val):val;
