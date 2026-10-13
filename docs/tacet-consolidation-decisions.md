@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.518
+# Tacet shared-core consolidation — decisions record, v4.519
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-13 · v4.519 — **§471 · A PICK-ANY QUESTION CAN LET ONE ANSWER BE PICKED MORE THAN ONCE (§153 AMENDED) — DECIDED BY ASH:** *"can't select 2 items that are the same for example 2 medjool boats"*, with a photo of the till's *Small Bites Selection* sheet (*At least 2*), then three choices put to him: a switch per question, a − n + counter on each answer, everywhere at once. A new `allow_repeat` column on `retail_product_options`, 0 on every existing row, so nothing already authored changes. With it on, a pick-any question counts every pick toward its floor and ceiling, charges each one and takes each one off a linked shelf. A repeat is stored on the order line as the same entry written twice, so money, stock and cost need no second rule; printers fold it into *Medjool Boats ×2*. Two Chinese strings composed by Claude; see the vocabulary's v1.330. Schema: one added column. No change to `.gitignore` or CI. See §471.
 
 2026-10-13 · v4.518 — **§470 · `routes/retail.js` IS SPLIT BY AREA, ONE AREA PER PR, WITH NO CHANGE IN BEHAVIOUR — DECIDED BY ASH:** *"Split retail.js up"*, then *"start"* to the plan put to him. The file is 43,320 lines and 402 endpoints. Each area moves into its own file under `routes/retail/`, mounted inside `retail.js` at the spot the area left, so no request is answered by a different handler. Polls and voting go first, as the pilot. Held by `scripts/test_retail_split_routes.js`, which fails if a moved endpoint and one left behind could answer the same request. No string, no schema, no change to `.gitignore` or CI. See §470.
 
@@ -30763,3 +30765,62 @@ repo, so the check has been reporting itself as skipped. The vote handler's
 transaction is one of the 30 it would count, and it now lives in the polls part.
 
 No string, no schema, no change to `.gitignore` or CI.
+
+## §471 — A PICK-ANY QUESTION CAN LET ONE ANSWER BE PICKED MORE THAN ONCE (§153 AMENDED)
+
+**Decided by Ash, 2026-10-13:** *"can't select 2 items that are the same for
+example 2 medjool boats"*, with a photo of the till's option sheet for *Small
+Bites Selection* (*Choose Your Bites · Required · At least 2*). Three choices
+were put to him and he took all three recommended ones: **a switch per
+question**, **a − n + counter on each answer**, **everywhere at once**.
+
+**Why it could not be done.** §153 said, on purpose: *"A repeated choice id
+counts once. A tick-box is on or off."* Every picker toggled, the QR menu's
+door and `normaliseChoiceIds` dropped a repeat before it was checked, and a
+second tap on Medjool Boats took the first one away.
+
+**The rules.**
+
+1. **Per question, off by default.** `retail_product_options.allow_repeat`,
+   0 on every existing row. Only a *Pick any* question can carry it; a *Pick
+   one* question is one answer by construction. Editors: *Repeats allowed* next
+   to *Required*, desktop and phone.
+2. **§153's sentence is amended, not removed.** On a question with the switch
+   off, a repeated id still counts once and is now dropped before it is charged
+   or written. With it on, every pick counts toward the floor and the ceiling,
+   is charged its delta, and takes one off a linked shelf per unit bought.
+3. **The limits stop being bounded by the number of answers.** *At least 3*
+   on two answers is reachable when one can be picked twice. The bound becomes
+   the per-line ceiling of 40 (`lib/option-limits.js` `REPEAT_CAP`, which
+   `MAX_CHOICES_PER_LINE` now reads). A floor only drops when every answer in
+   the group is sold out, not when fewer answers are left than the floor.
+4. **A repeat is stored as the same entry written twice**, not as one entry
+   with a count. Every reader that adds up delta, stock or cost entry by entry
+   is right without knowing repeats exist. Only readers that **print** a line
+   fold it, into *Medjool Boats ×2*, counted at its first appearance wherever
+   the repeats sit (`groupRepeats` in `lib/product-options.js`; the clients
+   carry the same few lines). Tickets print `x2`, as their quantities already
+   do, and a linked extra's pull count is multiplied by it.
+5. **Clients post the id once per pick.** The QR menu's door still caps
+   *different* answers at 12; repeats are bounded by the module's 40.
+
+**Two places charged a repeat once, and are fixed with it.** The mini app's
+cart price (`priceCart`) and the add-on settle (`deriveAddonLineMoney`) both
+looked choices up with `IN (...)` and summed the rows that came back — one row
+per distinct id. The first would have quoted less than checkout charged; the
+second would have refused to settle any add-on carrying a repeat. Both now add
+per posted entry, under rule 2.
+
+**The worst-case cost of a required group** (`requiredOptionFloorYuan`) is the
+dearest answer *floor* times over when repeats are on, not the *floor* dearest.
+
+**Where the counter is.** The till; the QR menu; the web shop; the mini app's
+product page and add-to-order page; the desktop and phone *New order*. The
+mini app needs an upload before customers see it there.
+
+**Not changed.** A *Pick one* question; any question with the switch off;
+Meituan and Eleme, which carry no choice ids.
+
+Held by `scripts/test_option_repeats.js`. Two Chinese strings composed by
+Claude (vocabulary v1.330). Schema: one added column, through `addColumn`. No
+change to `.gitignore` or CI.

@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.330 · 2026-10-13 · §471 ONE ANSWER PICKED MORE THAN ONCE — 2 STRINGS COMPOSED BY CLAUDE (`Repeats allowed · 可重复选`, `The same choice can be picked more than once · 同一项可选多次`), BUILT ON THE LIVE 多选 / 必选 / 单选 AND THE LIVE 可重复; THE COUNTER AND `×2` NEED NO WORDS.** See *One answer picked more than once (§471)*.
+
 **v1.329 · 2026-10-12 · §466 HIDING A CATEGORY FROM THE MINI APP — 4 STRINGS COMPOSED BY CLAUDE, EACH THE LIVE §288 QR-MENU STRING WITH `二维码菜单` SWAPPED FOR THE LIVE `小程序`; THE MINI-APP HINT EXTENDED WITH THE QR HINT'S OWN LIVE CLAUSE.** See *Hiding a category from the mini app (§466)*.
 
 **v1.328 · 2026-10-12 · §465 RECALCULATING WASTE COSTS — 1 STRING COMPOSED BY CLAUDE (`Recalculate costs · 重新计算成本`), FROM THE LIVE 计算成本; THE REST COPIED WHOLE.** See *Recalculating waste costs (§465)*.
@@ -13941,3 +13943,32 @@ register. Products → Categories on the desktop (`public/retail-admin/01-core.j
 `在小程序隐藏` for the pill: a verb, where the QR pill is a state
 (`已隐藏`). `下架`: means unpublished, which is a product's state and a
 different act — a hidden category's products stay published.
+
+## One answer picked more than once (§471)
+
+**Composed by Claude, 2026-10-13, under the 2026-09-06 amendment.** Operator
+register. The product editor's option row, desktop
+(`public/retail-admin/09-products.js`, `optRender`) and phone (`public/m.html`,
+the `peOptRepeat` control), beside *Required*. Asked by Ash: *"can't select 2
+items that are the same for example 2 medjool boats"*.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Repeats allowed` / `可重复选` | the tick beside *Required* on a *Pick any* question | `选` is the verb every neighbour on this row already ends on: `单选`, `多选`, `必选`. `可重复` is live (`可重复使用`) and means *can be done again*. Together they read *can be picked again*, in the row's own shape. |
+| `The same choice can be picked more than once` / `同一项可选多次` | that tick's hover title | `项` is the live word for an answer here (`至少选几项`, `最多选几项`, `请至少添加一个选项`). `可选` and `多次` are ordinary. |
+
+### Needs no words
+
+- The − n + counter on each answer is the two signs and a number.
+- A repeated answer on a bill, a ticket or an order reads `Medjool Boats ×2`
+  (tickets `x2`), the shape the line's own quantity already uses.
+
+### Rejected
+
+- `可多选` (*can pick several*): that is what `多选` (*Pick any*) already says,
+  so it would not tell the two apart.
+- `允许重复` (*allow duplicates*): reads as a data-entry warning, not as a
+  customer being able to have two of something.
+- `可重复使用`: the live string means *reusable* (a container), not *pick again*.

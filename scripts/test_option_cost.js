@@ -56,7 +56,7 @@ db.exec(`
   );
   CREATE TABLE retail_product_options (
     id INTEGER PRIMARY KEY, product_id INTEGER, type TEXT,
-    is_required INTEGER DEFAULT 0, min_choices INTEGER DEFAULT 0
+    is_required INTEGER DEFAULT 0, min_choices INTEGER DEFAULT 0, allow_repeat INTEGER DEFAULT 0
   );
   CREATE TABLE retail_product_option_choices (
     id INTEGER PRIMARY KEY, option_id INTEGER, stock_product_id INTEGER

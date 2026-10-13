@@ -1747,6 +1747,15 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
 .oc-x{flex:none;width:21px;height:21px;border:1.5px solid currentColor;
   border-radius:4px;display:flex;align-items:center;justify-content:center;
   font-size:14px;line-height:1}
+/* A REPEATABLE ANSWER'S − n + COUNTER — two Medjool Boats. Same currentColor
+   outline as the tick box, so it flips with the row; the − is a real target
+   because it is the only way to take one back. */
+.oc.rep .oc-l{flex:1}
+.oc-ct{flex:none;display:flex;align-items:center;gap:4px}
+.oc-m{width:30px;height:30px;border:1.5px solid currentColor;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:17px;line-height:1}
+.oc-m.off{opacity:.35}
+.oc-n{min-width:20px;text-align:center;font-variant-numeric:tabular-nums}
 /* The picker's foot holds one button and, when a required question has been
    left alone, one line above it. */
 /* NO RULE ABOVE THE PICKER'S FOOT. .sheet-f draws one because the basket's
@@ -2645,8 +2654,14 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      optLine does exactly this). Both languages in every half, like every other
      row this script draws — the CSS decides which is visible, not this code. */
   `var opsLine=function(a){if(!a||!a.length)return '';var h='';` +
-  `for(var i=0;i<a.length;i++){var o=a[i];` +
-  `h+='<div class="ln-o">'+bi(o.q_en+': '+o.en,o.q_cn+': '+o.cn)+'</div>'}` +
+  `for(var i=0;i<a.length;i++){var o=a[i],n=1;` +
+  /* A REPEATED PICK — two Medjool Boats — reads as one row with a count, the
+     way the line's own quantity does: counted on its first appearance, and
+     every later appearance skipped (lib/product-options.js groupRepeats). */
+  `if(o.choice_id!=null){var sk=0;for(var k=0;k<a.length;k++)if(a[k].choice_id===o.choice_id&&a[k].en===o.en){if(k<i){sk=1;break}if(k>i)n++}` +
+  `if(sk)continue}` +
+  `var x=n>1?' \u00d7'+n:'';` +
+  `h+='<div class="ln-o">'+bi(o.q_en+': '+o.en+x,o.q_cn+': '+o.cn+x)+'</div>'}` +
   `return h};` +
   /* THE BASKET IS KEYED BY WHAT WAS ORDERED, NOT BY WHICH PRODUCT. One
      full-sugar latte and one half-sugar latte are two lines, two prices and
@@ -2677,13 +2692,17 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var pkChosen=function(){var out=[];if(!pk)return out;` +
   `for(var i=0;i<pk.o.length;i++){var g=pk.o[i],sel=pk.s[g.id]||[];` +
   `for(var j=0;j<g.choices.length;j++){var c=g.choices[j];` +
-  `if(sel.indexOf(c.id)<0)continue;` +
+  /* HOW MANY TIMES this answer was picked: once at most on a tick-box
+     question, as often as the counter says on a repeatable one (g.rep). The
+     repeats go out side by side, in the order the answers are listed. */
+  `var n=0;for(var m=0;m<sel.length;m++)if(sel[m]===c.id)n++;` +
+  `if(!n)continue;if(!g.rep)n=1;` +
   /* A SOLD-OUT ANSWER IS NEVER CARRIED OUT OF THE PICKER, even if it somehow
      got ticked — a default that ran out between the page rendering and the tap
      is the real case. The server refuses it too (§120 rule 1A); this is the
      half that stops the customer being shown a price they cannot pay. */
   `if(c.out)continue;` +
-  `out.push({option_id:g.id,choice_id:c.id,q_en:g.q_en,q_cn:g.q_cn,` +
+  `for(;n>0;n--)out.push({option_id:g.id,choice_id:c.id,q_en:g.q_en,q_cn:g.q_cn,` +
   `en:c.en,cn:c.cn,d:c.d})}}` +
   `return out};` +
   `var pkPrice=function(){if(!pk)return 0;var t=pk.p,a=pkChosen();` +
@@ -2744,24 +2763,33 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var gi=0;for(var k=0;k<g.choices.length;k++)if(g.choices[k].img)gi=1;` +
   `for(var j=0;j<g.choices.length;j++){var c=g.choices[j];` +
   `var on=(sel.indexOf(c.id)>=0&&!c.out);` +
+  `var cnt=0;if(g.rep)for(var m=0;m<sel.length;m++)if(sel[m]===c.id)cnt++;` +
   /* A TICKED ROW IS NEVER CAPPED. Unticking is the only way back under the
      ceiling, so the rows that can do it must stay live — cap the ticked ones
      too and the customer is stuck at two with no way to change their mind. */
   `var cap=(!on&&full&&!c.out)?1:0;` +
-  `h+='<button type=\"button\" class=\"oc'+(g.multi?' multi':'')+` +
+  /* A REPEATABLE ROW AT THE CEILING IS NEVER DISABLED, because its − lives
+     inside it and a disabled button swallows the tap meant for the −. Its +
+     is dimmed instead and the click handler refuses the add. */
+  `h+='<button type=\"button\" class=\"oc'+(g.multi?' multi':'')+(g.rep?' rep':'')+` +
   `(on?' on':'')+(c.out?' out':'')+(cap?' cap':'')+'\"'+` +
-  `((c.out||cap)?' disabled':'')+' data-og=\"'+g.id+'\" data-oc=\"'+c.id+'\">'+` +
+  `((c.out||(cap&&!g.rep))?' disabled':'')+' data-og=\"'+g.id+'\" data-oc=\"'+c.id+'\">'+` +
   /* THE BOX IS EMPTY OR IT HAS A TICK, and it is only drawn for a question
      that accepts more than one answer. A single-answer question keeps the
      bare row: a box that can only ever hold one tick is a radio drawn as a
      checkbox, which is the opposite of the distinction being made here. */
-  `(g.multi?'<span class=\"oc-x\">'+(on?'\\u2713':'')+'</span>':'')+` +
+  `((g.multi&&!g.rep)?'<span class=\"oc-x\">'+(on?'\\u2713':'')+'</span>':'')+` +
   /* A TAP ON THE PICTURE ENLARGES IT, through the same full-screen viewer the product sheet's photo opens (#big), and does NOT tick the row:
      the customer is looking, not choosing. data-big is the choice route
      without a width; the viewer asks it for the hero width. */
   `(gi?(c.img?'<img class=\"oc-i\" src=\"'+esc(c.img)+'&w=160\" data-big=\"'+esc(c.img)+'\" alt=\"\" loading=\"lazy\" decoding=\"async\">':'<span class=\"oc-i\"></span>'):'')+` +
   `'<span class=\"oc-l\">'+bi(c.en,c.cn)+'</span>'+` +
   `'<span class=\"oc-d\">'+(c.out?L_OUT:(c.d?('+'+money(c.d)):''))+'</span>'+` +
+  /* THE − n + COUNTER of a repeatable answer. The row itself is the +, so a
+     tap anywhere on it adds one; only the − (data-ocm) takes one back. */
+  `(g.rep?'<span class=\"oc-ct\"><span class=\"oc-m'+(cnt?'':' off')+'\" data-ocm=\"1\">\\u2212</span>'+` +
+  `'<span class=\"oc-n\">'+cnt+'</span>'+` +
+  `'<span class=\"oc-m'+((full||c.out)?' off':'')+'\">+</span></span>':'')+` +
   `'</button>'}` +
   `h+='</div>'}` +
   `body.innerHTML=h;` +
@@ -2923,6 +2951,11 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var g=null;for(var gi=0;gi<pk.o.length;gi++)if(pk.o[gi].id===gid)g=pk.o[gi];` +
   `if(!g)return;` +
   `var sel=pk.s[gid]||[],at=sel.indexOf(cid);` +
+  /* A REPEATABLE ANSWER: the − takes back the last pick of it, anything else
+     on the row is one more — refused at the ceiling, like a tick would be. */
+  `if(g.rep){if(e.target.closest('[data-ocm]')){var la=sel.lastIndexOf(cid);if(la>=0)sel.splice(la,1)}` +
+  `else{if(g.max&&pkLive(g,sel)>=g.max)return;sel.push(cid)}` +
+  `pk.s[gid]=sel;oErr.hidden=true;pkPaint();return}` +
   /* The ceiling, guarded at the model and not only at the paint. The row is
      already disabled, so this catches the ways a tap can arrive anyway — a
      keyboard, a stale paint, an assistive click — and it is three lines
@@ -4358,17 +4391,27 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     // The answers, as ids and nothing else. Everything they mean — the label,
     // the question, the price — is looked up from this tenant's own tables
     // below. A delta that arrived from a phone is not a delta.
+    // REPEATS ARE PASSED THROUGH: two Medjool Boats post the same id twice, and
+    // whether that is two answers or one tick-box written twice depends on the
+    // question, which lib/product-options.js reads back and decides. The dozen
+    // still bounds DIFFERENT answers; the repeats are bounded by the module's
+    // own per-line ceiling.
     const rawCh = Array.isArray(raw && raw.choices) ? raw.choices : [];
-    if (rawCh.length > MAX_CHOICES) {
+    if (rawCh.length > productOptions.MAX_CHOICES_PER_LINE) {
       return res.status(400).json({ success: false, error: 'too_many_choices', store_product_id: pid });
     }
     const choices = [];
+    const distinct = new Set();
     for (const c of rawCh) {
       const cid = parseInt(c, 10);
       if (!Number.isInteger(cid) || cid < 1) {
         return res.status(400).json({ success: false, error: 'bad_choice', store_product_id: pid });
       }
-      if (choices.indexOf(cid) < 0) choices.push(cid);
+      choices.push(cid);
+      distinct.add(cid);
+    }
+    if (distinct.size > MAX_CHOICES) {
+      return res.status(400).json({ success: false, error: 'too_many_choices', store_product_id: pid });
     }
     rows.push({ pid, qty, choices });
     wanted.set(pid, (wanted.get(pid) || 0) + qty);
@@ -4754,6 +4797,8 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
         options: r.opts.map(o => ({
           q_en: o.question_en || '', q_cn: o.question_cn || o.question_en || '',
           en: o.label || '', cn: o.label_cn || o.label || '',
+          // So the done screen can fold two Medjool Boats into one row.
+          choice_id: o.choice_id,
         })),
       })),
     },
@@ -4872,11 +4917,13 @@ function orderLines(orderId, cur) {
     let v;
     try { v = JSON.parse(json || 'null'); } catch { return ''; }
     if (!Array.isArray(v) || !v.length) return '';
-    return v.map(o => {
+    return productOptions.groupRepeats(v).map(o => {
       if (o && typeof o === 'object') {
-        const en = String(o.label != null ? o.label : (o.label_en || '')).trim();
-        const cn = String(o.label_cn || en).trim();
-        if (!en && !cn) return '';
+        // Two Medjool Boats are one row with a count, as the line's own qty is.
+        const x = o.n > 1 ? ` \u00d7${o.n}` : '';
+        const en = String(o.label != null ? o.label : (o.label_en || '')).trim() + x;
+        const cn = String(o.label_cn || o.label || o.label_en || '').trim() + x;
+        if (!en.trim() && !cn.trim()) return '';
         const qEn = String(o.question_en || '').trim();
         const qCn = String(o.question_cn || qEn).trim();
         return `<div class="ln-o">${bi(qEn ? `${qEn}: ${en}` : en, qCn ? `${qCn}: ${cn}` : cn)}</div>`;

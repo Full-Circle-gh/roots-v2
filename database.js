@@ -2481,6 +2481,15 @@ addColumn('retail_product_option_choices', 'stock_product_id', 'INTEGER');
 addColumn('retail_product_options', 'min_choices', 'INTEGER DEFAULT 0');
 addColumn('retail_product_options', 'max_choices', 'INTEGER DEFAULT 0');
 
+// May one answer of a "Pick any" (multi) question be picked more than once? 1 =
+// yes: "Small Bites Selection, at least 2" taken as two Medjool Boats. Every
+// existing row gets 0, so every group that was tick-boxes stays tick-boxes; the
+// switch is per question and off unless the editor turns it on. Counts are
+// summed across repeats for min/max, and a repeat is snapshotted onto the order
+// line as the same entry written twice — so price, stock and cost, which already
+// add up entry by entry, need no second rule. Ignored for 'single' and 'text'.
+addColumn('retail_product_options', 'allow_repeat', 'INTEGER DEFAULT 0');
+
 // Customer-reported bugs / feedback submitted from the mini app "Found a bug?"
 // form. Lands read-only in the Mini App Backend → Feedback tab — completely
 // separate from the staff `feedback` table (which is the kitchen-app Sprout

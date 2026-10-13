@@ -7081,6 +7081,9 @@
   #tab-orders-new .onw-step button { width: 28px; height: 32px; border: 0; background: none; font-family: inherit; font-size: 15px; color: var(--td-text2); cursor: pointer; padding: 0; }
   #tab-orders-new .onw-step button:hover { background: rgba(var(--td-heat-rgb), .06); color: var(--td-text); }
   #tab-orders-new .onw-step span { min-width: 30px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 500; }
+  /* A repeatable answer carries the line stepper inside its chip (two Medjool Boats). */
+  #tab-orders-new .onw-opt-c .onw-step { margin-right: -8px; }
+  #tab-orders-new .onw-step button:disabled { opacity: .35; cursor: default; }
   #tab-orders-new .onw-step.bad { border-color: var(--td-brick); box-shadow: 0 0 0 1px var(--td-brick); }
   /* Frame G: the error lands NEXT TO the control that failed and stays. */
   #tab-orders-new .onw-inerr { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12px; line-height: 1.35; color: var(--td-brick-ink); }

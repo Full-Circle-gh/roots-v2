@@ -4472,6 +4472,8 @@ function optLoad(id) {
         type: o.type || 'single', is_required: o.is_required ? 1 : 0,
         // How many of a pick-any group may be ticked; 0 on both = no limit.
         min_choices: Number(o.min_choices) || 0, max_choices: Number(o.max_choices) || 0,
+        // The same answer may be picked more than once (§471): 2× Medjool Boats.
+        allow_repeat: o.allow_repeat ? 1 : 0,
         choices: (o.choices || []).map(c => ({
           label_en: c.label_en || '', label_cn: c.label_cn || '',
           price_delta: Number(c.price_delta) || 0, is_default: c.is_default ? 1 : 0,
@@ -4540,8 +4542,10 @@ function optRender() {
   // A radio has no such control: "Pick one" already says the number.
   const limBoxes = (oi, o) => {
     if (o.type !== 'multi') return '';
+    // With repeats on, "at least 3" on two choices is reachable, so the box is
+    // not capped at the number of choices (lib/option-limits.js REPEAT_CAP).
     const box = (key, title) =>
-      `<input type="number" min="0" max="${o.choices.length || 0}" step="1"` +
+      `<input type="number" min="0" max="${o.allow_repeat ? 40 : (o.choices.length || 0)}" step="1"` +
       ` value="${Number(o[key]) > 0 ? Number(o[key]) : ''}" placeholder="0"` +
       ` title="${title}" oninput="optLimit(${oi}, '${key}', this.value)">`;
     return `<span class="opt-lim" title="${cuT('0 in a box means no limit', '填 0 表示不限')}">` +
@@ -4563,6 +4567,9 @@ function optRender() {
         typeSel(oi, o.type) +
         limBoxes(oi, o) +
         `<label class="opt-req" title="${cuT('Customer must choose before adding to cart', '加入购物车前必须选择')}"><input type="checkbox"${o.is_required ? ' checked' : ''} onchange="optReq(${oi}, this.checked)"> ${cuT('Required', '必选')}</label>` +
+        // §471 — ONE ANSWER, PICKED MORE THAN ONCE: two Medjool Boats in a bites
+        // box. Pick-any only; the customer gets a − n + counter on each answer.
+        (o.type === 'multi' ? `<label class="opt-req" title="${cuT('The same choice can be picked more than once', '同一项可选多次')}"><input type="checkbox"${o.allow_repeat ? ' checked' : ''} onchange="optRepeat(${oi}, this.checked)"> ${cuT('Repeats allowed', '可重复选')}</label>` : '') +
         // A labelled button at the far end of the row, not a bare ✕: the ✕ sat
         // flush against Required and read as part of that tick, so operators
         // emptied a whole option choice by choice instead of finding it.
@@ -4640,7 +4647,7 @@ function optType(oi, val) {
   // Limits belong to a pick-any group only: "Pick one" already says the number,
   // and a stale floor left behind would be enforced by a server that cannot see
   // the control the operator used to set it.
-  if (val !== 'multi') { o.min_choices = 0; o.max_choices = 0; }
+  if (val !== 'multi') { o.min_choices = 0; o.max_choices = 0; o.allow_repeat = 0; }
   if (val === 'single') {
     o.choices.forEach(c => {
       c.price_delta = 0; c.stock_product_id = null;
@@ -4669,6 +4676,13 @@ function optLimit(oi, key, val) {
     const box = document.querySelector(`.opt-block[data-oi="${oi}"] .opt-req input`);
     if (box) box.checked = !!o.is_required;
   }
+}
+// §471 — repeats on or off. Re-rendered so the limit boxes pick up their new
+// ceiling; the server re-normalises the limits against the flag on save.
+function optRepeat(oi, on) {
+  const o = OPT[oi]; if (!o) return;
+  o.allow_repeat = on ? 1 : 0;
+  optRender();
 }
 function optDefault(oi, ci) {   // single-select: exactly one default
   const o = OPT[oi]; if (!o) return;
@@ -4758,7 +4772,8 @@ function optBody() {
     return {
       question_en: (o.question_en || '').trim(), question_cn: (o.question_cn || '').trim(), type,
       is_required: (o.is_required || lim.min > 0) ? 1 : 0,
-      min_choices: lim.min, max_choices: lim.max, choices,
+      min_choices: lim.min, max_choices: lim.max,
+      allow_repeat: (type === 'multi' && o.allow_repeat) ? 1 : 0, choices,
     };
   }).filter(o => (o.question_en || o.question_cn) && (o.type === 'text' || o.choices.length));
 }

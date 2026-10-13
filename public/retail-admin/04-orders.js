@@ -3894,13 +3894,28 @@ function itemSkuHtml(it) {
 // Chosen customer options (dressing, paid extras) for an order line, parsed
 // from options_json server-side into it.options = [{label, ...}]. Shown so the
 // operator/packer sees "which dressing" — two same-SKU salads differ only here.
+// A REPEATED PICK — two Medjool Boats — is the same entry written twice on the
+// line. Folded into its first appearance with a count `n`, the same rule as
+// lib/product-options.js groupRepeats. Entries without a choice_id never fold.
+function optFold(opts) {
+  const out = [], first = {};
+  (Array.isArray(opts) ? opts : []).forEach(o => {
+    const cid = o && o.choice_id != null ? o.choice_id + '|' + (o.label || '') : null;
+    if (cid != null && first[cid]) { first[cid].n = (first[cid].n || 1) + 1; return; }
+    const copy = o && typeof o === 'object' ? Object.assign({}, o) : o;
+    if (cid != null) first[cid] = copy;
+    out.push(copy);
+  });
+  return out;
+}
 function itemOptionsHtml(it) {
   const isCn = typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn';
-  const txt = (Array.isArray(it.options) ? it.options : [])
+  const txt = optFold(it.options)
     .map(o => {
       if (!o) return '';
       // Choice value (operator language wins; fall back to whichever exists).
-      const val = (isCn && o.label_cn) ? o.label_cn : (o.label || o.label_cn || '');
+      const val = ((isCn && o.label_cn) ? o.label_cn : (o.label || o.label_cn || ''))
+        + (o.n > 1 ? ' \u00d7' + o.n : '');
       if (!val) return '';
       // Prefix the QUESTION so "Yes" reads as "Heat up?: Yes". Older orders or
       // deleted options may lack it — then just show the bare value.
@@ -11413,6 +11428,12 @@ function ordNewTickOpt(oid, cid) {
   if (!c || c.out) return;
   const cur = ONW.opt.sel[oid] || [];
   if (!o.multi) ONW.opt.sel[oid] = (cur.length === 1 && cur[0] === cid && !o.req) ? [] : [cid];
+  // A REPEATABLE ANSWER (o.rep): + is one more pick, never a toggle.
+  else if (o.rep) {
+    if (o.max && cur.length >= o.max) return;
+    cur.push(cid);
+    ONW.opt.sel[oid] = cur;
+  }
   else {
     const at = cur.indexOf(cid);
     if (at >= 0) cur.splice(at, 1);
@@ -11420,6 +11441,16 @@ function ordNewTickOpt(oid, cid) {
     else cur.push(cid);
     ONW.opt.sel[oid] = cur;
   }
+  ONW.opt.err = false;
+  ordNewRenderOpts();
+}
+// The counter's −: takes back one pick of this answer.
+function ordNewUntickOpt(oid, cid) {
+  if (!ONW.opt) return;
+  const cur = ONW.opt.sel[oid] || [];
+  const at = cur.lastIndexOf(cid);
+  if (at < 0) return;
+  cur.splice(at, 1);
   ONW.opt.err = false;
   ordNewRenderOpts();
 }
@@ -11446,7 +11477,13 @@ function ordNewChosenOpts() {
   const out = [];
   if (!ONW.opt) return out;
   (ONW.opt.p.options || []).forEach(o => {
-    (ONW.opt.sel[o.id] || []).forEach(cid => {
+    // Repeats go out side by side, in the order the answers are listed.
+    const ids = (ONW.opt.sel[o.id] || []).slice();
+    if (o.rep) {
+      const rank = new Map((o.choices || []).map((x, i) => [x.id, i]));
+      ids.sort((a, b) => rank.get(a) - rank.get(b));
+    }
+    ids.forEach(cid => {
       const c = (o.choices || []).find(x => x.id === cid);
       if (!c) return;
       out.push({ option_id: o.id, choice_id: c.id, label: c.en, label_cn: c.cn,
@@ -11477,11 +11514,23 @@ function ordNewRenderOpts() {
     h += `<div class="onw-opt-q">${escapeHtml(cuT(o.q_en, o.q_cn))}`
        + (o.req ? `<i>${escapeHtml(cuT('Required', '必选'))}</i>` : '')
        + (lim ? `<i>${escapeHtml(lim)}</i>` : '') + '</div><div class="onw-opt-cs">';
+    const held = (ONW.opt.sel[o.id] || []).length;
     (o.choices || []).forEach(c => {
       const on = (ONW.opt.sel[o.id] || []).includes(c.id);
       const d = Number(c.d) || 0;
       const tail = c.out ? escapeHtml(cuT('Out of stock', '缺货'))
                  : (d ? (d > 0 ? '+' : '\u2212') + onwMoney(Math.abs(d)) : '');
+      // A REPEATABLE ANSWER is a − n + counter — the line stepper's own furniture.
+      if (o.rep) {
+        const n = (ONW.opt.sel[o.id] || []).filter(x => x === c.id).length;
+        const noAdd = c.out || (o.max && held >= o.max);
+        h += `<div class="onw-opt-c${n ? ' on' : ''}">`
+           + `<span>${escapeHtml(cuT(c.en, c.cn))}</span>` + (tail ? '<span class="od">' + tail + '</span>' : '')
+           + `<div class="onw-step"><button type="button"${n ? ` onclick="ordNewUntickOpt(${Number(o.id)},${Number(c.id)})"` : ' disabled'}>–</button>`
+           + `<span>${n}</span>`
+           + `<button type="button"${noAdd ? ' disabled' : ` onclick="ordNewTickOpt(${Number(o.id)},${Number(c.id)})"`}>+</button></div></div>`;
+        return;
+      }
       h += `<button type="button" class="onw-opt-c${on ? ' on' : ''}" aria-pressed="${on}"`
          + (c.out ? ' disabled' : ` onclick="ordNewTickOpt(${Number(o.id)},${Number(c.id)})"`) + '>'
          + `<span>${escapeHtml(cuT(c.en, c.cn))}</span>` + (tail ? '<span class="od">' + tail + '</span>' : '') + '</button>';
@@ -11499,8 +11548,8 @@ function ordNewRenderOpts() {
 }
 // "Heat up?: Yes" under the line's name — the till's own line (optsHtml).
 function onwOptsText(opts) {
-  return (opts || []).map(o => {
-    const a = cuT(o.label || '', o.label_cn || o.label || '');
+  return optFold(opts).map(o => {
+    const a = cuT(o.label || '', o.label_cn || o.label || '') + (o.n > 1 ? ' \u00d7' + o.n : '');
     const q = cuT(o.question_en || '', o.question_cn || o.question_en || '');
     return a ? (q ? q + ': ' + a : a) : '';
   }).filter(Boolean);

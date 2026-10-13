@@ -122,7 +122,7 @@ const CONSTS = ['peOptBlank', 'peOptTouched', 'PILL', 'KIND2PILL', 'PE_MAX_PHOTO
   'pePlainToHtml', 'peRichForEdit'];
 const REGS = ['peOpen', 'peField', 'peUndo', 'peBu', 'peBuRemove', 'peBpMode', 'peBpQty', 'peBpQtyDone', 'peBpRemove',
   'pePickOpen', 'pePickQ', 'pePickAdd', 'pePickClose', 'pePickRetry',
-  'peOptQ', 'peOptC', 'peOptType', 'peOptReq', 'peOptLimit', 'peOptDefault', 'peOptAdd', 'peOptRemove', 'peOptMove',
+  'peOptQ', 'peOptC', 'peOptType', 'peOptReq', 'peOptRepeat', 'peOptLimit', 'peOptDefault', 'peOptAdd', 'peOptRemove', 'peOptMove',
   'peOptChoiceAdd', 'peOptChoiceRemove', 'peOptChoiceMove', 'peOptLinkOpen', 'peOptUnlink'];
 const SRC = [...CONSTS.map(liftConst), 'let peAuto=null;', ...FNS.map(liftFn), ...REGS.map(liftReg)].join('\n');
 
@@ -201,10 +201,10 @@ const CATALOGUE = () => [
   { _id: 7, sku: 'SKU OM-1', rawSku: 'OM-1', name: ['Oat milk', '燕麦奶'], vLabel: '', size: '1 L', hay: 'oat milk 燕麦奶 om-1', parts: false, priceNum: 18, stock: 9 },
   { _id: 31, sku: 'SKU PK-1', rawSku: 'PK-1', name: ['Pickles', '腌菜'], vLabel: '', size: '50 g', hay: 'pickles 腌菜 pk-1', parts: false, priceNum: 4, stock: 12 },
   { _id: 32, sku: 'SKU HS-1', rawSku: 'HS-1', name: ['Hot sauce', 'Hot sauce'], vLabel: 'Small', size: '30 ml', hay: 'hot sauce hs-1', parts: false, priceNum: 0, stock: 0 }];
-const DRESSING = () => ({ id: 1, question_en: 'Choose dressing', question_cn: '选择酱料', type: 'single', is_required: 1, min_choices: 0, max_choices: 0,
+const DRESSING = () => ({ id: 1, question_en: 'Choose dressing', question_cn: '选择酱料', type: 'single', is_required: 1, min_choices: 0, max_choices: 0, allow_repeat: 0,
   choices: [{ id: 11, label_en: 'Tahini', label_cn: '芝麻酱', price_delta: 0, is_default: 1, stock_product_id: null },
             { id: 12, label_en: 'Lemon', label_cn: '柠檬', price_delta: 0, is_default: 0, stock_product_id: null }] });
-const EXTRAS = () => ({ id: 2, question_en: 'Add extras?', question_cn: '加点配料?', type: 'multi', is_required: 0, min_choices: 0, max_choices: 2,
+const EXTRAS = () => ({ id: 2, question_en: 'Add extras?', question_cn: '加点配料?', type: 'multi', is_required: 0, min_choices: 0, max_choices: 2, allow_repeat: 0,
   choices: [{ id: 21, label_en: 'Pickles', label_cn: '腌菜', price_delta: 4, is_default: 0, stock_product_id: 31 }] });
 const WITH = (...o) => ROW({ options: o });
 const OUT = (o) => { const x = JSON.parse(JSON.stringify(o)); delete x.id; x.choices = x.choices.map((c) => { const y = Object.assign({}, c); delete y.id; return y; }); return x; };
@@ -259,7 +259,7 @@ it('+ Add a pick (free): two blank choices and Required — nothing is sent unti
     choices: [{ label_en: '', label_cn: '', price_delta: 0, is_default: 0, stock_product_id: null }, { label_en: '', label_cn: '', price_delta: 0, is_default: 0, stock_product_id: null }] });
   h.flush(); assert.strictEqual(h.calls.writes.length, 0, 'a question with no words is not part of the list');
   h.CMD.peOptQ(0, 'question_en', 'Spice'); h.CMD.peOptC(0, 0, 'label_en', 'Mild'); h.flush();
-  same(h.w(0).body, { options: [{ question_en: 'Spice', question_cn: '', type: 'single', is_required: 1, min_choices: 0, max_choices: 0,
+  same(h.w(0).body, { options: [{ question_en: 'Spice', question_cn: '', type: 'single', is_required: 1, min_choices: 0, max_choices: 0, allow_repeat: 0,
     choices: [{ label_en: 'Mild', label_cn: '', price_delta: 0, is_default: 0, stock_product_id: null }] }] });
 });
 it('+ Add paid extras: the desktop’s seed — "Add extras?" / 加点配料?, pick any, not required, one slot', async () => {
@@ -274,14 +274,24 @@ it('a charge is a number; a pick-one has no charge to type', async () => {
 });
 it('Pick one ⇄ Pick any: to a free pick drops every charge, link and limit', async () => {
   const h = await opened({ row: WITH(EXTRAS()) }); h.CMD.peOptType(0, 'single'); h.flush();
-  same(h.w(0).body.options[0], { question_en: 'Add extras?', question_cn: '加点配料?', type: 'single', is_required: 0, min_choices: 0, max_choices: 0,
+  same(h.w(0).body.options[0], { question_en: 'Add extras?', question_cn: '加点配料?', type: 'single', is_required: 0, min_choices: 0, max_choices: 0, allow_repeat: 0,
     choices: [{ label_en: 'Pickles', label_cn: '腌菜', price_delta: 0, is_default: 0, stock_product_id: null }] });
+});
+it('§471 Repeats allowed: a pick-any question sends allow_repeat, a pick-one never does', async () => {
+  const h = await opened({ row: WITH(DRESSING(), EXTRAS()) });
+  h.CMD.peOptRepeat(0); h.CMD.peOptRepeat(1); h.flush();
+  same(h.w(0).body.options.map(o => o.allow_repeat), [0, 1]);
+  assert.ok(h.ctx.peOptCard().includes("peOptRepeat',1"), 'the switch is offered on the pick-any question');
+  assert.ok(!h.ctx.peOptCard().includes("peOptRepeat',0"), 'and not on the pick-one');
+  const h2 = await opened({ row: WITH(DRESSING(), Object.assign(EXTRAS(), { allow_repeat: 1 })) });
+  h2.CMD.peOptType(1, 'single'); h2.flush();
+  same(h2.w(0).body.options[1].allow_repeat, 0);
 });
 it('a text question stays what it is (no choices, the type shown and not offered)', async () => {
   const h = await opened({ row: WITH({ id: 3, question_en: 'Note', question_cn: '', type: 'text', is_required: 0, min_choices: 0, max_choices: 0, choices: [] }) });
   assert.ok(/<option value="text" selected disabled>Type an answer \(unsupported\)<\/option>/.test(h.ctx.peOptCard()));
   h.CMD.peOptQ(0, 'question_cn', '备注'); h.flush();
-  same(h.w(0).body.options, [{ question_en: 'Note', question_cn: '备注', type: 'text', is_required: 0, min_choices: 0, max_choices: 0, choices: [] }]);
+  same(h.w(0).body.options, [{ question_en: 'Note', question_cn: '备注', type: 'text', is_required: 0, min_choices: 0, max_choices: 0, allow_repeat: 0, choices: [] }]);
   h.CMD.peOptType(0, 'text'); assert.strictEqual(opts(h)[0].type, 'text', 'and nothing moves back onto it');
 });
 it('limits: a floor makes it Required; un-ticking Required drops the floor; 0 or nonsense is no limit', async () => {

@@ -200,8 +200,8 @@ function extractFn(name) {
   const end = SRC.indexOf('\n}', m.index);
   return end < 0 ? null : SRC.slice(m.index, end + 2);
 }
-const WANTED = ['onwLineUnit', 'onwLineItem', 'onwLineKey', 'ordNewAddAnswered', 'ordNewAddLine',
-                'ordNewOpenOpts', 'ordNewCloseOpts', 'ordNewTickOpt', 'ordNewOptsMissing',
+const WANTED = ['optFold', 'onwLineUnit', 'onwLineItem', 'onwLineKey', 'ordNewAddAnswered', 'ordNewAddLine',
+                'ordNewOpenOpts', 'ordNewCloseOpts', 'ordNewTickOpt', 'ordNewUntickOpt', 'ordNewOptsMissing',
                 'ordNewChosenOpts', 'ordNewCommitOpts', 'onwOptsText', 'ordNewCollect'];
 
 function thePanel(atShop) {

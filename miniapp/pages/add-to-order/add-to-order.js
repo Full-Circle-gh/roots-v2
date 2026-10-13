@@ -29,6 +29,11 @@ function deltaText(d, cn) {
   return n > 0 ? '+¥' + n.toFixed(2) : '−¥' + Math.abs(n).toFixed(2);
 }
 
+// Every pick in an option group, repeats included — what min/max count.
+function picksIn(g) {
+  return g.choices.reduce((n, c) => n + (c.count || 0), 0);
+}
+
 Page({
   data: {
     orderId: null,
@@ -46,7 +51,7 @@ Page({
     opShow: false,
     opLoading: false,
     opProduct: null,           // { id, name, base_price }
-    opGroups: [],              // [{ id, question, type, is_required, choices:[{id,label,delta_text,delta,sold_out,picked}] }]
+    opGroups: [],              // [{ id, question, type, is_required, allow_repeat, choices:[{id,label,delta_text,delta,sold_out,count,picked}] }]
     opQty: 1,
     opTotalDisp: '¥0.00',
     copy: {
@@ -322,12 +327,16 @@ Page({
   // Re-marks every pick-any group's unticked rows as closed or open, after any
   // change to what is picked. A ticked row is never capped — untick is how the
   // counter changes its mind, and a sheet with nothing tappable is dead.
+  // `count` is the truth (picks of that choice, only ever 0/1 outside a repeat
+  // group); `picked` is re-derived from it here for the existing bindings. In a
+  // repeat group a full ceiling marks every row, closing only its +.
   _applyCaps(groups) {
     groups.forEach(g => {
+      g.choices.forEach(c => { c.picked = c.count > 0; });
       const max = Number(g.max_choices) || 0;
       if (g.type !== 'multi' || !max) { g.choices.forEach(c => { c.capped = false; }); return; }
-      const full = g.choices.filter(c => c.picked).length >= max;
-      g.choices.forEach(c => { c.capped = full && !c.picked; });
+      const full = picksIn(g) >= max;
+      g.choices.forEach(c => { c.capped = full && (g.allow_repeat || !c.picked); });
     });
     return groups;
   },
@@ -353,6 +362,9 @@ Page({
         min_choices: Number(o.min_choices) || 0,
         max_choices: Number(o.max_choices) || 0,
         lim_hint: o.type === 'multi' ? optionText.limHint(o, L) : '',
+        // The same answer may be picked more than once ("2× Medjool Boats"):
+        // rows count with − n + and each pick is posted as its own id.
+        allow_repeat: o.type === 'multi' && !!Number(o.allow_repeat),
         // A picture beside each choice (its linked product's photo); the rest
         // of a group that has any keep an empty frame so the names line up.
         has_img: (o.choices || []).some(c => c.image_url),
@@ -366,7 +378,9 @@ Page({
             delta: Number(c.price_delta) || 0,
             delta_text: deltaText(c.price_delta, cn),
             sold_out: soldOut,
-            // Pre-pick defaults (single: first default; multi: every default).
+            // Pre-pick defaults (single: first default; multi: every default,
+            // once each — a repeat group's counter takes it from there).
+            count: isDefault ? 1 : 0,
             picked: isDefault,
           };
         }),
@@ -377,15 +391,15 @@ Page({
           // Defaults obey the ceiling too: three rows all marked default on a
           // "choose 2" group would open the sheet already over the cap.
           const cap = Number(g.max_choices) || 0;
-          if (cap) { let n = 0; g.choices.forEach(c => { if (c.picked && ++n > cap) c.picked = false; }); }
+          if (cap) { let n = 0; g.choices.forEach(c => { if (c.count && ++n > cap) c.count = 0; }); }
         }
         if (g.type !== 'multi') {
           let seen = false;
           g.choices.forEach(c => {
-            if (c.picked && !seen) { seen = true; } else { c.picked = false; }
+            if (c.count && !seen) { seen = true; } else { c.count = 0; }
           });
           // Required single with exactly one choice → auto-pick it.
-          if (g.is_required && g.choices.length === 1 && !g.choices[0].sold_out) g.choices[0].picked = true;
+          if (g.is_required && g.choices.length === 1 && !g.choices[0].sold_out) g.choices[0].count = 1;
         }
       });
       this.setData({
@@ -407,15 +421,39 @@ Page({
     const g = groups[gi];
     const c = g.choices[ci];
     if (!g || !c || c.sold_out) return;
+    // A repeat group's row is not a tick: its − and + do the picking.
+    if (g.allow_repeat) return;
     if (g.type === 'multi') {
       // The row is already dimmed at the ceiling; refuse the tap anyway rather
       // than trust the paint — an over-full line is refused at checkout, so
       // letting it through would only move the failure somewhere worse.
       const max = Number(g.max_choices) || 0;
-      if (!c.picked && max && g.choices.filter(x => x.picked).length >= max) return;
-      c.picked = !c.picked;                 // toggle
+      if (!c.count && max && picksIn(g) >= max) return;
+      c.count = c.count ? 0 : 1;            // toggle
     } else {
-      g.choices.forEach((x, i) => { x.picked = i === ci; });  // radio
+      g.choices.forEach((x, i) => { x.count = i === ci ? 1 : 0; });  // radio
+    }
+    this.setData({ opGroups: this._applyCaps(groups) });
+    this.recalcSheet();
+  },
+
+  // Repeat group: + adds one more of this choice, − takes one back. Every pick
+  // counts toward the ceiling, so + is refused there and on a sold-out choice.
+  onChoiceStep(e) {
+    const gi = parseInt(e.currentTarget.dataset.gi, 10);
+    const ci = parseInt(e.currentTarget.dataset.ci, 10);
+    const dir = parseInt(e.currentTarget.dataset.dir, 10);
+    const groups = this.data.opGroups.map(g => ({ ...g, choices: g.choices.map(c => ({ ...c })) }));
+    const g = groups[gi];
+    const c = g && g.choices[ci];
+    if (!g || !c || !g.allow_repeat) return;
+    if (dir > 0) {
+      const max = Number(g.max_choices) || 0;
+      if (c.sold_out || (max && picksIn(g) >= max)) return;
+      c.count += 1;
+    } else {
+      if (!c.count) return;
+      c.count -= 1;
     }
     this.setData({ opGroups: this._applyCaps(groups) });
     this.recalcSheet();
@@ -432,7 +470,7 @@ Page({
   recalcSheet() {
     const base = this.data.opProduct ? this.data.opProduct.base_price : 0;
     let delta = 0;
-    for (const g of this.data.opGroups) for (const c of g.choices) if (c.picked) delta += c.delta;
+    for (const g of this.data.opGroups) for (const c of g.choices) delta += c.delta * (c.count || 0);
     const unit = Math.max(0, base + delta);
     this.setData({ opTotalDisp: '¥' + (unit * this.data.opQty).toFixed(2) });
   },
@@ -446,7 +484,7 @@ Page({
     // Required check.
     for (const g of this.data.opGroups) {
       const min = Number(g.min_choices) || 0;
-      const n = g.choices.filter(c => c.picked).length;
+      const n = picksIn(g);
       // A floor of 1 or more IS the requirement; naming the number is what tells
       // the counter, sitting on one side, that the sheet is asking for two.
       if ((g.is_required && !n) || (min && n < min)) {
@@ -462,11 +500,17 @@ Page({
     const choices = [];
     // Keep the group's question beside each picked answer so the staged line
     // reads "Heat up?: Yes" rather than a bare "Yes" (both already localised).
+    // One id per pick: 2× of a repeat choice is posted twice, side by side, and
+    // the choice_id lets the label fold it to "Label ×2".
     const picked = [];
     let delta = 0;
     for (const g of this.data.opGroups) {
       for (const c of g.choices) {
-        if (c.picked) { choices.push(c.id); picked.push({ question: g.question, label: c.label }); delta += c.delta; }
+        for (let k = 0; k < (c.count || 0); k++) {
+          choices.push(c.id);
+          picked.push({ choice_id: c.id, question: g.question, label: c.label });
+          delta += c.delta;
+        }
       }
     }
     const unit = Math.max(0, base + delta);

@@ -318,7 +318,7 @@ it('the sizes are read and the product is read again; its choices card opens on 
   assert.ok(h.text(h.ctx.peOptCard()).includes('None · tap to add a choice'));
   assert.ok(h.text(h.ctx.peBuCard()).includes('No products yet — add some below.'));
   h.CMD.peOptAdd('pick'); h.CMD.peOptQ(0, 'question_en', 'Size'); h.CMD.peOptC(0, 0, 'label_en', 'Small'); h.flush();
-  same(h.w(1), { p: '/products/55', method: 'PATCH', body: { options: [{ question_en: 'Size', question_cn: '', type: 'single', is_required: 1, min_choices: 0, max_choices: 0,
+  same(h.w(1), { p: '/products/55', method: 'PATCH', body: { options: [{ question_en: 'Size', question_cn: '', type: 'single', is_required: 1, min_choices: 0, max_choices: 0, allow_repeat: 0,
     choices: [{ label_en: 'Small', label_cn: '', price_delta: 0, is_default: 0, stock_product_id: null }] }] } });
 });
 it('if that read fails, the choices card says it could not load — never "none"', async () => {
