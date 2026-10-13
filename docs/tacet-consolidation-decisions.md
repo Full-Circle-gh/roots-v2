@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.525
+# Tacet shared-core consolidation — decisions record, v4.526
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-13 · v4.526 — **§477 AMENDED · THE ORDER OF THE GROUPS: VOUCHERS NEXT, NOTIFICATIONS LAST AND IN PIECES — DECIDED BY ASH:** *"keep going"*, to the recommendation put after the points group landed. Measured, the remaining groups are vouchers 16 statements needing only the database, addresses and geocoding 17 tangled with the Qingyun queue, notifications 35 pulling in the WeChat shipping upload. Rule 1's "smallest first" decides, so the voucher rules go to `lib/vouchers.js` now. No string, no schema, no change to `.gitignore` or CI. See §477.
 
 2026-10-13 · v4.525 — **§477 · THE HELPERS `retail.js` SHARES ACROSS AREAS MOVE INTO `lib/`, ONE GROUP PER PR, BEFORE THE BIG AREAS MOVE — DECIDED BY ASH:** *"go for it"*, to the plan put after admin orders was recorded. Customers could not move cleanly: its endpoints lean on 28 helpers that orders and checkout share. Those helpers leave `routes/retail.js` for `lib/` modules in groups, smallest first, each a pure move that keeps all 239 recorded answers (§472). First group: the WeChat access token and the content checks. §474–§476 went to #1144 and #1148. No string, no schema, no change to `.gitignore` or CI. See §477.
 
@@ -31141,3 +31143,30 @@ shared helpers move first, into modules any file can `require`.
   the payment code and the image check both read.
 
 No string, no schema, no change to `.gitignore` or CI.
+
+**Amended 2026-10-13 — the order of the groups. Decided by Ash:** *"keep
+going"*, to the recommendation put after the points group landed (#1152).
+Rule 1's planned order was written before the groups were measured. Measured,
+the three left are:
+
+- the voucher rules: 16 statements, needing only the database and
+  `lib/phone-cn`;
+- addresses and geocoding: 17, tangled with the Qingyun delivery queue;
+- customer display and notifications: 35, pulling in the WeChat shipping
+  upload, the Guangzhou check and the full settings loader.
+
+"Smallest first" decides over the list, so the order is now: vouchers,
+addresses, then notifications, which is split into smaller groups before any
+of it moves. The planned order in rule 1 stays as written, as the record of
+what was first proposed.
+
+**The voucher group.** `lib/vouchers.js`: `computeVoucherDiscount`,
+`voucherGrantIsStanding` and its SQL twin `SQL_GRANT_IS_STANDING`,
+`customerHoldsVoucher`, `voucherPlaceOk`, `pickupPlaceFrom`,
+`counterVouchersFor`, `bestCounterVoucher`, `consumeCounterVoucher`,
+`counterGivable`, `counterVoucherTerms`, `counterHoldersByPhone`,
+`voucherRedemptionsBy`, `voucherCapReached`, `bestAutoVoucher`,
+`nearMissAutoVoucher`. `grantedById` and `grantedByName` stay in
+`routes/retail.js`: they read who is signed in, not a voucher. The QR menu
+(`routes/shop-menu.js`) keeps taking the counter helpers from
+`routes/retail.js`, unchanged.

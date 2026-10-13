@@ -30,7 +30,7 @@ function retailPartFiles() {
 // moved into a part. Each group that moves adds its file(s) to this list.
 const RETAIL_LIBS = [
   'lib/public-origin.js', 'lib/wx-access-token.js', 'lib/wx-content-gate.js',
-  'lib/store-config.js', 'lib/loyalty.js',
+  'lib/store-config.js', 'lib/loyalty.js', 'lib/vouchers.js',
 ];
 
 function retailSource() {
