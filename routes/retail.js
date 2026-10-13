@@ -144,6 +144,11 @@ const alipayOcr = require('../lib/alipay-ocr');  // Vision-AI read of manual-Ali
 // it the merchant's own day?
 const { sendOpsAlert, sendTenantAlert } = require('../lib/ops-alert');
 const wxSec = require('../lib/wx-sec-check');   // WeChat 内容安全 — every customer-published surface
+// The WeChat access token, the content checks, and the public origin the
+// payment and media URLs are built on, moved to lib/ (decisions §477).
+const { WECHAT_PAY_NOTIFY_URL, PAY_NOTIFY_ORIGIN } = require('../lib/public-origin');
+const { getWeChatAccessToken, refreshWeChatAccessTokenAfter, isWxTokenError } = require('../lib/wx-access-token');
+const { callWxSecWithTokenRetry, isRiskyText, refuseContent, submitImageSecCheck } = require('../lib/wx-content-gate');
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
 // than crashing — the image endpoint just skips the resize branch when null.
@@ -4755,7 +4760,6 @@ const WECHAT_PAY_API_V3_KEY    = process.env.WECHAT_PAY_API_V3_KEY || '';
 // already has real newlines (dotenv multiline) — the replace just no-ops.
 const WECHAT_PAY_PRIVATE_KEY   = (process.env.WECHAT_PAY_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const WECHAT_PAY_SERIAL_NO     = process.env.WECHAT_PAY_SERIAL_NO || '';
-const WECHAT_PAY_NOTIFY_URL    = process.env.WECHAT_PAY_NOTIFY_URL || 'https://rootskitchenchina.com/api/retail/payment/wechat/callback';
 const WECHAT_PAY_REFUND_NOTIFY_URL = process.env.WECHAT_PAY_REFUND_NOTIFY_URL || 'https://rootskitchenchina.com/api/retail/payment/wechat/refund-callback';
 const WECHAT_PAY_DEV_MODE = !WECHAT_PAY_MCH_ID || !WECHAT_PAY_PRIVATE_KEY || !WECHAT_APP_ID;
 
@@ -5104,13 +5108,6 @@ function oaPayContext() {
 // relevant slice into the kd100 / jd / feie lib fns so a tenant operates on
 // its OWN accounts and can never clobber Roots' live env.
 function integ() { return getTenantCreds(currentTenantId()).integrations; }
-
-// Public origin for tenant async-notify URLs — the same server/domain as Roots
-// (single-server SaaS), just a tenant-scoped path. Derived from Roots' notify
-// URL so there's no new config to set; WeChat Pay v3 accepts any HTTPS URL.
-const PAY_NOTIFY_ORIGIN = (() => {
-  try { return new URL(WECHAT_PAY_NOTIFY_URL).origin; } catch { return 'https://rootskitchenchina.com'; }
-})();
 function wechatNotifyUrl() {
   const tid = currentTenantId();
   return tid === ROOTS_TENANT_ID ? WECHAT_PAY_NOTIFY_URL
@@ -7224,95 +7221,6 @@ router.post('/api/retail/notifications/subscribe', requireRetailAuth, express.js
   res.json({ success: true });
 });
 
-// Server-side: cached WeChat access_token. Used for both subscribeMessage
-// API and any other server-to-server WeChat calls. Token lives ~2 hours;
-// we re-fetch when missing or near-expiry.
-//
-// Uses /cgi-bin/stable_token (not /cgi-bin/token). stable_token is WeChat's
-// multi-server-safe endpoint: it returns a token that does NOT invalidate
-// tokens held by other backends on the same AppID. The legacy /cgi-bin/token
-// would knock out a co-resident backend's cached token on every fetch — a
-// problem when the AppID is shared with another vendor (out1n) whose backend
-// also fetches tokens. force_refresh=false lets WeChat reuse a cached token
-// across calls, further reducing churn.
-// Per-AppID token cache. Each tenant runs its own mini-program (own AppID), so
-// the access_token is scoped to the AppID, not the process. Keyed by AppID so
-// two tenants (or Roots + a tenant) never clobber each other's token. Roots'
-// AppID resolves from env exactly as before — same stable_token semantics.
-const _wxTokenCache = new Map();   // appId -> { token, expiresAt }
-// When we last asked WeChat to FORCE a new token, per AppID. Forced refresh is
-// rate-limited on WeChat's side, so it must stay an exception path — see
-// refreshWeChatAccessTokenAfter().
-const _wxTokenForcedAt = new Map();   // appId -> ms
-const WX_TOKEN_FORCE_COOLDOWN_MS = 5 * 60_000;
-
-// opts.forceRefresh — abandon the cached token and make WeChat mint a new one.
-// The flag has to reach stable_token too, not just our own Map: with
-// force_refresh=false WeChat answers from ITS cache and hands back the very
-// token that was just rejected, so a "refresh" that only clears our side would
-// loop on the same bad value.
-async function getWeChatAccessToken(opts = {}) {
-  const { appId, appSecret } = getTenantCreds(currentTenantId()).wechat;
-  if (!appId || !appSecret) return null;
-  if (opts.forceRefresh) _wxTokenCache.delete(appId);
-  const hit = _wxTokenCache.get(appId);
-  if (hit && Date.now() < hit.expiresAt - 60_000) return hit.token;
-  if (opts.forceRefresh) _wxTokenForcedAt.set(appId, Date.now());
-  const resp = await fetch('https://api.weixin.qq.com/cgi-bin/stable_token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'client_credential',
-      appid:      appId,
-      secret:     appSecret,
-      force_refresh: !!opts.forceRefresh,
-    }),
-  });
-  const j = await resp.json();
-  if (!j.access_token) throw new Error('access_token_fetch_failed: ' + (j.errmsg || j.errcode));
-  _wxTokenCache.set(appId, { token: j.access_token, expiresAt: Date.now() + (Number(j.expires_in) || 7200) * 1000 });
-  return j.access_token;
-}
-
-// WeChat errcodes that all mean "the access_token you sent is no good" — the
-// token was invalidated early (another process forced a refresh, credentials
-// were rotated) rather than expiring on the clock we cache it against. Without
-// recovery every call keeps presenting the same dead token until our cache ages
-// out on its own, which for a 7200s token is up to two hours of hard failure.
-const WX_TOKEN_ERROR_CODES = new Set([
-  40001, // invalid credential / access_token isn't latest
-  40014, // invalid access_token
-  42001, // access_token expired
-]);
-const isWxTokenError = (code) => WX_TOKEN_ERROR_CODES.has(code);
-
-// Recover from one of the codes above. `staleToken` is the token that just got
-// rejected: if the cache no longer holds it, another caller already refreshed
-// and we simply take theirs — so a burst of concurrent 40001s costs ONE refresh,
-// not one per caller. The cooldown then bounds the pathological case (bad
-// AppSecret, revoked app) where every refresh produces another rejected token;
-// there we let calls keep failing rather than hammer a rate-limited endpoint.
-// Returns the token to retry with, or null when a retry isn't worth making.
-async function refreshWeChatAccessTokenAfter(staleToken) {
-  const { appId } = getTenantCreds(currentTenantId()).wechat;
-  if (!appId) return null;
-  const hit = _wxTokenCache.get(appId);
-  if (hit && hit.token && hit.token !== staleToken) return hit.token;   // someone beat us to it
-  const last = _wxTokenForcedAt.get(appId) || 0;
-  if (Date.now() - last < WX_TOKEN_FORCE_COOLDOWN_MS) {
-    console.warn('[wx-token] rejected token, but a forced refresh is on cooldown — not retrying');
-    return null;
-  }
-  try {
-    const fresh = await getWeChatAccessToken({ forceRefresh: true });
-    console.warn('[wx-token] access_token was rejected — forced a refresh');
-    return fresh && fresh !== staleToken ? fresh : null;
-  } catch (e) {
-    console.error('[wx-token] forced refresh failed:', e.message);
-    return null;
-  }
-}
-
 // Every mini-program API call goes through here so token recovery lives in ONE
 // place. POSTs `body` to api.weixin.qq.com`path` with the current token and, if
 // WeChat rejects the token, refreshes once and replays the SAME request.
@@ -7342,92 +7250,6 @@ async function wxApiPost(path, body) {
     if (fresh) return send(fresh);
   }
   return out;
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// WeChat content safety (内容安全)
-// ═══════════════════════════════════════════════════════════════════════
-// WeChat rejects a mini program that lets a customer publish anything without
-// checking it first — that is what killed the 2026-07 audit ("头像 功能在进行
-// 内容安全验证时，存在信息安全风险"). Every surface where a customer's own words
-// or pictures end up on a screen routes through the two helpers below:
-//
-//   nickname + avatar       → profile scene
-//   review text + photos    → comment scene
-//   feedback text + photos  → comment scene
-//
-// Text is decided on the spot. Images can't be: WeChat only accepts the job
-// and pushes the verdict back later (see the /api/wx/callback route), so an
-// image is held as 'pending' and stays unpublished until it passes.
-
-// Resolve this tenant's access token without ever letting a token failure
-// throw into a request handler.
-async function wxSecToken() {
-  try { return await getWeChatAccessToken(); }
-  catch (e) { console.warn('[wx-sec] access token unavailable:', e.message); return null; }
-}
-
-// wx-sec-check does its own fetching, so it can't go through wxApiPost — but it
-// reports the errcode back as reason 'api_error_<code>', which is enough to spot
-// a rejected token and replay the call once with a fresh one. Worth the retry
-// here specifically because BOTH checks fail open: a stale token would let text
-// and images publish unchecked for as long as the token stayed stale, which is
-// the exact exposure the content-safety gate exists to prevent.
-async function callWxSecWithTokenRetry(call) {
-  const token = await wxSecToken();
-  let r = await call(token);
-  const code = Number(String((r && r.reason) || '').replace('api_error_', ''));
-  if (token && isWxTokenError(code)) {
-    const fresh = await refreshWeChatAccessTokenAfter(token);
-    if (fresh) r = await call(fresh);
-  }
-  return r;
-}
-
-// Text gate. Returns true when the caller should refuse the content.
-async function isRiskyText(customer, text, scene) {
-  const r = await callWxSecWithTokenRetry((t) => wxSec.checkText(t, {
-    text, openid: customer && customer.openid, scene,
-  }));
-  if (r.verdict === 'risky') {
-    console.warn('[wx-sec] risky text refused — customer', customer && customer.id, 'scene', scene, 'label', r.label);
-    return true;
-  }
-  return false;
-}
-
-// The single refusal a customer ever sees. WeChat asks only that we tell them
-// the content contains disallowed information — no label, no category, no
-// score, because naming what tripped it teaches people how to get around it.
-function refuseContent(res) {
-  return res.status(400).json({
-    success: false,
-    error: 'content_violation',
-    message_en: 'That contains something we cannot publish. Please change it and try again.',
-    message_cn: '内容含违规信息，请修改后重试。',
-  });
-}
-
-// Image gate. Submits a freshly-uploaded media row to WeChat and records the
-// hold. Returns the sec_status now stored on the row: 'pending' when the job
-// is running, 'skipped' when no check was possible (dev mode, web login,
-// WeChat unreachable) — 'skipped' publishes immediately, because holding every
-// image hostage to an outage would break uploads for everyone.
-async function submitImageSecCheck(mediaId, customer, scene) {
-  const url = `${PAY_NOTIFY_ORIGIN}/api/retail/media/${mediaId}`;
-  const r = await callWxSecWithTokenRetry((t) => wxSec.submitMediaCheck(t, {
-    url, openid: customer && customer.openid, scene,
-  }));
-  const status = r.ok ? 'pending' : 'skipped';
-  try {
-    tdb().prepare(
-      `UPDATE retail_media
-          SET sec_status = ?, sec_trace_id = ?,
-              sec_checked_at = CASE WHEN ? = 'skipped' THEN CURRENT_TIMESTAMP ELSE NULL END
-        WHERE id = ?`
-    ).run(status, r.traceId || null, status, mediaId);
-  } catch (e) { console.warn('[wx-sec] could not record media hold:', e.message); }
-  return status;
 }
 
 // Apply a verdict to one media row and to everything that row is published in.
