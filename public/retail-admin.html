@@ -2664,8 +2664,8 @@
       }
       .vw-share.on { color: var(--text-1); }
       .vw-share:hover, .vw-x:hover { background: var(--bg-elev-1); color: var(--text-1); }
-      .vw-head {
-        font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+      .vw-head {   /* sentence case, 500 (§1.6, §2) */
+        font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none;
         color: var(--text-3); padding: 10px 10px 4px; border-top: 1px solid var(--line); margin-top: 4px;
       }
       .vw-empty { font-size: 12.5px; color: var(--text-3); padding: 10px; line-height: 1.5; }
@@ -2688,7 +2688,7 @@
       }
       .ovp { animation: zen-pop-in 540ms cubic-bezier(.16, 1, .3, 1); }
       .ovp[hidden] { display: none; }
-      .ovp-head { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+      .ovp-head { font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-3); }   /* §1.6, §2 */
       .ovp-group { display: flex; flex-direction: column; gap: 6px; }
       .ovp-label { font-size: 11px; color: var(--text-3); }
       .ovp-seg { display: flex; gap: 4px; background: var(--bg-input, var(--bg-app)); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 3px; }
