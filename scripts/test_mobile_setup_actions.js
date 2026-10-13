@@ -203,10 +203,10 @@ it('steps left: the desktop\'s "Almost there", naming them, and nothing is sent'
   assert.strictEqual(String(a.title), 'Almost there');
   assert.ok(String(a.body).includes('Finish these first so customers get a working store:'));
   assert.ok(String(a.body).includes('Add a payment method, Set up delivery or pickup'));
-  assert.deepStrictEqual(plain(a.options.map((o) => String(o.label))), ['OK']);
-  assert.strictEqual(a.run, undefined, 'OK only closes');
+  assert.deepStrictEqual(plain(a.options.map((o) => String(o.label))), ['Back to guide']);
+  assert.strictEqual(a.run, undefined, 'Back to guide only closes');
   assert.strictEqual(h.calls.writes.length, 0);
-  for (const w of ["cuT('Almost there', '就差一点')", "cuT('Finish these first so customers get a working store:', '先完成这些，顾客才能看到一个可用的店：')", "cuT('OK', '好的')"]) assert.ok(DESK.includes(w), w);
+  for (const w of ["cuT('Almost there', '就差一点')", "cuT('Finish these first so customers get a working store:', '先完成这些，顾客才能看到一个可用的店：')", "cuT('Back to guide', '返回引导')"]) assert.ok(DESK.includes(w), w);
 });
 it('nothing left: the desktop\'s question, then POST /setup {storeOpened:true}', async () => {
   const h = mk({ setup: ALLBUTOPEN() });

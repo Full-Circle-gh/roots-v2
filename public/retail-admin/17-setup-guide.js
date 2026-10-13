@@ -871,7 +871,7 @@ function suOpenDoors() {
       <div class="su-mhead"><h3>${cuT('Almost there', '就差一点')}</h3>
         <button class="su-x" type="button" onclick="suCloseModal()">✕</button></div>
       <p class="su-mnote">${cuT('Finish these first so customers get a working store:', '先完成这些，顾客才能看到一个可用的店：')}<br><b>${escapeHtml(names)}</b></p>
-      <div class="su-mfoot"><button class="btn btn-primary" type="button" onclick="suCloseModal()">${cuT('OK', '好的')}</button></div>`);
+      <div class="su-mfoot"><button class="btn btn-primary" type="button" onclick="suCloseModal()">${cuT('Back to guide', '返回引导')}</button></div>`);
     return;
   }
   suModal(`

@@ -12173,7 +12173,7 @@ reg('suOpen', ()=>{
     state.ask={title:T('Almost there','就差一点'),
       body:escAttr(T('Finish these first so customers get a working store:','先完成这些，顾客才能看到一个可用的店：'))
         +`<div style="margin-top:8px;font-weight:500">${escAttr(blockers.map(x=>T(...(SETUP_LABEL[x.key]||[x.key,x.key]))).join(T(', ','、')))}</div>`,
-      options:[{key:'ok',label:T('OK','好的')}]};
+      options:[{key:'ok',label:T('Back to guide','返回引导')}]};   // a verb, never "OK" (§5); the desktop's words
     render(); return;
   }
   state.ask={title:T('Open your store now?','现在开店？'),
