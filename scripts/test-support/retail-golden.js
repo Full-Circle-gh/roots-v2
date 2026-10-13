@@ -195,4 +195,7 @@ function normalise(text) {
   }), (k, x) => (/(_ms|_time)$/.test(k) && typeof x === 'number' ? '<N>' : x));
 }
 
-module.exports = { openApp, normalise, REPO, FIXED_NOW };
+// A one-pixel PNG, for the requests that upload a picture.
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+module.exports = { openApp, normalise, REPO, FIXED_NOW, PNG };
