@@ -1248,7 +1248,9 @@ function snippetsRender() {
         <div class="snip-row">
           <div class="label">${escapeHtml(s.label)}</div>
           <div class="help">${escapeHtml(s.help)}</div>
-          <div class="key">${escapeHtml(s.key)}</div>
+          ${/* The storage key (copy.cart.kicker…) is not shown: it is an engineer's
+                name, and the label and help already say which text this is. It
+                still rides on each input's data-key, which is what saving reads. */''}
           <div class="pair" style="margin-top: 8px">
             <div class="lang-wrap"><span class="lang-tag">EN</span><input type="text" data-key="${escapeAttr(s.key)}" data-lang="en" value="${escapeAttr(s._en ?? s.en)}"></div>
             <div class="lang-wrap"><span class="lang-tag">中</span><input type="text" data-key="${escapeAttr(s.key)}" data-lang="cn" value="${escapeAttr(s._cn ?? s.cn)}"></div>
