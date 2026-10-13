@@ -27,6 +27,9 @@ const path = require('path');
 
 const REPO = path.join(__dirname, '..', '..');
 
+// A Wednesday, 10:00 in Shanghai. See openApp() for why it is years ahead.
+const FIXED_NOW = '2030-01-02T02:00:00.000Z';
+
 // One seeded app per area. Returns { call, seed, close, outbound }.
 async function openApp() {
   // A map key in the shell would turn an address save into a lookup with an
@@ -34,6 +37,20 @@ async function openApp() {
   // already; blanking them keeps a developer's own shell from changing what
   // gets recorded. Read at module load, so this has to come first.
   for (const k of ['AMAP_MAPS_KEY', 'TENCENT_MAPS_KEY']) process.env[k] = '';
+
+  // THE APP'S CLOCK IS PINNED. Delivery slots, pickup times and opening hours
+  // are worked out from "now", so an unpinned run would record one answer at
+  // noon and another at 3am. JS time is fixed at FIXED_NOW and does not move.
+  // SQLite still stamps rows with the real time (CURRENT_TIMESTAMP cannot be
+  // hooked from JS), so FIXED_NOW sits years ahead: every comparison between
+  // the app's "now" and a database stamp comes out the same way on every run.
+  const RealDate = Date;
+  const fixedMs = RealDate.parse(FIXED_NOW);
+  class PinnedDate extends RealDate {
+    constructor(...a) { if (a.length) super(...a); else super(fixedMs); }
+    static now() { return fixedMs; }
+  }
+  global.Date = PinnedDate;
 
   // Nothing may leave the machine, by fetch or by node's http/https. Recorded
   // rather than thrown, so the answer the route gives is the one it gives
@@ -81,11 +98,20 @@ async function openApp() {
 
   // Insert a row, filling any NOT NULL column without a default that the
   // caller did not name, so a new column does not break the seed.
+  //
+  // A column that would default to the database's own "now" gets SEED_AT
+  // instead: SQLite stamps with the real clock, so a seeded order's month, or
+  // the days since it, would otherwise change with the date the suite runs on.
+  // Rows that requests create during the run keep real stamps; their
+  // timestamps are masked as <T> in the answers.
+  const SEED_AT = '2029-12-20 04:00:00';
   function ins(table, row) {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all();
     for (const c of cols) {
-      if (!c.notnull || c.dflt_value != null || c.pk || c.name in row) continue;
-      row[c.name] = /_at$/.test(c.name) ? '2026-01-01 00:00:00'
+      if (c.pk || c.name in row) continue;
+      if (/CURRENT_TIMESTAMP|'now'/i.test(String(c.dflt_value || ''))) { row[c.name] = SEED_AT; continue; }
+      if (!c.notnull || c.dflt_value != null) continue;
+      row[c.name] = /_at$/.test(c.name) ? SEED_AT
         : /(id|count|qty|rating|cents|points)$/.test(c.name) ? 1 : 'x';
     }
     const k = Object.keys(row);
@@ -121,6 +147,7 @@ async function openApp() {
     db, ins, customer, call, outbound,
     close: () => new Promise((r) => server.close(r)).then(() => {
       global.fetch = realFetch;
+      global.Date = RealDate;
       for (const [k, fn] of Object.entries(realRequest)) require(k.split('.')[0])[k.split('.')[1]] = fn;
     }),
   };
@@ -140,4 +167,4 @@ function normalise(text) {
   }), (k, x) => (/(_ms|_time)$/.test(k) && typeof x === 'number' ? '<N>' : x));
 }
 
-module.exports = { openApp, normalise, REPO };
+module.exports = { openApp, normalise, REPO, FIXED_NOW };
