@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.332 · 2026-10-13 · §475 A MANAGER'S TILL PIN — 8 STRINGS COMPOSED BY CLAUDE, ALL BUILT ON `PIN 码` AND THE LIVE 经理 / 收银台 / 折扣 / 新密码 SHAPES; `两次输入的 PIN 码不一致` AND `请填写所有字段` LIFTED FROM THE PASSWORD SHEET; THE LOCKOUT SENTENCE COPIED WHOLE.** See *A manager's till PIN (§475)*.
+
 **v1.331 · 2026-10-13 · §474 A MANAGER'S DISCOUNT AT THE TILL — 6 STRINGS COMPOSED BY CLAUDE (`Friends & family · 亲友`, `Complaint · 投诉`, `Till discount · 收银台折扣`, `Give discounts at the till · 前台收银打折`, the capability's money note, and the New order forms' `A discount can only be given at the till · 折扣只能在收银台给出。`), BUILT ON THE LIVE 折扣 / 收银台 / 前台收银; `折扣最多 20%` LIFTED FROM THE LIVE `折扣最多 100%`; EVERYTHING ELSE ON THE SHEET COPIED WHOLE.** See *A manager's discount at the till (§474)*.
 
 **v1.330 · 2026-10-13 · §473 ONE ANSWER PICKED MORE THAN ONCE — 2 STRINGS COMPOSED BY CLAUDE (`Repeats allowed · 可重复选`, `The same choice can be picked more than once · 同一项可选多次`), BUILT ON THE LIVE 多选 / 必选 / 单选 AND THE LIVE 可重复; THE COUNTER AND `×2` NEED NO WORDS.** See *One answer picked more than once (§473)*.
@@ -14023,3 +14025,37 @@ discount manually in the till I can't do it right now"*.
 - `亲朋好友`: correct but too long for a sheet row beside `破损` and `投诉`.
 - `员工折扣` for the capability: reads as *a discount for staff* (the Ramada
   voucher), the opposite of a discount given by staff.
+
+## A manager's till PIN (§475)
+
+**Composed by Claude, 2026-10-13, under the 2026-09-06 amendment.** Operator
+register. The till's Discount sheet (`public/till.html`) and the Security
+section of the account screen, desktop (`public/backend-account.html`) and
+phone (`public/m.html`). Asked by Ash: *"pin"*.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `PIN` / `PIN 码` | the till's PIN box | `PIN 码` is what a Chinese bank card and phone call it. Not `密码`, which is the sign-in password everywhere in this product and would read as "type your password". |
+| `Wrong PIN` / `PIN 码错误` | the till, under the box | The shape of the live `验证码不正确` / `当前密码不正确`, shortened to fit under a box. |
+| `Pick a manager and type their PIN.` / `请选择经理并输入其 PIN 码。` | the till | `经理` is the Manager role's own name. |
+| `Till PIN` / `收银 PIN 码` | the account row and heading | `收银` from the live `前台收银`; names where it is used. |
+| `A manager types this at the till to approve a discount. 4 to 6 digits.` / `经理在收银台输入此码以批准折扣。4 到 6 位数字。` | the account sheet and section | `收银台`, `折扣` live. `批准` is plainer than `审批` for one act. |
+| `New PIN` / `新 PIN 码`, `Confirm new PIN` / `确认新 PIN 码` | the account fields | The live `新密码` / `确认新密码` with the noun changed. |
+| `The PIN must be 4 to 6 digits` / `PIN 码须为 4 到 6 位数字` | account validation and the server's refusal | Plain. |
+
+### Lifted
+
+- `The PINs don’t match` / `两次输入的 PIN 码不一致`: the live `两次输入的新密码不一致` with the noun changed.
+- `Fill in all fields` / `请填写所有字段`: the live `请填写所有密码字段` without `密码`.
+
+### Copied whole
+
+`Manager · 经理` (the role's name), `Too many tries. Wait a moment and try again. · 尝试次数过多,请稍后重试。` (01-core.js), `Set · 已设置`, `Not set · 未设置`, `Current password · 当前密码`, `Save · 保存`, `Saved · 已保存`.
+
+### Rejected
+
+- `密码` for the PIN: it is the sign-in password on every screen of this product.
+- `口令`: dated, and nothing live uses it.
+- `授权码` (*authorisation code*): reads as a one-time code sent by SMS, which this is not.

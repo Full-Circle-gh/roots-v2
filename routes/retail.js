@@ -454,6 +454,7 @@ const recycle = require('../lib/recycle');
 // Sales tax and VAT (audit I-03). Off unless a shop has set a rate.
 const tax = require('../lib/tax');
 const tillDiscount = require('../lib/till-discount');
+const tillPin = require('../lib/till-pin');
 // §230 — the QR menu's per-type allow-list, so the editor's eye and the
 // live counter menu resolve a block from the same list.
 const qrBlockDefaults = require('../lib/qr-menu-block-defaults');
@@ -26986,6 +26987,24 @@ function manualDiscountDenied(req) {
   return !req.caps.has('till:discount');
 }
 
+/* §475 — THE MANAGERS A TILL CAN ASK, AND ASKING ONE.
+
+   A till signed in under a shop-floor account cannot give a discount itself
+   (above). It can name a manager and send that manager's PIN, and the sale is
+   then approved by them and recorded under their name. The list is names only,
+   read by the till when it opens; the check is the same one the sale makes, so
+   the cashier hears "wrong PIN" at Apply rather than at Mark paid. Five wrong
+   PINs lock that manager's PIN for fifteen minutes (lib/till-pin.js). */
+router.get('/api/retail-admin/till-approvers', requireRetailAdmin, (req, res) => {
+  res.json({ success: true, data: tillPin.approvers(db, req.tenant) });
+});
+router.post('/api/retail-admin/till-pin/check', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+  const r = tillPin.checkPin(db, req.tenant, b.approver_id, b.pin);
+  if (!r.ok) return res.status(r.status).json({ success: false, error: r.error });
+  res.json({ success: true, data: { id: r.user.id, name: r.user.display_name || r.user.username } });
+});
+
 router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), async (req, res) => {
   const b = req.body || {};
 
@@ -27083,7 +27102,17 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
       && String(b.fulfillment_type || '') === 'counter' && optionStoreId
       && (b.total_override == null || b.total_override === '');
     if (!isTill) return res.status(400).json({ success: false, error: 'manual_discount_till_only' });
-    if (manualDiscountDenied(req)) {
+    // §475 — who gives it: the operator, when they may; otherwise a manager
+    // named on the request, with their PIN. Checked before the arithmetic so a
+    // wrong PIN is never answered with anything about the amount.
+    let discountBy = null;
+    if (!manualDiscountDenied(req)) {
+      discountBy = req.user.display_name || req.user.username || null;
+    } else if (b.manual_discount && typeof b.manual_discount === 'object' && b.manual_discount.approver_id) {
+      const pc = tillPin.checkPin(db, req.tenant, b.manual_discount.approver_id, b.manual_discount.pin);
+      if (!pc.ok) return res.status(pc.status).json({ success: false, error: pc.error });
+      discountBy = pc.user.display_name || pc.user.username || null;
+    } else {
       return res.status(403).json({ success: false, error: 'forbidden_capability', need: 'till:discount' });
     }
     const md = tillDiscount.resolveManualDiscount(b.manual_discount, money.round(subtotal - voucherDiscount));
@@ -27092,7 +27121,7 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
       if (md.max_pct) out.max_pct = md.max_pct;
       return res.status(400).json(out);
     }
-    manualDiscount = md;
+    manualDiscount = Object.assign(md, { by: discountBy });
   }
   const manualDiscountAmount = manualDiscount ? manualDiscount.amount : 0;
   let total = Math.round((subtotal + shippingFee + packingFee) * 100) / 100;
@@ -27505,7 +27534,8 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
         manualDiscountAmount,
         manualDiscount ? manualDiscount.reason : null,
         manualDiscount ? manualDiscount.note : null,
-        manualDiscount ? (req.user.display_name || req.user.username || null) : null
+        // §475 — the manager who approved it with their PIN, when that is who.
+        manualDiscount ? manualDiscount.by : null
       );
       orderId = info.lastInsertRowid;
       // §426 — the voucher's use, counted the way the checkout counts it, in the
@@ -27679,7 +27709,8 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
               { order_no: orderNo, total, status, guest: !customerId,
                 channel, store_id: storeId, fulfillment_type: fulfillmentType,
                 ...(manualDiscount ? { manual_discount: manualDiscountAmount,
-                                       manual_discount_reason: manualDiscount.reason } : {}) }, req.ip);
+                                       manual_discount_reason: manualDiscount.reason,
+                                       manual_discount_by: manualDiscount.by } : {}) }, req.ip);
   // Pay link is only meaningful while unpaid. Built on this request's origin so
   // it works on whichever storefront host the operator is on (tenant-correct).
   const payUrl = (status === 'pending_payment' && total > 0)

@@ -445,6 +445,32 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
           <button type="submit" id="pwBtn" class="btn-ink"><span class="en">Update password</span><span class="cn">更新密码</span></button>
         </form>
 
+        <!-- §475 — a manager's till PIN. Drawn only for someone who may give a
+             till discount (hydrate unhides it); the PIN approves one on a till
+             signed in as somebody else. The current password is asked for, as
+             for a password change. -->
+        <div id="tillPinSect" hidden>
+        <h2 class="sect-h"><span class="en">Till PIN</span><span class="cn">收银 PIN 码</span></h2>
+        <p class="lead"><span class="en">A manager types this at the till to approve a discount. 4 to 6 digits.</span><span class="cn">经理在收银台输入此码以批准折扣。4 到 6 位数字。</span></p>
+        <p class="lead" id="tillPinState" style="font-size:12px;"></p>
+        <form id="pinForm" novalidate style="max-width:340px;">
+          <div class="field">
+            <label class="flabel" for="pinCur"><span class="en">Current password</span><span class="cn">当前密码</span></label>
+            <input id="pinCur" type="password" autocomplete="current-password" placeholder="••••••••" />
+          </div>
+          <div class="field">
+            <label class="flabel" for="pinNew"><span class="en">New PIN</span><span class="cn">新 PIN 码</span></label>
+            <input id="pinNew" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••" />
+          </div>
+          <div class="field">
+            <label class="flabel" for="pinNew2"><span class="en">Confirm new PIN</span><span class="cn">确认新 PIN 码</span></label>
+            <input id="pinNew2" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••" />
+          </div>
+          <div class="msg" id="pinMsg" role="status"><span></span></div>
+          <button type="submit" id="pinBtn" class="btn-ink"><span class="en">Save</span><span class="cn">保存</span></button>
+        </form>
+        </div>
+
         <!-- Two-step verification — email and SMS are independent switches
              (both can be on at once), not a single preferred method. Turning
              one on takes effect immediately: the address was already verified
@@ -560,6 +586,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       $('idName').textContent = name;
       if (document.activeElement !== $('nameInput')) $('nameInput').value = u.displayName || u.username || '';
       renderAvatar(u);
+      showTillPin(u);   // §475
       if (u.mustChangePassword || u.defaultPassword) $('defaultWarn').classList.add('show');
       // /me can resolve after the Devices tab is already open (race with the
       // tab click) — re-render so the owner/admin-only Team toggle appears.
@@ -658,6 +685,29 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
           else { setMsg($('msg'), 'err', pickErr(res.data && res.data.error) || L('Couldn’t update password','无法更新密码')); }
         })
         .catch(function(){ $('pwBtn').disabled = false; $('pwBtn').classList.remove('loading'); setMsg($('msg'), 'err', L('Network error — please try again','网络错误，请重试')); });
+    });
+
+    /* ── till PIN (§475) ── */
+    function showTillPin(u){
+      var can = u && (u.role === 'owner' || (Array.isArray(u.caps) && u.caps.indexOf('till:discount') !== -1));
+      $('tillPinSect').hidden = !can;
+      $('tillPinState').textContent = u && u.hasTillPin ? L('Set','已设置') : L('Not set','未设置');
+    }
+    $('pinForm').addEventListener('submit', function(e){
+      e.preventDefault(); setMsg($('pinMsg'), null, '');
+      var cur = $('pinCur').value, p1 = $('pinNew').value, p2 = $('pinNew2').value;
+      if (!cur || !p1 || !p2)        { setMsg($('pinMsg'), 'err', L('Fill in all fields','请填写所有字段')); return; }
+      if (!/^[0-9]{4,6}$/.test(p1))  { setMsg($('pinMsg'), 'err', L('The PIN must be 4 to 6 digits','PIN 码须为 4 到 6 位数字')); return; }
+      if (p1 !== p2)                 { setMsg($('pinMsg'), 'err', L('The PINs don’t match','两次输入的 PIN 码不一致')); return; }
+      $('pinBtn').disabled = true; $('pinBtn').classList.add('loading');
+      fetch('/api/backend/till-pin', { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ current_password:cur, pin:p1 }) })
+        .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
+        .then(function(res){
+          $('pinBtn').disabled = false; $('pinBtn').classList.remove('loading');
+          if (res.ok && res.data && res.data.success) { $('pinForm').reset(); $('tillPinState').textContent = L('Set','已设置'); setMsg($('pinMsg'), 'ok', L('Saved','已保存')); }
+          else { setMsg($('pinMsg'), 'err', pickErr(res.data && res.data.error) || L('Couldn’t save — please try again','保存失败，请重试')); }
+        })
+        .catch(function(){ $('pinBtn').disabled = false; $('pinBtn').classList.remove('loading'); setMsg($('pinMsg'), 'err', L('Network error — please try again','网络错误，请重试')); });
     });
 
     /* ── devices ── */

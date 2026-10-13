@@ -37611,7 +37611,12 @@ function screenAccount(){
       tmRow({label:T('Name','姓名'),value:escAttr(me.name||''),cmd:"APP.cmd('acctName')"}),
       emailRow, phoneRow])}</div>
     <div>${acctEyebrow(T('Security','安全'))}${tmList([
-      tmRow({label:T('Change password','修改密码'),cmd:"APP.cmd('acctPass')"})])}</div>
+      tmRow({label:T('Change password','修改密码'),cmd:"APP.cmd('acctPass')"}),
+      /* §475 — only for someone who may give a till discount: the PIN is how
+         they approve one on a till signed in as somebody else. */
+      ...(acctCanTillPin()?[tmRow({label:T('Till PIN','收银 PIN 码'),
+        value:(state.me&&state.me.hasTillPin)?T('Set','已设置'):T('Not set','未设置'),
+        cmd:"APP.cmd('acctTillPin')"})]:[])])}</div>
     ${r?`<div>${acctEyebrow(T('Two-step verification','两步验证'))}${twofa}</div>`:''}
     <div>${acctEyebrow(T('Devices','设备'))}${tmList([
       tmRow({label:T('Devices','设备'),
@@ -37689,6 +37694,30 @@ function acctPassAsk(){
       msg=>{ state.ask=acctPassAsk(); state.askErr=msg; },'Couldn’t update password','无法更新密码')};
 }
 reg('acctPass', ()=>{ state.askErr=null; state.ask=acctPassAsk(); render(); });
+
+/* ── Till PIN (§475) ─────────────────────────────────────────────────────────
+   A manager's 4 to 6 digits, typed at a till signed in as staff to approve a
+   discount there. The current password is asked for, as for a password: the
+   PIN approves money off a sale. Nothing typed is put back into a reopened
+   sheet, for the password sheet's reason. */
+function acctCanTillPin(){
+  return !!(state.me&&state.me.role==='owner') || (Array.isArray(state.caps)&&state.caps.indexOf('till:discount')!==-1);
+}
+function acctTillPinAsk(){
+  return {title:T('Till PIN','收银 PIN 码'),
+    body:T('A manager types this at the till to approve a discount. 4 to 6 digits.','经理在收银台输入此码以批准折扣。4 到 6 位数字。'),
+    fields:[{id:'cur',label:T('Current password','当前密码'),type:'password'},
+            {id:'pin',label:T('New PIN','新 PIN 码'),type:'password',max:6},
+            {id:'pin2',label:T('Confirm new PIN','确认新 PIN 码'),type:'password',max:6}],
+    confirmLabel:T('Save','保存'),
+    validate:v=> (!v.cur||!v.pin||!v.pin2) ? T('Fill in all fields','请填写所有字段')
+      : !/^[0-9]{4,6}$/.test(v.pin) ? T('The PIN must be 4 to 6 digits','PIN 码须为 4 到 6 位数字')
+      : v.pin!==v.pin2 ? T('The PINs don’t match','两次输入的 PIN 码不一致') : '',
+    run:v=>acctWrite('tillpin','/api/backend/till-pin',{current_password:v.cur,pin:v.pin},'PUT',
+      ()=>{ state.me=state.me||{}; state.me.hasTillPin=true; showToast(T('Saved','已保存')); },
+      msg=>{ state.ask=acctTillPinAsk(); state.askErr=msg; },'Couldn’t save — please try again','保存失败，请重试')};
+}
+reg('acctTillPin', ()=>{ state.askErr=null; state.ask=acctTillPinAsk(); render(); });
 
 /* ── Email and phone: address → code → verified ─────────────────────────────
    Two sheets in a row, the desktop's two steps. The code sheet names where the
@@ -51956,7 +51985,9 @@ async function loadMe(){
     state.caps=Array.isArray(u.caps)?u.caps:null;
     state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null, avatarUrl:u.avatarUrl||null,
       /* §453 — who, at which tenant: the key an unsent request is kept under on this phone. */
-      id:u.id!=null?u.id:null, tid:(u.tenant&&u.tenant.id!=null)?u.tenant.id:null};
+      id:u.id!=null?u.id:null, tid:(u.tenant&&u.tenant.id!=null)?u.tenant.id:null,
+      /* §475 — whether a till PIN is set; the PIN itself never comes here. */
+      hasTillPin:!!u.hasTillPin};
     // §300 F5 — RA_STORE_LOCK's rule: the first of the operator's scoped stores.
     state.storeLock=(Array.isArray(u.scopeStores)&&u.scopeStores.length)?String(u.scopeStores[0]):null;
     // §412.5 — the whole scope: stock staff are managed only at these stores.

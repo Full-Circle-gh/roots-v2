@@ -1175,6 +1175,15 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     complaint:    ['Complaint', '投诉'],               // composed, §474
     discMax:      ['Discount can be at most 20%', '折扣最多 20%'], // admin: 05-marketing.js, limit changed
     giveReason:   ['Give a reason first.', '请先填写原因。'], // admin: 01-core.js
+    /* §475 — a manager approves with their PIN on a till signed in as staff.
+       `manager` is the Manager role's own name (lib/roles.js); `pinLocked` is
+       the admin's own lockout sentence, copied whole. Three COMPOSED, declared
+       in docs/tacet-delivery-vocabulary.md (§475). */
+    manager:      ['Manager', '经理'],                 // lib/roles.js: the Manager role
+    pin:          ['PIN', 'PIN 码'],                   // composed, §475
+    wrongPin:     ['Wrong PIN', 'PIN 码错误'],         // composed, §475
+    pickManager:  ['Pick a manager and type their PIN.', '请选择经理并输入其 PIN 码。'], // composed, §475
+    pinLocked:    ['Too many tries. Wait a moment and try again.', '尝试次数过多,请稍后重试。'], // admin: 01-core.js
     /* §428 — adding a customer at the counter, and giving them this location's
        voucher. The first three are the phone app's own "Add a customer" form
        (m.html), quoted whole: the same three fields, the same act. `give` takes
@@ -1421,6 +1430,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        refuses the sale otherwise). `disc` is { percent | amount, reason, note }
        or null; `discOpen`/`discDraft` are the sheet. Cleared with the basket. */
     canDisc: false, disc: null, discOpen: false, discDraft: null,
+    /* §475 — when this operator cannot give one, the managers who can approve
+       one here with their PIN ({ id, name }), read once at boot. Empty means no
+       Discount button at all, exactly as before. */
+    approvers: [],
     heldSent: {}, heldBusy: {},
     home: null, homeLabel: null,  // where Back goes, and what it says — /api/backend/me
     leaveOpen: false,          // is the "leave without saving?" question up?
@@ -1899,6 +1912,14 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         // button drawn on a guess would only produce a refused sale.
         S.canDisc = !!((me && me.user && me.user.role === 'owner')
                        || (caps && caps.indexOf('till:discount') !== -1));
+        // §475 — otherwise, who could approve one here. A failed read leaves the
+        // list empty, which is the till as it was: no button.
+        if (!S.canDisc) {
+          api('/api/retail-admin/till-approvers').then(function (j) {
+            S.approvers = (j && j.success && Array.isArray(j.data)) ? j.data : [];
+            render();
+          }).catch(function () { S.approvers = []; });
+        }
         if (caps && (caps.indexOf('till:use') === -1 || caps.indexOf('orders:edit') === -1)) {
           boot('<p>' + esc(T('noPermission')) + '</p>');
           return;
@@ -2985,10 +3006,14 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (S.recall || !S.lines.length) { S.disc = null; return; }
     if (!(discOff(subtotal()) > 0)) { S.disc = null; S.err = T('discMax'); }
   }
+  // §475 — may a discount be given on this till at all: by this operator, or
+  // by a manager approving with their PIN.
+  function discAllowed() { return !!(S.canDisc || (S.approvers && S.approvers.length)); }
   function openDiscAsk() {
-    if (!S.canDisc || S.recall || !S.lines.length || S.busy) return;
+    if (!discAllowed() || S.recall || !S.lines.length || S.busy) return;
     var d = S.disc;
-    S.discDraft = { percent: d ? d.percent : null, reason: d ? d.reason : '' };
+    S.discDraft = { percent: d ? d.percent : null, reason: d ? d.reason : '',
+                    approver: d && d.approver_id ? d.approver_id : null };
     S.discOpen = true; render();
   }
   function closeDiscAsk() { S.discOpen = false; S.discDraft = null; render(); }
@@ -3015,8 +3040,21 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
          + '<span>' + esc(T(r[1])) + '</span></button>';
     });
     h += '<div class="cnew"><input id="disc-note" type="text" maxlength="120" autocomplete="off"'
-       + ' placeholder="' + esc(T('note')) + '"></div>'
-       + '<div class="derr" id="disc-err"></div>'
+       + ' placeholder="' + esc(T('note')) + '"></div>';
+    // §475 — signed in as someone who cannot give one: a manager approves it.
+    // The PIN is never put back into a rebuilt sheet from S: only what is still
+    // typed in the box survives a language switch.
+    var pinBox = $('disc-pin'), keepPin = pinBox ? pinBox.value : '';
+    if (!S.canDisc) {
+      h += '<div class="hd">' + esc(T('manager')) + '</div>';
+      S.approvers.forEach(function (a) {
+        h += '<button class="srow' + (String(dr.approver) === String(a.id) ? ' on' : '') + '" type="button"'
+           + ' data-disc-mgr="' + esc(String(a.id)) + '"><span>' + esc(a.name) + '</span></button>';
+      });
+      h += '<div class="cnew"><input id="disc-pin" type="password" inputmode="numeric" pattern="[0-9]*"'
+         + ' maxlength="6" autocomplete="off" placeholder="' + esc(T('pin')) + '"></div>';
+    }
+    h += '<div class="derr" id="disc-err"></div>'
        + '<button class="srow" type="button" data-disc="go"><span>' + esc(T('apply')) + '</span></button>'
        + (d ? '<button class="srow" type="button" data-disc="off"><span>' + esc(T('removeDiscount')) + '</span></button>' : '')
        + '<button class="srow" type="button" data-disc="close"><span>' + esc(T('cancel')) + '</span></button>'
@@ -3024,6 +3062,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     el.innerHTML = h;
     $('disc-amt').value = keepAmt || '';
     $('disc-note').value = keepNote || '';
+    if ($('disc-pin')) $('disc-pin').value = keepPin || '';
     el.setAttribute('data-built', _lang);
   }
   // A percentage and a typed amount are one choice: picking either clears the other.
@@ -3039,6 +3078,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     S.discDraft.reason = r;
     var bs = $('discpick').querySelectorAll('[data-disc-why]');
     for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', bs[i].getAttribute('data-disc-why') === r);
+  }
+  function pickDiscMgr(id) {
+    if (!S.discDraft) return;
+    S.discDraft.approver = id;
+    var bs = $('discpick').querySelectorAll('[data-disc-mgr]');
+    for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', bs[i].getAttribute('data-disc-mgr') === String(id));
+    var p = $('disc-pin'); if (p) p.focus();
   }
   function discTyped() {
     if (!S.discDraft) return;
@@ -3062,8 +3108,33 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (next.percent == null && !(next.amount > 0)) { var a = $('disc-amt'); if (a) a.focus(); return; }
     if (!next.reason || (next.reason === 'other' && !note)) return say('giveReason');
     if (next.amount != null && next.amount > discCeil(discBase(subtotal()))) return say('discMax');
-    S.disc = next; S.discOpen = false; S.discDraft = null; S.err = '';
-    render();
+    if (S.canDisc) {
+      S.disc = next; S.discOpen = false; S.discDraft = null; S.err = '';
+      return render();
+    }
+    // §475 — a manager's PIN, checked now so a wrong one is heard here rather
+    // than at Mark paid. The sale sends it again and the server checks again.
+    var pinEl = $('disc-pin');
+    var pin = pinEl ? String(pinEl.value || '').trim() : '';
+    if (!dr.approver || !/^[0-9]{4,6}$/.test(pin)) return say('pickManager');
+    if (S.discBusy) return;
+    S.discBusy = true;
+    fetch('/api/retail-admin/till-pin/check', {
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approver_id: dr.approver, pin: pin })
+    }).then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (j) {
+        S.discBusy = false;
+        if (!S.discOpen) return;
+        if (!j || !j.success) {
+          if (pinEl) pinEl.value = '';
+          return say(j && j.error === 'till_pin_locked' ? 'pinLocked' : 'wrongPin');
+        }
+        next.approver_id = dr.approver; next.pin = pin; next.by = j.data && j.data.name;
+        S.disc = next; S.discOpen = false; S.discDraft = null; S.err = '';
+        render();
+      })
+      .catch(function () { S.discBusy = false; say('wrongPin'); });
   }
   function removeDisc() { S.disc = null; S.discOpen = false; S.discDraft = null; render(); }
 
@@ -3439,7 +3510,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // §474 — Discount, under Hold, for an operator who may give one.
     var dbt = $('disc');
     if (dbt) {
-      dbt.hidden = !(S.canDisc && !S.recall && S.lines.length);
+      dbt.hidden = !(discAllowed() && !S.recall && S.lines.length);
       dbt.textContent = dOff > 0 ? T('discount') + '  −' + money(dOff) : T('discount');
       dbt.disabled = !!S.busy;
     }
@@ -3856,12 +3927,19 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (S.disc && discOff(subtotal()) > 0) {
       body.manual_discount = { percent: S.disc.percent, amount: S.disc.amount,
                                reason: S.disc.reason, note: S.disc.note || '' };
+      // §475 — the approving manager, when this operator cannot give it alone.
+      if (S.disc.approver_id) { body.manual_discount.approver_id = S.disc.approver_id; body.manual_discount.pin = S.disc.pin; }
     }
 
     api('/api/retail-admin/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     }).then(function (j) {
       S.busy = false;
+      // §475 — the PIN was good at Apply and is not now (locked, or changed in
+      // between). The discount is taken off the bill so it can be asked again.
+      if (j && (j.error === 'bad_till_pin' || j.error === 'till_pin_locked')) {
+        S.disc = null; S.err = T(j.error === 'till_pin_locked' ? 'pinLocked' : 'wrongPin'); render(); return;
+      }
       if (!j || !j.success) { S.err = T('didNotSave'); render(); return; }
       // The SERVER's figures, not this screen's: what it actually charged and
       // what it actually took off in credit. A done screen quoting the till's
@@ -4599,7 +4677,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (S.holdOpen && ev.target.id === 'holdpick') return closeHoldAsk();
       // §474 — tapping away from the discount sheet is not giving one.
       if (S.discOpen && ev.target.id === 'discpick') return closeDiscAsk();
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-hold],[data-held],[data-disc],[data-disc-pct],[data-disc-why]');
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-hold],[data-held],[data-disc],[data-disc-pct],[data-disc-why],[data-disc-mgr]');
       if (!t) return;
       // §183 — the question sheet. Answered before anything else on the screen:
       // while it is up it is the only thing the cashier is being asked.
@@ -4630,6 +4708,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (t.hasAttribute('data-held')) return openHeld(t.getAttribute('data-held'));
       if (t.hasAttribute('data-disc-pct')) return pickDiscPct(Number(t.getAttribute('data-disc-pct')));
       if (t.hasAttribute('data-disc-why')) return pickDiscWhy(t.getAttribute('data-disc-why'));
+      if (t.hasAttribute('data-disc-mgr')) return pickDiscMgr(t.getAttribute('data-disc-mgr'));
       if (t.hasAttribute('data-disc')) {   // §474
         var da = t.getAttribute('data-disc');
         if (da === 'go') return commitDisc();
