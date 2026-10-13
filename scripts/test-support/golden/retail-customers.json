@@ -1,0 +1,791 @@
+[
+  {
+    "req": "GET /api/retail-admin/customers [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 2,
+          "nickname": "Lin",
+          "phone": "13800138000",
+          "openid": "golden_lin",
+          "email": null,
+          "tier_key": "seed",
+          "lifetime_spend": 0,
+          "points_balance": 120,
+          "balance": 50,
+          "is_blocked": 0,
+          "created_at": "<T>",
+          "last_login_at": null,
+          "seen_at": null,
+          "note": null,
+          "tags": null,
+          "orders_count": 1,
+          "channel": "unknown"
+        },
+        {
+          "id": 1,
+          "nickname": "Golden",
+          "phone": null,
+          "openid": "golden_openid",
+          "email": null,
+          "tier_key": "seed",
+          "lifetime_spend": 0,
+          "points_balance": 7,
+          "balance": 0,
+          "is_blocked": 0,
+          "created_at": "<T>",
+          "last_login_at": null,
+          "seen_at": null,
+          "note": null,
+          "tags": null,
+          "orders_count": 2,
+          "channel": "unknown"
+        }
+      ],
+      "page": 1,
+      "pageSize": 20,
+      "total": 2,
+      "customers_on_file": 2,
+      "hidden_by_filters": null,
+      "returning": null,
+      "segments": null,
+      "tag_vocabulary": []
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers?q=Lin [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 2,
+          "nickname": "Lin",
+          "phone": "13800138000",
+          "openid": "golden_lin",
+          "email": null,
+          "tier_key": "seed",
+          "lifetime_spend": 0,
+          "points_balance": 120,
+          "balance": 50,
+          "is_blocked": 0,
+          "created_at": "<T>",
+          "last_login_at": null,
+          "seen_at": null,
+          "note": null,
+          "tags": null,
+          "orders_count": 1,
+          "channel": "unknown"
+        }
+      ],
+      "page": 1,
+      "pageSize": 20,
+      "total": 1,
+      "customers_on_file": 2,
+      "hidden_by_filters": null,
+      "returning": null,
+      "segments": null,
+      "tag_vocabulary": []
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers?q=nobody [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [],
+      "page": 1,
+      "pageSize": 20,
+      "total": 0,
+      "customers_on_file": 2,
+      "hidden_by_filters": null,
+      "returning": null,
+      "segments": null,
+      "tag_vocabulary": []
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers/export.csv [admin]",
+    "status": 200,
+    "body": "ID,Name,Phone,Email,Tier,Signed up via,Tags,Orders,Lifetime spend,Points,Wallet balance,Blocked,Joined (UTC+8),Last order (UTC+8),Last seen (UTC+8),Note\r\n1,Golden,,,seed,unknown,,2,0,7,0,No,<T>,<T>,,\r\n2,Lin,13800138000,,seed,unknown,,1,0,120,50,No,<T>,<T>,,"
+  },
+  {
+    "req": "GET /api/retail-admin/customers/by-phone?phone=13800138000 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "match": {
+        "id": 2,
+        "nickname": "Lin",
+        "phone": "13800138000",
+        "is_blocked": 0,
+        "orders_count": 1
+      },
+      "share_count": 1
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers/by-phone?phone=13900000000 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "match": null,
+      "share_count": 0
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers/2 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "customer": {
+          "id": 2,
+          "openid": "golden_lin",
+          "unionid": null,
+          "nickname": "Lin",
+          "avatar_url": null,
+          "phone": "13800138000",
+          "email": null,
+          "gender": null,
+          "birthday": null,
+          "tier_key": "seed",
+          "lifetime_spend": 0,
+          "points_balance": 120,
+          "coupon_count": 0,
+          "balance": 50,
+          "is_blocked": 0,
+          "created_at": "<T>",
+          "last_login_at": null,
+          "referral_code": null,
+          "referred_by_customer_id": null,
+          "referral_applied_at": null,
+          "lifetime_eligible": 0,
+          "lifetime_eligible_since": null,
+          "affiliate_blocked": 0,
+          "source": null,
+          "created_by": null,
+          "seen_at": "<T>",
+          "note": null,
+          "tags": null
+        },
+        "addresses": [],
+        "stats": {
+          "orders": {
+            "orders_count": 1,
+            "completed_count": 1,
+            "refunded_count": 0,
+            "cancelled_count": 0,
+            "revenue": 0,
+            "aov": 0,
+            "last_order_at": "<T>",
+            "first_order_at": "<T>",
+            "days_since_last_order": 0
+          },
+          "points": {
+            "earned": 0,
+            "redeemed": 0,
+            "expired": 0,
+            "admin_adjust": 0,
+            "expiring_30d": 0
+          },
+          "topup": {
+            "topup_total": 0,
+            "bonus_pts_total": 0,
+            "admin_adjust_total": 0
+          },
+          "vouchers": {
+            "unused": 0,
+            "used": 0
+          },
+          "reviews": {
+            "count": 0,
+            "avg_rating": null
+          },
+          "active_sessions": 0
+        },
+        "top_items": [],
+        "orders_by_month": [
+          {
+            "month": "2026-10",
+            "n": 1,
+            "revenue": 0
+          }
+        ],
+        "recent_orders": [
+          {
+            "id": 3,
+            "order_no": "GLDC1",
+            "status": "delivered",
+            "total": 88,
+            "created_at": "<T>"
+          }
+        ],
+        "recent_points": [],
+        "recent_topups": [],
+        "affiliate": {
+          "referral_code": null,
+          "affiliate_blocked": 0,
+          "referred_by": null,
+          "invites": [],
+          "summary": {
+            "total": 0,
+            "converted": 0,
+            "earned": 0
+          },
+          "lifetime_mode": "everyone",
+          "lifetime_eligible": 0,
+          "lifetime_eligible_since": null
+        },
+        "diagnostics": {
+          "device_last_seen": null,
+          "recent_logs": [],
+          "error_count_7d": 0,
+          "unavailable": false
+        }
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers/999999 [admin]",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "not_found"
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers/2/history [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "versions": []
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "reused": false,
+      "data": {
+        "id": 3,
+        "nickname": "Walk-in",
+        "avatar_url": null,
+        "phone": "13700137000",
+        "tier_key": "seed",
+        "lifetime_spend": 0,
+        "points_balance": 0,
+        "point_value_yuan": 1,
+        "coupon_count": 0,
+        "balance": 0,
+        "created_at": "<T>"
+      },
+      "carried": {
+        "balance": 0,
+        "points": 0,
+        "vouchers": 0
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "reused": true,
+      "data": {
+        "id": 2,
+        "nickname": "Lin",
+        "avatar_url": null,
+        "phone": "13800138000",
+        "tier_key": "seed",
+        "lifetime_spend": 0,
+        "points_balance": 120,
+        "point_value_yuan": 1,
+        "coupon_count": 0,
+        "balance": 50,
+        "created_at": "<T>"
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers [admin]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "name_or_phone_required"
+    }
+  },
+  {
+    "req": "PATCH /api/retail-admin/customers/2 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "changed": {
+        "email": "lin@example.com",
+        "phone": "13800138001"
+      }
+    }
+  },
+  {
+    "req": "PATCH /api/retail-admin/customers/2 [admin]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "bad_email"
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/points-adjust [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "balance_after": 150
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/points-adjust [admin]",
+    "status": 409,
+    "body": {
+      "success": false,
+      "error": "would_go_negative"
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/points-adjust [admin]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "bad_delta"
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/wallet-adjust [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "balance_after": 62.5
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/wallet-adjust [admin]",
+    "status": 409,
+    "body": {
+      "success": false,
+      "error": "would_go_negative"
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers/2 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "customer": {
+          "id": 2,
+          "openid": "golden_lin",
+          "unionid": null,
+          "nickname": "Lin",
+          "avatar_url": null,
+          "phone": "13800138001",
+          "email": "lin@example.com",
+          "gender": null,
+          "birthday": null,
+          "tier_key": "seed",
+          "lifetime_spend": 0,
+          "points_balance": 150,
+          "coupon_count": 0,
+          "balance": 62.5,
+          "is_blocked": 0,
+          "created_at": "<T>",
+          "last_login_at": null,
+          "referral_code": null,
+          "referred_by_customer_id": null,
+          "referral_applied_at": null,
+          "lifetime_eligible": 0,
+          "lifetime_eligible_since": null,
+          "affiliate_blocked": 0,
+          "source": null,
+          "created_by": null,
+          "seen_at": "<T>",
+          "note": null,
+          "tags": null
+        },
+        "addresses": [],
+        "stats": {
+          "orders": {
+            "orders_count": 1,
+            "completed_count": 1,
+            "refunded_count": 0,
+            "cancelled_count": 0,
+            "revenue": 0,
+            "aov": 0,
+            "last_order_at": "<T>",
+            "first_order_at": "<T>",
+            "days_since_last_order": 0
+          },
+          "points": {
+            "earned": 0,
+            "redeemed": 0,
+            "expired": 0,
+            "admin_adjust": 30,
+            "expiring_30d": 0
+          },
+          "topup": {
+            "topup_total": 0,
+            "bonus_pts_total": 0,
+            "admin_adjust_total": 12.5
+          },
+          "vouchers": {
+            "unused": 0,
+            "used": 0
+          },
+          "reviews": {
+            "count": 0,
+            "avg_rating": null
+          },
+          "active_sessions": 0
+        },
+        "top_items": [],
+        "orders_by_month": [
+          {
+            "month": "2026-10",
+            "n": 1,
+            "revenue": 0
+          }
+        ],
+        "recent_orders": [
+          {
+            "id": 3,
+            "order_no": "GLDC1",
+            "status": "delivered",
+            "total": 88,
+            "created_at": "<T>"
+          }
+        ],
+        "recent_points": [
+          {
+            "id": 2,
+            "delta": 30,
+            "balance_after": 150,
+            "source": "admin_adjust",
+            "order_id": null,
+            "note": "[golden_owner] goodwill",
+            "created_at": "<T>",
+            "expires_at": null
+          }
+        ],
+        "recent_topups": [
+          {
+            "id": 1,
+            "amount": 12.5,
+            "bonus_points": 0,
+            "payment_method": "admin_adjust",
+            "status": "success",
+            "created_at": "<T>",
+            "paid_at": "<T>"
+          }
+        ],
+        "affiliate": {
+          "referral_code": null,
+          "affiliate_blocked": 0,
+          "referred_by": null,
+          "invites": [],
+          "summary": {
+            "total": 0,
+            "converted": 0,
+            "earned": 0
+          },
+          "lifetime_mode": "everyone",
+          "lifetime_eligible": 0,
+          "lifetime_eligible_since": null
+        },
+        "diagnostics": {
+          "device_last_seen": null,
+          "recent_logs": [],
+          "error_count_7d": 0,
+          "unavailable": false
+        }
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/block [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/unblock [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/affiliate-block [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/affiliate-unblock [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/force-logout [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "revoked": 0
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/reset-test [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "revoked": 0
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers/2/addresses [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "addresses": []
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/addresses [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "recipient_name": "Lin",
+        "phone": "13800138000",
+        "province": "广东省",
+        "city": "广州市",
+        "district": "天河区",
+        "province_en": null,
+        "city_en": null,
+        "district_en": null,
+        "address": "体育西路 1 号",
+        "detail": null,
+        "postal_code": null,
+        "is_default": 1,
+        "created_at": "<T>",
+        "updated_at": "<T>"
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/addresses [admin]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "missing_required"
+    }
+  },
+  {
+    "req": "PUT /api/retail-admin/customers/2/addresses/1 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "recipient_name": "Lin W",
+        "phone": "13800138000",
+        "province": "广东省",
+        "city": "广州市",
+        "district": "天河区",
+        "province_en": null,
+        "city_en": null,
+        "district_en": null,
+        "address": "体育西路 2 号",
+        "detail": "",
+        "postal_code": null,
+        "is_default": 1,
+        "created_at": "<T>",
+        "updated_at": "<T>"
+      }
+    }
+  },
+  {
+    "req": "DELETE /api/retail-admin/customers/2/addresses/999 [admin]",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "not_found"
+    }
+  },
+  {
+    "req": "DELETE /api/retail-admin/customers/2/addresses/1 [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers/2/counter-vouchers?store_id=1 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [],
+      "givable": []
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/counter-vouchers [admin]",
+    "status": 403,
+    "body": {
+      "success": false,
+      "error": "not_this_location"
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/referral-code [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "code": "<REFERRAL_CODE>"
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/message [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 3
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/customers/2/message [admin]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "message_required"
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers [anon]",
+    "status": 401,
+    "body": {
+      "error": "Not authenticated"
+    }
+  },
+  {
+    "req": "GET /api/retail/customer [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "nickname": "Golden",
+        "avatar_url": null,
+        "phone": null,
+        "tier_key": "seed",
+        "lifetime_spend": 0,
+        "points_balance": 7,
+        "point_value_yuan": 1,
+        "coupon_count": 0,
+        "balance": 0,
+        "created_at": "<T>",
+        "addresses": [],
+        "favorite_count": 0
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/customer [anon]",
+    "status": 401,
+    "body": {
+      "success": false,
+      "error": "missing_token"
+    }
+  },
+  {
+    "req": "PATCH /api/retail/customer [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "nickname": "Golden Two",
+        "avatar_url": null,
+        "phone": null,
+        "tier_key": "seed",
+        "lifetime_spend": 0,
+        "points_balance": 7,
+        "point_value_yuan": 1,
+        "coupon_count": 0,
+        "balance": 0,
+        "created_at": "<T>"
+      }
+    }
+  },
+  {
+    "req": "PATCH /api/retail/customer [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "no_fields"
+    }
+  },
+  {
+    "req": "POST /api/retail/customer/avatar [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "url": "/api/retail/media/2",
+        "sec_status": "skipped"
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/customer/avatar [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "bad_data_uri"
+    }
+  },
+  {
+    "req": "GET /api/retail/customer [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "nickname": "Golden Two",
+        "avatar_url": null,
+        "phone": null,
+        "tier_key": "seed",
+        "lifetime_spend": 0,
+        "points_balance": 7,
+        "point_value_yuan": 1,
+        "coupon_count": 0,
+        "balance": 0,
+        "created_at": "<T>",
+        "addresses": [],
+        "favorite_count": 0
+      }
+    }
+  }
+]

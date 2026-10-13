@@ -29,16 +29,17 @@ const REPO = path.join(__dirname, '..', '..');
 
 // One seeded app per area. Returns { call, seed, close, outbound }.
 async function openApp() {
-  const F = require('./tenant-fixture');
-  const h = F.harness();
-  const db = h.db;
-  require(path.join(REPO, 'routes', 'backend-auth.js'));
-  const router = require(path.join(REPO, 'routes', 'retail.js'));
-  const express = require('express');
+  // A map key in the shell would turn an address save into a lookup with an
+  // answer from outside. Tests never load .env, so these are normally unset
+  // already; blanking them keeps a developer's own shell from changing what
+  // gets recorded. Read at module load, so this has to come first.
+  for (const k of ['AMAP_MAPS_KEY', 'TENCENT_MAPS_KEY']) process.env[k] = '';
 
-  // Nothing may leave the machine. Recorded rather than thrown, so the answer
-  // the route gives is the one it gives offline, and the suite reports it.
+  // Nothing may leave the machine, by fetch or by node's http/https. Recorded
+  // rather than thrown, so the answer the route gives is the one it gives
+  // offline, and the suite reports it.
   const outbound = [];
+  const isLocal = (host) => /^(127\.0\.0\.1|localhost)$/.test(String(host || '').replace(/:\d+$/, ''));
   const realFetch = global.fetch;
   global.fetch = (url, opts) => {
     const u = String(url && url.url ? url.url : url);
@@ -48,6 +49,31 @@ async function openApp() {
     }
     return realFetch(url, opts);
   };
+  const { EventEmitter } = require('events');
+  const realRequest = {};
+  for (const mod of [require('http'), require('https')]) {
+    for (const fn of ['request', 'get']) {
+      const real = mod[fn];
+      realRequest[(mod === require('http') ? 'http.' : 'https.') + fn] = real;
+      mod[fn] = function (...args) {
+        const o = typeof args[0] === 'string' || args[0] instanceof URL ? new URL(String(args[0])) : (args[0] || {});
+        const host = o.hostname || o.host;
+        if (isLocal(host)) return real.apply(this, args);
+        outbound.push(`${fn} ${host}${o.pathname || o.path || ''}`.replace(/key=[^&]+/, 'key=…'));
+        const fake = new EventEmitter();
+        Object.assign(fake, { write() {}, end() {}, abort() {}, destroy() {}, setTimeout() { return fake; }, setHeader() {} });
+        process.nextTick(() => fake.emit('error', new Error('golden: outbound request blocked')));
+        return fake;
+      };
+    }
+  }
+
+  const F = require('./tenant-fixture');
+  const h = F.harness();
+  const db = h.db;
+  require(path.join(REPO, 'routes', 'backend-auth.js'));
+  const router = require(path.join(REPO, 'routes', 'retail.js'));
+  const express = require('express');
 
   const tenant = db.prepare('SELECT id FROM tenants ORDER BY id LIMIT 1').get().id;
   db.prepare(`INSERT INTO tenant_users (id, tenant_id, username, password, role, is_active)
@@ -93,17 +119,24 @@ async function openApp() {
 
   return {
     db, ins, customer, call, outbound,
-    close: () => new Promise((r) => server.close(r)).then(() => { global.fetch = realFetch; }),
+    close: () => new Promise((r) => server.close(r)).then(() => {
+      global.fetch = realFetch;
+      for (const [k, fn] of Object.entries(realRequest)) require(k.split('.')[0])[k.split('.')[1]] = fn;
+    }),
   };
 }
 
-// Timestamps are the only thing that differs between two honest runs.
+// Timestamps differ between two honest runs, and so does a referral code,
+// which is minted at random (ensureReferralCode). The code is masked by field
+// name AND shape, so nothing else that happens to be called "code" is hidden.
+const TS = /\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(\.\d+)?Z?/g;
 function normalise(text) {
   let v;
-  try { v = JSON.parse(text); } catch { return text; }
-  return JSON.parse(JSON.stringify(v, (_k, x) => {
+  try { v = JSON.parse(text); } catch { return String(text).replace(TS, '<T>'); }   // CSV, HTML
+  return JSON.parse(JSON.stringify(v, (k, x) => {
     if (typeof x !== 'string') return x;
-    return x.replace(/\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(\.\d+)?Z?/g, '<T>');
+    if ((k === 'code' || k === 'referral_code') && /^[A-Z0-9]+-[A-Z0-9]{6}$/.test(x)) return '<REFERRAL_CODE>';
+    return x.replace(TS, '<T>');
   }), (k, x) => (/(_ms|_time)$/.test(k) && typeof x === 'number' ? '<N>' : x));
 }
 
