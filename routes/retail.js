@@ -149,7 +149,7 @@ const wxSec = require('../lib/wx-sec-check');   // WeChat 内容安全 — every
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
 // than crashing — the image endpoint just skips the resize branch when null.
 // SQL flag: does this row, or an active variant sibling, have a photo?
-const { hasImageFallbackSql } = require('../lib/product-image-sql');
+const { hasImageFallbackSql, touchPhotoBorrowers } = require('../lib/product-image-sql');
 const { choicePhotoVersions } = require('../lib/choice-photo');
 let sharp = null;
 try { sharp = require('sharp'); } catch (e) { console.warn('[retail] sharp not available — image thumbnails disabled:', e.message); }
@@ -25180,6 +25180,8 @@ router.post('/api/retail-admin/products/:id/restore-version', requireRetailAdmin
     // the transaction's own handle rather than through the async saver.
     //
     restoreProductOptionsFromSnapshot(db, id, snap);
+    // A restored photo is a new photo for the sizes that borrow this one.
+    if (cols.some(c => c === 'images' || c === 'image_data' || c === 'image_url')) touchPhotoBorrowers(db, id);
     // §377 — restoring a size's shipping restores the product's: the restored
     // value goes to every other size, or one restore would split the family.
     if (cols.includes('ship_modes')) {
@@ -25535,6 +25537,10 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
       return res.status(409).json({ success: false, error: 'sku_taken', conflict: findSkuConflict(body.sku, id) });
     throw e;
   }
+
+  // A size with no photo of its own shows this one's — move its link on too,
+  // or phones keep the old picture (lib/product-image-sql.js).
+  if ('images' in body) touchPhotoBorrowers(tdb(), id);
 
   // Persist customer-choice options (replace-all). Retail-owned like price/photos,
   // so allowed even when core catalog fields are locked.
@@ -26497,6 +26503,8 @@ router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) =
   // frees the code for a live product. (No restore UI exists, so this is safe;
   // the freed code is recorded in the activity log for audit.)
   tdb().prepare('UPDATE store_products SET is_active = 0, is_published = 0, sku = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  // A size that borrowed this photo now borrows another sibling's (or none).
+  touchPhotoBorrowers(tdb(), id);
   logActivity(req.user.id, req.user.username, 'delete', 'product_retail', id, { name: existing.name_en, freed_sku: existing.sku || null }, req.ip);
   res.json({ success: true });
 });
