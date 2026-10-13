@@ -24,6 +24,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 2026-10-13 · v4.521 — **§473 · A PICK-ANY QUESTION CAN LET ONE ANSWER BE PICKED MORE THAN ONCE (§153 AMENDED) — DECIDED BY ASH:** *"can't select 2 items that are the same for example 2 medjool boats"*, with a photo of the till's *Small Bites Selection* sheet (*At least 2*), then three choices put to him: a switch per question, a − n + counter on each answer, everywhere at once. A new `allow_repeat` column on `retail_product_options`, 0 on every existing row, so nothing already authored changes. With it on, a pick-any question counts every pick toward its floor and ceiling, charges each one and takes each one off a linked shelf. A repeat is stored on the order line as the same entry written twice, so money, stock and cost need no second rule; printers fold it into *Medjool Boats ×2*. Two Chinese strings composed by Claude; see the vocabulary's v1.330. Schema: one added column. No change to `.gitignore` or CI. See §473.
 
+2026-10-13 · v4.519 — **§471 · THE DEAD TRANSACTION COUNT IN `test_tx_conversion_batch2.js` IS REMOVED, NOT REBUILT — ASKED BY ASH**, to the item §470 found and left open. The check counted the transactions in `routes/retail.js` still on the old form by running `scripts/diagnose_async_conversion_scope.js`, and expected 30. **That script was deleted on purpose** on 2026-08-23 in *"Scrap the Postgres migration completely"* (`533f1244`), by name, as the AST conversion-count authority. Since then the check has printed *"count check SKIPPED"* on every run, main included. The number measured how far the async conversion had got, and that conversion is cancelled, so there is nothing for it to count toward. The seven named routes that must stay on the old form are still checked one by one. No string, no schema, no change to `.gitignore` or CI. See §471.
+
 2026-10-13 · v4.518 — **§470 · `routes/retail.js` IS SPLIT BY AREA, ONE AREA PER PR, WITH NO CHANGE IN BEHAVIOUR — DECIDED BY ASH:** *"Split retail.js up"*, then *"start"* to the plan put to him. The file is 43,320 lines and 402 endpoints. Each area moves into its own file under `routes/retail/`, mounted inside `retail.js` at the spot the area left, so no request is answered by a different handler. Polls and voting go first, as the pilot. Held by `scripts/test_retail_split_routes.js`, which fails if a moved endpoint and one left behind could answer the same request. No string, no schema, no change to `.gitignore` or CI. See §470.
 
 2026-10-13 · v4.517 — **§469 · A STAFF CLAIM CAN BE RE-FILED FROM THE ROWS BEHIND A CATEGORY — ASKED BY ASH:** *"is it possible now to change category of expense that was choose by a user ?"*, then *"ok do it"*, with a screenshot of the phone's Finance → *Other* sheet holding a ¥5,000 transfer to the construction company. **It was already possible** (§146) from Transactions and Approvals, but not from this list, where a wrong category is actually seen. **NOW:** on the phone, a staff-claim row in a category's sheet is tappable for whoever may re-file (`expenses:approve` or `expenses:cancel`, the server's own gate); it opens a category picker under the row, the same native select as Transactions. A pick posts the existing `/staff-expenses/:id/category`, the row leaves the list, and the sheet stays open so the next claim can be fixed; the figures, the ledger and the approvals queue re-read. The sheet is re-found by its category text after the refresh (the breakdown is sorted by amount, so the index moves), and closes if the line was emptied; its layer key is now one constant instead of the index. `GET /finance/summary/category` also returns `expense_categories` (active accounting list, same read as Transactions). Purchase-order rows are unchanged: their category is set on the order. **Not changed:** the re-file route, the schema, the desktop drill-down (a follow-up if wanted), `.gitignore`, CI. No new string; every pair is live. Held by `scripts/test_mobile_finance_summary.js` §4b and `scripts/test_finance_summary.js`. See §469.
@@ -30763,6 +30765,56 @@ counts the old-style transactions left in `retail.js` by running
 `scripts/diagnose_async_conversion_scope.js`. That script is no longer in the
 repo, so the check has been reporting itself as skipped. The vote handler's
 transaction is one of the 30 it would count, and it now lives in the polls part.
+*Closed in §471: the check is removed, because the script was retired on purpose.*
+
+No string, no schema, no change to `.gitignore` or CI.
+
+## §471 — THE DEAD TRANSACTION COUNT IN `test_tx_conversion_batch2.js` IS REMOVED, NOT REBUILT
+
+**Asked by Ash, 2026-10-13**, to close the item §470 found: restore
+`scripts/diagnose_async_conversion_scope.js` and make it count across
+`retail.js` and its parts, or, if it was retired on purpose, remove the check
+and say so here.
+
+**It was retired on purpose.** `git log --all` on the script shows four
+commits, the last being `533f1244`, *"Scrap the Postgres migration
+completely"* (2026-08-24 +0800, the §24 ADDENDUM dated 2026-08-23). That
+commit's message lists *"the AST conversion authority"* among the 52 files
+deleted, and the ADDENDUM names it again as *"the AST conversion-count
+authority"*. It was not lost by accident.
+
+**What the check was for.** Section 12 of `scripts/test_tx_conversion_batch2.js`
+asserted that 30 `db.transaction()` blocks were left in `routes/retail.js`,
+read from that script's AST count. Its own comment called it the tripwire for
+a conversion nobody intended, a number meant to move with each conversion
+batch. With the conversion cancelled there are no batches, so the number has
+nothing to move toward. Since the script went, the check printed *"count check
+SKIPPED"* on every run, main included, and guarded nothing.
+
+**What was done.** The count and the function that ran the script are removed.
+A comment stands in their place saying why, and pointing here. The rest of
+section 12 is unchanged and still runs. It reads `retail.js` and every
+`routes/retail/` part as one text, so it follows the §470 split. It checks that
+the ten converted handlers are async and use `withTransaction`, that none of
+them calls `tdb()` or awaits inside its transaction, and that the seven named
+routes and the checkout's `.immediate()` are still on the old form.
+
+**Why not restore it.** Rebuilding the script would bring back about 900 lines
+of migration tooling to guard a number that no longer means anything. A grep
+count is ruled out by the test's own history: it matched a comment and was off
+by one, and a regex comment-stripper returned 0 against an actual 39.
+
+**Found while doing this, not fixed here:**
+
+- `scripts/test-support/tx-detection-fixture.js` existed only for the deleted
+  script's `--self-test` and is now read by nothing. It is still listed in
+  the `scripts/diagnose_deployed_tree.js` manifest, whose `MANIFEST_COMMIT`
+  is already marked stale.
+- Two comments in `lib/` still name the deleted script as the authority for
+  their figures: `lib/db-transaction.js` (*"26 of the 56 … the other 30"*) and
+  `lib/express-async-guard.js` (*"207 of routes/retail.js's 327 handlers"*).
+  Both are dated statements, and both are now out of date. A `lib/` edit
+  ships to production, so they are left for a PR of their own.
 
 No string, no schema, no change to `.gitignore` or CI.
 
