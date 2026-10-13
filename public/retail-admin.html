@@ -808,6 +808,13 @@
      never loads. */
   html:not([data-ui-lang]) body { visibility: hidden; }
 
+  /* Inline emphasis is 500, never the browser's bold 700: Inter 400/500 only,
+     bold reads as shouting (tacet-design-system.md §2; audit 2026-10-13, P6).
+     Here, not in retail-admin.css, because the phone admin, the till and the
+     editors load that sheet too and keep their own type. A class or #tab rule
+     that sets a weight on a <b> still wins (this is a bare type selector). */
+  b, strong { font-weight: 500; }
+
   /* ── Boot splash ────────────────────────────────────────────────────
      The guard above blanks the page until the app JS stamps data-ui-lang,
      which on a cold cache is a second or two of nothing. This fills it: the
