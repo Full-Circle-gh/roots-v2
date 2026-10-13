@@ -52,7 +52,7 @@ ok(VOT.includes('<div class="vot-ed-head pin-head">'), 'Voting → the poll edit
 console.log('\nforms whose buttons are at the end');
 ok(count(HTML, /<div class="fb-save pin-foot">\s*<button class="btn" onclick="saveBatchSchedule\(\)">/g) === 2,
   'Fresh batches: the schedule and the checkout pop-up');
-ok(/<div class="pin-foot"[^>]*>\s*<button class="btn btn-primary" onclick="_savePrinter\(\)">/.test(HTML), 'Cloud printers: Save all');
+ok(/<div class="pin-foot"[^>]*>\s*<button class="btn" onclick="_savePrinter\(\)">/.test(HTML), 'Cloud printers: Save all');
 ok(HTML.includes('<div class="bx-sendbar pin-foot">'), 'Broadcasts: Send');
 ok(/<div class="pin-foot"[^>]*>\s*\$\{isEdit/.test(OPS), 'Settings → Operations: a new store');
 ok(count(PUR, /<div class="pu2-wizfoot pin-foot">/g) === 5,

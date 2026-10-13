@@ -9533,10 +9533,7 @@
                   </select>
                 </div>
                 <div class="helper" style="margin-top: 8px;">
-                  <b>Featured</b> uses the manual order on the Products page.<br>
-                  <b>Newest</b> sorts by date added (descending).<br>
-                  <b>Popular</b> sorts by order count in the last 30 days.<br>
-                  · <b>精选</b>采用产品页上的手动排序;<b>最新</b>按添加日期倒序排列;<b>最热销</b>按最近 30 天的下单次数排序。
+                  <span data-lang-block="en"><b>Featured</b> uses the manual order on the Products page.<br> <b>Newest</b> sorts by date added (descending).<br> <b>Popular</b> sorts by order count in the last 30 days.</span><span data-lang-block="cn"><b>精选</b>采用产品页上的手动排序;<b>最新</b>按添加日期倒序排列;<b>最热销</b>按最近 30 天的下单次数排序。</span>
                 </div>
               </div>
             </div>
@@ -9670,7 +9667,7 @@
               <h3>New-order alert to your phone · 新订单手机提醒
                 <span id="wecom-app-chip" style="margin-left:8px;vertical-align:middle"></span>
               </h3>
-              <div class="muted">Get a card in your WeChat Work (企业微信 / WeCom) app the moment a new order is paid — order number, amount, recipient and address. Works even when this backend is closed, and works on the international WeCom app. · 每当有新订单付款,立即在企业微信 App 收到一张卡片(订单号、金额、收货人、地址)。即使后台没开也能收到,国际版 WeCom 同样适用。</div>
+              <div class="muted"><span data-lang-block="en">Get a card in your WeChat Work (企业微信 / WeCom) app the moment a new order is paid — order number, amount, recipient and address. Works even when this backend is closed, and works on the international WeCom app.</span><span data-lang-block="cn">每当有新订单付款,立即在企业微信 App 收到一张卡片(订单号、金额、收货人、地址)。即使后台没开也能收到,国际版 WeCom 同样适用。</span></div>
             </div>
             <div class="illus-row">
               <div class="mini-phone">
@@ -9791,10 +9788,10 @@
 
           <div class="group-card" data-cap="settings:payments" data-sees="customer">
             <div class="group-card-head">
-              <h3>Alipay manual收款 (静态收款码) · 支付宝手动收款
+              <h3>Manual Alipay payment (static QR code) · 支付宝手动收款
                 <span id="alipay-manual-chip" style="margin-left:8px;vertical-align:middle"></span>
               </h3>
-              <div class="muted">Temporary fallback while 当面付 API access is pending. Customer picks Alipay → sees this收款码 + the amount → scans, pays, and uploads the payment screenshot in the app. Staff verify the screenshot on the order and click "Mark paid". Money lands in whatever account this收款码 belongs to. · 当面付接口开通前的临时方案。顾客选择支付宝后看到此收款码与金额,扫码付款并在小程序上传付款截图;客服在订单中核对截图后点击「标记已付款」。款项进入此收款码所属账户。</div>
+              <div class="muted"><span data-lang-block="en">Temporary fallback while 当面付 API access is pending. Customer picks Alipay → sees this收款码 + the amount → scans, pays, and uploads the payment screenshot in the app. Staff verify the screenshot on the order and click "Mark paid". Money lands in whatever account this收款码 belongs to.</span><span data-lang-block="cn">当面付接口开通前的临时方案。顾客选择支付宝后看到此收款码与金额,扫码付款并在小程序上传付款截图;客服在订单中核对截图后点击「标记已付款」。款项进入此收款码所属账户。</span></div>
             </div>
             <div class="illus-row">
               <div class="ctrl">
@@ -9806,7 +9803,7 @@
                   <input type="text" id="alipay-manual-account" placeholder="e.g. 哈素萌 / 柏玲" style="width: 100%;">
                 </div>
                 <div class="field" style="margin: 0;">
-                  <label for="alipay-manual-file" class="stacked">收款码 image · 收款二维码图片</label>
+                  <label for="alipay-manual-file" class="stacked">Payment QR code image · 收款二维码图片</label>
                   <input type="file" id="alipay-manual-file" accept="image/*" onchange="_alipayManualPickFile(event)">
                   <img id="alipay-manual-preview" alt="" style="display:none; max-width:160px; max-height:220px; margin-top:8px; border:1px solid var(--line); border-radius:8px;">
                 </div>
@@ -9828,7 +9825,7 @@
                     <div class="field" style="margin: 0 0 8px;">
                       <label for="alipay-manual-payee" class="stacked">Accepted payee names · 收款方名称(可多个)</label>
                       <input type="text" id="alipay-manual-payee" data-ph-en="哈素萌, 玲 — separate with commas" data-ph-cn="多个用逗号分隔" placeholder="哈素萌, 玲 — separate with commas" style="width: 100%;">
-                      <div class="muted" style="margin-top:4px; line-height:1.5;">List every name your 收钱码 can show and any one is enough to pass. The success screen shows the shop's display name (哈素萌); the 账单详情 page the customer opens later shows the registered name instead (*玲(个人)) — list both, or leave blank to skip this check. Stars, brackets and spaces are ignored. · 请列出收钱码可能显示的所有名称,命中任一即通过。支付成功页显示店铺名(哈素萌),顾客事后打开的账单详情页显示的是账户全称(*玲(个人)) — 两个都填,或留空则不检查。星号、括号、空格自动忽略。</div>
+                      <div class="muted" style="margin-top:4px; line-height:1.5;"><span data-lang-block="en">List every name your 收钱码 can show and any one is enough to pass. The success screen shows the shop's display name (哈素萌); the 账单详情 page the customer opens later shows the registered name instead (*玲(个人)) — list both, or leave blank to skip this check. Stars, brackets and spaces are ignored.</span><span data-lang-block="cn">请列出收钱码可能显示的所有名称,命中任一即通过。支付成功页显示店铺名(哈素萌),顾客事后打开的账单详情页显示的是账户全称(*玲(个人)) — 两个都填,或留空则不检查。星号、括号、空格自动忽略。</span></div>
                     </div>
                     <div class="field" style="margin: 0 0 8px;">
                       <label for="alipay-manual-window" class="stacked">Pay within (minutes, 0 = no deadline) · 付款期限(分钟,0=不限)</label>
@@ -9852,7 +9849,7 @@
                   <span id="alipay-manual-status" class="muted" style="font-size: 11px;"></span>
                 </div>
                 <div class="helper" style="margin-top: 10px; line-height: 1.55;">
-                  Open Alipay App → 收付款 → 收款 → save the收款码 image, then upload it here. The static code carries no amount, so the customer types the shown amount when paying. Uncheck Enable (or clear the image) to turn off and fall back to WeChat-only. · 支付宝 App → 收付款 → 收款 → 保存收款码图片,上传到这里。静态码不含金额,顾客付款时手动输入页面显示的金额。取消勾选或清除图片即关闭。
+                  <span data-lang-block="en">Open Alipay App → 收付款 → 收款 → save the收款码 image, then upload it here. The static code carries no amount, so the customer types the shown amount when paying. Uncheck Enable (or clear the image) to turn off and fall back to WeChat-only.</span><span data-lang-block="cn">支付宝 App → 收付款 → 收款 → 保存收款码图片,上传到这里。静态码不含金额,顾客付款时手动输入页面显示的金额。取消勾选或清除图片即关闭。</span>
                 </div>
               </div>
             </div>
@@ -9863,7 +9860,7 @@
               <h3>SMS when delivered (out-of-Guangzhou orders) · 送达短信(广州市外订单)
                 <span id="aliyun_sms-chip" style="margin-left:8px;vertical-align:middle"></span>
               </h3>
-              <div class="muted">Text the customer the moment an out-of-town courier order is marked delivered — for shoppers who aren't watching the mini app. Same-city Guangzhou deliveries and in-store pickups are skipped (they already get the in-app notice). Uses your Aliyun 短信服务 package. · 当广州市外的快递订单标记为「已送达」时,给顾客发一条短信(适合不盯着小程序的顾客)。广州同城配送与到店自提不发送(已有应用内通知)。使用你的阿里云短信套餐包。</div>
+              <div class="muted"><span data-lang-block="en">Text the customer the moment an out-of-town courier order is marked delivered — for shoppers who aren't watching the mini app. Same-city Guangzhou deliveries and in-store pickups are skipped (they already get the in-app notice). Uses your Aliyun 短信服务 package.</span><span data-lang-block="cn">当广州市外的快递订单标记为「已送达」时,给顾客发一条短信(适合不盯着小程序的顾客)。广州同城配送与到店自提不发送(已有应用内通知)。使用你的阿里云短信套餐包。</span></div>
             </div>
             <div class="illus-row">
               <div class="mini-phone">
@@ -9885,15 +9882,15 @@
                   <input type="password" id="aliyun_sms-ak_secret" autocomplete="off" data-ph-en="paste AccessKey Secret" data-ph-cn="粘贴 AccessKey Secret" placeholder="paste AccessKey Secret" style="width: 100%; font-family: monospace;">
                 </div>
                 <div class="field" style="margin: 0 0 8px;">
-                  <label for="aliyun_sms-sign_name" class="stacked">Signature (签名) · 短信签名</label>
+                  <label for="aliyun_sms-sign_name" class="stacked"><span data-lang-block="en">Signature (签名)</span><span data-lang-block="cn">短信签名</span></label>
                   <input type="text" id="aliyun_sms-sign_name" placeholder="e.g. 满圆 (must be approved in 签名管理)" style="width: 100%;">
                 </div>
                 <div class="field" style="margin: 0;">
-                  <label for="aliyun_sms-template_delivered" class="stacked">Delivered template code (模板CODE) · 送达模板编号</label>
+                  <label for="aliyun_sms-template_delivered" class="stacked"><span data-lang-block="en">Delivered template code (模板CODE)</span><span data-lang-block="cn">送达模板编号</span></label>
                   <input type="text" id="aliyun_sms-template_delivered" placeholder="e.g. SMS_123456789" style="width: 100%; font-family: monospace;">
                 </div>
                 <div class="field" style="margin: 0;">
-                  <label for="aliyun_sms-template_otp" class="stacked">Login OTP template code (模板CODE) · 网页登录验证码模板编号</label>
+                  <label for="aliyun_sms-template_otp" class="stacked"><span data-lang-block="en">Login OTP template code (模板CODE)</span><span data-lang-block="cn">网页登录验证码模板编号</span></label>
                   <input type="text" id="aliyun_sms-template_otp" placeholder="e.g. SMS_987654321 (template variable must be code)" style="width: 100%; font-family: monospace;">
                 </div>
                 <div class="field" style="margin: 10px 0 0;">
@@ -9919,7 +9916,7 @@
           <div class="group-card">
             <div class="group-card-head">
               <h3>Alternative: group-bot webhook · 备选:群机器人 Webhook</h3>
-              <div class="muted">Only if you use mainland 企业微信 with an internal (company-only) group. Paste the group robot's webhook and the card posts there instead. Leave blank if you're using the app above. · 仅当你使用国内企业微信且有内部群时。填入群机器人的 Webhook,卡片会发到群里。若用上面的 App 方式,请留空。</div>
+              <div class="muted"><span data-lang-block="en">Only if you use mainland 企业微信 with an internal (company-only) group. Paste the group robot's webhook and the card posts there instead. Leave blank if you're using the app above.</span><span data-lang-block="cn">仅当你使用国内企业微信且有内部群时。填入群机器人的 Webhook,卡片会发到群里。若用上面的 App 方式,请留空。</span></div>
             </div>
             <div class="illus-row">
               <div class="ctrl">
@@ -10024,7 +10021,7 @@
           <div class="group-card">
             <div class="group-card-head">
               <h3>System Alerts · 系统告警</h3>
-              <div class="muted">Sends operational alerts — a channel (Meituan/闪购) disconnecting, the proxy going down, or the storefront not responding — to a dedicated WeCom group. Keep this separate from your order group so ops noise doesn't bury orders. · 把运营告警(渠道掉线、代理中断、店铺无响应等)发到一个专用企业微信群,与订单群分开,避免淹没订单。</div>
+              <div class="muted"><span data-lang-block="en">Sends operational alerts — a channel (Meituan/闪购) disconnecting, the proxy going down, or the storefront not responding — to a dedicated WeCom group. Keep this separate from your order group so ops noise doesn't bury orders.</span><span data-lang-block="cn">把运营告警(渠道掉线、代理中断、店铺无响应等)发到一个专用企业微信群,与订单群分开,避免淹没订单。</span></div>
             </div>
             <div class="illus-row">
               <div class="ctrl">
@@ -10040,7 +10037,7 @@
                   <span id="system_alerts-test-status" class="muted" style="font-size: 11px;"></span>
                 </div>
                 <div class="helper" style="margin-top: 10px; line-height: 1.55;">
-                  Create a NEW WeCom group (separate from orders) → ··· → 群机器人 → 添加 → copy its Webhook. Paste it here, tick Enable, Send test to confirm it lands, then Save with the main "Save settings" button. Only qyapi.weixin.qq.com URLs are accepted. · 新建一个企业微信群(与订单群分开)→ ··· → 群机器人 → 添加 → 复制 Webhook,粘贴到此处,勾选开启,点"发送测试"确认,再用底部"保存设置"保存。仅接受 qyapi.weixin.qq.com 地址。
+                  <span data-lang-block="en">Create a NEW WeCom group (separate from orders) → ··· → 群机器人 → 添加 → copy its Webhook. Paste it here, tick Enable, Send test to confirm it lands, then Save with the main "Save settings" button. Only qyapi.weixin.qq.com URLs are accepted.</span><span data-lang-block="cn">新建一个企业微信群(与订单群分开)→ ··· → 群机器人 → 添加 → 复制 Webhook,粘贴到此处,勾选开启,点"发送测试"确认,再用底部"保存设置"保存。仅接受 qyapi.weixin.qq.com 地址。</span>
                 </div>
               </div>
             </div>
@@ -10051,21 +10048,19 @@
         <div class="sub-panel" id="sub-cs">
           <h2>Customer service · 客户服务</h2>
           <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
-            Shows a chat-bubble button on the Me tab, checkout, and order pages. Tapping opens a chat with your team.
-            WeCom (企业微信) is the preferred mode — customers get a live conversation with a staff agent.
-            · 在"我的"页、结算页和订单页显示一个聊天气泡按钮,点击即可与你的团队对话。推荐使用企业微信(WeCom)模式 —— 顾客可与客服人员实时交流。
+            <span data-lang-block="en">Shows a chat-bubble button on the Me tab, checkout, and order pages. Tapping opens a chat with your team. WeCom (企业微信) is the preferred mode — customers get a live conversation with a staff agent.</span><span data-lang-block="cn">在"我的"页、结算页和订单页显示一个聊天气泡按钮,点击即可与你的团队对话。推荐使用企业微信(WeCom)模式 —— 顾客可与客服人员实时交流。</span>
           </div>
 
           <!-- Mode -->
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>How customers reach you · 顾客联系方式</h3>
-              <div class="muted">Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet. · 三种方式可选。企业微信最适合持续对话;微信客服是轻量的内置方案;二维码则是两者都未配置时的备选。</div>
+              <div class="muted"><span data-lang-block="en">Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet.</span><span data-lang-block="cn">三种方式可选。企业微信最适合持续对话;微信客服是轻量的内置方案;二维码则是两者都未配置时的备选。</span></div>
             </div>
             <select id="cfg-cs-mode" aria-label="How customers reach you · 顾客联系方式" style="width:100%;max-width:460px;padding:10px 12px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
               <option value="off">Off — hide the button entirely · 关闭 — 完全隐藏按钮</option>
-              <option value="wecom">WeCom (企业微信) — recommended · 推荐</option>
-              <option value="kf">WeChat 客服 — public-account customer service · 公众号客服</option>
+              <option value="wecom">WeCom — recommended · 企业微信 — 推荐</option>
+              <option value="kf">WeChat customer service — public account · 微信客服 — 公众号客服</option>
               <option value="qr">QR code — show a scannable image · 二维码 — 显示可扫描图片</option>
             </select>
             <div class="muted" style="margin-top: 8px; font-size: 12px; line-height: 1.5;">
@@ -11648,7 +11643,7 @@
             </div>
 
             <div id="ops-stores-list" class="muted" style="font-size:13px">Loading…</div>
-            <div style="margin-top:12px"><button class="btn btn-primary" onclick="_opsStoreForm(null)">+ Add store · 添加门店</button></div>
+            <div style="margin-top:12px"><button class="btn" onclick="_opsStoreForm(null)">+ Add store · 添加门店</button></div>
             <div id="ops-store-form"></div>
             <div id="ops-store-staff"></div>
           </div>
@@ -11697,7 +11692,7 @@
                 <div class="muted"><span data-lang-block="en">The same Tacet, on your staff's phones. What they see follows the role you gave them (Settings → Team): a shop staffer counts that store's shelves, a kitchen staffer enters only <b>how many they just made</b>. No PC, and no access to the rest of this back office. Open it on a phone and tap <b>Add to Home Screen</b> to use it like an installed app, then share the link below with staff.</span><span data-lang-block="cn">同一个 Tacet,装在员工手机上。看到哪些功能取决于你为其设置的角色(设置 → 团队):门店员工盘点本店货架,后厨员工<b>只需输入刚制作的数量</b>。无需电脑,也无法进入后台其他功能。在手机上打开后点按<b>“添加到主屏幕”</b>即可像已安装的应用一样使用,再把下面的链接发给员工。</span></div>
               </div>
               <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 2px 2px;">
-                <button class="btn btn-primary" onclick="window.location.href='/m'">Open Tacet · 打开 Tacet</button>
+                <button class="btn" onclick="window.location.href='/m'">Open Tacet · 打开 Tacet</button>
                 <button class="btn" id="qs-copy-link" onclick="qsCopyStockLink()">Copy staff link · 复制员工链接</button>
                 <code id="qs-link" style="font-size:12px;color:var(--text-3);"></code>
               </div>
@@ -11773,12 +11768,12 @@
           <div class="group-card">
             <div class="group-card-head">
               <h3>Order routing · 派单 — Maps geocoding · 地图定位</h3>
-              <div class="muted">Geocodes store + customer addresses so paid orders route to the geographically closest store (GPS distance), not just by district name. Set <code>AMAP_MAPS_KEY</code> (高德, recommended) <em>or</em> <code>TENCENT_MAPS_KEY</code> in <code>/root/roots-v2/.env</code>, then restart pm2. Free keys: <a href="https://console.amap.com" target="_blank" style="color:var(--accent)">console.amap.com</a> · <a href="https://lbs.qq.com" target="_blank" style="color:var(--accent)">lbs.qq.com</a>. <strong>Without a working key, distances fall back to district centres and can be several km off.</strong> · 地址保存时自动转经纬度,按 GPS 距离选最近门店。无可用 key 时退回到区中心点,距离会偏差数公里。</div>
+              <div class="muted"><span data-lang-block="en">Geocodes store + customer addresses so paid orders route to the geographically closest store (GPS distance), not just by district name. Set <code>AMAP_MAPS_KEY</code> (高德, recommended) <em>or</em> <code>TENCENT_MAPS_KEY</code> in <code>/root/roots-v2/.env</code>, then restart pm2. Free keys: <a href="https://console.amap.com" target="_blank" style="color:var(--accent)">console.amap.com</a> · <a href="https://lbs.qq.com" target="_blank" style="color:var(--accent)">lbs.qq.com</a>. <strong>Without a working key, distances fall back to district centres and can be several km off.</strong></span><span data-lang-block="cn">地址保存时自动转经纬度,按 GPS 距离选最近门店。无可用 key 时退回到区中心点,距离会偏差数公里。</span></div>
             </div>
             <div id="integrations-status" class="muted" style="font-size:13px;padding:14px 16px;background:var(--bg-elev-1);border-radius:8px;margin-bottom:14px">Loading status…</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
               <button class="btn" onclick="loadIntegrationsStatus()">↻ Refresh status · 刷新状态</button>
-              <button class="btn btn-primary" onclick="_geocodeBackfill()">🗺 Geocode all stores &amp; addresses now · 立即定位所有门店与地址</button>
+              <button class="btn" onclick="_geocodeBackfill()">🗺 Geocode all stores &amp; addresses now · 立即定位所有门店与地址</button>
             </div>
             <div class="muted" style="font-size:11px;margin-top:10px"><strong>↻ Refresh status</strong> only re-counts — it does NOT geocode. Use <strong>🗺 Geocode all</strong> to actually fetch coordinates. New addresses + stores also geocode automatically on save. · ↻ 仅刷新计数,不定位;🗺 才会真正获取坐标。新地址保存时自动定位。</div>
           </div>
@@ -11883,7 +11878,7 @@
               <option value="">— Use each order's own store · 按订单所属门店 —</option>
             </select>
             <div class="pin-foot" style="display:flex;gap:10px;flex-wrap:wrap">
-              <button class="btn btn-primary" onclick="_savePrinter()">💾 Save all · 全部保存</button>
+              <button class="btn" onclick="_savePrinter()">💾 Save all · 全部保存</button>
             </div>
           </div>
         </div>
@@ -11981,7 +11976,9 @@
 
         <!-- ────── shared save bar ────── -->
         <div class="save-bar" style="display: none;"><!-- §279: Notifications only; the Settings switcher shows it there. -->
-          <button class="btn btn-primary" onclick="saveConfig()">
+          <!-- Secondary, not primary: Settings is an A4 Console, whose save is
+               Secondary and pinned to the group it saves (tacet-desktop-patterns §2). -->
+          <button class="btn" onclick="saveConfig()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             Save settings · 保存设置
           </button>

@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.333 · 2026-10-13 · SETTINGS → CUSTOMER SERVICE — 2 STRINGS COMPOSED BY CLAUDE (`WeCom — recommended · 企业微信 — 推荐`, `WeChat customer service — public account · 微信客服 — 公众号客服`), EACH TWO LIVE TERMS JOINED; THE MODE PICKER'S OPTIONS STOP RENDERING BOTH LANGUAGES.** See *Settings → Customer service mode picker*.
+
 **v1.332 · 2026-10-13 · §475 A MANAGER'S TILL PIN — 8 STRINGS COMPOSED BY CLAUDE, ALL BUILT ON `PIN 码` AND THE LIVE 经理 / 收银台 / 折扣 / 新密码 SHAPES; `两次输入的 PIN 码不一致` AND `请填写所有字段` LIFTED FROM THE PASSWORD SHEET; THE LOCKOUT SENTENCE COPIED WHOLE.** See *A manager's till PIN (§475)*.
 
 **v1.331 · 2026-10-13 · §474 A MANAGER'S DISCOUNT AT THE TILL — 6 STRINGS COMPOSED BY CLAUDE (`Friends & family · 亲友`, `Complaint · 投诉`, `Till discount · 收银台折扣`, `Give discounts at the till · 前台收银打折`, the capability's money note, and the New order forms' `A discount can only be given at the till · 折扣只能在收银台给出。`), BUILT ON THE LIVE 折扣 / 收银台 / 前台收银; `折扣最多 20%` LIFTED FROM THE LIVE `折扣最多 100%`; EVERYTHING ELSE ON THE SHEET COPIED WHOLE.** See *A manager's discount at the till (§474)*.
@@ -14059,3 +14061,28 @@ phone (`public/m.html`). Asked by Ash: *"pin"*.
 - `密码` for the PIN: it is the sign-in password on every screen of this product.
 - `口令`: dated, and nothing live uses it.
 - `授权码` (*authorisation code*): reads as a one-time code sent by SMS, which this is not.
+
+## Settings → Customer service mode picker
+
+**Composed by Claude, 2026-10-13, under the 2026-09-06 amendment.** Operator
+register. The two `<option>`s of the mode picker in Settings → Customer
+service (`public/retail-admin.html`, `#sub-cs`). Found by the 2026-10-13 page
+audit: both options carried Chinese in their English half (`WeCom (企业微信) —
+recommended · 推荐`), so the language splitter refused them and every reader
+saw both languages. An `<option>` cannot hold the `data-lang-block` spans the
+rest of the panel now uses, so each needed a clean English half and a Chinese
+half that says the whole thing — the old Chinese half was only `推荐` /
+`公众号客服`, which dropped the name of the mode.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `WeCom — recommended` / `企业微信 — 推荐` | first option | `企业微信` and `推荐` are both live in this panel's own help text and the old option. Joined with the same ` — ` the English uses. |
+| `WeChat customer service — public account` / `微信客服 — 公众号客服` | second option | `微信客服` is live in the panel's help (*微信客服是轻量的内置方案*); `公众号客服` is the old option's own half. |
+
+### Rejected
+
+- Keeping `企业微信` inside the English half: that is what made the splitter refuse the option.
+- `企业微信(推荐)` with full-width brackets: nothing else in the panel brackets a recommendation; the dash matches the English.
+

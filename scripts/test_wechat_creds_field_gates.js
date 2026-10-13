@@ -149,7 +149,7 @@ const stored = () => { creds.invalidate(T); const c = creds.getTenantCreds(T); r
       && IG.includes("if (mwCanPay()) Object.assign(body, { mchId: v('mc_mchid')"), 'the configuration page sends each half only for its key');
     ok(IG.includes("const roLogin = env || !mwCanLogin(), roPay = env || !mwCanPay();"), '…and draws each half read-only without it');
     ok(IG.includes("if (!mwCanPay()) { igMiniappConfigFull(); return; }"), 'the wizard ends after the login pair without the payments key');
-    for (const h3 of ['<h3>Currency · 货币</h3>', '<h3>Tax · 税费', '<h3>Alipay manual收款']) {
+    for (const h3 of ['<h3>Currency · 货币</h3>', '<h3>Tax · 税费', '<h3>Manual Alipay payment']) {
       const at = HTML.indexOf(h3);
       const card = HTML.lastIndexOf('<div class="group-card"', at);
       ok(HTML.slice(card, HTML.indexOf('>', card)).includes('data-cap="settings:payments"'), h3.replace(/<[^>]+>/g, '') + ' card is hidden without settings:payments');

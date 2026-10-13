@@ -8168,9 +8168,9 @@
   #sub-ops input[type=password]:focus { border-color: var(--accent); }
   #sub-ops input[type=text], #sub-ops input[type=password],
   #sub-ops select, #sub-ops textarea { width: 100%; }
-  #sub-ops .field-label {
-    font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-    color: var(--text-3); display: block; margin-bottom: 4px;
+  #sub-ops .field-label {   /* the shared field label: 13px/500, sentence case (§1.6, §5) */
+    font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none;
+    color: var(--td-text); display: block; margin-bottom: 4px;
   }
   #sub-ops .ops-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
   #sub-ops code { background: var(--bg-elev-1); padding: 1px 5px; border-radius: 4px; }
@@ -8255,7 +8255,8 @@
 
   .save-bar {
     position: sticky; bottom: 0;
-    background: linear-gradient(180deg, transparent, var(--bg-app) 35%);
+    /* Solid ground and a hairline, not a fade — no gradients (§9). */
+    background: var(--bg-app); border-top: 1px solid var(--td-border);
     margin: var(--s6) calc(var(--s5) * -1) calc(var(--s5) * -1);
     padding: var(--s4) var(--s5) var(--s5);
     display: flex; align-items: center; gap: var(--s4);
