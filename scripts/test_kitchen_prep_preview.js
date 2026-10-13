@@ -350,7 +350,9 @@ section('5 · settings');
 // ═══════════════════════════════════════════════════════════════════════════
 section('6 · wiring, privacy and the record');
 {
-  const retail = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+  // routes/retail.js and what moved out of it: PRIVATE_CONFIG_PREFIXES now sits
+  // in lib/store-config.js (decisions §477).
+  const retail = require('./test-support/retail-source').retailSource();
   const caps = require(path.join(ROOT, 'lib', 'cap-routes.js'));
   const html = fs.readFileSync(path.join(ROOT, 'public/retail-admin.html'), 'utf8');
   const mkt = fs.readFileSync(path.join(ROOT, 'public/retail-admin/05-marketing.js'), 'utf8');

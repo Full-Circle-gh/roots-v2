@@ -25,7 +25,9 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
-const RETAIL = read('routes/retail.js');
+// routes/retail.js and what moved out of it: the show_on table now sits in
+// lib/page-layout.js (decisions §477).
+const RETAIL = require('./test-support/retail-source').retailSource();
 const BLOCKS = read('public/shop/blocks.js');
 const MINI_CONFIG = read('miniapp/utils/config.js');
 const CMS = read('public/cms.html');

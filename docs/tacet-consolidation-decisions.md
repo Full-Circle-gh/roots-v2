@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.527
+# Tacet shared-core consolidation — decisions record, v4.528
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-13 · v4.528 — **§477 · THE CUSTOMER INBOX, THE WHOLE-CONFIG LOADER AND THE PAGE-LAYOUT DEFAULTS MOVE TO `lib/` — DECIDED BY ASH:** *"build group 1"*, to the survey of what the customers area still needs. Ten statements into `lib/customer-notify.js`, `lib/store-config.js` and `lib/page-layout.js`. Before the move, a test was added (#1175) proving every private settings family stays out of the public config. No string, no schema, no change to `.gitignore` or CI. See §477.
 
 2026-10-13 · v4.527 — **§477 · THE ADDRESS GROUP MOVES TO `lib/addresses.js`; THE ORDER-SNAPSHOT LOOKUP STAYS WITH ORDERS — DECIDED BY ASH:** *"build addresses"*, to the survey put after the voucher group landed. Ten statements, all needing only modules already in `lib/`. `geocodeOrderSnapshotAsync` stays in `routes/retail.js`: it requeues the Qingyun courier push, which is what made the group look tangled. No string, no schema, no change to `.gitignore` or CI. See §477.
 
@@ -31186,3 +31188,36 @@ Chinese" section headings stay in `routes/retail.js` above the routes they
 introduce. `addressHasLatin` was defined about 19,000 lines below the lookup
 that uses it, which worked only because the lookup runs later; in one module
 that ordering no longer matters.
+
+**The remaining customers helpers, and the first of their three groups.
+Decided by Ash, 2026-10-13:** *"build group 1"*, to the survey put after the
+address group landed. What the customers area still needs from
+`routes/retail.js` falls into three groups of about ten statements each,
+built in this order:
+
+1. the customer's in-app inbox and what it reads;
+2. signup gifts, imported-customer credit and referral codes;
+3. customer basics (how a customer is shown, the email clean-up, who granted
+   a voucher, the manual-customer creator) and the shop's day-boundary clock.
+
+The earlier count of 35 for "notifications" included the order-status WeChat
+pushes; the customers area uses none of them, so they stay and move with
+orders.
+
+Group 1 is the closure of `notifyCustomer`:
+
+- `lib/customer-notify.js`: `notifCategoryEnabled`, `notifyCustomer`;
+- `lib/store-config.js`, beside `cfgValue`: `PRIVATE_CONFIG_PREFIXES`,
+  `loadConfig`, `setPath`;
+- `lib/page-layout.js`: `ALLOWED_PAGES`, `SHOW_ON_VALUES`,
+  `SHOW_ON_DEFAULTS`, `showOnFor`, `withShowOn`.
+
+The inbox reads the operator's per-category mute through the whole-config
+loader, which shapes the page layouts on the way out; that is why the three
+travel together. The "Storefront config" and "In-app notification center"
+headings stay in `routes/retail.js` above the code they still introduce.
+`PRIVATE_CONFIG_PREFIXES` is what keeps integration secrets, printer
+settings, review seeding and the kitchen's WeCom link out of the public
+config. Before this move only `kitchen.` was proven by a request, so a
+behavioural check for all four families went in first (#1175,
+`scripts/test_public_config_secrets.js` section 6).

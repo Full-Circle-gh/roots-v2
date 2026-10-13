@@ -128,10 +128,12 @@ ok(/api\('\/config'\)\.then\(c=>\{[\s\S]{0,400}wecom_order_webhook/.test(M), 'ph
 
 /* ── 4. every webhook key the code names is covered ─────────────────────── */
 section('4. every storefront_config key naming a webhook is private or omitted');
-const RETAIL = read('routes/retail.js');
+// routes/retail.js and what moved out of it: PRIVATE_CONFIG_PREFIXES now sits in
+// lib/store-config.js (decisions §477).
+const RETAIL = require('./test-support/retail-source').retailSource();
 const prefMatch = RETAIL.match(/const PRIVATE_CONFIG_PREFIXES = \[([^\]]*)\]/);
 const PRIVATE = prefMatch ? [...prefMatch[1].matchAll(/'([^']+)'/g)].map(m => m[1]) : [];
-ok(PRIVATE.length > 0, 'PRIVATE_CONFIG_PREFIXES read from routes/retail.js');
+ok(PRIVATE.length > 0, 'PRIVATE_CONFIG_PREFIXES read from the retail source');
 // m.html form-draft field names, not storefront_config keys.
 const NOT_CONFIG_KEYS = new Set(['cfg.webhook', 'cfg.alerts_webhook']);
 const files = [];
