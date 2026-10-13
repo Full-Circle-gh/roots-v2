@@ -13,6 +13,7 @@ const inventory = require('../lib/inventory');
 // is a behavioural no-op today; it closes the cross-tenant split before data
 // isolation is switched on.
 const { tdb, currentTenantId } = require('../lib/tenant-db');
+const { cfgValue } = require('../lib/store-config');
 const { logActivity } = require('../middleware/auth');
 // Lazily, and deliberately: routes/retail.js requires this file's siblings, so
 // a top-level require here would close a cycle at load time.
@@ -364,17 +365,15 @@ const STATUS_FLOW = ['draft', 'sent', 'received', 'prepared', 'delivered'];
 //   • Idempotent via restock_orders.stock_applied_at — 'prepared' applies
 //     it; a later 'delivered' is a no-op safety net.
 
-// `stock.warehouseStoreId` off `storefront_config`, on the tenant handle.
-// The four-line twin of cfgValue() in routes/retail.js, which is not exported.
+// `stock.warehouseStoreId` off `storefront_config`, on the tenant handle,
+// through the one shared settings reader (lib/store-config.js, §477).
 // value_json is JSON, so the id may arrive as a number or as a quoted string;
 // both are accepted and anything that is not a positive integer is treated as
 // unset so a malformed value falls through rather than resolving to 0/NaN.
+// The try stays: cfgValue lets a failed read throw, and this answers unset.
 function _cfgWarehouseStoreId() {
   try {
-    const row = tdb().prepare(
-      "SELECT value_json FROM storefront_config WHERE key = 'stock.warehouseStoreId'").get();
-    if (!row) return null;
-    const id = parseInt(JSON.parse(row.value_json), 10);
+    const id = parseInt(cfgValue('stock.warehouseStoreId', null), 10);
     return Number.isFinite(id) && id > 0 ? id : null;
   } catch { return null; }
 }
