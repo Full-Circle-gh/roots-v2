@@ -163,4 +163,35 @@ section('5. public/shop/_gallery.fixtures.js holds no group-bot URL');
 ok(!/qyapi\.weixin\.qq\.com\/cgi-bin\/webhook/i.test(read('public/shop/_gallery.fixtures.js')),
   'the gallery fixture is clean');
 
+/* ── 6. every private family stays out of the public config ─────────────── */
+// PRIVATE_CONFIG_PREFIXES is the list loadConfig() skips. Until this section
+// only `kitchen.` was proven by a request (test_kitchen_prep_preview.js);
+// dropping `integrations.`, `printer.` or `reviews.topup` from the list
+// failed nothing. One real key per family, seeded with a value that cannot
+// appear by accident, then the public response is searched for it.
+section('6. GET /api/retail/config — no integration, printer, review-seeding or kitchen setting');
+const PRIVATE_SEED = {
+  'integrations.alipayManual': { app_secret: 'S6-INTEGRATIONS-SECRET' },
+  'printer.kitchen_sn': 'S6-PRINTER-SN',
+  'reviews.topup': { enabled: true, note: 'S6-REVIEWS-TOPUP' },
+  'reviews.topup_state': { last_run: 'S6-REVIEWS-TOPUP-STATE' },
+  'kitchen.prep_webhook': 'S6-KITCHEN-HOOK',
+};
+for (const [k, v] of Object.entries(PRIVATE_SEED)) put.run(k, JSON.stringify(v));
+put.run('reviews.reward', JSON.stringify({ amount: 6 }));   // the public half of reviews.*
+for (const [label, q] of [['plain', {}], ['with a preview token', { preview_token: 'not-a-valid-token' }]]) {
+  const body = get('/api/retail/config', q).body;
+  const text = JSON.stringify(body);
+  const pd = (body && body.data) || {};
+  for (const k of Object.keys(PRIVATE_SEED)) {
+    const marker = JSON.stringify(PRIVATE_SEED[k]).match(/S6-[A-Z-]+/)[0];
+    ok(!text.includes(marker), `${k} is not served (${label})`);
+  }
+  ok(!pd.integrations && !pd.printer && !pd.kitchen, `no integrations / printer / kitchen object at all (${label})`);
+  ok(!(pd.reviews && ('topup' in pd.reviews || 'topup_state' in pd.reviews)),
+    `reviews.topup and reviews.topup_state are absent (${label})`);
+  eq(pd.reviews && pd.reviews.reward && pd.reviews.reward.amount, 6,
+    `reviews.reward, an offer to the customer, still ships (${label})`);
+}
+
 done();
