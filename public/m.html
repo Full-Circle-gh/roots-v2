@@ -13153,11 +13153,20 @@ function screenTupPkgs(){
 }
 
 /* ── Top-up ──────────────────────────────────────────────────────────────── */
+const TUP_PAY_METHODS=new Set(['wechat','weixin','wechatpay','wechat_pay','微信','微信支付','alipay','zhifubao','支付宝',
+  'cash','bank_transfer','wechat_offline','alipay_offline','other','intl_card','wechat_alipay_offline']);
+function tupIsTopup(t){ return TUP_PAY_METHODS.has(String(t&&t.payment_method||'').toLowerCase().trim()); }
 function loadTopups(force){
   if(state.tupTried&&!force) return;
   state.tupTried=true;
-  Promise.all([api('/topup-transactions?limit=50'),api('/topup-packages').catch(()=>[])]).then(([tx,pk])=>{
-    state.tup=Array.isArray(tx)?tx:[];
+  // /topup-transactions is the whole WALLET ledger: order spends (order_redeem),
+  // referral credits, staff adjustments and refund reversals live in the same
+  // table. Only a row paid with a way of paying is a top-up — the same keys the
+  // desktop Top-up page counts as one (TUP_PAY_METHODS, 07-content-billing.js).
+  // Without this an order spend of −¥1,000 sat in "Recent top-ups" as if the
+  // customer had paid it in. 200, not 50, so 50-ish real top-ups survive the cut.
+  Promise.all([api('/topup-transactions?limit=200'),api('/topup-packages').catch(()=>[])]).then(([tx,pk])=>{
+    state.tup=(Array.isArray(tx)?tx:[]).filter(tupIsTopup).slice(0,50);
     state.tupPkgs=Array.isArray(pk)?pk:[];
     state.tupErr=null; render();
   }).catch(e=>{
