@@ -835,7 +835,8 @@ async function roundThreeSuites() {
   // ── G5 · call-site guards for the round-2 finding ────────────────────────
   console.log('\nG5 · the routes still go through the shared decisions (source checks)');
   it('call site (source check): translation adoption goes through shouldAdoptTranslation', () => {
-    const retail = src('routes/retail.js');
+    // geocodeAddressAsync moved to lib/addresses.js (§477); read the whole family.
+    const retail = require('./test-support/retail-source').retailSource();
     assert.ok(/addressCn\.shouldAdoptTranslation\(\{\s*first,\s*retry,\s*mergedAddress/.test(retail),
       'geocodeAddressAsync must call the shared adoption rule');
     assert.ok(!/GEO_RANK\[retry\.precision\]/.test(retail),
