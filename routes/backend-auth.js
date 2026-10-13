@@ -201,6 +201,15 @@ try { db.exec("ALTER TABLE tenant_users ADD COLUMN twofa_method TEXT NOT NULL DE
 // for the same language.
 try { db.exec('ALTER TABLE tenant_users ADD COLUMN language TEXT'); } catch (e) { /* already added */ }
 
+// §475 — a manager's till PIN, bcrypt-hashed like the password. NULL until the
+// manager sets one under Account → Security. It approves a till discount on a
+// tablet signed in under someone else (lib/till-pin.js). Never sent anywhere:
+// /me says only whether one is set.
+try { db.exec('ALTER TABLE tenant_users ADD COLUMN till_pin TEXT'); } catch (e) {
+  // Safe to ignore: SQLite has no ADD COLUMN IF NOT EXISTS, so every boot after
+  // the first throws here because the column is already there.
+}
+
 // Two-step verification, per channel — email and SMS are independent switches
 // (both can be on at once), not a single preferred method. Turning one on takes
 // effect immediately: the channel's own address was already verified when it
@@ -346,6 +355,9 @@ try {
   // rows that already hold the finance/approval capabilities this rides beside.
   const voids = roles.migrateExpenseCancelCap();
   if (voids) console.log('[backend-auth] granted expenses:cancel to ' + voids + ' role(s)');
+  // §474's key, the same shape again: the managers only, never the shop floor.
+  const discounts = roles.migrateTillDiscountCap();
+  if (discounts) console.log('[backend-auth] granted till:discount to ' + discounts + ' manager role(s)');
   // §278: the kitchen and store-stock descriptions stop naming the deleted
   // app, on every row whose description nobody has typed over.
   const descs = roles.migrateStockRoleDescriptions();
@@ -682,8 +694,11 @@ router.post('/api/backend/logout', (req, res) => {
 
 router.get('/api/backend/me', (req, res) => {
   if (!req.session || !req.session.backendUserId) return res.json({ user: null });
-  const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login, avatar_url, retail_store_id, scope_all, language FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+  const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login, avatar_url, retail_store_id, scope_all, language, till_pin FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
   if (!u) return res.json({ user: null });
+  // §475 — whether a till PIN is set. The hash itself never leaves this line.
+  const hasTillPin = !!u.till_pin;
+  delete u.till_pin;
   touchSession(req, u);   // keep the Devices index warm (surfaces pre-existing logins + heartbeat)
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
   // Effective capabilities + store scope for the signed-in operator. The client
@@ -739,7 +754,7 @@ router.get('/api/backend/me', (req, res) => {
   const brandStamp = tenant && tenant.brand_updated_at ? +new Date(tenant.brand_updated_at) : 0;
   res.json({
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role,
-            roleLayout, roleName, dashboardCards,
+            roleLayout, roleName, dashboardCards, hasTillPin,
             home,                   // the tool list, when there is somewhere to go back to
             homeLabel,              // that screen's own name, so Back can say it
             lastLogin: u.last_login, avatarUrl: u.avatar_url || null,
@@ -773,6 +788,31 @@ router.put('/api/backend/password', express.json(), (req, res) => {
   }
   db.prepare('UPDATE tenant_users SET password = ? WHERE id = ?').run(bcrypt.hashSync(new_password, 10), req.session.backendUserId);
   res.json({ success: true });
+});
+
+// §475 — set, change or clear one's own till PIN. The current password is
+// required, as for a password change: the PIN approves money off a sale. Only
+// for someone who may give a till discount — a PIN nobody can use is a
+// credential with nothing behind it. `pin` empty or null clears it.
+router.put('/api/backend/till-pin', express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const { current_password, pin } = req.body || {};
+  const u = db.prepare('SELECT * FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+  if (!u) return res.status(404).json({ error: 'Operator not found · 未找到操作员' });
+  if (!current_password || !bcrypt.compareSync(current_password, u.password)) {
+    return res.status(400).json({ error: 'Current password is incorrect · 当前密码不正确', code: 'bad_password' });
+  }
+  const tillPin = require('../lib/till-pin');
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
+  if (!tillPin.canDiscount(db, u, tenant)) {
+    return res.status(403).json({ error: 'forbidden_capability', need: 'till:discount' });
+  }
+  const clear = pin == null || pin === '';
+  if (!clear && !tillPin.validPin(pin)) {
+    return res.status(400).json({ error: 'The PIN must be 4 to 6 digits · PIN 码须为 4 到 6 位数字', code: 'bad_pin' });
+  }
+  db.prepare('UPDATE tenant_users SET till_pin = ? WHERE id = ?').run(clear ? null : tillPin.hashPin(pin), u.id);
+  res.json({ success: true, hasTillPin: !clear });
 });
 
 // Fan a live "identity changed" nudge to this operator's OTHER open sessions so

@@ -14916,6 +14916,9 @@ const ONW_WHERE={
      is nowhere near the control that caused it. 'from' is the channel block. */
   bad_shop_entry_method:'from', shop_entry_method_required:'from',
   shop_entry_method_not_allowed:'from',
+  /* §474 — the till's hand discount. Unreachable from this form, mapped for the
+     reason the three above are. 'how' carries the money controls. */
+  manual_discount_till_only:'how',
   /* A product's own questions ("Hot or iced?"). The server refuses a line whose
      required question is unanswered and this form does not ask them yet, so the
      refusal used to land on 'who' as the catch-all sentence, naming nothing.
@@ -14977,6 +14980,7 @@ function onwErrText(code,msg,pid){
     bad_shop_entry_method:E('A shop order must say which way it came in — the till or the QR menu.','门店订单需注明来自前台还是二维码。'),
     shop_entry_method_required:E('A shop order must say which way it came in — the till or the QR menu.','门店订单需注明来自前台还是二维码。'),
     shop_entry_method_not_allowed:E('Only a shop order comes in through the till or the QR menu.','只有门店订单才能标注前台或二维码来源。'),
+    manual_discount_till_only:E('A discount can only be given at the till.','折扣只能在收银台给出。'),
     channel_note_required:E('Write where this order came from.','请填写具体来源。'),
     bad_store_id:E('Pick a store.','请选择门店。'),
     store_not_found:E('That store no longer exists. Pick another.','该门店已不存在,请另选。'),
@@ -37607,7 +37611,12 @@ function screenAccount(){
       tmRow({label:T('Name','姓名'),value:escAttr(me.name||''),cmd:"APP.cmd('acctName')"}),
       emailRow, phoneRow])}</div>
     <div>${acctEyebrow(T('Security','安全'))}${tmList([
-      tmRow({label:T('Change password','修改密码'),cmd:"APP.cmd('acctPass')"})])}</div>
+      tmRow({label:T('Change password','修改密码'),cmd:"APP.cmd('acctPass')"}),
+      /* §475 — only for someone who may give a till discount: the PIN is how
+         they approve one on a till signed in as somebody else. */
+      ...(acctCanTillPin()?[tmRow({label:T('Till PIN','收银 PIN 码'),
+        value:(state.me&&state.me.hasTillPin)?T('Set','已设置'):T('Not set','未设置'),
+        cmd:"APP.cmd('acctTillPin')"})]:[])])}</div>
     ${r?`<div>${acctEyebrow(T('Two-step verification','两步验证'))}${twofa}</div>`:''}
     <div>${acctEyebrow(T('Devices','设备'))}${tmList([
       tmRow({label:T('Devices','设备'),
@@ -37685,6 +37694,30 @@ function acctPassAsk(){
       msg=>{ state.ask=acctPassAsk(); state.askErr=msg; },'Couldn’t update password','无法更新密码')};
 }
 reg('acctPass', ()=>{ state.askErr=null; state.ask=acctPassAsk(); render(); });
+
+/* ── Till PIN (§475) ─────────────────────────────────────────────────────────
+   A manager's 4 to 6 digits, typed at a till signed in as staff to approve a
+   discount there. The current password is asked for, as for a password: the
+   PIN approves money off a sale. Nothing typed is put back into a reopened
+   sheet, for the password sheet's reason. */
+function acctCanTillPin(){
+  return !!(state.me&&state.me.role==='owner') || (Array.isArray(state.caps)&&state.caps.indexOf('till:discount')!==-1);
+}
+function acctTillPinAsk(){
+  return {title:T('Till PIN','收银 PIN 码'),
+    body:T('A manager types this at the till to approve a discount. 4 to 6 digits.','经理在收银台输入此码以批准折扣。4 到 6 位数字。'),
+    fields:[{id:'cur',label:T('Current password','当前密码'),type:'password'},
+            {id:'pin',label:T('New PIN','新 PIN 码'),type:'password',max:6},
+            {id:'pin2',label:T('Confirm new PIN','确认新 PIN 码'),type:'password',max:6}],
+    confirmLabel:T('Save','保存'),
+    validate:v=> (!v.cur||!v.pin||!v.pin2) ? T('Fill in all fields','请填写所有字段')
+      : !/^[0-9]{4,6}$/.test(v.pin) ? T('The PIN must be 4 to 6 digits','PIN 码须为 4 到 6 位数字')
+      : v.pin!==v.pin2 ? T('The PINs don’t match','两次输入的 PIN 码不一致') : '',
+    run:v=>acctWrite('tillpin','/api/backend/till-pin',{current_password:v.cur,pin:v.pin},'PUT',
+      ()=>{ state.me=state.me||{}; state.me.hasTillPin=true; showToast(T('Saved','已保存')); },
+      msg=>{ state.ask=acctTillPinAsk(); state.askErr=msg; },'Couldn’t save — please try again','保存失败，请重试')};
+}
+reg('acctTillPin', ()=>{ state.askErr=null; state.ask=acctTillPinAsk(); render(); });
 
 /* ── Email and phone: address → code → verified ─────────────────────────────
    Two sheets in a row, the desktop's two steps. The code sheet names where the
@@ -40166,6 +40199,7 @@ function sheetOrderDetail(){
          ${o.breakdown?`<div style="margin-top:12px;display:flex;flex-direction:column;gap:7px">${o.breakdown.map(([l,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${Array.isArray(l)?T(l[0],l[1]):escAttr(l)}</span><span class="num">${v}</span></div>`).join('')}
            ${o.tax?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${o.tax.mode==='inclusive'?T('incl. tax','含税'):T('Tax','税费')}</span><span class="num">${money(CUR,o.tax.amount)}</span></div>`:''}
            ${o.voucher?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Voucher','优惠券')}${o.voucher.code?' · '+escAttr(o.voucher.code):''}</span><span class="num">−${money(CUR,o.voucher.amount)}</span></div>`:''}
+           ${o.tillDisc?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Till discount','收银台折扣')} · ${escAttr(tillDiscReason(o.tillDisc.reason))}${o.tillDisc.note?' · '+escAttr(o.tillDisc.note):''}${o.tillDisc.by?' · '+escAttr(o.tillDisc.by):''}</span><span class="num">−${money(CUR,o.tillDisc.amount)}</span></div>`:''}
          </div>`:''}</div>
        ${moneyGapBand(o)}
        ${settlePanel(o)}
@@ -44956,6 +44990,7 @@ function trendDigest(){
     delivery_modes:(D.delivery||[]).slice(0,5).map(x=>({mode:x.mode,orders:x.orders})),
     revenue_composition:D.composition?{products:r2(D.composition.product_total),delivery_fees:r2(D.composition.delivery_fee),
       voucher_discounts:r2(D.composition.voucher_total),point_discounts:r2(D.composition.points_total),
+      till_discounts:r2(D.composition.manual_discount_total),
       store_credit_used:r2(D.composition.balance_total),net:r2(D.composition.net_total)}:null,
     wallet:D.topups?{topups_received:r2(D.topups.received),store_credit_redeemed:r2(D.topups.redeemed)}:null,
     busiest_hours:(D.heat||[]).slice().sort((a,b)=>b.orders-a.orders).slice(0,3)
@@ -51122,6 +51157,13 @@ function orderBreakdown(o){
   if(Number(o.card_surcharge_fee)>0) rows.push([['Card fee 4%','外卡手续费 4%'],money(CUR,o.card_surcharge_fee)]);
   return rows;
 }
+// §474 — why a till discount was given, in the reader's language. The four
+// the till offers; an unknown stored value prints as stored.
+function tillDiscReason(r){
+  const L={damaged:['Damaged','破损'],friends_family:['Friends & family','亲友'],
+           complaint:['Complaint','投诉'],other:['Other','其他']}[r];
+  return L?T(L[0],L[1]):String(r||'');
+}
 function mapDetail(o){
   const base=mapOrderRow(o);
   base.items=(o.items||[]).map(ITEM_TUPLE);
@@ -51238,7 +51280,8 @@ function mapDetail(o){
     const items=Math.round(its.reduce((a,it)=>a+Number(it.line_total),0)*100)/100;
     const taxAdded=(o.tax_mode==='exclusive'&&o.tax_amount!=null)?(Number(o.tax_amount)||0):0;
     const surcharges=Number(o.shipping_fee||0)+Number(o.packing_fee||0)+taxAdded+Number(o.card_surcharge_fee||0); // §450
-    const deductions=Number(o.voucher_amount||0)+Number(o.points_amount||0)+Number(o.balance_used||0);
+    const deductions=Number(o.voucher_amount||0)+Number(o.points_amount||0)+Number(o.balance_used||0)
+      +Number(o.manual_discount_amount||0);   // §474
     const expected=Math.round((items+surcharges-deductions)*100)/100;
     const gap=Math.round((expected-total)*100)/100;
     if(Math.abs(gap)<=Math.max(5,items*0.3)) return null;
@@ -51264,6 +51307,9 @@ function mapDetail(o){
   base.custId=o.customer_id!=null?o.customer_id:null;       // so the name can be tapped
   base.custName=o.nickname||o.recipient_name||'';
   base.voucher=(Number(o.voucher_amount)>0)?{code:o.voucher_code||'',amount:Number(o.voucher_amount)}:null;
+  // §474 — a manager's hand discount at the till: how much, why, and who.
+  base.tillDisc=(Number(o.manual_discount_amount)>0)?{amount:Number(o.manual_discount_amount),
+    reason:o.manual_discount_reason||'',note:o.manual_discount_note||'',by:o.manual_discount_by||''}:null;
   base.printFailed=(o.print_status==='failed'&&!['pending_payment','cancelled','refunded'].includes(o.status))?(o.print_error||''):null;
   base.fulfil_rollup=(o.fulfillment&&o.fulfillment.rollup)||null;
   base.fulfil_counts=o.fulfillment?{done:o.fulfillment.dispatched,total:o.fulfillment.total}:null;
@@ -51939,7 +51985,9 @@ async function loadMe(){
     state.caps=Array.isArray(u.caps)?u.caps:null;
     state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null, avatarUrl:u.avatarUrl||null,
       /* §453 — who, at which tenant: the key an unsent request is kept under on this phone. */
-      id:u.id!=null?u.id:null, tid:(u.tenant&&u.tenant.id!=null)?u.tenant.id:null};
+      id:u.id!=null?u.id:null, tid:(u.tenant&&u.tenant.id!=null)?u.tenant.id:null,
+      /* §475 — whether a till PIN is set; the PIN itself never comes here. */
+      hasTillPin:!!u.hasTillPin};
     // §300 F5 — RA_STORE_LOCK's rule: the first of the operator's scoped stores.
     state.storeLock=(Array.isArray(u.scopeStores)&&u.scopeStores.length)?String(u.scopeStores[0]):null;
     // §412.5 — the whole scope: stock staff are managed only at these stores.
