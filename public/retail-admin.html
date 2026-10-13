@@ -7571,9 +7571,9 @@
         transition: background .2s var(--afx-ease), border-color .2s var(--afx-ease), color .2s var(--afx-ease);
       }
       #tab-affiliate .afx-btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
-      /* The one Dusk element on the page. */
-      #tab-affiliate .afx-btn.dusk { background: var(--td-dusk); color: #fff; border-color: var(--td-dusk); }
-      #tab-affiliate .afx-btn.dusk:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+      /* No Dusk here: Affiliate is an A4 Console, which spends none (§1.8 rule 6).
+         Save is Ink (it moves money, so it keeps its button — §279 rule 2); the
+         home-screen shortcut is Secondary. The .dusk rule went with its last use. */
       #tab-affiliate .afx-btn.ink { background: var(--td-text); color: var(--td-paper); border-color: var(--td-text); }
       #tab-affiliate .afx-btn.ink:hover { background: color-mix(in srgb, var(--td-text) 88%, var(--td-paper)); }
       #tab-affiliate .afx-btn.sec { background: var(--td-surface); color: var(--td-text); border-color: var(--td-border); }
@@ -8145,8 +8145,9 @@
         font-size: 10px; line-height: 1.5; border: 1px solid var(--border);
       }
       #tab-feedback .pill.neutral, #fb-drawer .pill.neutral { color: var(--text-2); }
-      #tab-feedback .pill.warn { background: rgba(242,202,108,.14); border-color: rgba(242,202,108,.30); color: var(--st-preparing, #d9a441); }
-      #tab-feedback .pill.ok   { background: rgba(128,196,98,.12);  border-color: rgba(128,196,98,.30);  color: #80c462; }
+      /* Status tints are the system's (§5): Amber = needs attention, Sage = all clear. Were off-palette yellow and lime. */
+      #tab-feedback .pill.warn { background: var(--td-amber-tint); border-color: transparent; color: var(--td-amber-ink); }
+      #tab-feedback .pill.ok   { background: var(--td-sage-tint);  border-color: transparent; color: var(--td-sage-ink); }
       /* Feedback list rows open a conversation — say so on hover. */
       #feedback-table tbody tr.fb-row { cursor: pointer; }
       #feedback-table tbody tr.fb-row:hover { background: var(--bg-elev-2, #f1efe9); }
@@ -8220,14 +8221,14 @@
         width: 18px; height: 18px; background: #fff; border-radius: 50%;
         transition: .2s;
       }
-      .lb-toggle input:checked + .slider { background: #80c462; }
+      .lb-toggle input:checked + .slider { background: var(--td-sage); }   /* was off-palette lime */
       .lb-toggle input:checked + .slider::before { transform: translateX(18px); }
       .lb-status-pill {
         display: inline-flex; align-items: center; gap: 5px;
         padding: 1px 8px; border-radius: 999px;
         font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none;
       }
-      .lb-status-pill.on  { background: rgba(128, 196, 98, .14); color: #80c462; }
+      .lb-status-pill.on  { background: var(--td-sage-tint); color: var(--td-sage-ink); }
       .lb-status-pill.off { background: var(--bg-elev-2); color: var(--text-3); }
       .lb-save-bar { display: flex; align-items: center; gap: 12px; padding-top: 4px; }
       .lb-preview {
@@ -13372,7 +13373,7 @@
                    guessed — as was 我方, which breaks between its two
                    characters below about 12%. 25 + 12 + 23 + 11 + 20 + 9 = 100. -->
               <th style="width:25%">Product · 商品</th>
-              <th style="width:12%;text-align:center">天河 qty · 我方</th>
+              <th style="width:12%;text-align:center">Our qty · 我方</th>
               <th style="width:23%">Guanyi match · 管易商品</th>
               <th style="width:11%;text-align:center">Guanyi qty · Δ</th>
               <!-- §103 step 5: the state, in the same four words the other two

@@ -234,7 +234,7 @@ function afxRenderHead() {
   }
   if (cta) {
     cta.innerHTML = (o && afxProgramOn() && !o.placements.onHome)
-      ? `<button class="afx-btn dusk" data-afx="go-home-layout">${afT('Put the invite on the home screen', '把邀请放到首页')}</button>`
+      ? `<button class="afx-btn sec" data-afx="go-home-layout">${afT('Put the invite on the home screen', '把邀请放到首页')}</button>`
       : '';
   }
 }
@@ -996,8 +996,8 @@ function afxRenderSaveBar() {
           '新金额只对此后发放的奖励生效 — 已获得的奖励不受影响。')}</div>`
       : '';
   const btn = AFX.saving
-    ? `<button class="afx-btn dusk" disabled><span class="afx-spin"></span>${afT('Saving…', '保存中…')}</button>`
-    : `<button class="afx-btn dusk" data-afx="save">${afT('Save changes', '保存更改')}</button>`;
+    ? `<button class="afx-btn ink" disabled><span class="afx-spin"></span>${afT('Saving…', '保存中…')}</button>`
+    : `<button class="afx-btn ink" data-afx="save">${afT('Save changes', '保存更改')}</button>`;
   host.innerHTML = `<div class="afx-savebar"><div class="afx-savebar-in">${say}
       <div class="afx-savebar-main">
         <div class="afx-savebar-msg"><b>${afxSaveMessage()}</b></div>
@@ -3331,7 +3331,7 @@ function paintAboutStats() {
       <td><input type="text" value="${escapeAttr(s.value_cn || '')}" oninput="ABOUT_STATE.stats[${i}].value_cn=this.value"></td>
       <td><input type="text" value="${escapeAttr(s.label_en || '')}" oninput="ABOUT_STATE.stats[${i}].label_en=this.value"></td>
       <td><input type="text" value="${escapeAttr(s.label_cn || '')}" oninput="ABOUT_STATE.stats[${i}].label_cn=this.value"></td>
-      <td style="width:32px;"><button class="btn btn-sm" onclick="aboutRemoveStat(${i})">×</button></td>
+      <td style="width:32px;"><button class="btn btn-sm btn-danger" aria-label="${cuT('Remove', '移除')}" title="${cuT('Remove', '移除')}" onclick="aboutRemoveStat(${i})">×</button></td>
     </tr>
   `).join('');
   /* The strip used to arrive with four rows already in it, so it never needed
@@ -3361,7 +3361,7 @@ function paintAboutBullets() {
         <td style="width:24px;color:var(--text-3,#888);font-size:11px;">${i + 1}</td>
         <td><input type="text" value="${escapeAttr(it.en || '')}" oninput="ABOUT_STATE.${which}_items[${i}].en=this.value"></td>
         <td><input type="text" value="${escapeAttr(it.cn || '')}" oninput="ABOUT_STATE.${which}_items[${i}].cn=this.value"></td>
-        <td style="width:32px;"><button class="btn btn-sm" onclick="aboutRemoveBullet('${which}', ${i})">×</button></td>
+        <td style="width:32px;"><button class="btn btn-sm btn-danger" aria-label="${cuT('Remove', '移除')}" title="${cuT('Remove', '移除')}" onclick="aboutRemoveBullet('${which}', ${i})">×</button></td>
       </tr>
     `).join('');
   }

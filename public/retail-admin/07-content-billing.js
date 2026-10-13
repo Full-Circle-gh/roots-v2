@@ -1510,7 +1510,7 @@ function renderReviewTagsTable() {
       <td>
         <select onchange="updateReviewTag(${i}, 'color', this.value)" style="width: 100%;">${colourOpts}</select>
       </td>
-      <td><button class="btn btn-sm" onclick="removeReviewTag(${i})">×</button></td>
+      <td><button class="btn btn-sm btn-danger" aria-label="${cuT('Remove', '移除')}" title="${cuT('Remove', '移除')}" onclick="removeReviewTag(${i})">×</button></td>
     </tr>`;
   }).join('');
 }
@@ -1639,7 +1639,7 @@ function renderFaqCatsTable() {
       <td><input type="text" value="${escapeAttr(c.en)}" oninput="updateFaqCat(${i}, 'en', this.value)" style="width: 100%;"></td>
       <td><input type="text" value="${escapeAttr(c.cn)}" oninput="updateFaqCat(${i}, 'cn', this.value)" style="width: 100%;"></td>
       <td><select onchange="updateFaqCat(${i}, 'color', this.value)" style="width: 100%;">${opts}</select></td>
-      <td><button class="btn btn-sm" onclick="removeFaqCat(${i})">×</button></td>
+      <td><button class="btn btn-sm btn-danger" aria-label="${cuT('Remove', '移除')}" title="${cuT('Remove', '移除')}" onclick="removeFaqCat(${i})">×</button></td>
     </tr>`;
   }).join('');
 }
@@ -1699,7 +1699,7 @@ function renderFaqQs() {
         <div class="row" style="gap: 4px; align-self: flex-end; padding-bottom: 2px;">
           <button class="btn btn-sm" onclick="moveFaqQ(${i}, -1)" ${i === 0 ? 'disabled' : ''}>↑</button>
           <button class="btn btn-sm" onclick="moveFaqQ(${i}, 1)"  ${i === FAQ_QS.length - 1 ? 'disabled' : ''}>↓</button>
-          <button class="btn btn-sm" onclick="removeFaqQ(${i})">×</button>
+          <button class="btn btn-sm btn-danger" aria-label="${cuT('Remove', '移除')}" title="${cuT('Remove', '移除')}" onclick="removeFaqQ(${i})">×</button>
         </div>
       </div>
       <div class="row" style="gap: 12px;">
