@@ -29,7 +29,7 @@ const GOLDEN_DIR = path.join(__dirname, 'test-support', 'golden');
 // is [who, METHOD, path, body?, { afterMs }?], who ∈ customer | admin | anon.
 // The areas, in the order they run. They share one database, so the order is
 // part of every recording: add a new area at the END, never in the middle.
-const ORDER = ['polls', 'feedback', 'reviews', 'customers', 'checkout'];
+const ORDER = ['polls', 'feedback', 'reviews', 'customers', 'checkout', 'orders-admin'];
 const AREAS = Object.fromEntries(ORDER.map((a) => [a, require('./test-support/golden-areas/' + a)]));
 
 (async () => {
