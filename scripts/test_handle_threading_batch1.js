@@ -58,7 +58,7 @@ const SABOTAGE = process.env.HT1_SABOTAGE === '1';
 const ROOT = path.join(__dirname, '..');
 const DB_SRC = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
 const SCHEMA_SRC = fs.readFileSync(path.join(ROOT, 'schema.sql'), 'utf8');
-const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+const RETAIL_SRC = require('./test-support/retail-source').retailSource();
 
 // Every column these two helpers touch. Read off the SQL in the helpers, not off
 // the schema — the point is to catch a harness table that has grown THINNER than
@@ -129,9 +129,18 @@ const CODE = stripComments(RETAIL_SRC);
  */
 const acorn = require('acorn');
 
+// Each file of the retail family (routes/retail.js, its parts, and the helpers
+// it moved to lib/, decisions §477) is parsed on its own: they are separate
+// modules, so as one text they would declare the same names twice. The call
+// sites below are collected across all of them.
 let AST = null;
 function ast() {
-  if (!AST) AST = acorn.parse(RETAIL_SRC, { ecmaVersion: 'latest', sourceType: 'script' });
+  if (!AST) {
+    const rs = require('./test-support/retail-source');
+    const files = ['routes/retail.js', ...rs.retailPartFiles(), ...rs.RETAIL_LIBS];
+    AST = { type: 'Program', body: files.flatMap((f) =>
+      acorn.parse(fs.readFileSync(path.join(ROOT, f), 'utf8'), { ecmaVersion: 'latest', sourceType: 'script' }).body) };
+  }
   return AST;
 }
 
