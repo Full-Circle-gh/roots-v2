@@ -402,7 +402,7 @@ section('4 · the writes');
     assert.ok(!e.s.stack.some((x) => x.route === 'newpo'));
     assert.ok(e.calls.gets.includes('/purchases'), 'the list is read again');
   });
-  it('Place order saves, then sends status Ordered, then opens the order', async () => {
+  it('Record order saves, then sends status Ordered, then opens the order', async () => {
     const e = await filled({ stubOpen: true });
     e.CMD.pwStep(3);
     const t = screen(e);
@@ -411,7 +411,7 @@ section('4 · the writes');
     e.CMD.pwSave(1); await flush();
     assert.deepStrictEqual(plain(e.calls.writes.map((w) => [w.method, w.p])), [['POST', '/purchases'], ['PUT', '/purchases/41/status']]);
     assert.deepStrictEqual(e.calls.writes[1].body, { status: 'Ordered' });
-    assert.deepStrictEqual(e.calls.toasts, ['Order placed']);
+    assert.deepStrictEqual(e.calls.toasts, ['Order recorded']);
     assert.deepStrictEqual(e.calls.opened, [41]);
   });
   it('a Place that saved but could not mark ordered does not make a second draft on the retry', async () => {
@@ -568,7 +568,7 @@ section('7 · both languages');
     assert.ok(t.includes('来源与门店') && t.includes('收货门店') && t.includes('下一步 —— 采购内容'));
     e.CMD.pwStep(3);
     t = screen(e);
-    assert.ok(t.includes('确认下单') && t.includes('存为草稿'));
+    assert.ok(t.includes('登记采购单') && t.includes('存为草稿'));   // Record order — the desktop's word since §1.13 was built
   });
 }
 

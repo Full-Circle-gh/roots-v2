@@ -412,7 +412,7 @@ Two exits are permitted and at most one is Dusk. The commit takes the page's sin
 
 **The non-committing exit is Secondary, not Ghost.** *(Decided by Ash 2026-07-30, from the New order round.)* This corrects Record order's locked line, which says Ghost "Save as draft". The reason is §1.8's own button table: **Ghost is "tertiary, in-row."** A page-header exit is neither tertiary nor in-row — it is one of the two ways to leave the page, and an operator who has half-filled a form and wants to walk away must be able to find it without hunting. Secondary is the default for everything that is not the single primary, and that is exactly what this is. The hierarchy still reads correctly: a Dusk fill beats a hairline border by a wide margin. Making the exit findable does not make it compete.
 
-**Superseded, pick up at build time:** §1.13's 2026-07-19 Record order entry still specifies Ghost. Change it to Secondary when Purchasing is built. Do not resolve the conflict the other way — the reasoning is here and the 2026-07-19 line has none.
+**Superseded, pick up at build time:** §1.13's 2026-07-19 Record order entry still specifies Ghost. Change it to Secondary when Purchasing is built. Do not resolve the conflict the other way — the reasoning is here and the 2026-07-19 line has none. **Built 2026-10-13:** Purchasing's order wizard became the one-page Record order form; its Cancel is Secondary and Record order takes the page's one Dusk.
 
 **The container must be a takeover, not a sheet. It does not have to be a route.** *(Amended 2026-07-30 — the original wording named a mechanism when it meant an outcome. See below.)*
 
