@@ -51,8 +51,8 @@
     --brass:      var(--td-amber);       /* was Aged Brass — attention/action → Tacet amber */
     --brass-hi:   var(--td-amber-ink);
     --lime:       var(--td-sage-ink);   /* legacy alias → sage */
-    --danger:     #e8556a;
-    --danger-soft: rgba(232, 85, 106, .14);
+    --danger:     var(--td-brick-ink);   /* was #e8556a pink-red; Tacet error = Brick (§1) */
+    --danger-soft: var(--td-brick-tint);
     --warn:       var(--td-amber);       /* attention = Tacet amber (was Brass) */
     --success:    var(--td-sage-ink);    /* positive = Tacet sage (was Tea) */
 
@@ -128,7 +128,7 @@
     --lime:       var(--td-sage-ink);   /* legacy alias → sage */
     --warn:       var(--td-amber);
     --success:    var(--td-sage-ink);
-    --danger-soft: rgba(232, 85, 106, .11);
+    --danger-soft: var(--td-brick-tint);
 
     /* Warm-tinted shadows so cards feel like paper sitting on a desk
        rather than floating elements with bluish drops. */
@@ -5182,7 +5182,7 @@
     font-size: 13px; font-weight: 500;
     padding: 7px 12px;
     border: 1px solid var(--line);
-    background: var(--bg-elev-1);
+    background: transparent;   /* Secondary: transparent + hairline, not a grey slab (§5) */
     color: var(--text-1);
     border-radius: var(--r-md);
     cursor: pointer;
@@ -5199,19 +5199,24 @@
   .btn:active { transform: translateY(1px); }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
   .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
-  /* Primary action = Aged Brass (the single brass CTA per surface —
-     Attach tracking, Save, Apply…). Tea is reserved for active/live. */
+  /* Base primary = Ink fill, weight 500 — decisions §476. It was --brass, which
+     the rebrand pointed at Tacet amber: the WARNING colour, painted on every
+     un-rebuilt page's main button. Not Dusk: Dusk means "Tacet did this", one
+     per screen and none on a Console, and the base class sits on 13 Settings
+     buttons. A page that earns its one Dusk opts in with its own class, as
+     Orders, Customers, Voting and Sales already do. In dark mode --td-text is
+     Paper, so the fill flips with the theme and the label stays readable. */
   .btn-primary {
-    background: var(--brass); color: var(--accent-ink);
-    border-color: var(--brass); font-weight: 600;
+    background: var(--td-text); color: var(--td-surface);
+    border-color: var(--td-text); font-weight: 500;
   }
-  .btn-primary:hover { background: var(--brass-hi); border-color: var(--brass-hi); }
+  .btn-primary:hover { background: var(--td-text); border-color: var(--td-text); opacity: .88; }
   .btn-ghost {
     background: transparent; border-color: transparent; color: var(--text-2);
   }
   .btn-ghost:hover { background: var(--bg-elev-1); color: var(--text-1); border-color: transparent; }
   .btn-danger {
-    background: transparent; color: var(--danger); border-color: rgba(232, 85, 106, .25);
+    background: transparent; color: var(--danger); border-color: var(--td-brick);   /* Brick outline (§5) */
   }
   .btn-danger:hover { background: var(--danger-soft); border-color: var(--danger); }
   .btn-sm { padding: 4px 10px; font-size: 12px; }
