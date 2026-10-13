@@ -1151,10 +1151,13 @@
   /* ═══════════════════════════════════════════════════════════════════
      SALES — channel overview (#tab-sales)
      ═══════════════════════════════════════════════════════════════════ */
-  /* Small gold section label, reused for SUMMARY and CHANNELS headers. */
+  /* Small section label, reused for the Summary and Channels headers and the
+     Delivery panel. Was 10px mono, 700, UPPERCASE, in amber — the warning colour
+     (§1), the caps ban (§1.6) and bold (§2) at once. Now a 13px/500 Graphite
+     caption (audit 2026-10-13, P7). */
   .sales-eyebrow {
-    font-family: var(--f-mono); font-size: 10px; font-weight: 700;
-    letter-spacing: .12em; text-transform: uppercase; color: var(--brass);
+    font-family: var(--f-sans); font-size: 13px; font-weight: 500;
+    letter-spacing: 0; text-transform: none; color: var(--td-text2);
     margin: var(--s5) 0 var(--s3);
   }
   #tab-sales .fc-kpis + .sales-eyebrow { margin-top: var(--s6); }
@@ -5475,8 +5478,8 @@
     display: inline-block; vertical-align: middle; margin-right: 8px;
     padding: 2px 7px; border-radius: 3px;
     background: var(--success); color: #E8E5DC;   /* Tacet sage — the "live/new" chip */
-    font-family: var(--f-mono); font-size: 9px; font-weight: 700;
-    letter-spacing: .16em; text-transform: uppercase; line-height: 1.5; white-space: nowrap;
+    font-family: var(--f-sans); font-size: 11px; font-weight: 500;   /* no caps, no bold (§1.6, §2) */
+    letter-spacing: 0; text-transform: none; line-height: 1.5; white-space: nowrap;
   }
   /* Status cell wraps status + refund pills as a small flex column so
      a narrow column shows the refund pill directly below the status pill
@@ -7641,9 +7644,9 @@
     align-items: center;
     margin: 0 0 var(--s2);
   }
-  .sort-chips .sort-label {
-    font-size: 10px; font-weight: 600; letter-spacing: .1em;
-    text-transform: uppercase; color: var(--text-3);
+  .sort-chips .sort-label {   /* sentence case, 500 (§1.6, §2) */
+    font-size: 12px; font-weight: 500; letter-spacing: 0;
+    text-transform: none; color: var(--text-3);
     margin-right: 4px;
   }
   .sort-chip {
@@ -9093,8 +9096,8 @@
   #td-observation[hidden] { display: none; }
   #td-observation::before { content: '·'; margin: 0 .5em; color: var(--td-border); }
   .td-head-sp { flex: 1; }
-  .td-kicker {
-    font-size: 11px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase;
+  .td-kicker {   /* sentence case, no tracking (§1.6) */
+    font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none;
     color: var(--td-text2); margin: 40px 0 14px;
   }
   #tab-reports .card {
