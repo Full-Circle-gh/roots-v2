@@ -341,10 +341,12 @@ function versionOf(tid) {
   // margin. One key more, the same sixteen coins. If a later change makes this
   // seventeen, something has been ADDED rather than split, and that is worth
   // reading the diff for.
-  is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 23, '23 capabilities move money');
+  // §474 added `till:discount`: a manager's hand discount at the till, up to 20%.
+  // That is the 24th move — ADDED, read in the diff, as the note above asks.
+  is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 24, '24 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
   // §252 added `integrations:signin`, which moves no money and shows none.
-  is(caps.CAPABILITIES.length, 118, 'across all 118');
+  is(caps.CAPABILITIES.length, 119, 'across all 119');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,
@@ -393,8 +395,9 @@ function versionOf(tid) {
       'the ' + role + ' preset, commented as having no money, now has none here either');
   }
   const sm = caps.presetCapsFor('store_manager').filter(k => caps.MONEY_KEYS[k] === 'moves');
-  is(sm.sort(), ['customers:adjust', 'invoices:manage', 'orders:dispatch_courier', 'orders:refund', 'products:edit', 'till:use'],
-    'the shipped store_manager preset moves money six ways — the marker is why this is now visible');
+  // §474 — the store's manager also gives the till's hand discount.
+  is(sm.sort(), ['customers:adjust', 'invoices:manage', 'orders:dispatch_courier', 'orders:refund', 'products:edit', 'till:discount', 'till:use'],
+    'the shipped store_manager preset moves money seven ways — the marker is why this is now visible');
   // The sixth arrived with the counter till (2026-09-03) and is the narrowest of
   // them: ringing a sale at the marked price. It is asserted here rather than
   // waved through because a store manager gaining a money power is exactly what

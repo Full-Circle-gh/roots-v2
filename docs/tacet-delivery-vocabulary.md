@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.331 · 2026-10-13 · §474 A MANAGER'S DISCOUNT AT THE TILL — 6 STRINGS COMPOSED BY CLAUDE (`Friends & family · 亲友`, `Complaint · 投诉`, `Till discount · 收银台折扣`, `Give discounts at the till · 前台收银打折`, the capability's money note, and the New order forms' `A discount can only be given at the till · 折扣只能在收银台给出。`), BUILT ON THE LIVE 折扣 / 收银台 / 前台收银; `折扣最多 20%` LIFTED FROM THE LIVE `折扣最多 100%`; EVERYTHING ELSE ON THE SHEET COPIED WHOLE.** See *A manager's discount at the till (§474)*.
+
 **v1.330 · 2026-10-13 · §473 ONE ANSWER PICKED MORE THAN ONCE — 2 STRINGS COMPOSED BY CLAUDE (`Repeats allowed · 可重复选`, `The same choice can be picked more than once · 同一项可选多次`), BUILT ON THE LIVE 多选 / 必选 / 单选 AND THE LIVE 可重复; THE COUNTER AND `×2` NEED NO WORDS.** See *One answer picked more than once (§473)*.
 
 **v1.329 · 2026-10-12 · §466 HIDING A CATEGORY FROM THE MINI APP — 4 STRINGS COMPOSED BY CLAUDE, EACH THE LIVE §288 QR-MENU STRING WITH `二维码菜单` SWAPPED FOR THE LIVE `小程序`; THE MINI-APP HINT EXTENDED WITH THE QR HINT'S OWN LIVE CLAUSE.** See *Hiding a category from the mini app (§466)*.
@@ -13972,3 +13974,52 @@ items that are the same for example 2 medjool boats"*.
 - `允许重复` (*allow duplicates*): reads as a data-entry warning, not as a
   customer being able to have two of something.
 - `可重复使用`: the live string means *reusable* (a container), not *pick again*.
+
+## A manager's discount at the till (§474)
+
+**Composed by Claude, 2026-10-13, under the 2026-09-06 amendment.** Operator
+register. The till's Discount sheet and bill line (`public/till.html`), the
+order on desktop (`public/retail-admin/04-orders.js`) and phone
+(`public/m.html`), the dashboard (`public/retail-admin/03-dashboard.js`) and the
+role editor (`lib/capabilities.js`). Asked by Ash: *"if I want to give more
+discount manually in the till I can't do it right now"*.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Friends & family` / `亲友` | a reason on the sheet; the order and the dashboard print it back | The ordinary two-character word for relatives and friends. Short enough for a sheet row and a dashboard sub-label. |
+| `Complaint` / `投诉` | a reason | The plain word a customer and a shop both use for a complaint. Nothing live says it. |
+| `Till discount` / `收银台折扣` (also `till discount`, `Till discounts`, and `收银台折扣 ¥X` in the dashboard hover) | the order subline and tile, the phone order line, the dashboard list | `收银台` is live (`在收银台开单即为收款并计入营收`) and `折扣` is live (`Percent off · 折扣`). Named after the place, so it reads apart from the voucher (`优惠券`) beside it. |
+| `Give discounts at the till` / `前台收银打折` | the capability in the role editor | Built on its neighbour `Open the counter till · 使用前台收银`, so the two till permissions read as a pair. `打折` is live (2 uses). |
+| `Takes up to 20% off a sale at the counter.` / `在收银台为一单减价,最多 20%。` | the capability's money note | Same shape as `till:use`'s note beside it (`在收银台开单即为收款…`). States the limit, because the limit is what makes the power safe to hand out. |
+| `A discount can only be given at the till.` / `折扣只能在收银台给出。` | the New order forms, desktop and phone, for a refusal neither can actually trigger (mapped so no code the server sends is homeless) | `折扣` and `收银台` as above; `只能…` is the ordinary *can only*. |
+
+### Lifted
+
+- `Discount can be at most 20%` / `折扣最多 20%`: the admin's live `Percent can
+  be at most 100` / `折扣最多 100%` (05-marketing.js, m.html), with the limit
+  changed.
+
+### Copied whole
+
+`Discount · 折扣` (the Chinese half of `Percent off · 折扣`), `Reason · 原因`,
+`Apply · 应用`, `Note · 备注`, `Damaged · 破损`, `Other · 其他`,
+`Amount · 金额`, `Cancel · 取消`, `Remove discount · 取消优惠` (§426),
+`Give a reason first. · 请先填写原因。`.
+
+### Needs no words
+
+- The quick choices are `5%`, `10%`, `15%`, `20%`.
+- The printed receipt's `Discount` line is English only, like every line in
+  that block (lib/feie.js says why).
+
+### Rejected
+
+- `手动折扣` (*manual discount*): says how it was entered, not where; a cashier
+  reads `收银台` faster, and nothing live uses `手动` for money.
+- `客诉`: trade shorthand for *customer complaint*; `投诉` is the word a shop
+  assistant actually says.
+- `亲朋好友`: correct but too long for a sheet row beside `破损` and `投诉`.
+- `员工折扣` for the capability: reads as *a discount for staff* (the Ramada
+  voucher), the opposite of a discount given by staff.

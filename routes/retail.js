@@ -453,6 +453,7 @@ const { cardSurcharge } = require('../lib/card-surcharge');
 const recycle = require('../lib/recycle');
 // Sales tax and VAT (audit I-03). Off unless a shop has set a rate.
 const tax = require('../lib/tax');
+const tillDiscount = require('../lib/till-discount');
 // §230 — the QR menu's per-type allow-list, so the editor's eye and the
 // live counter menu resolve a block from the same list.
 const qrBlockDefaults = require('../lib/qr-menu-block-defaults');
@@ -16639,6 +16640,14 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
        AND voucher_code IS NOT NULL AND voucher_code != ''
      GROUP BY voucher_code ORDER BY uses DESC LIMIT 15`).all(from, to);
+  // §474 — the hand discounts given at the till, by who gave them and why.
+  const manualDiscounts = tdb().prepare(`
+    SELECT COALESCE(manual_discount_by, '') AS by_name, manual_discount_reason AS reason,
+           COUNT(*) AS uses, COALESCE(SUM(manual_discount_amount), 0) AS discount
+      FROM retail_orders
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
+       AND manual_discount_amount > 0
+     GROUP BY by_name, reason ORDER BY discount DESC LIMIT 20`).all(from, to);
   const points = tdb().prepare(`
     SELECT COUNT(*) AS orders, COALESCE(SUM(points_used), 0) AS points_used,
            COALESCE(SUM(points_amount), 0) AS points_value
@@ -16689,6 +16698,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     SELECT COALESCE(SUM(subtotal), 0)       AS product_total,
            COALESCE(SUM(shipping_fee), 0)   AS delivery_fee,
            COALESCE(SUM(voucher_amount), 0) AS voucher_total,
+           COALESCE(SUM(manual_discount_amount), 0) AS manual_discount_total,
            COALESCE(SUM(points_amount), 0)  AS points_total,
            COALESCE(SUM(balance_used), 0)   AS balance_total,
            COALESCE(SUM(total), 0)          AS net_total
@@ -16957,7 +16967,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       },
       topProducts, topCustomers, tiers,
       geoCities, geoDistricts,
-      marketing: { vouchers, points },
+      marketing: { vouchers, points, manualDiscounts },
       traffic: { scenes },
       heat, cohorts, cohortSizes, composition,
       // Wallet economics for the window. `received` = real top-up cash in
@@ -26960,6 +26970,22 @@ router.put('/api/retail-admin/orders/till-held/:billId', requireRetailAdmin, exp
   res.json({ success: true, data: { taken: out.taken } });
 });
 
+/* §474 — MAY THIS OPERATOR GIVE A HAND DISCOUNT AT THE TILL?
+
+   The one gate in this file that does NOT fail open, and that does not wait for
+   the tenant to switch rbac_enforce on. Every other capability check lets a
+   request through when enforcement is off or the cap set could not be resolved,
+   because blocking a working operator is the worse failure for them. Here the
+   worse failure is the other one: "managers only" was Ash's whole condition, a
+   hidden button is not a permission, and a sale that cannot take a discount is
+   still a sale — the cashier rings it at the shelf price, which is what the till
+   has always done. Owner always may. */
+function manualDiscountDenied(req) {
+  if (req && req.backendUser && req.backendUser.role === 'owner') return false;
+  if (!req || !req.caps || typeof req.caps.has !== 'function') return true;
+  return !req.caps.has('till:discount');
+}
+
 router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), async (req, res) => {
   const b = req.body || {};
 
@@ -27046,8 +27072,32 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
       && (b.total_override == null || b.total_override === ''))
     ? bestCounterVoucher([customer.id], optionStoreId, subtotal) : null;
   const voucherDiscount = counterVoucher ? counterVoucher.discount : 0;
+  /* ── §474 · a manager's hand discount at the till ──────────────────────
+     Up to 20% off the goods left after any voucher, with a reason from a fixed
+     list. The till only — the same four marks as the voucher above — and never
+     beside a typed grand total, which already says what the customer pays.
+     lib/till-discount.js does the arithmetic and is the authority. */
+  let manualDiscount = null;
+  if (b.manual_discount != null && b.manual_discount !== '') {
+    const isTill = String(b.channel || '') === 'shop' && String(b.shop_entry_method || '') === 'till'
+      && String(b.fulfillment_type || '') === 'counter' && optionStoreId
+      && (b.total_override == null || b.total_override === '');
+    if (!isTill) return res.status(400).json({ success: false, error: 'manual_discount_till_only' });
+    if (manualDiscountDenied(req)) {
+      return res.status(403).json({ success: false, error: 'forbidden_capability', need: 'till:discount' });
+    }
+    const md = tillDiscount.resolveManualDiscount(b.manual_discount, money.round(subtotal - voucherDiscount));
+    if (md.error) {
+      const out = { success: false, error: md.error };
+      if (md.max_pct) out.max_pct = md.max_pct;
+      return res.status(400).json(out);
+    }
+    manualDiscount = md;
+  }
+  const manualDiscountAmount = manualDiscount ? manualDiscount.amount : 0;
   let total = Math.round((subtotal + shippingFee + packingFee) * 100) / 100;
   if (voucherDiscount) total = Math.round((total - voucherDiscount) * 100) / 100;
+  if (manualDiscountAmount) total = Math.round((total - manualDiscountAmount) * 100) / 100;
   let overridden = false;
   if (b.total_override != null && b.total_override !== '') {
     const to = Number(b.total_override);
@@ -27076,7 +27126,8 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
         packingMinor: money.toMinor(packingFee) || 0,
         // On the DISCOUNTED base, the checkout's order: tax is charged on what
         // was actually charged.
-        discountMinor: money.toMinor(voucherDiscount) || 0,
+        // §474 — the hand discount too: it is money off the goods, like the voucher.
+        discountMinor: (money.toMinor(voucherDiscount) || 0) + (money.toMinor(manualDiscountAmount) || 0),
       }, taxCfg);
   if (taxLine.addedMinor) total = money.round(total + money.fromMinor(taxLine.addedMinor));
   const taxAmount = taxCfg.enabled ? money.fromMinor(taxLine.taxMinor) : null;
@@ -27428,8 +27479,9 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
            customer_note, staff_note, channel, channel_note, source, created_by, fulfillment_type, pay_token,
            store_id, tax_amount, tax_rate_micro, tax_mode, shop_entry_method,
            points_used, points_amount, balance_used, voucher_code, voucher_amount,
-           card_surcharge_fee
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+           card_surcharge_fee,
+           manual_discount_amount, manual_discount_reason, manual_discount_note, manual_discount_by
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(
         // Always inserted as pending_payment first; markOrderPaid() flips it below
         // when staff chose 'paid', keeping the settle logic in one place.
@@ -27448,7 +27500,12 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
         // entirely in cash the shop never took.
         credit.pointsUsed, credit.pointsAmount, credit.balanceUsed,
         counterVoucher ? counterVoucher.voucher.code : null, voucherDiscount,
-        cardFee
+        cardFee,
+        // §474 — who gave it is the operator's NAME as it reads today, not an id.
+        manualDiscountAmount,
+        manualDiscount ? manualDiscount.reason : null,
+        manualDiscount ? manualDiscount.note : null,
+        manualDiscount ? (req.user.display_name || req.user.username || null) : null
       );
       orderId = info.lastInsertRowid;
       // §426 — the voucher's use, counted the way the checkout counts it, in the
@@ -27620,7 +27677,9 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   // saved its customer in the same transaction is not a guest order.
   logActivity(req.user.id, req.user.username, 'create_manual', 'retail_order', orderId,
               { order_no: orderNo, total, status, guest: !customerId,
-                channel, store_id: storeId, fulfillment_type: fulfillmentType }, req.ip);
+                channel, store_id: storeId, fulfillment_type: fulfillmentType,
+                ...(manualDiscount ? { manual_discount: manualDiscountAmount,
+                                       manual_discount_reason: manualDiscount.reason } : {}) }, req.ip);
   // Pay link is only meaningful while unpaid. Built on this request's origin so
   // it works on whichever storefront host the operator is on (tenant-correct).
   const payUrl = (status === 'pending_payment' && total > 0)
@@ -27634,6 +27693,8 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
                                     balance_used: credit.balanceUsed,
                                     // §426 — the voucher the server applied, if any.
                                     voucher_amount: voucherDiscount,
+                                    // §474 — the hand discount the server charged.
+                                    manual_discount_amount: manualDiscountAmount,
                                     // §450 — the intl-card 4%, already inside `total`.
                                     card_surcharge_fee: cardFee,
                                     // What was charged, so the caller can print

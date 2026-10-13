@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.521
+# Tacet shared-core consolidation — decisions record, v4.522
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-13 · v4.522 — **§474 · A MANAGER CAN TAKE UP TO 20% OFF A TILL SALE, WITH A REASON — DECIDED BY ASH:** *"if I want to give more discount manually in the till I can't do it right now"*, with a photo of a till bill carrying the Ramada Staff 10%, then *"go, managers only, max 20%, reasoozn required"* to the proposal. A **Discount** button on the till (5 / 10 / 15 / 20% or a typed amount, a reason from Damaged / Friends & family / Complaint / Other, a note required for Other), behind a new capability `till:discount` that the manager presets carry and the shop floor does not. It comes off the goods **after** the voucher and **before** tax, is stored in its own columns beside `voucher_amount` with its reason and the giver's name, prints on the receipt, shows on the order on desktop and phone, and is counted on the dashboard by person and reason. **Reverses** the till's "no price override at the counter" (the `till:use` note in `lib/capabilities.js`), for this one bounded act. See §474.
 
 2026-10-13 · v4.521 — **§473 · A PICK-ANY QUESTION CAN LET ONE ANSWER BE PICKED MORE THAN ONCE (§153 AMENDED) — DECIDED BY ASH:** *"can't select 2 items that are the same for example 2 medjool boats"*, with a photo of the till's *Small Bites Selection* sheet (*At least 2*), then three choices put to him: a switch per question, a − n + counter on each answer, everywhere at once. A new `allow_repeat` column on `retail_product_options`, 0 on every existing row, so nothing already authored changes. With it on, a pick-any question counts every pick toward its floor and ceiling, charges each one and takes each one off a linked shelf. A repeat is stored on the order line as the same entry written twice, so money, stock and cost need no second rule; printers fold it into *Medjool Boats ×2*. Two Chinese strings composed by Claude; see the vocabulary's v1.330. Schema: one added column. No change to `.gitignore` or CI. See §473.
 
@@ -30930,3 +30932,84 @@ Meituan and Eleme, which carry no choice ids.
 Held by `scripts/test_option_repeats.js`. Two Chinese strings composed by
 Claude (vocabulary v1.330). Schema: one added column, through `addColumn`. No
 change to `.gitignore` or CI.
+
+## §474 — A MANAGER CAN TAKE UP TO 20% OFF A TILL SALE, WITH A REASON
+
+**Decided by Ash, 2026-10-13:** *"if I want to give more discount manually in
+the till I can't do it right now . I need the option to do it"*, with a photo
+of a till bill showing *Ramada Staff −¥4.30*. A proposal was put to him (a
+button with quick percentages, a required reason, a capability, its own line on
+the order), with a warning against the easier build — letting the cashier type
+over a price or the total, which leaves no record of how much was given away,
+by whom or why. He answered *"go, managers only, max 20%, reasoozn required"*.
+
+**What it reverses.** The till was built with no price override on purpose
+(the `till:use` note in `lib/capabilities.js`: *"prices come from
+products.sell_price and the cashier cannot type over them"*). That stays true
+for prices. What changes is that a manager can take a bounded discount off the
+bill, and it is recorded as a discount, not as a different price.
+
+**The rules.**
+
+1. **Managers only.** A new capability, `till:discount`, money-marked. The
+   `admin`/`manager` presets carry it through `ALL_KEYS`, `store_manager` lists
+   it, `staff` does not. Live tenants get it by a once-only backfill onto their
+   `admin`, `manager` and `store_manager` role rows
+   (`migrateTillDiscountCap`, ledger `grant_till_discount_to_managers_v1`). The
+   owner always may.
+2. **The server checks it whatever `rbac_enforce` says, and fails closed.**
+   This is the one capability check that does not follow the layer's fail-open
+   rule (`manualDiscountDenied` in `routes/retail.js`). Ash's condition was
+   "managers only", a hidden button is not a permission, and every tenant today
+   runs with enforcement off. A refused discount costs nothing: the sale can
+   still be rung at the shelf price.
+3. **At most 20%, of the goods after any voucher, before tax.** The voucher
+   (§426) is the shop's standing promotion and comes off first. The hand
+   discount is a decision about what is left. Tax is worked on what was
+   charged. A typed amount is held to the same 20% as a percentage, so ¥40 off
+   a ¥43 bill cannot walk past the limit.
+4. **A reason is required.** One of `damaged`, `friends_family`, `complaint`,
+   `other`. `other` needs a note in the cashier's own words (up to 120
+   characters).
+5. **The till only.** The same marks as the §426 voucher: a counter sale from
+   the till with a store. Never on the admin's New order, and never beside a
+   typed grand total, which already says what the customer pays.
+6. **Its own record.** `retail_orders.manual_discount_amount` (registered in
+   `lib/money-columns.js` as a source amount), `_reason`, `_note`, and `_by`, the
+   giver's display name as text, because tenant and kitchen user ids collide
+   (v4.85). Kept apart from `voucher_amount` because they answer different
+   questions, and the reports count them apart.
+7. **Where it shows.** The till's bill (*Discount 10% · Damaged −¥4.30*, under
+   the voucher), the printed receipt (*Discount*), the order on desktop (the
+   money subline, a *Till discount* tile with the reason, note and name, and the
+   money-gap check) and on the phone, and the dashboard: a *Till discounts* list
+   by person and reason, the revenue composition's hover, and the AI digest.
+
+**The arithmetic lives once.** `lib/till-discount.js` is the authority; the
+till carries a copy for the glass and the server works the figure out again
+from what is posted.
+
+**Not changed.** Prices. A recalled QR order (the till does not offer the
+button on one: the customer priced it on their own phone). A held bill does not
+keep its discount: holding clears it, and it is given again when the bill comes
+back. The mini app's own order screen does not show the line yet; a customer
+who was given one sees the lower total.
+
+**Open, for Ash.** The till is often signed in under one account for the whole
+shift. The button only shows when that account holds `till:discount`. If the
+counter tablet runs on a shop-floor login, a manager cannot give a discount
+there without signing in. A manager PIN on the tablet would close that; it is
+not built.
+
+Three existing suites pinned what this changes and were updated, not skipped:
+`test_tenant_roles.js` (24 money-moving capabilities of 119, and the store
+manager's seven), `test_till_hold.js` (the till's click selector now ends in
+the discount's three attributes), and the New order forms' refusal maps
+(`test_phone_order.js`, `verify-fulfilment-types.js`), which now give
+`manual_discount_till_only` a home and a sentence although neither form can
+trigger it — the rule those maps exist for.
+
+Held by `scripts/test_till_manual_discount.js` (fast shard). Six Chinese
+strings composed by Claude (vocabulary v1.331). Schema: four added columns,
+through `addColumn`. One new capability and its backfill. No change to
+`.gitignore` or CI.

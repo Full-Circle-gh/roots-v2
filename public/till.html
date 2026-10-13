@@ -594,6 +594,22 @@ button{font:inherit;color:inherit;margin:0}
   font-size:14px;font-weight:500;
 }
 .hold[hidden]{display:none}
+/* §474 — the hand discount. The same quiet shape as Hold, for the same
+   reason: it is not the act the rail is for. Only drawn for an operator who
+   holds till:discount. */
+.disc{
+  width:100%;height:44px;margin-top:8px;border:1px solid var(--td-border);
+  background:transparent;color:var(--td-text);border-radius:var(--r-control);
+  font-size:14px;font-weight:500;
+}
+.disc[hidden]{display:none}
+.disc:active{background:var(--td-raised)}
+.disc[disabled]{color:var(--td-text2)}
+/* The sheet: four quick percentages in one row, then the amount, then why. */
+.dpcts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.dpcts .srow{justify-content:center;padding:0;font-variant-numeric:tabular-nums}
+.derr{font-size:14px;font-weight:500;color:var(--td-brick-ink)}
+.derr:empty{display:none}
 .hold:active{background:var(--td-raised)}
 .hold[disabled]{color:var(--td-text2)}
 /* WHAT WENT WRONG, ON THE SCREEN IT WENT WRONG ON. Same ink as the settle
@@ -1031,6 +1047,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         <div class="terr" id="till-err" hidden></div>
         <button class="pay" id="pay" type="button" disabled></button>
         <button class="hold" id="hold" type="button" data-hold="ask" hidden></button>
+        <button class="disc" id="disc" type="button" data-disc="ask" hidden></button>
         <div class="cxq" id="cancel-ask" hidden></div>
         <button class="cxo" id="cancel-order" type="button" data-cancel-order="1" hidden></button>
       </div>
@@ -1051,6 +1068,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   <div class="sscrim" id="custpick" hidden></div>
   <div class="sscrim" id="leavepick" hidden></div>
   <div class="sscrim" id="holdpick" hidden></div>
+  <div class="sscrim" id="discpick" hidden></div>
   <div class="sscrim" id="optpick" hidden></div>
 </div>
 <div class="boot" id="boot"><p id="boot-msg"></p></div>
@@ -1143,6 +1161,20 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     typedPhone:   ['Phone typed by the customer — check before taking payment',
                    '顾客自己输入的电话,收款前请核对'],  // composed, §426
     removeDiscount: ['Remove discount', '取消优惠'],   // composed, §426
+    /* §474 — a manager's hand discount. `discount` is the admin's own word for
+       a percentage off (05-marketing.js, Percent off · 折扣); `reason`, `apply`,
+       `note`, `damaged` and `giveReason` are copied whole; `discMax` is the
+       admin's "Percent can be at most 100" with the limit changed. Two reasons
+       are COMPOSED and declared in docs/tacet-delivery-vocabulary.md (§474). */
+    discount:     ['Discount', '折扣'],                // admin: 05-marketing.js Percent off
+    reason:       ['Reason', '原因'],                  // admin: 04-orders.js
+    apply:        ['Apply', '应用'],                   // m.html
+    note:         ['Note', '备注'],                    // m.html
+    damaged:      ['Damaged', '破损'],                 // admin: 16-purchasing.js
+    friendsFamily: ['Friends & family', '亲友'],       // composed, §474
+    complaint:    ['Complaint', '投诉'],               // composed, §474
+    discMax:      ['Discount can be at most 20%', '折扣最多 20%'], // admin: 05-marketing.js, limit changed
+    giveReason:   ['Give a reason first.', '请先填写原因。'], // admin: 01-core.js
     /* §428 — adding a customer at the counter, and giving them this location's
        voucher. The first three are the phone app's own "Add a customer" form
        (m.html), quoted whole: the same three fields, the same act. `give` takes
@@ -1384,6 +1416,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        `heldLast` is what was last written for it, so a repaint that changed
        nothing writes nothing. `holdOpen` is the note sheet. */
     tid: null, held: [], heldId: null, heldLast: '', holdOpen: false,
+    /* §474 — a manager's hand discount on THIS bill. `canDisc` is whether this
+       operator holds till:discount (closed when it cannot be read: the server
+       refuses the sale otherwise). `disc` is { percent | amount, reason, note }
+       or null; `discOpen`/`discDraft` are the sheet. Cleared with the basket. */
+    canDisc: false, disc: null, discOpen: false, discDraft: null,
     heldSent: {}, heldBusy: {},
     home: null, homeLabel: null,  // where Back goes, and what it says — /api/backend/me
     leaveOpen: false,          // is the "leave without saving?" question up?
@@ -1857,6 +1894,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         // Opened from the desktop backend rather than from /m — see homeFromDoor.
         var _door = homeFromDoor(S.home);
         if (_door) { S.home = _door.home; S.homeLabel = _door.label; }
+        // §474 — the Discount button. CLOSED when the caps cannot be read, unlike
+        // the gate below: the server refuses a discount it cannot check, so a
+        // button drawn on a guess would only produce a refused sale.
+        S.canDisc = !!((me && me.user && me.user.role === 'owner')
+                       || (caps && caps.indexOf('till:discount') !== -1));
         if (caps && (caps.indexOf('till:use') === -1 || caps.indexOf('orders:edit') === -1)) {
           boot('<p>' + esc(T('noPermission')) + '</p>');
           return;
@@ -2197,6 +2239,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   function render() {
     if (!S.storeId) return;
     heldSync();   // §457 — before anything is drawn from it
+    discSync();   // §474 — a typed amount the bill has shrunk under is dropped
     $('hd-title').textContent = T('counterSale');
     // The label names the destination — the operator's own home screen, titled
     // with their role's name, exactly as the phone titles it. 'Back' alone when
@@ -2223,6 +2266,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     renderOpts();
     renderLeave();
     renderHoldAsk();
+    renderDiscAsk();
     $('hd-lang').textContent = _lang === 'cn' ? 'EN' : '中文';
     renderInstall();
     renderSound();
@@ -2524,7 +2568,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       name: o.recipient_name || '', total: Number(o.total) || 0, loading: true
     };
     S.cxArm = false;
-    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = '';
+    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.disc = null;
     // The sheet is where the rail lives on a phone, and it is closed by
     // default. Opening it is what makes "check the order" a thing that has
     // happened rather than a thing the cashier could have done.
@@ -2575,7 +2619,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   function cancelRecall() {
     S.cxArm = false;
     S.recall = null; S.lines = []; S.sel = null;
-    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = '';
+    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.disc = null;
     S.view = 'till'; S.pane = 'pend'; S.paneTouched = true;
     render();
   }
@@ -2689,7 +2733,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (!heldPut(bill)) { S.err = T('didNotSave'); return false; }
     heldStockPush(id, bill.lines);
     S.lines = []; S.sel = null; S.customer = null; S.heldId = null; S.heldLast = '';
-    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = '';
+    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.disc = null;
     return true;
   }
 
@@ -2736,7 +2780,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     S.sel = null;
     S.customer = bill.customer ? custRow({ id: bill.customer.id, nickname: bill.customer.nickname,
                                            points: bill.customer.points, balance: bill.customer.balance }) : null;
-    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = '';
+    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.disc = null;
     // Back to the menu, so the coffee they just ordered is one tap away; and
     // on a phone the sheet opens, as it does for a recall.
     S.pane = 'menu'; S.paneTouched = true; S.sheetOpen = true;
@@ -2905,8 +2949,123 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   function settleDue() {
     if (S.recall) return S.recall.total;
     var sub = subtotal(), cv = counterVoucher(sub);
-    return dueNow(Math.round((sub - (cv ? cv.off : 0)) * 100) / 100);
+    return dueNow(Math.round((sub - (cv ? cv.off : 0) - discOff(sub)) * 100) / 100);
   }
+
+  /* ── §474 · a manager's hand discount ──────────────────────────────────
+     Up to 20% off what is left after the voucher, before tax, with a reason.
+     THE ARITHMETIC MIRRORS lib/till-discount.js and is NOT the authority: the
+     server works the figure out again from what is posted and charges its own.
+     A percentage follows the bill as lines change; a typed amount that the bill
+     has shrunk under (more than 20% of what is left) is dropped and said. */
+  var DISC_MAX_PCT = 20;
+  var DISC_PCTS = [5, 10, 15, 20];
+  var DISC_REASONS = [['damaged', 'damaged'], ['friends_family', 'friendsFamily'],
+                      ['complaint', 'complaint'], ['other', 'other']];
+  function discReasonLabel(r) {
+    for (var i = 0; i < DISC_REASONS.length; i++) if (DISC_REASONS[i][0] === r) return T(DISC_REASONS[i][1]);
+    return String(r || '');
+  }
+  function discBase(sub) {
+    var cv = counterVoucher(sub);
+    return Math.max(0, Math.round((sub - (cv ? cv.off : 0)) * 100) / 100);
+  }
+  function discCeil(base) { return Math.round((base * DISC_MAX_PCT / 100) * 100) / 100; }
+  function discOff(sub) {
+    var d = S.disc;
+    if (!d || S.recall) return 0;
+    var base = discBase(sub);
+    if (!(base > 0)) return 0;
+    var off = d.percent != null ? Math.round((base * d.percent / 100) * 100) / 100 : d.amount;
+    if (d.amount != null && d.amount > discCeil(base)) return 0;
+    return off > 0 ? off : 0;
+  }
+  function discSync() {
+    if (!S.disc) return;
+    if (S.recall || !S.lines.length) { S.disc = null; return; }
+    if (!(discOff(subtotal()) > 0)) { S.disc = null; S.err = T('discMax'); }
+  }
+  function openDiscAsk() {
+    if (!S.canDisc || S.recall || !S.lines.length || S.busy) return;
+    var d = S.disc;
+    S.discDraft = { percent: d ? d.percent : null, reason: d ? d.reason : '' };
+    S.discOpen = true; render();
+  }
+  function closeDiscAsk() { S.discOpen = false; S.discDraft = null; render(); }
+  // BUILT ONCE PER OPENING, like the hold note: a repaint must not throw away a
+  // half-typed amount or drop the keyboard. Picks are toggled in place.
+  function renderDiscAsk() {
+    var el = $('discpick');
+    el.hidden = !S.discOpen;
+    if (!S.discOpen) { el.innerHTML = ''; el.removeAttribute('data-built'); return; }
+    if (el.getAttribute('data-built') === _lang) return;
+    var d = S.disc, dr = S.discDraft || {};
+    var amt = $('disc-amt'), nt = $('disc-note');
+    var keepAmt = amt ? amt.value : (d && d.amount != null ? String(d.amount) : '');
+    var keepNote = nt ? nt.value : (d && d.note ? d.note : '');
+    var h = '<div class="ssheet"><div class="hd">' + esc(T('discount')) + '</div><div class="dpcts">';
+    DISC_PCTS.forEach(function (p) {
+      h += '<button class="srow' + (dr.percent === p ? ' on' : '') + '" type="button" data-disc-pct="' + p + '">' + p + '%</button>';
+    });
+    h += '</div><div class="cnew"><input id="disc-amt" type="text" inputmode="decimal" maxlength="9" autocomplete="off"'
+       + ' placeholder="' + esc(T('amount')) + '"></div>'
+       + '<div class="hd">' + esc(T('reason')) + '</div>';
+    DISC_REASONS.forEach(function (r) {
+      h += '<button class="srow' + (dr.reason === r[0] ? ' on' : '') + '" type="button" data-disc-why="' + r[0] + '">'
+         + '<span>' + esc(T(r[1])) + '</span></button>';
+    });
+    h += '<div class="cnew"><input id="disc-note" type="text" maxlength="120" autocomplete="off"'
+       + ' placeholder="' + esc(T('note')) + '"></div>'
+       + '<div class="derr" id="disc-err"></div>'
+       + '<button class="srow" type="button" data-disc="go"><span>' + esc(T('apply')) + '</span></button>'
+       + (d ? '<button class="srow" type="button" data-disc="off"><span>' + esc(T('removeDiscount')) + '</span></button>' : '')
+       + '<button class="srow" type="button" data-disc="close"><span>' + esc(T('cancel')) + '</span></button>'
+       + '</div>';
+    el.innerHTML = h;
+    $('disc-amt').value = keepAmt || '';
+    $('disc-note').value = keepNote || '';
+    el.setAttribute('data-built', _lang);
+  }
+  // A percentage and a typed amount are one choice: picking either clears the other.
+  function pickDiscPct(p) {
+    if (!S.discDraft) return;
+    S.discDraft.percent = S.discDraft.percent === p ? null : p;
+    var amt = $('disc-amt'); if (amt && S.discDraft.percent != null) amt.value = '';
+    var bs = $('discpick').querySelectorAll('[data-disc-pct]');
+    for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', Number(bs[i].getAttribute('data-disc-pct')) === S.discDraft.percent);
+  }
+  function pickDiscWhy(r) {
+    if (!S.discDraft) return;
+    S.discDraft.reason = r;
+    var bs = $('discpick').querySelectorAll('[data-disc-why]');
+    for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', bs[i].getAttribute('data-disc-why') === r);
+  }
+  function discTyped() {
+    if (!S.discDraft) return;
+    var amt = $('disc-amt');
+    if (amt && String(amt.value || '').trim()) {
+      S.discDraft.percent = null;
+      var bs = $('discpick').querySelectorAll('[data-disc-pct]');
+      for (var i = 0; i < bs.length; i++) bs[i].classList.remove('on');
+    }
+  }
+  function commitDisc() {
+    if (!S.discOpen) return;
+    var dr = S.discDraft || {};
+    var err = $('disc-err');
+    var say = function (k) { if (err) err.textContent = T(k); };
+    var raw = String(($('disc-amt') || {}).value || '').trim().replace(/[\u00a5\uffe5,\s]/g, '');
+    var note = String(($('disc-note') || {}).value || '').trim().slice(0, 120);
+    var next = { percent: null, amount: null, reason: dr.reason || '', note: note };
+    if (dr.percent != null) next.percent = dr.percent;
+    else if (raw) next.amount = Math.round((Number(raw) || 0) * 100) / 100;
+    if (next.percent == null && !(next.amount > 0)) { var a = $('disc-amt'); if (a) a.focus(); return; }
+    if (!next.reason || (next.reason === 'other' && !note)) return say('giveReason');
+    if (next.amount != null && next.amount > discCeil(discBase(subtotal()))) return say('discMax');
+    S.disc = next; S.discOpen = false; S.discDraft = null; S.err = '';
+    render();
+  }
+  function removeDisc() { S.disc = null; S.discOpen = false; S.discDraft = null; render(); }
 
   /* ── §426 · the attached customer's voucher at THIS counter ────────────
      A located voucher the customer holds comes off a till sale with no tap —
@@ -3243,7 +3402,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     var row = function (a, b) { return '<div><span>' + esc(a) + '</span><span>' + b + '</span></div>'; };
     var cv = counterVoucher(sub);
     var off = cv ? cv.off : 0;
-    var net = Math.round((sub - off) * 100) / 100;
+    var dOff = discOff(sub);   // §474
+    var net = Math.round((sub - off - dOff) * 100) / 100;
     var sums = '';
     if (S.recall) {
       // The recalled order's voucher, as the server stored it. A discount found
@@ -3256,9 +3416,14 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
                 + esc(T('removeDiscount')) + '</button></div>';
         }
       }
-    } else if (S.lines.length && (S.tax || off > 0)) {
-      if (off > 0 || (S.tax && S.tax.mode === 'exclusive')) sums += row(T('subtotal'), money(sub));
+    } else if (S.lines.length && (S.tax || off > 0 || dOff > 0)) {
+      if (off > 0 || dOff > 0 || (S.tax && S.tax.mode === 'exclusive')) sums += row(T('subtotal'), money(sub));
       if (off > 0) sums += row(cv.title, '−' + money(off));
+      // §474 — after the voucher, which it is worked on. Named by its reason.
+      if (dOff > 0) {
+        sums += row(T('discount') + (S.disc.percent != null ? ' ' + S.disc.percent + '%' : '')
+                    + ' · ' + discReasonLabel(S.disc.reason), '−' + money(dOff));
+      }
       if (S.tax) sums += row(S.tax.label, money(taxOn(net)));
     }
     $('sums').innerHTML = sums;
@@ -3271,6 +3436,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     var b = $('pay');
     b.disabled = !ready;
     b.textContent = ready ? T('markPaid') + '  ' + money(due) : T('markPaid');
+    // §474 — Discount, under Hold, for an operator who may give one.
+    var dbt = $('disc');
+    if (dbt) {
+      dbt.hidden = !(S.canDisc && !S.recall && S.lines.length);
+      dbt.textContent = dOff > 0 ? T('discount') + '  −' + money(dOff) : T('discount');
+      dbt.disabled = !!S.busy;
+    }
     // §457 — Hold, under Mark paid, for the till's own bill only.
     var hb = $('hold');
     if (hb) {
@@ -3680,6 +3852,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (cashDue() <= 0 && creditApplied() > 0) body.payment_method = creditTender();
     // §461 — the server gives this bill's held units back, then the sale takes them.
     if (S.heldId) body.held_bill_id = S.heldId;
+    // §474 — exactly one of percent / amount; the server works out the figure.
+    if (S.disc && discOff(subtotal()) > 0) {
+      body.manual_discount = { percent: S.disc.percent, amount: S.disc.amount,
+                               reason: S.disc.reason, note: S.disc.note || '' };
+    }
 
     api('/api/retail-admin/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -3842,7 +4019,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
 
   function reset() {
     S.lines = []; S.sel = null; S.customer = null; S.heldId = null; S.heldLast = '';
-    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.done = null;
+    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.done = null; S.disc = null;
     S.view = 'till'; S.printState = 'idle';
     S.q = ''; $('q').value = '';
     // The sale is over, so the pane goes back to being defaulted rather than
@@ -4420,7 +4597,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (S.opts && ev.target.id === 'optpick') return closeOpts();
       // §457 — tapping away from the note sheet is not holding.
       if (S.holdOpen && ev.target.id === 'holdpick') return closeHoldAsk();
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-hold],[data-held]');
+      // §474 — tapping away from the discount sheet is not giving one.
+      if (S.discOpen && ev.target.id === 'discpick') return closeDiscAsk();
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-hold],[data-held],[data-disc],[data-disc-pct],[data-disc-why]');
       if (!t) return;
       // §183 — the question sheet. Answered before anything else on the screen:
       // while it is up it is the only thing the cashier is being asked.
@@ -4449,6 +4628,15 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         return openHoldAsk();
       }
       if (t.hasAttribute('data-held')) return openHeld(t.getAttribute('data-held'));
+      if (t.hasAttribute('data-disc-pct')) return pickDiscPct(Number(t.getAttribute('data-disc-pct')));
+      if (t.hasAttribute('data-disc-why')) return pickDiscWhy(t.getAttribute('data-disc-why'));
+      if (t.hasAttribute('data-disc')) {   // §474
+        var da = t.getAttribute('data-disc');
+        if (da === 'go') return commitDisc();
+        if (da === 'off') return removeDisc();
+        if (da === 'close') return closeDiscAsk();
+        return openDiscAsk();
+      }
       if (t.hasAttribute('data-recall-cancel')) return cancelRecall();
       if (t.hasAttribute('data-rm-voucher')) return removeVoucher();
       if (t.hasAttribute('data-give')) return giveVoucher(t.getAttribute('data-give'));   // §428
@@ -4539,6 +4727,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // §457 — Enter in the note field holds, as the sheet's own button does.
     $('holdpick').addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && e.target && e.target.id === 'hold-note') { e.preventDefault(); commitHold(); }
+    });
+    // §474 — typing an amount clears a picked percentage.
+    $('discpick').addEventListener('input', function (e) {
+      if (e.target && e.target.id === 'disc-amt') discTyped();
     });
     $('q').addEventListener('input', function (e) { S.q = e.target.value || ''; $('q-clr').hidden = !S.q; renderGrid(); });
     $('q-clr').addEventListener('click', function () { S.q = ''; $('q').value = ''; $('q-clr').hidden = true; renderGrid(); });

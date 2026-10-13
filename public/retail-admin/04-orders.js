@@ -6678,7 +6678,8 @@ function ordMoneyGap(o) {
   // §450 — the international-card 4% is inside `total` too.
   const surcharges = Number(o.shipping_fee || 0) + Number(o.packing_fee || 0) + taxAdded
                    + Number(o.card_surcharge_fee || 0);
-  const deductions = Number(o.voucher_amount || 0) + Number(o.points_amount || 0) + Number(o.balance_used || 0);
+  const deductions = Number(o.voucher_amount || 0) + Number(o.points_amount || 0) + Number(o.balance_used || 0)
+                   + Number(o.manual_discount_amount || 0);   // §474
   const expected = Math.round((items + surcharges - deductions) * 100) / 100;
   const gap = Math.round((expected - total) * 100) / 100;
   if (Math.abs(gap) <= Math.max(5, items * 0.3)) return null;
@@ -6690,6 +6691,13 @@ function ordMoneyGap(o) {
 // refund ceiling because that is the practical consequence: refunds are capped
 // at `total` (routes/retail.js orderTenders), so an operator refunding "all the
 // lines" on this order gets the smaller number and no explanation.
+// §474 — why a till discount was given, in the reader's language. The same
+// four the till offers; an unknown stored value prints as stored.
+function ordTillDiscountReason(r) {
+  const L = { damaged: ['Damaged', '破损'], friends_family: ['Friends & family', '亲友'],
+              complaint: ['Complaint', '投诉'], other: ['Other', '其他'] }[r];
+  return L ? cuT(L[0], L[1]) : String(r || '');
+}
 function orderMoneyGapBand(o) {
   const g = ordMoneyGap(o);
   if (!g) return '';
@@ -6724,6 +6732,8 @@ function orderTotalSubline(o) {
   // weren't one — 44 of 616 live orders, two off by more than ¥1000. Wallet is
   // what the Customers page calls balance_used, so the two surfaces agree.
   if (Number(o.voucher_amount) > 0) s += ` · ${cuT('voucher','优惠券')} −${acMoney(o.voucher_amount)}`;
+  // §474 — a manager's hand discount at the till, after the voucher it follows.
+  if (Number(o.manual_discount_amount) > 0) s += ` · ${cuT('till discount','收银台折扣')} −${acMoney(o.manual_discount_amount)}`;
   if (Number(o.points_amount) > 0)  s += ` · ${cuT('points','积分')} −${acMoney(o.points_amount)}`;
   if (Number(o.balance_used) > 0)   s += ` · ${cuT('wallet','钱包')} −${acMoney(o.balance_used)}`;
   // §450 — after the credit, because it is worked on what the card took.
@@ -7277,6 +7287,11 @@ function renderOpenOrder(o) {
             ${Number(o.voucher_amount) > 0 ? `<div>
               <div class="kicker">${cuT('voucher','优惠券')}</div>
               <div class="val" data-no-i18n>${o.voucher_code ? `<b>${escapeHtml(o.voucher_code)}</b>` : cuT('not recorded','未记录')}</div>
+            </div>` : ''}
+            ${Number(o.manual_discount_amount) > 0 ? `<div>
+              <div class="kicker">${cuT('Till discount','收银台折扣')}</div>
+              <div class="val"><b>${escapeHtml(ordTillDiscountReason(o.manual_discount_reason))}</b>${o.manual_discount_note ? ` · ${escapeHtml(o.manual_discount_note)}` : ''}</div>
+              ${o.manual_discount_by ? `<div class="sub" data-no-i18n>${escapeHtml(o.manual_discount_by)}</div>` : ''}
             </div>` : ''}
             ${renderShipByTile(o)}
             ${o.store_code ? `<div>
@@ -12149,6 +12164,9 @@ const ONW_ERR_WHERE = {
   // 'route' because that is the block the channel control sits in.
   bad_shop_entry_method: 'route', shop_entry_method_required: 'route',
   shop_entry_method_not_allowed: 'route',
+  // §474 — a manager's hand discount is the till's alone. Unreachable from this
+  // form (it never sends one), mapped for the reason the three above are.
+  manual_discount_till_only: 'money',
   bad_store_id: 'route', store_not_found: 'route',
   store_required_for_counter: 'route',
   bad_fulfillment_type: 'route', fulfillment_type_required: 'route',
@@ -12244,6 +12262,7 @@ function ordNewErrText(code, detail, productId) {
                                     '门店订单需注明来自前台还是二维码。'),
     shop_entry_method_not_allowed: cuT('Only a shop order comes in through the till or the QR menu.',
                                        '只有门店订单才能标注前台或二维码来源。'),
+    manual_discount_till_only: cuT('A discount can only be given at the till.', '折扣只能在收银台给出。'),   // composed, §474
     bad_store_id: cuT('Pick a store.', '请选择门店。'),
     store_not_found: cuT('That store no longer exists. Pick another.', '该门店已不存在,请另选。'),
     // The server refuses a walk-in with no location: the goods left a shelf, and

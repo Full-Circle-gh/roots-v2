@@ -346,6 +346,9 @@ try {
   // rows that already hold the finance/approval capabilities this rides beside.
   const voids = roles.migrateExpenseCancelCap();
   if (voids) console.log('[backend-auth] granted expenses:cancel to ' + voids + ' role(s)');
+  // §474's key, the same shape again: the managers only, never the shop floor.
+  const discounts = roles.migrateTillDiscountCap();
+  if (discounts) console.log('[backend-auth] granted till:discount to ' + discounts + ' manager role(s)');
   // §278: the kitchen and store-stock descriptions stop naming the deleted
   // app, on every row whose description nobody has typed over.
   const descs = roles.migrateStockRoleDescriptions();
