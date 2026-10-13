@@ -9594,7 +9594,7 @@
   .bx-in-list { display: grid; gap: 2px; margin-top: 4px; align-content: start; }
   /* Section caption for the merged "On the way / Drafts" card — a small quiet
      label above each of its two lists; the second gets a hairline separator. */
-  .bx-in-cap { font: 600 11px var(--f-sans); color: var(--td-text2); margin: 0 0 2px; }
+  .bx-in-cap { font: 500 11px var(--f-sans); color: var(--td-text2); margin: 0 0 2px; }
   .bx-in-cap.bx-in-cap-2 { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--td-raised); }
   .bx-in-row { display: flex; align-items: baseline; gap: 12px; padding: 7px 0; font-size: 13.5px; }
   .bx-in-row + .bx-in-row { border-top: 1px solid var(--td-raised); }
@@ -11684,10 +11684,10 @@ body:has(#tab-vouchers.active) { background: var(--td-paper); }
 #tab-vouchers .td-head { align-items: flex-start; flex-wrap: wrap; margin-bottom: 20px; }
 .vch-spacer { flex: 1; }
 
-/* Creation CTA — dark-ink primary, matches #tab-flash .fsm-new. */
-.vch-new { background: var(--text-1); border-color: var(--text-1); color: var(--bg-app); gap: 7px; font-weight: 500; white-space: nowrap; }
-.vch-new:hover { background: #24304A; border-color: #24304A; color: var(--paper, #FBF9F4); }
-[data-theme="dark"] .vch-new:hover { background: #EAE7DF; border-color: #EAE7DF; color: var(--bg-app); }
+/* Creation CTA — the page's one Dusk, matches #tab-flash .fsm-new. */
+/* The page's one Dusk: the header create action (§1.8 rule 1; marketing addendum: "Header CTA = Dusk (was Ink drift)"). */
+.vch-new { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; gap: 7px; font-weight: 500; white-space: nowrap; }
+.vch-new:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); color: #fff; }
 .vch-new svg { flex: none; }
 
 /* ── toolbar: segment + search ── */
@@ -11769,7 +11769,7 @@ tr.vch-row.is-off .vch-code, tr.vch-row.is-off .vch-gives { color: var(--text-2)
 /* ── the coupon drawer ── */
 #vch-drawer .drawer-body { padding-top: 26px; }
 .vch-kicker {
-  font-size: 11px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase;
+  font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none;
   color: var(--text-2); margin: 24px 0 4px;
 }
 .vch-dw-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-right: 40px; }
