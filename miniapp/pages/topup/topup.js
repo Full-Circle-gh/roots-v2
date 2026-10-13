@@ -17,8 +17,14 @@ const api = require('../../utils/api');
 const POINT_VALUE_YUAN = 0.01;
 
 const TIER_BGS = ['#FFFCF7', 'var(--corn)', 'var(--papaya)', 'var(--lime)'];
-const TIER_LABELS_EN = ['STARTER', 'REGULAR', 'PLUS', 'BEST VALUE'];
-const TIER_LABELS_CN = ['入门', '常规', '高级', '最划算'];
+// Card header word. Never the package's typed title_en/title_cn: staff write
+// numbers into those ("5000¥+450 POINT"), and once bonus_points changes the
+// title lies beside the real "+500 PTS". Amount and points below the header
+// come from the real fields, so the header carries no numbers of its own —
+// same as the web shop's top-up block. The last tier gets no word: its
+// BEST VALUE sticker already says it.
+const TIER_LABELS_EN = ['STARTER', 'REGULAR', 'PLUS'];
+const TIER_LABELS_CN = ['入门', '常规', '高级'];
 
 Page({
   data: {
@@ -125,7 +131,7 @@ Page({
         const pctRaw = amount > 0 ? (bonusYuan / amount) * 100 : 0;
         const pct    = parseFloat(pctRaw.toFixed(2));
         const totalYuan = amount + bonusYuan;
-        const labelFallback = (cn ? TIER_LABELS_CN : TIER_LABELS_EN)[Math.min(i, 3)];
+        const isLast = i === rows.length - 1;
         return {
           id: p.id,
           amount,
@@ -133,7 +139,7 @@ Page({
           pct,
           amountDisplay: amount.toLocaleString(),
           totalDisplay:  Number(totalYuan.toFixed(2)).toLocaleString(),
-          label: (cn ? (p.title_cn || labelFallback) : (p.title_en || labelFallback)).toUpperCase(),
+          label: isLast ? '' : (cn ? TIER_LABELS_CN : TIER_LABELS_EN)[Math.min(i, 2)],
           bg: TIER_BGS[i % TIER_BGS.length],
           best: false,
           numLabel: 'NO. ' + String(i + 1).padStart(2, '0'),

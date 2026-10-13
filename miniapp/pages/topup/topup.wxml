@@ -39,7 +39,7 @@
       <view wx:if="{{item.best}}" class="tier-best f-gothic">{{lang === 'cn' ? '最划算' : 'BEST VALUE'}}</view>
 
       <view class="tier-label f-gothic" style="color: {{index === selectedIndex ? accent : 'var(--olive)'}};">
-        {{item.numLabel}} · {{item.label}}
+        {{item.numLabel}}<text wx:if="{{item.label}}"> · {{item.label}}</text>
       </view>
 
       <view class="tier-amt f-bear" style="color: {{index === selectedIndex ? '#fff' : 'var(--ink)'}};">
