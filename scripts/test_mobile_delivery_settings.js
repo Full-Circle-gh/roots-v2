@@ -281,7 +281,7 @@ async function main() {
   console.log('\n9 · the words are the desktop\'s');
   {
     for (const s of ['Same-day cutoff · 当日截单', 'Cutoff · 截单时间', 'min before close · 分钟(关门前)', 'Message (English) · 英文消息',
-      '消息(中文)· Message (Chinese)', '— optional, leave blank for the default', '— 可留空,使用默认文案',
+      'Message (Chinese) · 消息(中文)', '— optional, leave blank for the default', '— 可留空,使用默认文案',
       'Fees &amp; minimum · 费用与起送', 'Free-shipping threshold · 包邮门槛', 'Minimum order · 起送金额', 'Packing fee · 包装费',
       'Store pickup · 到店自提', 'Opens · 开始', 'Closes · 结束', 'Earliest pickup · 最早可取', 'Everywhere else — default delivery · 其他地区 — 默认配送',
       'Status · 状态', 'Flat fee · 统一运费', 'Free over · 满额免运', 'Packing / item · 每件包装费', 'Packing cap · 包装费上限', 'Lead time · 备货天数',
