@@ -7842,7 +7842,6 @@
   .fc-switch input:checked + .fc-switch-track { background: var(--accent); border-color: var(--accent); }
   .fc-switch input:checked + .fc-switch-track::after { transform: translateX(18px); background: var(--accent-ink); }
   .fc-switch input:focus-visible + .fc-switch-track { box-shadow: 0 0 0 3px var(--ring); }
-  .snip-row .key  { font-family: var(--f-mono); font-size: 10px; color: var(--text-4); }
   .snip-row .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .snip-row .pair .lang-wrap {
     display: flex; align-items: stretch;
