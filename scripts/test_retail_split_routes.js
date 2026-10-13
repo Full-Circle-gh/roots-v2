@@ -64,6 +64,21 @@ const PARTS = {
     'PUT /api/retail-admin/polls/:id',
     'DELETE /api/retail-admin/polls/:id',
   ],
+  'routes/retail/reviews.js': [
+    'GET /api/retail/reviews/pending',
+    'GET /api/retail/products/:id/reviews',
+    'POST /api/retail/review-photos',
+    'POST /api/retail/products/:id/reviews',
+    'GET /api/retail-admin/reviews',
+    'GET /api/retail-admin/reviews/unseen-count',
+    'PATCH /api/retail-admin/reviews/:id',
+    'POST /api/retail-admin/reviews/dismiss-waiting',
+    'POST /api/retail-admin/reviews/:id/undismiss',
+    'DELETE /api/retail-admin/reviews/:id',
+    'GET /api/retail-admin/reviews/reward',
+    'GET /api/retail-admin/reviews/topup',
+    'POST /api/retail-admin/reviews/topup/run',
+  ],
 };
 
 let pass = 0, fail = 0;
