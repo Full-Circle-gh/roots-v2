@@ -7223,59 +7223,146 @@
     </div>
   </div>
 
-  <!-- ─── TOP-UP ─── -->
+  <!-- ─── TOP-UP ───
+       A4 Console (tacet-desktop-patterns.md §2): no Dusk anywhere, so "New
+       package" is a Secondary button. Built from Option A of the 2026-10-13
+       top-up mockups. Everything is namespaced `tup-` so the old Full Circle
+       sheet (global h2 / th / .table-wrap) cannot reach it.
+       The package titles (title_en / title_cn) are deliberately NOT shown or
+       edited here: no customer surface reads them — the mini-app and the web
+       shop build every package card from amount + bonus_points (see the note
+       at the top of miniapp/pages/topup/topup.js). A column of text nobody
+       sees is a claim the page cannot back (§1.17). The stored values are
+       left untouched. -->
   <section id="tab-topup">
-    <h2>Top-up · 充值</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      Customers can pre-load their wallet for a bonus-points kickback. The wallet ¥ amount is credited 1:1; bonus points are extra on top. Points earn-rate, value and expiry are set under <b>Membership &amp; points</b>. · 充值即送积分:钱包金额 1:1 入账,赠送积分额外叠加。积分规则在“会员积分”中设置。
-    </div>
+    <style>
+      #tab-topup .tup { display: flex; flex-direction: column; gap: 24px; }
+      #tab-topup .td-head { margin-bottom: 0; align-items: flex-start; flex-wrap: wrap; }
+      /* Status line: work waiting, never a census (§1.7). Shown only while a
+         top-up sits unconfirmed — the same fact, in the same words, as the
+         phone's Top-up screen (m.html statusTopups). */
+      #tab-topup .td-hd-sub { font-size: 15px; font-variant-numeric: tabular-nums; }
+      #tab-topup .tup-sec { display: flex; flex-direction: column; gap: 12px; }
+      #tab-topup .tup-sec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+      #tab-topup .tup-sec-head h3 {
+        margin: 0; font: 500 15px/1.4 var(--f-sans); color: var(--td-text);
+        text-transform: none; letter-spacing: 0;
+      }
+      #tab-topup .tup-foot { margin: 0; font-size: 13px; line-height: 1.6; color: var(--td-text2); }
+      /* The card owns the corners and clips with clip-path, NOT overflow —
+         overflow would make it the scrollport and the sticky band would pin
+         to the card instead of the page (§1.13a rule 2). */
+      #tab-topup .tup-card {
+        background: var(--td-surface); border: 1px solid var(--td-border);
+        border-radius: 14px; clip-path: inset(0 round 14px);
+      }
+      #tab-topup .tup-tbl { width: 100%; table-layout: fixed; border-collapse: collapse; }
+      /* §1.13a band values. text-transform and letter-spacing are declared
+         because the global th rule sets uppercase + .08em and nothing else
+         here would out-rank it on those two properties (see #tab-finance). */
+      #tab-topup .tup-tbl thead th {
+        font: 500 13px/1.6 var(--f-sans); color: var(--td-text); text-align: left;
+        text-transform: none; letter-spacing: 0; white-space: nowrap;
+        background: var(--td-header); padding: 10px 12px; border-bottom: 1px solid var(--td-border);
+        position: sticky; top: 56px; z-index: 5;
+      }
+      #tab-topup .tup-tbl td {
+        font: 400 14px/1.6 var(--f-sans); color: var(--td-text);
+        padding: 10px 12px; border-bottom: 1px solid var(--td-border); vertical-align: middle;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      #tab-topup .tup-tbl tbody tr:last-child td { border-bottom: 0; }
+      #tab-topup .tup-tbl th.num, #tab-topup .tup-tbl td.num { text-align: right; font-variant-numeric: tabular-nums; }
+      #tab-topup .tup-tbl td.act { text-align: right; overflow: visible; }
+      /* Type names run long ("Repeat-order share reversed") and Status holds a
+         pill plus a button; both wrap rather than clip. */
+      #tab-topup .tup-tbl td.wrap { white-space: normal; }
+      #tab-topup .tup-tbl .muted { color: var(--td-text2); }
+      #tab-topup .tup-rate { margin-left: 8px; color: var(--td-text2); font-size: 13px; }
+      #tab-topup .tup-ref { font-size: 12px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+      #tab-topup .tup-tbl tr.is-off td:not(.act) { color: var(--td-text2); }
+      #tab-topup .tup-tbl tr.is-editing td { background: var(--td-raised); }
+      #tab-topup .tup-in {
+        width: 100%; max-width: 140px; font: 400 14px var(--f-sans); text-align: right;
+        font-variant-numeric: tabular-nums; color: var(--td-text); background: var(--td-surface);
+        border: 1px solid var(--td-border); border-radius: 8px; padding: 6px 10px;
+      }
+      #tab-topup .tup-in:focus { outline: none; border-color: var(--td-dusk); }
+      #tab-topup .tup-acts { display: inline-flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+      #tab-topup .tup-del { color: var(--td-brick-ink); border-color: var(--td-brick); background: transparent; }
+      #tab-topup .tup-del:hover { background: var(--td-brick-tint); }
+      #tab-topup .tup-state { padding: 28px 12px; text-align: center; white-space: normal; color: var(--td-text2); }
+      #tab-topup .tup-err { color: var(--td-brick-ink); }
+      /* The on-sale switch — the Membership page's switch, same box. */
+      #tab-topup .tup-switch { position: relative; display: inline-flex; flex: none; width: 40px; height: 24px; cursor: pointer; vertical-align: middle; }
+      #tab-topup .tup-switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+      #tab-topup .tup-knob { position: absolute; inset: 0; border-radius: 999px; background: var(--td-border); transition: background 200ms cubic-bezier(.16,1,.3,1); }
+      #tab-topup .tup-knob::after {
+        content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+        border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(17,26,43,.3);
+        transition: left 200ms cubic-bezier(.16,1,.3,1);
+      }
+      #tab-topup .tup-switch input:checked + .tup-knob { background: var(--td-sage); }
+      #tab-topup .tup-switch input:checked + .tup-knob::after { left: 19px; }
+      #tab-topup .tup-switch input:focus-visible + .tup-knob { outline: 2px solid var(--td-text); outline-offset: 2px; }
+      /* Filter strip (§1.7): pill chips, Ink fill when active. */
+      #tab-topup .tup-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+      #tab-topup .tup-chip {
+        font: 400 13px/1.6 var(--f-sans); color: var(--td-text); background: transparent;
+        border: 1px solid var(--td-border); border-radius: 999px; padding: 2px 12px; cursor: pointer;
+      }
+      #tab-topup .tup-chip .n { margin-left: 6px; opacity: .7; font-variant-numeric: tabular-nums; }
+      #tab-topup .tup-chip.on { background: var(--td-text); color: var(--td-surface); border-color: var(--td-text); }
+      #tab-topup .tup-pill { display: inline-flex; align-items: center; font-size: 13px; line-height: 1.6; border-radius: 999px; padding: 0 10px; white-space: nowrap; }
+      #tab-topup .tup-pill.ok { background: var(--td-sage-tint); color: var(--td-sage-ink); }
+      #tab-topup .tup-pill.wait { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+      #tab-topup .tup-pill.off { background: var(--td-raised); color: var(--td-text2); }
+      #tab-topup .tup-st { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      @media (prefers-reduced-motion: reduce) {
+        #tab-topup .tup-knob, #tab-topup .tup-knob::after { transition: none; }
+      }
+    </style>
 
-    <div class="card" style="margin-bottom: var(--s4);">
-      <h3 style="font-size: 13px; margin-bottom: 12px;">New top-up package · 新建充值套餐</h3>
-      <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label for="tp-amount" class="stacked">Amount ¥ · 金额</label>
-          <input type="number" id="tp-amount" placeholder="200" style="width: 120px;">
+    <div class="tup">
+      <div class="td-head">
+        <div class="td-hd-col">
+          <h2>Top-up · 充值</h2>
+          <div class="td-hd-sub" id="tup-status" hidden></div>
         </div>
-        <div class="field" style="margin: 0;">
-          <label for="tp-bonus" class="stacked">Bonus points · 赠送积分</label>
-          <input type="number" id="tp-bonus" placeholder="50" style="width: 120px;">
-        </div>
-        <div class="field" style="margin: 0; flex: 1; min-width: 180px;">
-          <label for="tp-title-en" class="stacked">Title · EN · 标题 · 英文</label>
-          <input type="text" id="tp-title-en" placeholder="¥200 + 50 bonus pts" style="width: 100%;">
-        </div>
-        <div class="field" style="margin: 0; flex: 1; min-width: 180px;">
-          <label for="tp-title-cn" class="stacked">Title · 中</label>
-          <input type="text" id="tp-title-cn" placeholder="充200送50积分" style="width: 100%;">
-        </div>
-        <button class="btn btn-primary" onclick="addTopupPackage()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Add · 添加
-        </button>
+        <span class="td-head-sp"></span>
+        <button class="btn" type="button" id="tup-new-btn" onclick="tupNewPackage()">New top-up package · 新建充值套餐</button>
       </div>
-    </div>
 
-    <h3 style="font-size: 13px; margin: 0 0 8px;">Top-up packages · 充值套餐</h3>
-    <div class="table-wrap">
-      <table id="tp-table">
-        <thead><tr>
-          <th class="numeric">Amount ¥ · 金额</th><th class="numeric">Bonus pts · 赠送积分</th>
-          <th>标题(英文)</th><th>标题(中文)</th><th>Active · 启用</th><th></th>
-        </tr></thead>
-        <tbody><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
-      </table>
-    </div>
+      <div class="tup-sec">
+        <div class="tup-card">
+          <table class="tup-tbl" id="tp-table">
+            <colgroup><col style="width: 22%"><col style="width: 30%"><col style="width: 16%"><col style="width: 32%"></colgroup>
+            <thead><tr>
+              <th class="num">Amount ¥ · 金额</th><th class="num">Bonus points · 赠送积分</th>
+              <th>Active · 启用</th><th></th>
+            </tr></thead>
+            <tbody><tr><td colspan="4" class="tup-state">Loading… · 加载中…</td></tr></tbody>
+          </table>
+        </div>
+        <p class="tup-foot">The wallet ¥ amount is credited 1:1; bonus points are extra on top. Points earn-rate, value and expiry are set under Membership &amp; points. · 钱包金额 1:1 入账,赠送积分额外叠加。积分规则在“会员积分”中设置。</p>
+      </div>
 
-    <h3 style="font-size: 13px; margin: var(--s4) 0 8px;">Recent top-up transactions · 近期充值记录</h3>
-    <div class="table-wrap">
-      <table id="tp-tx-table">
-        <thead><tr>
-          <th>When · 时间</th><th>Customer · 顾客</th><th class="numeric">¥ · 金额</th><th class="numeric">Bonus · 赠送</th>
-          <th>Method · 方式</th><th>Status · 状态</th><th>Out trade # · 商户单号</th><th></th>
-        </tr></thead>
-        <tbody><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
-      </table>
+      <div class="tup-sec">
+        <div class="tup-sec-head">
+          <h3>Wallet · 钱包</h3>
+          <div class="tup-chips" id="tup-chips" role="group" aria-label="Filter"></div>
+        </div>
+        <div class="tup-card">
+          <table class="tup-tbl" id="tp-tx-table">
+            <colgroup><col style="width: 14%"><col style="width: 18%"><col style="width: 10%"><col style="width: 8%"><col style="width: 16%"><col style="width: 20%"><col style="width: 14%"></colgroup>
+            <thead><tr>
+              <th>When · 时间</th><th>Customer · 顾客</th><th class="num">¥ · 金额</th><th class="num">Bonus · 赠送</th>
+              <th>Type · 类型</th><th>Status · 状态</th><th>Out trade # · 商户单号</th>
+            </tr></thead>
+            <tbody><tr><td colspan="7" class="tup-state">Loading… · 加载中…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </section>
 

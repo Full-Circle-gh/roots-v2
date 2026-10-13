@@ -714,6 +714,12 @@ async function submitBulkTag() {
 // the Membership & points tab — see loadPointsSettings() below.)
 // ════════════════════════════════════════════════════════════════
 async function loadTopup() {
+  // Every string on the page is rendered by cuT() from the cached rows, so a
+  // language switch repaints from cache rather than refetching.
+  if (!_tupLangHooked && typeof window.onLangChange === 'function') {
+    _tupLangHooked = true;
+    onLangChange(() => { tupRenderPkgs(); tupRenderTx(); });
+  }
   await Promise.all([loadTopupPackages(), loadTopupTransactions()]);
 }
 
@@ -881,56 +887,164 @@ function mpPreview() {
     <div class="mp-pv-cap">${escapeHtml(cuT('Live preview — what a shopper sees', '实时预览 — 顾客所见'))}</div>`;
 }
 
-async function loadTopupPackages() {
-  const r = await api('/api/retail-admin/topup-packages');
-  const rows = r?.data || [];
+// ── Top-up packages ─────────────────────────────────────────────────────────
+// Rows are READ-ONLY until Edit. They used to be four live inputs each, saving
+// on blur with no sign that anything had saved — a stray keystroke in a price
+// field went straight to customers. One row edits at a time; TUP_EDIT holds
+// its id, or 'new' for the blank row the header button opens at the top.
+//
+// No title columns: no customer surface reads title_en / title_cn (the
+// mini-app and the web shop build each card from amount + bonus_points), so
+// the page neither shows nor edits them. Stored values are left alone.
+let TUP_PKGS = null, TUP_PKG_ERR = null, TUP_EDIT = null, TUP_BUSY = false;
+
+function tupAmount(n) {
+  return acWrap(Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }));
+}
+// The bonus as a share of the amount — "5.0%". A numeral, so it needs no
+// label of its own; it sits muted beside the points it describes.
+function tupRate(amount, bonus) {
+  const a = Number(amount), b = Number(bonus) || 0;
+  return a > 0 ? (b / a * 100).toFixed(1) + '%' : '';
+}
+function tupSwitch(p) {
+  const on = p ? !!p.is_active : true;
+  const handler = p ? `onchange="tupToggleActive(${p.id}, this.checked)"` : 'id="tup-new-active"';
+  return `<label class="tup-switch"><input type="checkbox" ${on ? 'checked' : ''} ${handler} aria-label="${cuT('Active', '启用')}"><span class="tup-knob"></span></label>`;
+}
+function tupEditRow(p) {
+  const key = p ? p.id : 'new';
+  const save = p
+    ? `<button class="btn btn-sm" type="button" ${TUP_BUSY ? 'disabled' : ''} onclick="tupSavePackage(${p.id})">${cuT('Save', '保存')}</button>`
+    : `<button class="btn btn-sm" type="button" ${TUP_BUSY ? 'disabled' : ''} onclick="addTopupPackage()">${cuT('Add', '添加')}</button>`;
+  const del = p
+    ? `<button class="btn btn-sm tup-del" type="button" ${TUP_BUSY ? 'disabled' : ''} onclick="deleteTopupPackage(${p.id}, ${Number(p.amount) || 0})">${cuT('Delete', '删除')}</button>`
+    : '';
+  return `<tr class="is-editing" data-tup="${key}">
+    <td class="num"><input class="tup-in" type="number" min="0" step="0.01" id="tup-amt-${key}" value="${p ? escapeHtml(String(p.amount)) : ''}" placeholder="200" aria-label="${cuT('Amount', '金额')}"></td>
+    <td class="num"><input class="tup-in" type="number" min="0" step="1" id="tup-bon-${key}" value="${p ? escapeHtml(String(p.bonus_points || 0)) : ''}" placeholder="50" aria-label="${cuT('Bonus points', '赠送积分')}"></td>
+    <td>${tupSwitch(p)}</td>
+    <td class="act"><span class="tup-acts">${del}<button class="btn btn-sm btn-ghost" type="button" onclick="tupCancelEdit()">${cuT('Cancel', '取消')}</button>${save}</span></td>
+  </tr>`;
+}
+function tupPkgRow(p) {
+  if (TUP_EDIT === p.id) return tupEditRow(p);
+  return `<tr class="${p.is_active ? '' : 'is-off'}">
+    <td class="num">${tupAmount(p.amount)}</td>
+    <td class="num">${Number(p.bonus_points || 0).toLocaleString('en-US')}<span class="tup-rate">${tupRate(p.amount, p.bonus_points)}</span></td>
+    <td>${tupSwitch(p)}</td>
+    <td class="act"><button class="btn btn-sm btn-ghost" type="button" onclick="tupEditPackage(${p.id})">${cuT('Edit', '编辑')}</button></td>
+  </tr>`;
+}
+function tupRenderPkgs() {
   const tbody = $('#tp-table tbody');
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="muted">No top-up packages yet — add one above. · 暂无充值套餐 — 请在上方添加。</td></tr>';
+  if (!tbody) return;
+  if (TUP_PKG_ERR) {
+    tbody.innerHTML = `<tr><td colspan="4" class="tup-state tup-err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(TUP_PKG_ERR)}</span></td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(p => `
-    <tr>
-      <td class="numeric"><input type="number" value="${p.amount}" style="width: 100px;" onchange="updateTopup(${p.id}, 'amount', this.value)"></td>
-      <td class="numeric"><input type="number" value="${p.bonus_points}" style="width: 100px;" onchange="updateTopup(${p.id}, 'bonus_points', this.value)"></td>
-      <td><input type="text" value="${(p.title_en||'').replace(/"/g,'&quot;')}" style="width: 100%;" onchange="updateTopup(${p.id}, 'title_en', this.value)"></td>
-      <td><input type="text" value="${(p.title_cn||'').replace(/"/g,'&quot;')}" style="width: 100%;" onchange="updateTopup(${p.id}, 'title_cn', this.value)"></td>
-      <td><label style="display:inline-flex; align-items:center; gap:6px;"><input type="checkbox" ${p.is_active ? 'checked' : ''} onchange="updateTopup(${p.id}, 'is_active', this.checked ? 1 : 0)"></label></td>
-      <td><button class="btn" onclick="deleteTopupPackage(${p.id}, ${p.amount})">Delete · 删除</button></td>
-    </tr>
-  `).join('');
+  if (!TUP_PKGS) {
+    tbody.innerHTML = `<tr><td colspan="4" class="tup-state">${cuT('Loading…', '加载中…')}</td></tr>`;
+    return;
+  }
+  const head = TUP_EDIT === 'new' ? tupEditRow(null) : '';
+  if (!TUP_PKGS.length && !head) {
+    tbody.innerHTML = `<tr><td colspan="4" class="tup-state">${cuT('No top-up packages yet.', '暂无充值套餐。')}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = head + TUP_PKGS.map(tupPkgRow).join('');
+}
+async function loadTopupPackages() {
+  try {
+    const r = await api('/api/retail-admin/topup-packages');
+    TUP_PKGS = r?.data || [];
+    TUP_PKG_ERR = null;
+  } catch (e) {
+    TUP_PKG_ERR = e.message || String(e);
+  }
+  tupRenderPkgs();
+}
+function tupFocus(key) {
+  const el = $('#tup-amt-' + key);
+  if (el) { el.focus(); el.select?.(); }
+}
+function tupNewPackage() {
+  TUP_EDIT = 'new';
+  tupRenderPkgs();
+  tupFocus('new');
+}
+function tupEditPackage(id) {
+  TUP_EDIT = id;
+  tupRenderPkgs();
+  tupFocus(id);
+}
+function tupCancelEdit() {
+  TUP_EDIT = null;
+  tupRenderPkgs();
+}
+function tupReadRow(key) {
+  return {
+    amount: Number($('#tup-amt-' + key)?.value),
+    bonus: Math.max(0, parseInt($('#tup-bon-' + key)?.value, 10) || 0),
+  };
 }
 
 async function addTopupPackage() {
-  const amt = Number($('#tp-amount').value);
-  if (!(amt > 0)) return toast('Amount required · 请填写金额', 'err');
-  const body = {
-    amount: amt,
-    bonus_points: Math.max(0, parseInt($('#tp-bonus').value, 10) || 0),
-    title_en: $('#tp-title-en').value.trim() || null,
-    title_cn: $('#tp-title-cn').value.trim() || null,
-  };
+  const { amount, bonus } = tupReadRow('new');
+  if (!(amount > 0)) { toast(cuT('Amount required', '请填写金额'), 'err'); tupFocus('new'); return; }
+  const body = { amount, bonus_points: bonus, is_active: $('#tup-new-active')?.checked === false ? 0 : 1 };
+  TUP_BUSY = true; tupRenderPkgs();
   try {
     await api('/api/retail-admin/topup-packages', { method: 'POST', body });
-    ['tp-amount','tp-bonus','tp-title-en','tp-title-cn'].forEach(id => { const e = $('#'+id); if (e) e.value = ''; });
-    toast('Package added · 套餐已添加');
-    loadTopupPackages();
-  } catch (e) { toast('Add failed · 添加失败: '+e.message, 'err'); }
+    TUP_EDIT = null;
+    toast(cuT('Package added', '套餐已添加'));
+  } catch (e) { toast(cuT('Add failed', '添加失败') + ': ' + e.message, 'err'); }
+  TUP_BUSY = false;
+  loadTopupPackages();
 }
 
-async function updateTopup(id, field, val) {
+// Only what changed goes up — the PATCH route writes every field it is sent.
+async function tupSavePackage(id) {
+  const p = (TUP_PKGS || []).find(x => x.id === id);
+  if (!p) return;
+  const { amount, bonus } = tupReadRow(id);
+  if (!(amount > 0)) { toast(cuT('Amount required', '请填写金额'), 'err'); tupFocus(id); return; }
+  const body = {};
+  if (amount !== Number(p.amount)) body.amount = amount;
+  if (bonus !== Number(p.bonus_points || 0)) body.bonus_points = bonus;
+  if (!Object.keys(body).length) { tupCancelEdit(); return; }
+  TUP_BUSY = true; tupRenderPkgs();
   try {
-    await api(`/api/retail-admin/topup-packages/${id}`, { method: 'PATCH', body: { [field]: val } });
-  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); loadTopupPackages(); }
+    await api(`/api/retail-admin/topup-packages/${id}`, { method: 'PATCH', body });
+    TUP_EDIT = null;
+    toast(cuT('Saved', '已保存'));
+  } catch (e) { toast(cuT('Save failed', '保存失败') + ': ' + e.message, 'err'); }
+  TUP_BUSY = false;
+  loadTopupPackages();
+}
+
+// The switch saves on its own — it is one decision, and the switch shows it.
+// A failure reloads so the switch never sits in a state the server refused.
+async function tupToggleActive(id, on) {
+  try {
+    await api(`/api/retail-admin/topup-packages/${id}`, { method: 'PATCH', body: { is_active: on ? 1 : 0 } });
+    const p = (TUP_PKGS || []).find(x => x.id === id);
+    if (p) p.is_active = on ? 1 : 0;
+    if (TUP_EDIT !== id) tupRenderPkgs();
+  } catch (e) { toast(cuT('Save failed', '保存失败') + ': ' + e.message, 'err'); loadTopupPackages(); }
 }
 
 async function deleteTopupPackage(id, amt) {
-  if (!(await askConfirm({ title: `Delete ${acWrap(amt)} top-up package? · 删除 ${acWrap(amt)} 充值套餐？`, confirmLabel: 'Delete package', danger: true }))) return;
+  if (!(await askConfirm({
+    title: cuT(`Delete the ${acWrap(amt)} top-up package?`, `删除 ${acWrap(amt)} 充值套餐？`),
+    confirmLabel: cuT('Delete', '删除'), danger: true,
+  }))) return;
   try {
     await api(`/api/retail-admin/topup-packages/${id}`, { method: 'DELETE' });
-    toast('Package deleted · 套餐已删除');
+    TUP_EDIT = null;
+    toast(cuT('Package deleted', '套餐已删除'));
     loadTopupPackages();
-  } catch (e) { toast('Delete failed · 删除失败: '+e.message, 'err'); }
+  } catch (e) { toast(cuT('Delete failed', '删除失败') + ': ' + e.message, 'err'); }
 }
 
 async function savePointsSettings() {
@@ -1190,33 +1304,149 @@ async function saveRctiers() {
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
 }
 
-async function loadTopupTransactions() {
-  const r = await api('/api/retail-admin/topup-transactions?limit=50');
-  const rows = r?.data || [];
+// ── Wallet ──────────────────────────────────────────────────────────────────
+// /topup-transactions returns EVERY row of retail_topup_transactions, and that
+// table is the wallet ledger, not a list of top-ups: order spends
+// (order_redeem), referral credits, staff adjustments and refund reversals all
+// live in it. This list used to sit under "Recent top-up transactions", so an
+// order spend of −¥1,000 read as a top-up beside two real ones. Rows are now
+// sorted into kinds and the list opens on top-ups only.
+//
+// A row is a TOP-UP only when its payment_method is a way of paying —
+// the same keys paymentBrandHTML() renders as a tender. Everything else is a
+// wallet movement and is named, never shown as a payment.
+const TUP_PAY_METHODS = new Set([
+  'wechat', 'weixin', 'wechatpay', 'wechat_pay', '微信', '微信支付',
+  'alipay', 'zhifubao', '支付宝',
+  'cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'other', 'intl_card', 'wechat_alipay_offline',
+]);
+// Movements CU_PTS_SOURCE (08-customers.js) does not name. Each pair is the
+// one already live for the same event: the mini-app wallet's history labels
+// (miniapp/pages/wallet/wallet.js) and the Affiliate page's "Reward for the
+// friend" (10-extras.js). An unmapped key shows raw and unstyled — visibly odd
+// beats plausibly wrong (see paymentBrandHTML's fallback).
+const TUP_MOVE_LABEL = {
+  referral_reward:              ['Referral reward', '推广奖励'],
+  referral_welcome:             ['Reward for the friend', '好友奖励'],
+  lifetime_commission:          ['Repeat-order share', '复购分成'],
+  lifetime_commission_clawback: ['Repeat-order share reversed', '复购分成撤销'],
+};
+// Status words — the phone's Top-up screen's (m.html TUP_WORD), so the same
+// row says the same thing on both.
+const TUP_STATUS = {
+  success: ['Paid', '已支付', 'ok'], pending: ['Pending', '待支付', 'wait'], failed: ['Failed', '失败', 'off'],
+  cancelled: ['Cancelled', '已取消', 'off'], refunded: ['Refunded', '已退款', 'off'],
+};
+let TUP_TX = null, TUP_TX_ERR = null, TUP_FILTER = 'topup', _tupLangHooked = false;
+
+function tupKind(t) {
+  const m = String(t.payment_method || '').toLowerCase().trim();
+  if (TUP_PAY_METHODS.has(m)) return 'topup';
+  if (m === 'order_redeem') return 'spend';
+  return 'other';
+}
+function tupMoveLabel(method) {
+  const m = String(method || '');
+  if (TUP_MOVE_LABEL[m]) return escapeHtml(cuT(TUP_MOVE_LABEL[m][0], TUP_MOVE_LABEL[m][1]));
+  if (typeof CU_PTS_SOURCE !== 'undefined' && CU_PTS_SOURCE[m]) return escapeHtml(cuPtsSource(m));
+  return `<span class="pay-unknown">${escapeHtml(m)}</span>`;
+}
+function tupSigned(n) {
+  const v = Number(n || 0);
+  return v < 0 ? '−' + acMoney(-v) : acMoney(v);
+}
+function tupStatusCell(t, kind) {
+  const st = String(t.status || '').toLowerCase();
+  // A wallet movement is written already settled; "Paid" beside an order
+  // spend would be false, so it carries no status unless something is off.
+  if (kind !== 'topup' && st === 'success') return '';
+  const w = TUP_STATUS[st];
+  const pill = w
+    ? `<span class="tup-pill ${w[2]}">${escapeHtml(cuT(w[0], w[1]))}</span>`
+    : `<span class="tup-pill off"><span class="pay-unknown">${escapeHtml(st)}</span></span>`;
+  const act = (kind === 'topup' && st === 'pending')
+    ? `<button class="btn btn-sm" type="button" onclick="finalizeTopupTx(${t.id})">${cuT('Mark success', '标记成功')}</button>` : '';
+  return `<span class="tup-st">${pill}${act}</span>`;
+}
+function tupTxRow(t) {
+  const kind = tupKind(t);
+  const when = (typeof tdWhen === 'function') ? tdWhen(t.created_at, 'dateTime') : String(t.created_at || '');
+  const bonus = Number(t.bonus_points || 0);
+  return `<tr>
+    <td class="muted">${escapeHtml(when)}</td>
+    <td data-no-i18n>${escapeHtml(t.nickname || cuT('(no name)', '无名'))} <span class="muted">${escapeHtml(t.phone || '')}</span></td>
+    <td class="num">${tupSigned(t.amount)}</td>
+    <td class="num">${bonus ? bonus.toLocaleString('en-US') : ''}</td>
+    <td class="wrap">${kind === 'topup' ? paymentBrandHTML(t.payment_method) : tupMoveLabel(t.payment_method)}</td>
+    <td class="wrap">${tupStatusCell(t, kind)}</td>
+    <td class="tup-ref" data-no-i18n>${kind === 'topup' ? escapeHtml(t.out_trade_no || '') : ''}</td>
+  </tr>`;
+}
+function tupRenderStatus() {
+  const el = $('#tup-status');
+  if (!el) return;
+  const n = (TUP_TX || []).filter(t => tupKind(t) === 'topup' && String(t.status || '').toLowerCase() === 'pending').length;
+  el.hidden = !n;
+  el.textContent = n ? cuT(n + ' waiting to be confirmed', n + ' 笔待确认') : '';
+}
+function tupRenderChips() {
+  const box = $('#tup-chips');
+  if (!box) return;
+  const rows = TUP_TX || [];
+  const count = k => rows.filter(t => tupKind(t) === k).length;
+  // A chip with nothing behind it is not shown — except Top-ups, which is
+  // where the list opens, and All.
+  const chips = [
+    ['topup', cuT('Top-ups', '充值'), count('topup'), true],
+    ['spend', cuT('Redeemed on order', '订单抵扣'), count('spend'), false],
+    ['other', cuT('Other', '其他'), count('other'), false],
+    ['all', cuT('All', '全部'), rows.length, true],
+  ].filter(c => c[3] || c[2] > 0);
+  if (!chips.some(c => c[0] === TUP_FILTER)) TUP_FILTER = 'topup';
+  box.innerHTML = chips.map(([k, label, n]) =>
+    `<button type="button" class="tup-chip${k === TUP_FILTER ? ' on' : ''}" aria-pressed="${k === TUP_FILTER}" onclick="tupSetFilter('${k}')">${escapeHtml(label)}<span class="n">${n}</span></button>`
+  ).join('');
+}
+function tupSetFilter(k) {
+  TUP_FILTER = k;
+  tupRenderTx();
+}
+function tupRenderTx() {
   const tbody = $('#tp-tx-table tbody');
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">No top-up transactions yet. · 暂无充值记录。</td></tr>';
+  if (!tbody) return;
+  tupRenderStatus();
+  tupRenderChips();
+  if (TUP_TX_ERR) {
+    tbody.innerHTML = `<tr><td colspan="7" class="tup-state tup-err">${cuT('Could not load top-ups.', '加载充值记录失败。')} <span data-no-i18n>${escapeHtml(TUP_TX_ERR)}</span></td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(t => `
-    <tr>
-      <td class="muted">${(t.created_at || '').replace('T',' ').slice(0,16)}</td>
-      <td>${escapeHtml(t.nickname || '(no name) · 无名')} <span class="muted">${escapeHtml(t.phone || '')}</span></td>
-      <td class="numeric">${fmt(t.amount)}</td>
-      <td class="numeric">${t.bonus_points || 0}</td>
-      <td>${paymentBrandHTML(t.payment_method)}</td>
-      <td>${t.status}</td>
-      <td class="muted" style="font-family: monospace; font-size: 11px;">${t.out_trade_no || '—'}</td>
-      <td>${t.status === 'pending' ? `<button class="btn" onclick="finalizeTopupTx(${t.id})">Mark success · 标记成功</button>` : ''}</td>
-    </tr>
-  `).join('');
+  if (!TUP_TX) {
+    tbody.innerHTML = `<tr><td colspan="7" class="tup-state">${cuT('Loading…', '加载中…')}</td></tr>`;
+    return;
+  }
+  const rows = TUP_FILTER === 'all' ? TUP_TX : TUP_TX.filter(t => tupKind(t) === TUP_FILTER);
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="tup-state">${cuT('No top-ups yet.', '暂无充值记录。')}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(tupTxRow).join('');
+}
+async function loadTopupTransactions() {
+  try {
+    const r = await api('/api/retail-admin/topup-transactions?limit=50');
+    TUP_TX = r?.data || [];
+    TUP_TX_ERR = null;
+  } catch (e) {
+    TUP_TX_ERR = e.message || String(e);
+  }
+  tupRenderTx();
 }
 
 async function finalizeTopupTx(id) {
-  if (!(await askConfirm({ title: 'Mark this top-up as successful and credit the wallet? · 标记此充值为成功并入账钱包?', confirmLabel: 'Mark successful' }))) return;
+  if (!(await askConfirm({ title: cuT('Mark this top-up as successful and credit the wallet?', '标记此充值为成功并入账钱包?'), confirmLabel: cuT('Mark successful', '标记成功') }))) return;
   try {
     await api(`/api/retail-admin/topup-transactions/${id}/finalize`, { method: 'POST' });
-    toast('Top-up finalized · 充值已确认');
+    toast(cuT('Top-up finalized', '充值已确认'));
     loadTopupTransactions();
   } catch (e) { toast(cuT('Failed', '失败') + ': '+e.message, 'err'); }
 }
