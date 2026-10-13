@@ -72,9 +72,10 @@ const REPO = path.join(__dirname, '..');
    title headers (标题(英文) / 标题(中文)) with the columns they named.
    159 → 135 the same day: Settings' mixed help paragraphs became
    data-lang-block pairs (the splitter skips those by design).
-   135 → 127: the same for Settings → Delivery. */
+   135 → 127: the same for Settings → Delivery.
+   127 → 125: the Share cards tip, likewise. */
 const BUDGET = 0;
-const ORPHAN_BUDGET = 127;
+const ORPHAN_BUDGET = 125;
 
 const CJK = /[一-鿿]/;
 const VOID = new Set(['br', 'img', 'input', 'hr', 'meta', 'link', 'source',
