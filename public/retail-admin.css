@@ -5393,12 +5393,30 @@
     border-bottom: 1px solid var(--line-soft);
     vertical-align: middle;
   }
+  /* Base th. Was the Full Circle header — 11px/600, UPPERCASE, .08em, --text-3
+     on --bg-app — and every table without its own full header rule still wore
+     some of it: the caps leaked into Waste, Purchasing, the record pages and the
+     Orders/Customers drawer tables, which override only part of it (audit
+     2026-10-13, P2). §1.6 bans the caps everywhere and §2 bans bold, so the base
+     drops both. Size, colour and ground are left alone HERE on purpose: most
+     tables reaching this rule are small ones inside padded drawer cards, and
+     §1.13a gives those no band. */
   th {
-    font-size: 11px; font-weight: 600;
-    letter-spacing: .08em; text-transform: uppercase;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0; text-transform: none;
     color: var(--text-3);
     background: var(--bg-app);
     border-bottom-color: var(--line);
+  }
+  /* The full-width tables that had no header rule of their own get the §1.13a
+     band: --td-header, 13px/500 sentence case in Ink, a 1px --td-border rule.
+     Named, not inferred: `.table-wrap` also wraps the drawer tables, so it
+     cannot tell a page's table from a drawer's. Padding stays the shared
+     `th, td` 10px 14px so each header lines up with its cells. Delivery's zone
+     table and About's tables carry their own rules and get their page PRs. */
+  #feedback-table th, #faq-cats-table th, #ch-table th, #nl-table th {
+    font-size: 13px; color: var(--td-text);
+    background: var(--td-header); border-bottom-color: var(--td-border);
   }
   tbody tr { transition: background var(--t-fast) ease; }
   tbody tr:hover { background: var(--bg-elev-1); }
