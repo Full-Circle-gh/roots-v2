@@ -11896,9 +11896,10 @@ tr.vch-row.is-off .vch-code, tr.vch-row.is-off .vch-gives { color: var(--text-2)
 body:has(#tab-membership.active) { background: var(--td-paper); }
 
 #tab-membership .mp { max-width: 1120px; }
+/* Section heading, not an eyebrow: sentence case, Ink (§1.6). */
 #tab-membership .mp-eyebrow {
-  font-size: 11px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase;
-  color: var(--text-3); margin: 34px 0 6px;
+  font-size: 18px; font-weight: 500; letter-spacing: 0; text-transform: none;
+  color: var(--td-text); margin: 34px 0 6px;
 }
 #tab-membership .mp-eyebrow:first-child { margin-top: 8px; }
 #tab-membership .mp-section-sub {
