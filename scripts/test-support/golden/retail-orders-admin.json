@@ -476,6 +476,10 @@
         "balance_used": 0,
         "refund_cash_amount": null,
         "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null,
         "nickname": "Golden Two",
         "avatar_url": null,
         "customer_phone": null,
@@ -2367,6 +2371,10 @@
         "balance_used": 0,
         "refund_cash_amount": null,
         "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null,
         "nickname": "Golden Two",
         "avatar_url": null,
         "customer_phone": null,
@@ -2704,7 +2712,11 @@
         "invoice_reminder_snoozed_until": null,
         "balance_used": 0,
         "refund_cash_amount": null,
-        "card_surcharge_fee": 0
+        "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null
       }
     }
   },
@@ -2865,7 +2877,11 @@
         "invoice_reminder_snoozed_until": null,
         "balance_used": 0,
         "refund_cash_amount": null,
-        "card_surcharge_fee": 0
+        "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null
       }
     }
   },
@@ -3026,7 +3042,11 @@
         "invoice_reminder_snoozed_until": null,
         "balance_used": 0,
         "refund_cash_amount": null,
-        "card_surcharge_fee": 0
+        "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null
       }
     }
   },
@@ -3187,7 +3207,11 @@
         "invoice_reminder_snoozed_until": null,
         "balance_used": 0,
         "refund_cash_amount": null,
-        "card_surcharge_fee": 0
+        "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null
       }
     }
   },
@@ -3348,7 +3372,11 @@
         "invoice_reminder_snoozed_until": null,
         "balance_used": 0,
         "refund_cash_amount": null,
-        "card_surcharge_fee": 0
+        "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null
       }
     }
   },
@@ -3509,7 +3537,11 @@
         "invoice_reminder_snoozed_until": null,
         "balance_used": 0,
         "refund_cash_amount": null,
-        "card_surcharge_fee": 0
+        "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null
       }
     }
   },
@@ -3739,7 +3771,11 @@
         "invoice_reminder_snoozed_until": null,
         "balance_used": 0,
         "refund_cash_amount": null,
-        "card_surcharge_fee": 0
+        "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null
       }
     }
   },
@@ -4003,6 +4039,10 @@
         "balance_used": 0,
         "refund_cash_amount": 28,
         "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null,
         "nickname": "Golden Two",
         "avatar_url": null,
         "customer_phone": null,
@@ -4430,6 +4470,10 @@
         "balance_used": 0,
         "refund_cash_amount": 20,
         "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null,
         "nickname": "Golden Two",
         "avatar_url": null,
         "customer_phone": null,
@@ -4742,7 +4786,11 @@
         "invoice_reminder_snoozed_until": null,
         "balance_used": 0,
         "refund_cash_amount": null,
-        "card_surcharge_fee": 0
+        "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null
       }
     }
   },
@@ -4903,7 +4951,11 @@
         "invoice_reminder_snoozed_until": null,
         "balance_used": 0,
         "refund_cash_amount": null,
-        "card_surcharge_fee": 0
+        "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null
       }
     }
   },
@@ -5074,6 +5126,10 @@
         "balance_used": 0,
         "refund_cash_amount": null,
         "card_surcharge_fee": 0,
+        "manual_discount_amount": 0,
+        "manual_discount_reason": null,
+        "manual_discount_note": null,
+        "manual_discount_by": null,
         "nickname": "Golden Two",
         "avatar_url": null,
         "customer_phone": null,
@@ -5260,6 +5316,7 @@
         "points_amount": 0,
         "balance_used": 0,
         "voucher_amount": 0,
+        "manual_discount_amount": 0,
         "card_surcharge_fee": 0,
         "tax_amount": null,
         "tax_mode": null,
