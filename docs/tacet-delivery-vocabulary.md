@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.336 · 2026-10-14 · STOCK ACTIVITY SAYS WHY A MINI-APP ORDER'S STOCK MOVED — 3 STRINGS COMPOSED BY CLAUDE (`付款时扣减`, `开始备货时扣减`, `已补货，自动扣减`), EACH BUILT ON LIVE `扣减`, `开始备货`, `已补货` AND `自动扣减`; `库存退回` LIFTED WHOLE.** See *Stock activity — the reason beside a mini-app order*.
+
 **v1.335 · 2026-10-13 · PURCHASING RECORD ORDER — 4 STRINGS COMPOSED BY CLAUDE, ALL BUILT ON THE LIVE `登记` (Record) AND `采购单` (purchase order): `Record order · 登记采购单`, `Order recorded · 采购单已登记`, and the summary's two lines; THE PHONE'S THIRD STEP COPIES THE LIVE `Review order · 确认订单`.** See *Purchasing — Record order*.
 
 **v1.334 · 2026-10-13 · ABOUT PAGE EDITOR — 1 STRING COMPOSED BY CLAUDE (`Every section is hidden from customers until you write it — nothing is filled in for you.`), KEPT WHEN THE PAGE'S PURPOSE LINE WAS CUT; `Body — Chinese · 中文正文` COPIES LEGAL'S LIVE `中文正文`.** See *About page editor — the one line kept*.
@@ -14142,3 +14144,32 @@ for since 2026-07-19 ("form over wizard"), whose own name for the flow is
 - Keeping `确认下单` under the new English: it says *confirm placing an order*, the very word the rename takes away, so the two halves would disagree.
 - `记录`: live only for waste and payments (`记录损耗`, `记录付款`); Purchasing and Invoices already say `登记`.
 
+## Stock activity — the reason beside a mini-app order
+
+**Composed by Claude, 2026-10-14, under the 2026-09-06 amendment.** Operator
+register. The Stock activity log on the desktop
+(`public/retail-admin/13-activity.js`, `ACT_REASON_NAME`) and on the phone
+(`public/m.html`, `ACT_REASON`), one table in two places. Asked by Ash, with two
+screenshots of the same log where one order's stock had come off at restock and
+another's only when he pressed Start preparing: *"build the label"*. Every
+mini-app row used to say only *Mini-app*, so the two rules looked like one
+inconsistent one. The label names the moment the units left the shelf and is
+followed by the order number: `Taken on restock · TC001129`.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Taken at payment` / `付款时扣减` | the last column, an `order_commit` row | `扣减` is live for stock coming off (`从 … 扣减`, `最近自动扣减`); `付款` is live (`付款时间`, `付款时点`). No live sentence says *at payment* about stock, so the two are joined. |
+| `Taken when preparing` / `开始备货时扣减` | an `order_prepare` row | `开始备货` is the live *Start preparing*, the very button that causes this row; `扣减` as above. |
+| `Taken on restock` / `已补货，自动扣减` | an `awaiting_restock_release` row | `已补货` is live (`已补货 · 开始备货`, the restocked order's button); `自动扣减` is live (`提货会自动扣减库存。`). The word *自动* is the point: nobody pressed anything. |
+
+### Copied whole
+
+`Stock returned` / `库存退回` — from the shop-change sheet's `库存退回 …`. It labels `order_reverse`, `order_reverse_partial` and `order_reverse_ledger` alike: the log needs to say the units came back, and the three tokens differ only in how the code guards against doing it twice.
+
+### Rejected
+
+- `补货释放` / `Released on restock`: `释放` is live only for reservations being let go (`released`), which is not what happened here. The stock was taken.
+- `备货时扣减` for the prepare row: `备货` alone is live (`备货天数`, `备货`) but `开始备货` is the button's own word, so the label matches what the clerk pressed.
+- `已补货，开始备货` for the restock row: that is the button label on an order that still waits for a person, and this row is the case where nobody pressed it.
