@@ -76,7 +76,9 @@ function extractFn(name, src) {
   return null;
 }
 
-const ROUTES_SRC = fs.readFileSync(path.join(__dirname, '..', 'routes', 'retail.js'), 'utf8');
+// routes/retail.js and everything moved out of it (decisions §477): expandStockLines
+// and parseBundleItems are in lib/bundles.js.
+const ROUTES_SRC = require('./test-support/retail-source').retailSource();
 const INVENTORY_SRC = fs.readFileSync(path.join(__dirname, '..', 'lib', 'inventory.js'), 'utf8');
 
 const ROUTE_FNS = ['prepareCommitUnreservedOrder', 'freshLinesDeferred',

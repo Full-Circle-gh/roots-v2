@@ -59,7 +59,9 @@ const Database = require('better-sqlite3');
 const ROOT = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
-let ROUTES  = read('routes/retail.js');
+// routes/retail.js and everything moved out of it (decisions §477): expandStockLines
+// and parseBundleItems are in lib/bundles.js.
+let ROUTES  = require('./test-support/retail-source').retailSource();
 let INV     = read('lib/inventory.js');
 let DESKTOP = read('public/retail-admin/04-orders.js');
 let MOBILE  = read('public/m.html');

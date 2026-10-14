@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.534
+# Tacet shared-core consolidation — decisions record, v4.535
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-14 · v4.535 — **§477 · THE BUNDLE HELPERS MOVE TO `lib/bundles.js` AND THE COST-OF-SALE WRAPPERS TO `lib/cost-at-sale.js` — DECIDED BY ASH:** *"move bundles"*, step 3 of the orders plan. 8 statements, a pure move; tests went in first (#1193). See the amendment at the end of §477.
 
 2026-10-14 · v4.534 — **§477 · THE PAYMENT GATEWAY CODE MOVES TO `lib/payment-gateways.js`, AND THE TENANT BRAND HELPERS TO `lib/tenant-brand.js` — DECIDED BY ASH:** *"move payment"*, step 2 of the orders plan. 33 statements (WeChat Pay and Alipay config, pay context, signing, charge / status / refund, callback checks) and 3 brand helpers, a pure move. Tests went in first (#1190). See the amendment at the end of §477.
 
@@ -31395,3 +31397,31 @@ survey (tests first, then the cleanest group).
    message without its last line feed) fails three of its checks.
 6. **No CI change.** `scripts/verify-fulfilment-types.js` reads none of this
    code, so the deploy's fulfilment gate does not need to name the new files.
+
+**Amended 2026-10-14 — the orders area's second group: bundles, stock lines
+and cost of sale. Decided by Ash:** *"move bundles"*.
+
+1. **`lib/bundles.js`** takes `parseBundleItems`, `sanitizeBundleItems`,
+   `resolveBundleComponents`, `expandStockLines`, `decorateBundleRow` and
+   `applyBundleCost`: a bundle's recipe, its parts as the shop shows them,
+   its stock made from its parts, the stock lines a cart reserves, and its
+   derived admin cost.
+2. **`lib/cost-at-sale.js`** takes `costAtSale` and `optionsCostAtSale`, the
+   cost stamped on a sold line. They are not bundle code and do not go under a
+   bundle name; both never throw, because they run inside the transaction that
+   writes the order.
+3. **What stays in `routes/retail.js`:** the stock-return-on-refund helpers
+   beside them (`parcelStockLines`, `orderShippedQty`,
+   `reverseOrderStockStillHere`, `orderStockLinesForReversal`,
+   `reverseOrderStock`). They decide what comes back to the shelf when money
+   goes back, and go with the paid-order lifecycle group, tests first.
+4. **Proof.** Every top-level statement of main's `retail.js` is in exactly
+   one place, the moved ones in order; the only other changes are require
+   lines, and `bundleUnitCostYuan` and `chosenOptionCostYuan` leaving
+   `retail.js`'s imports because only the moved code read them. Route order
+   is identical. `scripts/test_bundle_stock_cost.js` (#1193) passes, and a
+   break made inside the new file (a quantity of 0 let through) fails it.
+   Three suites that read `routes/retail.js` as text now read
+   `retailSource()`, so they check the code where it went.
+5. **No CI change.** `scripts/verify-fulfilment-types.js` reads none of this
+   code.
