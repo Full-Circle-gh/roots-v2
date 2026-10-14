@@ -856,7 +856,8 @@ async function roundThreeSuites() {
       'no provenance-less UPDATE left behind');
   });
   it('call site (source check): the admin address PUT uses the shared text-changed rule', () => {
-    const retail = src('routes/retail.js');
+    // The admin address PUT moved to routes/retail/customers.js (decisions §470).
+    const retail = require('./test-support/retail-source').retailSource();
     assert.ok(/addressPin\.addressTextChanged\(a, existing\)/.test(retail));
     assert.ok(!/const adminTextChanged = \['province'/.test(retail), 'the inline copy is gone');
   });

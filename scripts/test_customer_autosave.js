@@ -137,7 +137,9 @@ const run = (src) => vm.runInContext(src, sandbox);
   is(SENT.length, 1, 'and it does not try again on its own');
 
   section('5 · the server keeps the history');
-  const RETAIL = read('routes/retail.js');
+  // routes/retail.js and its parts: the customers area now lives in
+  // routes/retail/customers.js (decisions §470).
+  const RETAIL = require('./test-support/retail-source').retailSource();
   const snap = (RETAIL.match(/function customerSnapshot\(c\) \{[\s\S]*?\n\}/) || [''])[0];
   yes(snap && !/phone/.test(snap.replace(/\/\/.*$/gm, '')), 'the history snapshot leaves the phone number out');
   const patch = RETAIL.slice(RETAIL.indexOf("router.patch('/api/retail-admin/customers/:id'"));
