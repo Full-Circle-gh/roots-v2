@@ -225,6 +225,44 @@ it('lost race: an already-claimed credit writes no row and moves no money', () =
   assert.strictEqual(pts(db, 1), 0);
 });
 
+// 4b ── THE GUARD ITSELF. The lost race above pre-claims the credit, so the
+// function stops at its first lookup and never reaches the compare-and-set;
+// removing `AND claimed_at IS NULL` from the UPDATE failed nothing. Here the
+// other claimant lands BETWEEN the lookup and the write — the only gap a
+// second process sharing the database file could use — so the UPDATE's own
+// guard is the one thing between the customer and a second credit.
+it('the claim guard: a claim landing between lookup and write leaves the money alone', () => {
+  const db = fresh(); credit(db);
+  const LOOKUP = 'FROM retail_migration_credits WHERE phone = ? AND claimed_at IS NULL';
+  let interleaved = 0;
+  const racing = {
+    transaction: (fn) => db.transaction(fn),
+    prepare(sql) {
+      const st = db.prepare(sql);
+      if (!sql.includes(LOOKUP)) return st;
+      return {
+        get: (...a) => {
+          const row = st.get(...a);
+          db.prepare('UPDATE retail_migration_credits SET claimed_at = CURRENT_TIMESTAMP, claimed_customer_id = 2 WHERE id = 10').run();
+          interleaved++;
+          return row;
+        },
+      };
+    },
+  };
+  const out = new Function('tdb', 'normalizeMigrationPhone', `${SRC}\nreturn claimMigrationCredit;`)(
+    () => racing,
+    new Function('raw', `${extractFunction(RETAIL_SRC, 'normalizeMigrationPhone').replace(/^function normalizeMigrationPhone\(raw\) \{|\}$/g, '')}`)
+  )(1);
+  assert.strictEqual(interleaved, 1, 'the interleaving never happened — the lookup was not found, so this proves nothing');
+  assert.strictEqual(out, null, 'the second claimant was told it won');
+  assert.strictEqual(wallet(db, 1).length, 0, 'the second claimant got a wallet row');
+  assert.strictEqual(bal(db, 1), 0, 'the second claimant was credited');
+  assert.strictEqual(pts(db, 1), 0, 'the second claimant was given points');
+  assert.strictEqual(db.prepare('SELECT claimed_customer_id FROM retail_migration_credits WHERE id = 10').get().claimed_customer_id, 2,
+    'the first claimant lost the credit to the second');
+});
+
 // 5 ── THE ROLLBACK. What proves the write is INSIDE the transaction — and the
 // assertion that would have caught the original defect.
 it('rollback: a failing ledger INSERT unwinds the claim AND the balance', () => {
