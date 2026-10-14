@@ -413,7 +413,12 @@ jobs:
           # 2026-10-14 (decisions §477): the test reads routes/retail.js through
           # retailSource(), and two of its checks now find
           # createOrReuseManualCustomer in lib/customers.js, where it moved.
-          if grep -qE '^(lib/fulfilment\.js|lib/feie\.js|routes/retail\.js|lib/customers\.js|scripts/test-support/retail-source\.js|scripts/verify-fulfilment-types\.js|public/retail-admin/04-orders\.js)$' /tmp/files.txt; then
+          #
+          # routes/retail/*.js since 2026-10-14 (decisions §470): retailSource()
+          # reads every part in that directory, and the customer-search check
+          # now finds its code in routes/retail/customers.js. Direct children
+          # only, which is exactly what retailSource() lists.
+          if grep -qE '^(lib/fulfilment\.js|lib/feie\.js|routes/retail\.js|routes/retail/[^/]+\.js|lib/customers\.js|scripts/test-support/retail-source\.js|scripts/verify-fulfilment-types\.js|public/retail-admin/04-orders\.js)$' /tmp/files.txt; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             echo "Fulfilment logic touched — the test gate will run."
           else

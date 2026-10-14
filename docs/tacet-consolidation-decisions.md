@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.532
+# Tacet shared-core consolidation — decisions record, v4.533
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-14 · v4.533 — **§470 · THE DEPLOY'S FULFILMENT GATE ALSO FIRES ON `routes/retail/*.js` — DECIDED BY ASH:** *"yes"*, to the open question recorded with the customers move (#1184, deployed). `retailSource()` reads every part in that directory and the customer-search check now finds its code in `routes/retail/customers.js`, so a change there must re-prove the fulfilment table. One pattern in `.github/workflows/deploy.yml`, called out in its commit and PR. No string, no schema, no change to `.gitignore`. See §470.
 
 2026-10-14 · v4.532 — **§470 · THE CUSTOMERS AREA MOVES TO `routes/retail/customers.js` — DECIDED BY ASH:** *"move customers"*. 26 endpoints (23 admin, 3 profile) and their 7 own helpers, with 4 helpers handed in. Recorded answers were extended first (#1183) so a block that blocks nothing fails. Open for Ash: the deploy's fulfilment gate does not fire on `routes/retail/` parts, though the test now reads the customer search there. No string, no schema, no change to `.gitignore` or CI. See §470.
 
@@ -30828,6 +30830,16 @@ block is now read back before it is undone.
 `routes/retail/`. The earlier parts were already read through
 `retailSource()`, but none of their checks were fulfilment ones. Widening the
 trigger to `routes/retail/` is a CI change, so it is not made here.
+
+**Answered. Decided by Ash, 2026-10-14:** *"yes"*, widen it. The gate in
+`.github/workflows/deploy.yml` now fires on `routes/retail/[^/]+\.js`: direct
+children only, the same set `retailSource()` lists. Of the code that moved to
+`lib/` under §477, only `lib/customers.js` is read by a fulfilment check, and
+it was added earlier (v4.531). The other `lib/` modules were moved while the
+test still read `routes/retail.js` directly and it stayed 335/335 each time,
+so none of its checks depends on them. The one gap left was this directory.
+It is a change to how builds work, in its own PR, and called out in both the
+commit and the PR.
 
 ## §471 — THE DEAD TRANSACTION COUNT IN `test_tx_conversion_batch2.js` IS REMOVED, NOT REBUILT
 
