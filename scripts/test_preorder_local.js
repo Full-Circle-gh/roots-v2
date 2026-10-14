@@ -176,7 +176,9 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
   const inventory = require(path.join(ROOT, 'lib/inventory.js'));
   const { localPreorderLine } = require(path.join(ROOT, 'routes/retail.js'));
   const { tdb } = require(path.join(ROOT, 'lib/tenant-db.js'));
-  const retailSrc = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+  // routes/retail.js and everything moved out of it (decisions §477):
+  // expandStockLines is in lib/bundles.js.
+  const retailSrc = require('./test-support/retail-source').retailSource();
 
   // Core Guangzhou: always on the local run, whatever day is picked.
   const GZ = { city: '广州市', district: '天河区', address: '新塘大街7号' };
