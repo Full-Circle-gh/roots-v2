@@ -16031,10 +16031,15 @@ function activityRows({ where, params }, limit, offset) {
            COALESCE(NULLIF(TRIM(s.name_en),''), NULLIF(TRIM(s.name_cn),''), s.code) AS store,
            p.sku,
            COALESCE(NULLIF(TRIM(p.name_en),''), NULLIF(TRIM(p.name_cn),'')) AS product,
-           l.delta, l.balance_after, l.actor_label, l.note
+           l.delta, l.balance_after, l.actor_label, l.note,
+           o.order_no
       FROM retail_stock_ledger l
       LEFT JOIN store_products p ON p.id = l.product_id
       LEFT JOIN retail_stores  s ON s.id = l.store_id
+      -- The order a mini-app row belongs to, read off the ledger's own link.
+      -- Not every writer stamps the order number into the note (the restock
+      -- release never did), and the screens show the number beside the reason.
+      LEFT JOIN retail_orders  o ON l.ref_table = 'retail_orders' AND o.id = l.ref_id
      WHERE ${where}
      ORDER BY l.id DESC
      ${limit != null ? 'LIMIT @limit OFFSET @offset' : ''}

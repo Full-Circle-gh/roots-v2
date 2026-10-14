@@ -30,6 +30,29 @@ const ACT_SOURCE_NAME = {
 };
 function actSourceName(src) { const f = ACT_SOURCE_NAME[src]; return f ? f() : (src || '—'); }
 
+// WHAT THE STOCK DID FOR A MINI-APP ORDER, in words. The ledger's reason token
+// says when the units left the shelf, and the three moments are not the same:
+// at payment, when staff press Start preparing, or automatically the moment a
+// restock covers an order that was waiting for it. Every mini-app row was
+// labelled just "Mini-app", so the log could not say which had happened. A
+// reason with no entry here shows nothing, exactly as before. Same table as
+// m.html's actReasonName — change both together.
+const ACT_REASON_NAME = {
+  order_commit:             () => actT('Taken at payment', '付款时扣减'),
+  order_prepare:            () => actT('Taken when preparing', '开始备货时扣减'),
+  awaiting_restock_release: () => actT('Taken on restock', '已补货，自动扣减'),
+  order_reverse:            () => actT('Stock returned', '库存退回'),
+  order_reverse_partial:    () => actT('Stock returned', '库存退回'),
+  order_reverse_ledger:     () => actT('Stock returned', '库存退回'),
+};
+// The last column: the reason and the order for a mini-app row; the clerk and
+// the note for a hand count; the note for everything else.
+function actContext(r) {
+  const f = ACT_REASON_NAME[r.reason];
+  if (f) return [f(), r.order_no || r.note].filter(Boolean).join(' · ');
+  return r.source === 'manual' ? [r.actor_label, r.note].filter(Boolean).join(' · ') : (r.note || '');
+}
+
 function actT(en, cn) { return window.cuT ? cuT(en, cn) : en; }
 // Today on the STORE's calendar. Was Guangzhou's, spelled out as +8 hours.
 function actShopToday() { return tdToday(); }
@@ -238,9 +261,7 @@ function actRenderRows() {
                                 : `<span class="act-out num">−${Math.abs(r.delta)}</span>`;
       const bal = r.balance_after === 0 ? `<span class="act-zero num">0</span>`
                                         : `<span class="num">${r.balance_after}</span>`;
-      const ctx = r.source === 'manual'
-        ? [r.actor_label, r.note].filter(Boolean).join(' · ')
-        : (r.note || '');
+      const ctx = actContext(r);
       return `<tr>`
         + `<td class="act-time num">${escapeHtml(actFmtClock(r.ts_local))}</td>`
         + `<td class="act-ch${r.source === 'manual' ? ' act-ch-manual' : ''}">${escapeHtml(actSourceName(r.source))}</td>`

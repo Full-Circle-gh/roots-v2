@@ -14156,6 +14156,21 @@ const ACT_SRC={miniapp:['Mini-app','小程序'],gzgrocery:['Gzgrocery','Gzgrocer
   meituan_tianhe:['Meituan Tianhe','美团天河'],meituan_yuexiu:['Meituan Yuexiu','美团越秀'],
   meituan:['Meituan','美团'],guanyi:['Guanyi','管易'],manual:['Manual','手动']};
 const actSrcName=k=>ACT_SRC[k]?T(...ACT_SRC[k]):(k||'—');
+/* What the stock did for a mini-app order, in words: taken at payment, taken
+   when staff press Start preparing, or taken automatically when a restock
+   covered an order that was waiting for it. Same table as the desktop's
+   ACT_REASON_NAME in 13-activity.js — change both together. A reason with no
+   entry shows nothing, as before. */
+const ACT_REASON={order_commit:['Taken at payment','付款时扣减'],
+  order_prepare:['Taken when preparing','开始备货时扣减'],
+  awaiting_restock_release:['Taken on restock','已补货，自动扣减'],
+  order_reverse:['Stock returned','库存退回'],order_reverse_partial:['Stock returned','库存退回'],
+  order_reverse_ledger:['Stock returned','库存退回']};
+function actContext(r){
+  const w=ACT_REASON[r.reason];
+  if(w) return [T(...w), r.order_no||r.note].filter(Boolean).join(' · ');
+  return r.source==='manual' ? [r.actor_label,r.note].filter(Boolean).join(' · ') : (r.note||'');
+}
 /* The desktop's three quick ranges, ending on today, on the STORE's clock —
    the same boundary the server counts its days on. */
 function actPreset(k){
@@ -14209,7 +14224,7 @@ function actDelta(n){
 function actRow(r){
   // A sale is normal, so its delta stays ink. Stock-in is sage. A zero balance
   // is the only amber on this ledger — a channel is a filter, not a light.
-  const ctx = r.source==='manual' ? [r.actor_label,r.note].filter(Boolean).join(' · ') : (r.note||'');
+  const ctx = actContext(r);
   const bal = Number(r.balance_after)===0
     ? `<span class="num" style="color:var(--amber-ink);font-weight:500">0</span>`
     : `<span class="num" style="color:var(--text-secondary)">${r.balance_after!=null?r.balance_after:'—'}</span>`;

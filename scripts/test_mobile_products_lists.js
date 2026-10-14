@@ -132,11 +132,11 @@ const FNS = ['chipRow', 'searchBox', 'searchClearShow', 'searchClearRun', 'noteB
   'prodBulkCanEdit', 'prodBulkCanDelete', 'prodBulkAny', 'prodVisibleIds', 'prodBulkBar',
   // §325 X3 — the Count sheet button rides the catalogue's top row beside Export.
   'countOffered', 'countButton',
-  'actPreset', 'actWindow', 'loadActivity', 'actClock', 'actRangeLine', 'actDelta', 'actRow', 'actDigestCard',
+  'actPreset', 'actWindow', 'loadActivity', 'actClock', 'actRangeLine', 'actDelta', 'actContext', 'actRow', 'actDigestCard',
   'screenActivity', 'actReload',
   'wstPreset', 'wstWindow', 'loadWasteReasons', 'wstReasonName', 'loadWaste', 'wstStoreName', 'wstProductName',
   'wstPulse', 'wstRow', 'screenWaste', 'wstRefilter'];
-const CONSTS = ['cfgGet', 'PILL', 'KIND2PILL', 'prodBySize', 'PROD_STATUS_KIND', 'MCAN_MONEY_ONLY', 'ACT_SRC', 'actSrcName',
+const CONSTS = ['cfgGet', 'PILL', 'KIND2PILL', 'prodBySize', 'PROD_STATUS_KIND', 'MCAN_MONEY_ONLY', 'ACT_SRC', 'actSrcName', 'ACT_REASON',
   'wstMoney', 'wstShowMoney', 'money'];
 const REGS = ['askRun', 'prodStatus', 'prodCat', 'prodSub', 'prodStore', 'prodExport', 'prodClearQ',
   'actRange', 'actQ', 'actSearchGo', 'mActClr', 'actExport', 'actSource',
