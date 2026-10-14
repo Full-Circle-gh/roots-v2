@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.529
+# Tacet shared-core consolidation — decisions record, v4.530
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-14 · v4.530 — **§477 · THE SHOP CLOCK, BROADCAST AUDIENCES AND CUSTOMER BASICS MOVE TO `lib/`; THE CUSTOMERS AREA NOW NEEDS NOTHING HANDED IN — DECIDED BY ASH:** *"build group 3"*. Thirteen statements into `lib/shop-clock.js`, `lib/broadcast-audience.js` and `lib/customers.js`. Tests went in first (#1179) for the per-account clock memo, broadcast audiences and email clean-up. Two questions are left open for Ash: whether broadcasts count `awaiting_restock` as paid, and whether the deploy's fulfilment gate should also fire on `lib/customers.js`. No string, no schema, no change to `.gitignore` or CI. See §477.
 
 2026-10-14 · v4.529 — **§477 · SIGNUP REWARDS AND REFER-A-FRIEND MOVE TO `lib/` — DECIDED BY ASH:** *"after group 2 build"*. Twelve statements into `lib/signup-rewards.js` and `lib/referrals.js`. Before the move, tests were added (#1177) for the OUT1N claim guard and for the welcome coupon never reaching a returning customer; neither had a test that could fail. No string, no schema, no change to `.gitignore` or CI. See §477.
 
@@ -31248,3 +31250,41 @@ test that could fail. One is the claim's compare-and-set: the existing
 "lost race" stopped at the lookup and never reached it. The other is the
 rule that a returning OUT1N customer never gets the welcome coupon. Tests
 for both went in first (#1177), and they gate this move.
+
+**Group 3: the shop clock, broadcast audiences and customer basics.
+Decided by Ash, 2026-10-14:** *"build group 3"*. Thirteen statements:
+
+- `lib/shop-clock.js`: `_tzMemo` and `shopSqlShift`, the shop's SQL day
+  boundary (audit A-05), with the section comment that explains it;
+- `lib/broadcast-audience.js`: `BC_PAID_STATUSES`, `BC_TIER_KEYS`,
+  `BC_ACTIVITIES`, `normalizeAudience`, `audienceWhere`. The survey listed
+  only `BC_PAID_STATUSES` (the customers area reads it), but it is one of
+  five pieces of one rule, so the five travel together rather than split;
+- `lib/customers.js`: `normEmail`, `publicCustomer`, `grantedById`,
+  `grantedByName`, `createOrReuseManualCustomer`, `historyTenantId`.
+
+The "Broadcasts", "Vouchers / coupons" and auth-provider headings stay in
+`routes/retail.js` above the code they still introduce. So does the "Manual
+customer create" description above `POST /api/retail-admin/customers`; only
+the function's own comment moves with it. With this group, the customers area
+needs no helper handed in from `routes/retail.js`.
+
+Breaking each helper before the move found three with no test that could
+fail: the clock's memo being per account, the broadcast paid list, and the
+email lower-casing. Tests for all three went in first (#1179).
+
+**Two questions left open, for Ash:**
+
+1. *Is an order awaiting restock "paid" for a broadcast?* `lib/finance-window.js`
+   counts `awaiting_restock` as paid. `BC_PAID_STATUSES` does not, so a
+   customer whose only order awaits restock is "never ordered" to a broadcast
+   and can be sent a first-order offer. The move keeps today's behaviour, and
+   `scripts/test_broadcast_audience.js` deliberately asserts nothing about
+   that status.
+2. *Should the deploy's fulfilment gate also fire on `lib/customers.js`?*
+   Two of `scripts/verify-fulfilment-types.js`'s checks now read
+   `createOrReuseManualCustomer` there. The gate in
+   `.github/workflows/deploy.yml` runs only when one of the files it names
+   changes, and the workflow's own rule is that a file the test reads must be
+   one of them. Changing a CI trigger is not made silently, so it is not in
+   this move. §470 rule 6 already plans this widening for when orders moves.

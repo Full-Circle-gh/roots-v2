@@ -402,9 +402,11 @@ check('counter transitions match delivery — the list is keyed on status, not t
 // and the same group carries real delivery jobs, so a walk-in wearing that shape
 // teaches staff to skim the channel.
 //
-// Same extraction technique as the client predicates, against routes/retail.js.
-const SERVER_SRC = fs.readFileSync(
-  path.join(__dirname, '..', 'routes', 'retail.js'), 'utf8');
+// Same extraction technique as the client predicates, against routes/retail.js
+// and what moved out of it to lib/ (decisions §477): createOrReuseManualCustomer
+// now sits in lib/customers.js. retail.js comes first in that text, so a
+// position inside it is the same as before.
+const SERVER_SRC = require('./test-support/retail-source').retailSource();
 
 const CARD_FNS = ['buildWecomOrderCard', 'buildWecomCounterCard'];
 const cardSrc = {};
