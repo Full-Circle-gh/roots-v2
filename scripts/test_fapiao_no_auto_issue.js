@@ -36,7 +36,9 @@ const path = require('path');
 
 const ROOT   = path.join(__dirname, '..');
 const M_SRC  = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
-const R_SRC  = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+// routes/retail.js and everything moved out of it (decisions §477): the
+// auto-issue path is in lib/fapiao.js, its endpoints still in routes/retail.js.
+const R_SRC  = require('./test-support/retail-source').retailSource();
 const C_SRC  = fs.readFileSync(path.join(ROOT, 'lib', 'tenant-creds.js'), 'utf8');
 
 let pass = 0, fail = 0;

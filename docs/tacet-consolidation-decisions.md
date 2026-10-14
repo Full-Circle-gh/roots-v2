@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.535
+# Tacet shared-core consolidation — decisions record, v4.536
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-15 · v4.536 — **§477 · THE DORMANT 发票 AUTO-ISSUE MOVES TO `lib/fapiao.js`; `notifyForOrder` JOINS `lib/customer-notify.js` AND `integ` JOINS `lib/tenant-creds.js` — DECIDED BY ASH:** *"merge deploy then move then merge deploy"*, step 4 of the orders plan. 6 statements, a pure move; tests went in first (#1195). See the amendment at the end of §477.
 
 2026-10-14 · v4.535 — **§477 · THE BUNDLE HELPERS MOVE TO `lib/bundles.js` AND THE COST-OF-SALE WRAPPERS TO `lib/cost-at-sale.js` — DECIDED BY ASH:** *"move bundles"*, step 3 of the orders plan. 8 statements, a pure move; tests went in first (#1193). See the amendment at the end of §477.
 
@@ -31423,5 +31425,29 @@ and cost of sale. Decided by Ash:** *"move bundles"*.
    break made inside the new file (a quantity of 0 let through) fails it.
    Three suites that read `routes/retail.js` as text now read
    `retailSource()`, so they check the code where it went.
+5. **No CI change.** `scripts/verify-fulfilment-types.js` reads none of this
+   code.
+
+**Amended 2026-10-15 — the orders area's third group: the invoices. Decided by
+Ash:** *"merge deploy then move then merge deploy"*.
+
+1. **`lib/fapiao.js`** takes `fapiaoSettings`, `buildNuonuoOrder`,
+   `finalizeInvoiceResult` and `maybeAutoIssueInvoice`: the dormant Nuonuo
+   auto-issue, kept for the first tenant whose provider has an API (§99
+   addendum 2). Its endpoints stay in `routes/retail.js`.
+2. **`notifyForOrder` joins `lib/customer-notify.js`**, beside the
+   `notifyCustomer` it wraps, rather than a new file of one function. The
+   "In-app notification center" heading stays in `routes/retail.js`, because
+   the notification routes under it stay.
+3. **`integ` joins `lib/tenant-creds.js`.** It is one line over that module's
+   own `getTenantCreds`, and `retail.js` reads it in 31 places; the module
+   already required `lib/tenant-db.js`, so this adds no circular require.
+4. **Proof.** Every top-level statement of main's `retail.js` is in exactly
+   one place, the moved ones in order; the only other changes are require
+   lines and the two modules' export lists. Route order is identical.
+   `scripts/test_fapiao_auto_issue_flow.js` (#1195) passes, and a break made
+   inside the new file (a cancelled order let through to issuing) fails it.
+   `scripts/test_fapiao_no_auto_issue.js` now reads `retailSource()`, so it
+   checks the auto-issue path where it went.
 5. **No CI change.** `scripts/verify-fulfilment-types.js` reads none of this
    code.
