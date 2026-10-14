@@ -33,6 +33,7 @@ const RETAIL_LIBS = [
   'lib/store-config.js', 'lib/loyalty.js', 'lib/vouchers.js', 'lib/addresses.js',
   'lib/page-layout.js', 'lib/customer-notify.js', 'lib/signup-rewards.js', 'lib/referrals.js',
   'lib/shop-clock.js', 'lib/broadcast-audience.js', 'lib/customers.js',
+  'lib/tenant-brand.js', 'lib/payment-gateways.js',
 ];
 
 function retailSource() {

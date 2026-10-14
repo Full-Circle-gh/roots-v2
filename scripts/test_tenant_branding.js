@@ -2,7 +2,8 @@
 /**
  * Nothing goes out under another company's name — audit D-04.
  *
- * `tenantBrandLabel()` exists in routes/retail.js and its own note says why:
+ * `tenantBrandLabel()` exists (lib/tenant-brand.js, moved out of routes/retail.js
+ * under decisions §477) and its own note says why:
  * "a shopper's payment screen never reads another company's name. (⑦
  * de-Roots.)" It was written for the WeChat and Alipay descriptions and used
  * there — and twenty-four thousand lines further down the same file, the JD
@@ -28,6 +29,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
+const { retailSource } = require('./test-support/retail-source');
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
 
 let pass = 0; let fail = 0;
@@ -37,7 +39,9 @@ const is = (a, e, m) => (a === e ? ok(m) : bad(m, `expected ${JSON.stringify(e)}
 const yes = (c, m, extra) => (c ? ok(m) : bad(m, extra));
 const section = (t) => console.log('\n' + t);
 
-const RETAIL = strip(read('routes/retail.js'));
+// routes/retail.js and everything moved out of it (its parts and lib/), so a
+// helper that moves keeps being checked where it went.
+const RETAIL = strip(retailSource());
 
 // ─────────────────────────────────────────────────────────────────────────
 section('1 · the helper, and that it is actually reached');
@@ -58,7 +62,7 @@ yes(/function payDescription\(orderNo\) \{ return `\$\{tenantBrandLabel\(\)\}/.t
   'the payment description does too — the name on the payment screen');
 
 // ─────────────────────────────────────────────────────────────────────────
-section('2 · no literal left in routes/retail.js where a customer can see it');
+section('2 · no literal left in routes/retail.js, or what moved out of it, where a customer can see it');
 
 /* The whole file, comments stripped. Two legitimate survivors are named
    explicitly below rather than pattern-matched, so adding a third is a
@@ -72,11 +76,11 @@ for (const a of ALLOWED) body = body.split(a).join(' ');
 const left = (body.match(/'Roots'|"Roots"|`Roots/g) || []).length;
 is(left, 0, 'no other Roots literal in the admin API');
 if (left) {
-  const lines = read('routes/retail.js').split('\n')
+  const lines = retailSource().split('\n')
     .map((l, i) => [i + 1, l])
     .filter(([, l]) => /'Roots'|"Roots"|`Roots/.test(l) && !/^\s*(\/\/|\*)/.test(l)
       && !ALLOWED.some((a) => l.includes(a)));
-  for (const [n, l] of lines.slice(0, 8)) console.log(`      retail.js:${n}  ${l.trim().slice(0, 110)}`);
+  for (const [n, l] of lines.slice(0, 8)) console.log(`      retail source line ${n}:  ${l.trim().slice(0, 110)}`);
   console.log('      use tenantBrandLabel()');
 }
 
