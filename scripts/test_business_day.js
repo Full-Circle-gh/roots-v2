@@ -175,7 +175,9 @@ it('routes/ and lib/ carry no "+8 hours" in code, except the named fallback', ()
 });
 
 it('the API resolves the boundary per account rather than per platform', () => {
-  const retail = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+  // routes/retail.js and what moved out of it: shopSqlShift now sits in
+  // lib/shop-clock.js (decisions §477).
+  const retail = require('./test-support/retail-source').retailSource();
   assert.match(retail, /function shopSqlShift\(\)/, 'the resolver must exist');
   assert.match(retail, /sqlDayShiftForShop\(tdb\(\)\)/, 'and read the ACCOUNT’s connection');
   // Memoised — it is called dozens of times per request.

@@ -48,7 +48,9 @@ const { openTablesDb, driver } = require('./test-support/memory-db');
 
 const MUTANT = process.env.HTMC_MUTANT === '1';
 const ROOT = path.join(__dirname, '..');
-const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+// routes/retail.js and what moved out of it: createOrReuseManualCustomer now
+// sits in lib/customers.js (decisions §477).
+const RETAIL_SRC = require('./test-support/retail-source').retailSource();
 
 // ── Source extraction ──────────────────────────────────────────────────────
 // Comments are stripped so an anchor cannot match inside one — the failure mode
