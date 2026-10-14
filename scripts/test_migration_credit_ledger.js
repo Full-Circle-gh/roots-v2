@@ -46,7 +46,9 @@ const ROOT = path.join(__dirname, '..');
 const DB_SRC = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
 // Normalised at read: routes/retail.js is CRLF in a Windows checkout, and an
 // anchor written with "\n" would match nothing and pass silently.
-const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8').replace(/\r\n/g, '\n');
+// routes/retail.js and what moved out of it: claimMigrationCredit now sits in
+// lib/signup-rewards.js (decisions §477). retailSource() normalises CRLF too.
+const RETAIL_SRC = require('./test-support/retail-source').retailSource();
 
 function extractFunction(code, name) {
   const m = new RegExp(`^function ${name}\\(`, 'm').exec(code);
