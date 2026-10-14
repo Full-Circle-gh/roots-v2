@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.528
+# Tacet shared-core consolidation — decisions record, v4.529
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-14 · v4.529 — **§477 · SIGNUP REWARDS AND REFER-A-FRIEND MOVE TO `lib/` — DECIDED BY ASH:** *"after group 2 build"*. Twelve statements into `lib/signup-rewards.js` and `lib/referrals.js`. Before the move, tests were added (#1177) for the OUT1N claim guard and for the welcome coupon never reaching a returning customer; neither had a test that could fail. No string, no schema, no change to `.gitignore` or CI. See §477.
 
 2026-10-13 · v4.528 — **§477 · THE CUSTOMER INBOX, THE WHOLE-CONFIG LOADER AND THE PAGE-LAYOUT DEFAULTS MOVE TO `lib/` — DECIDED BY ASH:** *"build group 1"*, to the survey of what the customers area still needs. Ten statements into `lib/customer-notify.js`, `lib/store-config.js` and `lib/page-layout.js`. Before the move, a test was added (#1175) proving every private settings family stays out of the public config. No string, no schema, no change to `.gitignore` or CI. See §477.
 
@@ -31221,3 +31223,28 @@ settings, review seeding and the kitchen's WeCom link out of the public
 config. Before this move only `kitchen.` was proven by a request, so a
 behavioural check for all four families went in first (#1175,
 `scripts/test_public_config_secrets.js` section 6).
+
+**Group 2: signup rewards and refer-a-friend. Decided by Ash, 2026-10-14:**
+*"after group 2 build"*. Twelve statements, in two modules because they do
+two jobs:
+
+- `lib/signup-rewards.js`: `grantSignupVouchers`,
+  `reconcileSignupVouchers`, `normalizeMigrationPhone`,
+  `claimMigrationCredit`. These are the welcome coupon (granted to a new
+  phone, withheld and pulled back from a returning OUT1N phone) and the
+  one-time claim of a migrated OUT1N balance. They need only the database.
+- `lib/referrals.js`: `AFFILIATE_REWARD_DEFAULT`, `REFERRAL_CODE_PREFIX`,
+  `REFERRAL_CODE_BODY_LEN`, `affiliateSettings`, `SHARE_TITLE_MAX`,
+  `normShareTitle`, `newReferralCodeBody`, `ensureReferralCode`. These are
+  the programme's settings and each customer's referral code. They need the
+  database, `cfgValue` and `crypto`.
+
+The "Vouchers / coupons" and "Affiliate / refer-a-friend" headings stay in
+`routes/retail.js` above the routes they introduce. The referral flow itself
+(apply a code, reward the first paid order) stays there too.
+
+Breaking the code on purpose before the move showed that two guards had no
+test that could fail. One is the claim's compare-and-set: the existing
+"lost race" stopped at the lookup and never reached it. The other is the
+rule that a returning OUT1N customer never gets the welcome coupon. Tests
+for both went in first (#1177), and they gate this move.

@@ -31,7 +31,7 @@ function retailPartFiles() {
 const RETAIL_LIBS = [
   'lib/public-origin.js', 'lib/wx-access-token.js', 'lib/wx-content-gate.js',
   'lib/store-config.js', 'lib/loyalty.js', 'lib/vouchers.js', 'lib/addresses.js',
-  'lib/page-layout.js', 'lib/customer-notify.js',
+  'lib/page-layout.js', 'lib/customer-notify.js', 'lib/signup-rewards.js', 'lib/referrals.js',
 ];
 
 function retailSource() {
