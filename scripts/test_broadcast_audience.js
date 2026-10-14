@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * test_broadcast_audience.js — a broadcast reaches the customers its audience
- * names, and "has ordered" means a paid order in any of its paid stages.
+ * names, and "has ordered" means a paid order, as Finance counts paid.
  *
  *   node scripts/test_broadcast_audience.js
  *
@@ -11,13 +11,13 @@
  * list to 'paid' alone, so a customer whose order had moved on to preparing,
  * dispatched or delivered read as "never ordered", failed no suite.
  *
- * OPEN, NOT ASSERTED. lib/finance-window.js counts 'awaiting_restock' as paid
- * and BC_PAID_STATUSES does not, so a customer whose only order awaits restock
- * is "never ordered" to a broadcast. Whether that is right is a product
- * question put to Ash; this suite deliberately says nothing about that status.
+ * AWAITING RESTOCK IS PAID. Decided by Ash 2026-10-14 (decisions §477,
+ * v4.531): the list is lib/finance-window.js's PAID_STATUSES, not a copy, so a
+ * customer whose only order is paid and waiting on stock is a buyer here as in
+ * Finance. Until then it was a four-status copy that left that status out.
  *
- * THE REAL FUNCTIONS ARE LIFTED FROM THE SOURCE AND RUN (retailSource() finds
- * them wherever they live) over the real table definitions from database.js.
+ * The real module, lib/broadcast-audience.js, over the real table definitions
+ * from database.js.
  */
 'use strict';
 
@@ -25,28 +25,11 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { openTablesDb } = require('./test-support/memory-db');
-const { retailSource } = require('./test-support/retail-source');
 
 const ROOT = path.join(__dirname, '..');
-const SRC = retailSource();
 const DB_SRC = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
-
-function extractConst(name) {
-  const m = new RegExp(`^const ${name} = .*;$`, 'm').exec(SRC);
-  assert.ok(m, `const ${name} not found`);
-  return m[0];
-}
-function extractFunction(name) {
-  const at = SRC.search(new RegExp(`^function ${name}\\(`, 'm'));
-  assert.ok(at >= 0, `function ${name} not found`);
-  return SRC.slice(at, SRC.indexOf('\n}', at) + 2);
-}
-const BODY = [
-  extractConst('BC_PAID_STATUSES'), extractConst('BC_TIER_KEYS'), extractConst('BC_ACTIVITIES'),
-  extractFunction('normalizeAudience'), extractFunction('audienceWhere'),
-].join('\n');
-const { audienceWhere, normalizeAudience } =
-  new Function(`${BODY}\nreturn { audienceWhere, normalizeAudience };`)();
+const { BC_PAID_STATUSES, audienceWhere, normalizeAudience } = require(path.join(ROOT, 'lib', 'broadcast-audience'));
+const { PAID_STATUSES } = require(path.join(ROOT, 'lib', 'finance-window'));
 
 const db = openTablesDb(DB_SRC, ['retail_customers', 'retail_orders', 'retail_customer_addresses']);
 const cust = db.prepare('INSERT INTO retail_customers (id, openid, nickname, tier_key, is_blocked) VALUES (?, ?, ?, ?, ?)');
@@ -55,7 +38,7 @@ const order = (cid, status, daysAgo) => db.prepare(
   `INSERT INTO retail_orders (order_no, customer_id, status, placed_at, total)
    VALUES (?, ?, ?, datetime('now', ?), 10)`).run('BA' + (++orderNo), cid, status, `-${daysAgo} days`);
 // One customer per paid stage, each with a single recent order.
-const STAGES = ['paid', 'preparing', 'dispatched', 'delivered'];
+const STAGES = ['paid', 'preparing', 'dispatched', 'delivered', 'awaiting_restock'];
 STAGES.forEach((s, i) => { cust.run(10 + i, 'o' + i, s, 'seed', 0); order(10 + i, s, 3); });
 cust.run(20, 'o20', 'only pending', 'seed', 0);   order(20, 'pending', 3);
 cust.run(21, 'o21', 'only cancelled', 'seed', 0); order(21, 'cancelled', 3);
@@ -76,8 +59,13 @@ function it(name, fn) {
   catch (e) { fail++; console.log('  ✗ ' + name + '\n      ' + e.message); }
 }
 
+console.log('\n0. one meaning of paid');
+it('the broadcast paid list IS Finance\'s paid list, not a copy of it', () => {
+  assert.strictEqual(BC_PAID_STATUSES, PAID_STATUSES);
+});
+
 console.log('\n1. "has ordered" covers every paid stage');
-it('buyers: a customer at each of paid, preparing, dispatched and delivered is a buyer', () => {
+it('buyers: a customer at each paid stage, awaiting restock included, is a buyer', () => {
   const got = who({ activity: 'buyers' });
   for (let i = 0; i < STAGES.length; i++) assert.ok(got.includes(10 + i), `${STAGES[i]} was left out of buyers`);
 });
