@@ -52,7 +52,9 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const RETAIL_JS = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+// routes/retail.js and everything moved out of it (decisions §477):
+// WX_OUT_TRADE_PREFIX and isMissingTransactionError are in lib/payment-gateways.js.
+const RETAIL_JS = require('./test-support/retail-source').retailSource();
 const DATABASE_JS = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
 
 let pass = 0;

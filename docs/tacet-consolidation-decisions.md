@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.533
+# Tacet shared-core consolidation — decisions record, v4.534
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-14 · v4.534 — **§477 · THE PAYMENT GATEWAY CODE MOVES TO `lib/payment-gateways.js`, AND THE TENANT BRAND HELPERS TO `lib/tenant-brand.js` — DECIDED BY ASH:** *"move payment"*, step 2 of the orders plan. 33 statements (WeChat Pay and Alipay config, pay context, signing, charge / status / refund, callback checks) and 3 brand helpers, a pure move. Tests went in first (#1190). See the amendment at the end of §477.
 
 2026-10-14 · v4.533 — **§470 · THE DEPLOY'S FULFILMENT GATE ALSO FIRES ON `routes/retail/*.js` — DECIDED BY ASH:** *"yes"*, to the open question recorded with the customers move (#1184, deployed). `retailSource()` reads every part in that directory and the customer-search check now finds its code in `routes/retail/customers.js`, so a change there must re-prove the fulfilment table. One pattern in `.github/workflows/deploy.yml`, called out in its commit and PR. No string, no schema, no change to `.gitignore`. See §470.
 
@@ -31358,3 +31360,38 @@ both"*, to the recommendation put with group 3.
    workflow's own rule is that a file the test reads is a file that triggers
    it. This is a change to how builds work, in its own PR, and called out in
    both the commit and the PR.
+
+**Amended 2026-10-14 — the orders area's first group: the payment gateways.
+Decided by Ash:** *"move payment"*, step 2 of the plan put with the orders
+survey (tests first, then the cleanest group).
+
+1. **`lib/payment-gateways.js`** takes the WeChat Pay and Alipay code whole:
+   the merchant config that is only read there (`WECHAT_PAY_REFUND_NOTIFY_URL`,
+   the `ALIPAY_*` settings, the out-trade-no prefix and its two builders, the
+   user agent), `payContext`, the notify URLs, `payDescription`, request
+   signing, the JSAPI / H5 / Native charges, the status query, the refund,
+   `isMissingTransactionError`, the Alipay sign string, API call, precreate,
+   redirect URL, query and notify check, and `verifyWxPayNotify` with its
+   replay window. 33 statements. It needs only `lib/`.
+2. **`lib/tenant-brand.js`** takes the three tenant brand helpers
+   (`tenantBrandLabel`, `tenantPrintCredit`, `tenantBrandLogoUrl`).
+   `payDescription` needs the first; receipts, the courier sender name and
+   top-up descriptions use it too, so it is the brand's own module, not a
+   payment one, and the family moves together.
+3. **What stays in `routes/retail.js`:** the payment routes, the callback
+   handlers that settle orders (`handleWechatPayCallback`,
+   `handleWechatRefundCallback`), `oaPayContext`, the two not-configured
+   flags and their boot warnings, and the top-up and add-on prefixes, which
+   are built on the imported `WX_OUT_TRADE_PREFIX`.
+4. **`retail.js` still exports** `oaPayContext`, `wechatJsapiPrepare`,
+   `buildWxPayParams`, `wxOutTradeNo` and `payDescription` to
+   `routes/shop-menu.js`, unchanged: the names are imported and passed on.
+5. **Proof.** Every top-level statement of main's `retail.js` is in exactly
+   one place, the moved ones in order; the only other changes are require and
+   export lines, and `WECHAT_PAY_NOTIFY_URL` leaving `retail.js`'s import,
+   because only the moved notify-URL helper read it. Route order is
+   identical. `scripts/test_payment_signing.js` (#1190) and the recorded
+   answers pass, and a break made inside the new file (WeChat's signed
+   message without its last line feed) fails three of its checks.
+6. **No CI change.** `scripts/verify-fulfilment-types.js` reads none of this
+   code, so the deploy's fulfilment gate does not need to name the new files.
