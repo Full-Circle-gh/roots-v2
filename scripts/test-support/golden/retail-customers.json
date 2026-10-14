@@ -520,6 +520,140 @@
     }
   },
   {
+    "req": "GET /api/retail-admin/customers/2 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "customer": {
+          "id": 2,
+          "openid": "golden_lin",
+          "unionid": null,
+          "nickname": "Lin",
+          "avatar_url": null,
+          "phone": "13800138001",
+          "email": "lin@example.com",
+          "gender": null,
+          "birthday": null,
+          "tier_key": "seed",
+          "lifetime_spend": 0,
+          "points_balance": 150,
+          "coupon_count": 0,
+          "balance": 62.5,
+          "is_blocked": 1,
+          "created_at": "<T>",
+          "last_login_at": null,
+          "referral_code": null,
+          "referred_by_customer_id": null,
+          "referral_applied_at": null,
+          "lifetime_eligible": 0,
+          "lifetime_eligible_since": null,
+          "affiliate_blocked": 0,
+          "source": null,
+          "created_by": null,
+          "seen_at": "<T>",
+          "note": null,
+          "tags": null
+        },
+        "addresses": [],
+        "stats": {
+          "orders": {
+            "orders_count": 1,
+            "completed_count": 1,
+            "refunded_count": 0,
+            "cancelled_count": 0,
+            "revenue": 0,
+            "aov": 0,
+            "last_order_at": "<T>",
+            "first_order_at": "<T>",
+            "days_since_last_order": 12
+          },
+          "points": {
+            "earned": 0,
+            "redeemed": 0,
+            "expired": 0,
+            "admin_adjust": 30,
+            "expiring_30d": 0
+          },
+          "topup": {
+            "topup_total": 0,
+            "bonus_pts_total": 0,
+            "admin_adjust_total": 12.5
+          },
+          "vouchers": {
+            "unused": 0,
+            "used": 0
+          },
+          "reviews": {
+            "count": 0,
+            "avg_rating": null
+          },
+          "active_sessions": 0
+        },
+        "top_items": [],
+        "orders_by_month": [
+          {
+            "month": "2039-12",
+            "n": 1,
+            "revenue": 0
+          }
+        ],
+        "recent_orders": [
+          {
+            "id": 3,
+            "order_no": "GLDC1",
+            "status": "delivered",
+            "total": 88,
+            "created_at": "<T>"
+          }
+        ],
+        "recent_points": [
+          {
+            "id": 2,
+            "delta": 30,
+            "balance_after": 150,
+            "source": "admin_adjust",
+            "order_id": null,
+            "note": "[golden_owner] goodwill",
+            "created_at": "<T>",
+            "expires_at": null
+          }
+        ],
+        "recent_topups": [
+          {
+            "id": 1,
+            "amount": 12.5,
+            "bonus_points": 0,
+            "payment_method": "admin_adjust",
+            "status": "success",
+            "created_at": "<T>",
+            "paid_at": "<T>"
+          }
+        ],
+        "affiliate": {
+          "referral_code": null,
+          "affiliate_blocked": 0,
+          "referred_by": null,
+          "invites": [],
+          "summary": {
+            "total": 0,
+            "converted": 0,
+            "earned": 0
+          },
+          "lifetime_mode": "everyone",
+          "lifetime_eligible": 0,
+          "lifetime_eligible_since": null
+        },
+        "diagnostics": {
+          "device_last_seen": null,
+          "recent_logs": [],
+          "error_count_7d": 0,
+          "unavailable": false
+        }
+      }
+    }
+  },
+  {
     "req": "POST /api/retail-admin/customers/2/unblock [admin]",
     "status": 200,
     "body": {
@@ -531,6 +665,140 @@
     "status": 200,
     "body": {
       "success": true
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/customers/2 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "customer": {
+          "id": 2,
+          "openid": "golden_lin",
+          "unionid": null,
+          "nickname": "Lin",
+          "avatar_url": null,
+          "phone": "13800138001",
+          "email": "lin@example.com",
+          "gender": null,
+          "birthday": null,
+          "tier_key": "seed",
+          "lifetime_spend": 0,
+          "points_balance": 150,
+          "coupon_count": 0,
+          "balance": 62.5,
+          "is_blocked": 0,
+          "created_at": "<T>",
+          "last_login_at": null,
+          "referral_code": null,
+          "referred_by_customer_id": null,
+          "referral_applied_at": null,
+          "lifetime_eligible": 0,
+          "lifetime_eligible_since": null,
+          "affiliate_blocked": 1,
+          "source": null,
+          "created_by": null,
+          "seen_at": "<T>",
+          "note": null,
+          "tags": null
+        },
+        "addresses": [],
+        "stats": {
+          "orders": {
+            "orders_count": 1,
+            "completed_count": 1,
+            "refunded_count": 0,
+            "cancelled_count": 0,
+            "revenue": 0,
+            "aov": 0,
+            "last_order_at": "<T>",
+            "first_order_at": "<T>",
+            "days_since_last_order": 12
+          },
+          "points": {
+            "earned": 0,
+            "redeemed": 0,
+            "expired": 0,
+            "admin_adjust": 30,
+            "expiring_30d": 0
+          },
+          "topup": {
+            "topup_total": 0,
+            "bonus_pts_total": 0,
+            "admin_adjust_total": 12.5
+          },
+          "vouchers": {
+            "unused": 0,
+            "used": 0
+          },
+          "reviews": {
+            "count": 0,
+            "avg_rating": null
+          },
+          "active_sessions": 0
+        },
+        "top_items": [],
+        "orders_by_month": [
+          {
+            "month": "2039-12",
+            "n": 1,
+            "revenue": 0
+          }
+        ],
+        "recent_orders": [
+          {
+            "id": 3,
+            "order_no": "GLDC1",
+            "status": "delivered",
+            "total": 88,
+            "created_at": "<T>"
+          }
+        ],
+        "recent_points": [
+          {
+            "id": 2,
+            "delta": 30,
+            "balance_after": 150,
+            "source": "admin_adjust",
+            "order_id": null,
+            "note": "[golden_owner] goodwill",
+            "created_at": "<T>",
+            "expires_at": null
+          }
+        ],
+        "recent_topups": [
+          {
+            "id": 1,
+            "amount": 12.5,
+            "bonus_points": 0,
+            "payment_method": "admin_adjust",
+            "status": "success",
+            "created_at": "<T>",
+            "paid_at": "<T>"
+          }
+        ],
+        "affiliate": {
+          "referral_code": null,
+          "affiliate_blocked": 1,
+          "referred_by": null,
+          "invites": [],
+          "summary": {
+            "total": 0,
+            "converted": 0,
+            "earned": 0
+          },
+          "lifetime_mode": "everyone",
+          "lifetime_eligible": 0,
+          "lifetime_eligible_since": null
+        },
+        "diagnostics": {
+          "device_last_seen": null,
+          "recent_logs": [],
+          "error_count_7d": 0,
+          "unavailable": false
+        }
+      }
     }
   },
   {
