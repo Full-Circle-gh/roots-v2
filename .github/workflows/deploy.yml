@@ -408,7 +408,12 @@ jobs:
           # 04-orders.js is here because the test EXTRACTS its predicates from the
           # shipped source and evaluates them. A gate that doesn't cover a file its
           # assertions read is not covering the test.
-          if grep -qE '^(lib/fulfilment\.js|lib/feie\.js|routes/retail\.js|scripts/verify-fulfilment-types\.js|public/retail-admin/04-orders\.js)$' /tmp/files.txt; then
+          #
+          # lib/customers.js and scripts/test-support/retail-source.js since
+          # 2026-10-14 (decisions §477): the test reads routes/retail.js through
+          # retailSource(), and two of its checks now find
+          # createOrReuseManualCustomer in lib/customers.js, where it moved.
+          if grep -qE '^(lib/fulfilment\.js|lib/feie\.js|routes/retail\.js|lib/customers\.js|scripts/test-support/retail-source\.js|scripts/verify-fulfilment-types\.js|public/retail-admin/04-orders\.js)$' /tmp/files.txt; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             echo "Fulfilment logic touched — the test gate will run."
           else

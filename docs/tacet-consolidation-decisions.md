@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.530
+# Tacet shared-core consolidation — decisions record, v4.531
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-14 · v4.531 — **§477 · BOTH OPEN QUESTIONS ANSWERED — DECIDED BY ASH:** *"yes for both"*. (1) An order awaiting restock is paid for a broadcast too: `BC_PAID_STATUSES` becomes `lib/finance-window.js`'s `PAID_STATUSES`, one list, not a copy. (2) The deploy's fulfilment gate also fires on `lib/customers.js` and `scripts/test-support/retail-source.js`. Each lands as its own PR; the CI change is called out in its commit and PR. See §477.
 
 2026-10-14 · v4.530 — **§477 · THE SHOP CLOCK, BROADCAST AUDIENCES AND CUSTOMER BASICS MOVE TO `lib/`; THE CUSTOMERS AREA NOW NEEDS NOTHING HANDED IN — DECIDED BY ASH:** *"build group 3"*. Thirteen statements into `lib/shop-clock.js`, `lib/broadcast-audience.js` and `lib/customers.js`. Tests went in first (#1179) for the per-account clock memo, broadcast audiences and email clean-up. Two questions are left open for Ash: whether broadcasts count `awaiting_restock` as paid, and whether the deploy's fulfilment gate should also fire on `lib/customers.js`. No string, no schema, no change to `.gitignore` or CI. See §477.
 
@@ -31288,3 +31290,21 @@ email lower-casing. Tests for all three went in first (#1179).
    changes, and the workflow's own rule is that a file the test reads must be
    one of them. Changing a CI trigger is not made silently, so it is not in
    this move. §470 rule 6 already plans this widening for when orders moves.
+
+**The two open questions, answered. Decided by Ash, 2026-10-14:** *"yes for
+both"*, to the recommendation put with group 3.
+
+1. **An order awaiting restock counts as paid for a broadcast.** The customer
+   has paid, and Finance already counts the order. `BC_PAID_STATUSES` in
+   `lib/broadcast-audience.js` becomes `PAID_STATUSES` from
+   `lib/finance-window.js`: one list, not a copy, so the two cannot drift
+   apart again (rule 5). This is a change in behaviour, in its own PR, and
+   `scripts/test_broadcast_audience.js` gains the case. Who it reaches: a
+   customer whose only paid order is awaiting restock moves from "never
+   ordered" to "buyers" (and to "active" or "lapsed" by date).
+2. **The deploy's fulfilment gate also fires on `lib/customers.js` and
+   `scripts/test-support/retail-source.js`.** These are the two files
+   `scripts/verify-fulfilment-types.js` now reads beyond its old list, and the
+   workflow's own rule is that a file the test reads is a file that triggers
+   it. This is a change to how builds work, in its own PR, and called out in
+   both the commit and the PR.
