@@ -59,7 +59,9 @@ const bad = (m, extra) => { fail++; console.log('  ✗ ' + m + (extra ? '\n     
 const yes = (c, m, extra) => (c ? ok(m) : bad(m, extra));
 const section = (t) => console.log('\n' + t);
 
-const RETAIL  = read('routes/retail.js');
+// routes/retail.js and its parts: the customers area now lives in
+// routes/retail/customers.js (decisions §470).
+const RETAIL  = require('./test-support/retail-source').retailSource();
 const DESKTOP = read('public/retail-admin/08-customers.js');
 const PHONE   = read('public/m.html');
 const VOCAB   = read('docs/tacet-delivery-vocabulary.md');

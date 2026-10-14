@@ -111,7 +111,8 @@ console.log('\nserver — same_city / local_run on the addresses the customer re
 {
   const inventory = require(path.join(ROOT, 'lib/inventory.js'));
   const { stampSameCity } = require(path.join(ROOT, 'routes/retail.js'));
-  const retailSrc = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+  // The admin address list moved to routes/retail/customers.js (decisions §470).
+  const retailSrc = require('./test-support/retail-source').retailSource();
 
   it('a Guangzhou address is same-city, whichever field carries the city', () => {
     assert.strictEqual(inventory.isGuangzhouAddress({ city: '广州市', district: '天河区' }), true);
@@ -129,7 +130,9 @@ console.log('\nserver — same_city / local_run on the addresses the customer re
     assert.ok(/r\.same_city = inventory\.isGuangzhouAddress\(r\)/.test(retailSrc),
       'the verdict comes from lib/inventory, not a second matcher');
     // GET /api/retail/addresses (mini app) + GET /api/retail/customer (web).
-    const stamped = retailSrc.match(/stampSameCity\(/g) || [];
+    // The customers part's hand-in pass-through (deps.stampSameCity(...)) only
+    // forwards the call to the declaration, so it is not counted as a payload.
+    const stamped = retailSrc.match(/(?<!deps\.)stampSameCity\(/g) || [];
     assert.strictEqual(stamped.length, 3, 'declaration + both address payloads');
   });
 

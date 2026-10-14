@@ -2708,7 +2708,8 @@ check('the till does not create customers',
 // Read locally rather than leaning on SERVER_SRC from an earlier section: a
 // section that cannot run standalone is a section nobody checks before a push,
 // which is exactly how the last gate failure reached CI.
-const custSearchSrc = fs.readFileSync(path.join(__dirname, '..', 'routes', 'retail.js'), 'utf8');
+// The customer search moved to routes/retail/customers.js (decisions §470).
+const custSearchSrc = require('./test-support/retail-source').retailSource();
 check('a numeric search finds the customer id itself',
   /ors\.push\('id = \?'\)/.test(custSearchSrc), true);
 

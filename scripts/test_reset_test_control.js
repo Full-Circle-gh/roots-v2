@@ -53,7 +53,9 @@ const section = (t) => console.log('\n' + t);
 const DESKTOP = read('public/retail-admin/08-customers.js');
 const CORE    = read('public/retail-admin/01-core.js');
 const DIALOGS = read('public/tacet-dialogs.js');
-const RETAIL  = read('routes/retail.js');
+// routes/retail.js and its parts: the customers area now lives in
+// routes/retail/customers.js (decisions §470).
+const RETAIL  = require('./test-support/retail-source').retailSource();
 const VOCAB   = read('docs/tacet-delivery-vocabulary.md');
 
 const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');

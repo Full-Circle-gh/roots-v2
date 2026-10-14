@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.531
+# Tacet shared-core consolidation — decisions record, v4.532
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-14 · v4.532 — **§470 · THE CUSTOMERS AREA MOVES TO `routes/retail/customers.js` — DECIDED BY ASH:** *"move customers"*. 26 endpoints (23 admin, 3 profile) and their 7 own helpers, with 4 helpers handed in. Recorded answers were extended first (#1183) so a block that blocks nothing fails. Open for Ash: the deploy's fulfilment gate does not fire on `routes/retail/` parts, though the test now reads the customer search there. No string, no schema, no change to `.gitignore` or CI. See §470.
 
 2026-10-14 · v4.531 — **§477 · BOTH OPEN QUESTIONS ANSWERED — DECIDED BY ASH:** *"yes for both"*. (1) An order awaiting restock is paid for a broadcast too: `BC_PAID_STATUSES` becomes `lib/finance-window.js`'s `PAID_STATUSES`, one list, not a copy. (2) The deploy's fulfilment gate also fires on `lib/customers.js` and `scripts/test-support/retail-source.js`. Each lands as its own PR; the CI change is called out in its commit and PR. See §477.
 
@@ -30790,6 +30792,42 @@ transaction is one of the 30 it would count, and it now lives in the polls part.
 *Closed in §471: the check is removed, because the script was retired on purpose.*
 
 No string, no schema, no change to `.gitignore` or CI.
+
+**Customers. Decided by Ash, 2026-10-14:** *"move customers"*, once §477 had
+moved every helper it shared with orders and checkout. The part is
+`routes/retail/customers.js`, with 26 endpoints:
+
+- 23 admin endpoints under `/api/retail-admin/customers`: roster, search,
+  CSV, by-phone, one customer's record and history, create, edit, block,
+  affiliate block, force logout, the test reset, points and wallet
+  adjustments, saved addresses, counter vouchers, referral code and direct
+  message;
+- 3 profile endpoints for the customer: `GET` and `PATCH /api/retail/customer`,
+  and `POST /api/retail/customer/avatar`.
+
+Seven helpers only this area uses move with it: the roster search and filter,
+the history snapshot and notes, and the avatar folder. Four still live in
+`retail.js` and are handed in: `requireRetailAuth`, `requireRetailAdmin`,
+`stampSameCity` and `sniffImageMime`. Everything else is required from `lib/`.
+That is the point of §477: 28 hand-ins became 4.
+
+The part is mounted where the area started. The voucher-grant routes that sat
+between its pieces stay in `retail.js`, and so does `POST /api/retail/phone`
+under the "Current customer" heading. The split guard finds no request two
+files could answer. A dump of all 462 endpoints on main and on the branch
+shows the same set, with the non-customer endpoints in identical order and
+the customer ones in identical relative order.
+
+**The recording was extended first (#1183).** It blocked and unblocked with
+nothing in between, so a block that blocked nothing passed every suite. Each
+block is now read back before it is undone.
+
+**Open, for Ash.** The deploy's fulfilment gate runs
+`scripts/verify-fulfilment-types.js`, which now reads the customer search in
+`routes/retail/customers.js`. The gate fires on `routes/retail.js` but not on
+`routes/retail/`. The earlier parts were already read through
+`retailSource()`, but none of their checks were fulfilment ones. Widening the
+trigger to `routes/retail/` is a CI change, so it is not made here.
 
 ## §471 — THE DEAD TRANSACTION COUNT IN `test_tx_conversion_batch2.js` IS REMOVED, NOT REBUILT
 
