@@ -32,9 +32,14 @@ module.exports = {
     ['admin', 'POST', `/api/retail-admin/customers/${lin}/wallet-adjust`, { delta: 12.5, reason: 'refund' }],
     ['admin', 'POST', `/api/retail-admin/customers/${lin}/wallet-adjust`, { delta: -500, reason: 'too much' }],
     ['admin', 'GET', `/api/retail-admin/customers/${lin}`],
+    // Each block is read back before it is undone: the unblock that follows
+    // would otherwise leave the same end state whether the block did anything
+    // or not, and a block that blocked nothing passed every suite.
     ['admin', 'POST', `/api/retail-admin/customers/${lin}/block`],
+    ['admin', 'GET', `/api/retail-admin/customers/${lin}`],
     ['admin', 'POST', `/api/retail-admin/customers/${lin}/unblock`],
     ['admin', 'POST', `/api/retail-admin/customers/${lin}/affiliate-block`],
+    ['admin', 'GET', `/api/retail-admin/customers/${lin}`],
     ['admin', 'POST', `/api/retail-admin/customers/${lin}/affiliate-unblock`],
     ['admin', 'POST', `/api/retail-admin/customers/${lin}/force-logout`],
     ['admin', 'POST', `/api/retail-admin/customers/${lin}/reset-test`],
