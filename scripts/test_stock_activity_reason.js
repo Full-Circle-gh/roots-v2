@@ -104,6 +104,7 @@ const WANT = {
   order_commit:             ['Taken at payment', '付款时扣减'],
   order_prepare:            ['Taken when preparing', '开始备货时扣减'],
   awaiting_restock_release: ['Taken on restock', '已补货，自动扣减'],
+  order_restock:            ['Taken on restock', '已补货，自动扣减'],   // §478
   order_reverse:            ['Stock returned', '库存退回'],
   order_reverse_partial:    ['Stock returned', '库存退回'],
   order_reverse_ledger:     ['Stock returned', '库存退回'],

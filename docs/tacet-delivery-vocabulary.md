@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.337 · 2026-10-15 · §478 TELLS THE SHOP WHEN A WECHAT PAYMENT LANDS ON A CANCELLED ORDER — NOTHING COMPOSED; EVERY CHINESE FRAGMENT IS LIVE (`微信支付`, `已取消`, `已退款`, `退款失败`, `订单号`, `金额`) AND `请手动退款给顾客` IS LIFTED FROM A LIVE SENTENCE.** See *A payment that arrives after the order was cancelled*.
+**v1.337 · 2026-10-15 · §479 TELLS THE SHOP WHEN A WECHAT PAYMENT LANDS ON A CANCELLED ORDER — NOTHING COMPOSED; EVERY CHINESE FRAGMENT IS LIVE (`微信支付`, `已取消`, `已退款`, `退款失败`, `订单号`, `金额`) AND `请手动退款给顾客` IS LIFTED FROM A LIVE SENTENCE.** See *A payment that arrives after the order was cancelled*.
 
 **v1.336 · 2026-10-14 · STOCK ACTIVITY SAYS WHY A MINI-APP ORDER'S STOCK MOVED — 3 STRINGS COMPOSED BY CLAUDE (`付款时扣减`, `开始备货时扣减`, `已补货，自动扣减`), EACH BUILT ON LIVE `扣减`, `开始备货`, `已补货` AND `自动扣减`; `库存退回` LIFTED WHOLE.** See *Stock activity — the reason beside a mini-app order*.
 
@@ -14178,7 +14178,7 @@ followed by the order number: `Taken on restock · TC001129`.
 
 ## A payment that arrives after the order was cancelled
 
-**Nothing composed — 2026-10-15, §478.** Operator register. The WeCom alert
+**Nothing composed — 2026-10-15, §479.** Operator register. The WeCom alert
 `lib/wechat-pay-window.js` (`lateAlertText`) sends the shop when WeChat money
 lands on an order that is already cancelled: once when it is refunded
 automatically, once when that refund fails. Chinese and English on their own

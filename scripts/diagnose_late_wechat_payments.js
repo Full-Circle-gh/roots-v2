@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Which cancelled orders did WeChat actually take money for? READ-ONLY (§478).
+ * Which cancelled orders did WeChat actually take money for? READ-ONLY (§479).
  *
  *   Actions → "Read-only prod query" → scripts/diagnose_late_wechat_payments.js
  *   or, on the server:  node scripts/diagnose_late_wechat_payments.js
  *
- * Why it exists. Until §478 a WeChat charge stayed payable after the order was
+ * Why it exists. Until §479 a WeChat charge stayed payable after the order was
  * cancelled, and a payment that landed then was answered "OK" by our callback
  * and kept, with nobody told. TC001211 (2026-10-15) was the one a customer
  * complained about. This finds any others.

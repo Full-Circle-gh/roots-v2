@@ -96,7 +96,7 @@ const {
   // the storefront charge through, so a payment placed here settles through
   // the same callback into the same ledger.
   oaPayContext, wechatJsapiPrepare, buildWxPayParams, wxOutTradeNo, payDescription,
-  // §478 — and the same expiry, so a QR charge stops when its order would be
+  // §479 — and the same expiry, so a QR charge stops when its order would be
   // cancelled.
   wechatPayExpiry,
   // §426 — a voucher found from a phone typed at checkout. Found, priced and

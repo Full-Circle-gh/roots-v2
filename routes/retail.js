@@ -199,7 +199,7 @@ const {
   wechatH5Prepare, wechatNativePrepare, wechatTradeState, wechatPayRefund, isMissingTransactionError,
   alipayPrecreate, alipayPageRedirectUrl, alipayTradeQuery, alipayVerifyNotify, verifyWxPayNotify,
 } = require('../lib/payment-gateways');
-// §478 — a WeChat charge for an order expires when the order would be
+// §479 — a WeChat charge for an order expires when the order would be
 // cancelled, and money that still lands on a cancelled order goes back.
 const { orderWechatTimeExpire, findLatePayment, refundLatePayment } = require('../lib/wechat-pay-window');
 // Bundle products (recipe, parts, stock made from parts, the stock lines a cart
@@ -5104,7 +5104,7 @@ function sendWecomAddressChangeAlert(orderId, fromAddress) {
   } catch (e) { console.warn('[wecom addr change setup]', e.message); }
 }
 
-// The time_expire every WeChat charge for an order carries (§478): when the
+// The time_expire every WeChat charge for an order carries (§479): when the
 // sweeps would cancel it, read from the two settings those sweeps read. Never
 // throws — a charge with no expiry is what every charge was before, and the
 // callback's safety net covers it.
@@ -5987,7 +5987,7 @@ async function handleWechatPayCallback(req, res, tid) {
           }
           return;
         }
-        // §478 — MONEY ON AN ORDER THAT IS ALREADY CANCELLED. The lookup below
+        // §479 — MONEY ON AN ORDER THAT IS ALREADY CANCELLED. The lookup below
         // only finds a 'pending' row, so a payment landing after a sweep had
         // flipped the row to 'cancelled' found nothing and was answered "OK":
         // the shop kept the money and nobody knew (TC001211). And a staff
@@ -37913,7 +37913,7 @@ module.exports.wechatJsapiPrepare    = wechatJsapiPrepare;
 module.exports.buildWxPayParams      = buildWxRequestPaymentParams;
 module.exports.wxOutTradeNo          = wxOutTradeNo;
 module.exports.payDescription        = payDescription;
-// §478 — the QR menu's charge expires with its order, like every other rail's.
+// §479 — the QR menu's charge expires with its order, like every other rail's.
 module.exports.wechatPayExpiry       = wechatPayExpiry;
 // The replace-all writer for a product's customer-choice questions, exported so
 // its refusal can be tested against a REAL database rather than a reimplementation

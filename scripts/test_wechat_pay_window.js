@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The WeChat pay window and the late-payment safety net (decisions §478).
+ * The WeChat pay window and the late-payment safety net (decisions §479).
  *
  *   node scripts/test_wechat_pay_window.js
  *
