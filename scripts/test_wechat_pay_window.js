@@ -303,6 +303,33 @@ it('a failed late refund answers WeChat non-200, so the notify comes back', () =
   assert.ok(/if \(out\.retry\) return res\.status\(500\)/.test(RETAIL));
 });
 
+section('6. The checker for payments already kept (scripts/diagnose_late_wechat_payments.js)');
+
+const D = require('./diagnose_late_wechat_payments');
+it('asks WeChat only about cancelled orders whose charge was raised and whose row records no refund', () => {
+  freshDb();
+  const o = db.prepare('INSERT INTO retail_orders (id, order_no, status, placed_at) VALUES (?, ?, ?, ?)');
+  const p = db.prepare("INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no) VALUES (?, 'wechat', 15, ?, ?)");
+  o.run(1, 'TC001211', 'cancelled', '2026-10-15 03:13:00'); p.run(1, 'cancelled', 'FCTC001211');   // the case
+  o.run(2, 'TC000002', 'cancelled', '2026-10-15 03:13:00'); p.run(2, 'pending', 'FCTC000002');     // staff cancel
+  o.run(3, 'TC000003', 'cancelled', '2026-10-15 03:13:00'); p.run(3, 'refunded', 'FCTC000003');    // already returned
+  o.run(4, 'TC000004', 'cancelled', '2026-10-15 03:13:00'); p.run(4, 'pending', 'TC000004');       // never reached WeChat
+  o.run(5, 'TC000005', 'paid', '2026-10-15 03:13:00'); p.run(5, 'success', 'FCTC000005');          // a live order
+  const got = db.prepare(D.CANDIDATES_SQL).all().map((r) => r.order_no);
+  assert.deepStrictEqual(got, ['TC001211', 'TC000002']);
+});
+it('one question per charge, even when two payment rows share it', () => {
+  assert.strictEqual(D.uniqueByTrade([{ out_trade_no: 'A' }, { out_trade_no: 'A' }, { out_trade_no: 'B' }]).length, 2);
+});
+it('WeChat SUCCESS is money held; REFUND is already returned; anything else is nothing held', () => {
+  assert.strictEqual(D.classify('SUCCESS'), 'kept');
+  assert.strictEqual(D.classify('REFUND'), 'refunded');
+  for (const s of ['NOTPAY', 'CLOSED', 'REVOKED', 'USERPAYING', 'PAYERROR', 'NOT_FOUND']) assert.strictEqual(D.classify(s), 'not_paid');
+});
+it('times are shown in Beijing time (TC001211 placed 11:13)', () => {
+  assert.strictEqual(D.bj('2026-10-15 03:13:00'), '2026-10-15 11:13');
+});
+
 (async () => {
   for (const step of pending) await step();
   console.log(`\n${pass} passed, ${fail} failed`);

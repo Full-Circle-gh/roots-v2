@@ -31477,8 +31477,17 @@ does not flip the payment row at all, so a late payment there was marked
 `'success'` on a cancelled order and kept just the same.
 
 Whether TC001211's ¥15 was actually paid is not visible from the code. The
-WeChat Pay merchant platform answers it (merchant order number `FCTC001211`).
-This change does not reach back to it.
+WeChat Pay merchant platform answered it: it was paid and kept, and Ash
+refunded it by hand on 2026-10-15. This change does not reach back to it.
+
+**Finding the others — decided by Ash the same day:** *"go"*, to a read-only
+check for every other cancelled order whose WeChat money was kept the same
+way. `scripts/diagnose_late_wechat_payments.js`, run through the read-only
+prod query workflow. It asks WeChat about each cancelled order that had a
+charge raised and no refund recorded, and lists three groups: paid and kept,
+already refunded, never paid. It writes nothing and refunds nothing; each one
+it finds is refunded by hand. Roots account only; it prints how many other
+accounts it did not check.
 
 **The rule.**
 
