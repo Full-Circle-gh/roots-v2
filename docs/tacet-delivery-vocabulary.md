@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.337 · 2026-10-15 · §478 TELLS THE SHOP WHEN A WECHAT PAYMENT LANDS ON A CANCELLED ORDER — NOTHING COMPOSED; EVERY CHINESE FRAGMENT IS LIVE (`微信支付`, `已取消`, `已退款`, `退款失败`, `订单号`, `金额`) AND `请手动退款给顾客` IS LIFTED FROM A LIVE SENTENCE.** See *A payment that arrives after the order was cancelled*.
+
 **v1.336 · 2026-10-14 · STOCK ACTIVITY SAYS WHY A MINI-APP ORDER'S STOCK MOVED — 3 STRINGS COMPOSED BY CLAUDE (`付款时扣减`, `开始备货时扣减`, `已补货，自动扣减`), EACH BUILT ON LIVE `扣减`, `开始备货`, `已补货` AND `自动扣减`; `库存退回` LIFTED WHOLE.** See *Stock activity — the reason beside a mini-app order*.
 
 **v1.335 · 2026-10-13 · PURCHASING RECORD ORDER — 4 STRINGS COMPOSED BY CLAUDE, ALL BUILT ON THE LIVE `登记` (Record) AND `采购单` (purchase order): `Record order · 登记采购单`, `Order recorded · 采购单已登记`, and the summary's two lines; THE PHONE'S THIRD STEP COPIES THE LIVE `Review order · 确认订单`.** See *Purchasing — Record order*.
@@ -14173,3 +14175,37 @@ followed by the order number: `Taken on restock · TC001129`.
 - `补货释放` / `Released on restock`: `释放` is live only for reservations being let go (`released`), which is not what happened here. The stock was taken.
 - `备货时扣减` for the prepare row: `备货` alone is live (`备货天数`, `备货`) but `开始备货` is the button's own word, so the label matches what the clerk pressed.
 - `已补货，开始备货` for the restock row: that is the button label on an order that still waits for a person, and this row is the case where nobody pressed it.
+
+## A payment that arrives after the order was cancelled
+
+**Nothing composed — 2026-10-15, §478.** Operator register. The WeCom alert
+`lib/wechat-pay-window.js` (`lateAlertText`) sends the shop when WeChat money
+lands on an order that is already cancelled: once when it is refunded
+automatically, once when that refund fails. Chinese and English on their own
+lines, as the payment-failed card does.
+
+The label is restructured so live strings fit it, per the rule's first
+preference, rather than a new sentence being minted.
+
+### Copied whole
+
+| String | Where | Live source |
+|---|---|---|
+| `微信支付` | the heading | the guest pay button, `Pay with WeChat · 微信支付` |
+| `已取消` | the heading | order status, `Cancelled · 已取消` |
+| `已退款` | the heading, refunded | `Refunded · 已退款`, guest pay and the order drawer's toast |
+| `退款失败` | the heading, failed | the order drawer's toast, `Refund failed · 退款失败` |
+| `订单号` / `金额` | the two detail lines | the payment-failed WeCom card's `订单号 Order:` and `金额 Amount:` |
+
+### Lifted from a live sentence
+
+`请手动退款给顾客` — the closing clause of the drawer's off-app refund toast,
+`该订单为线下支付,请手动退款给顾客`. The first clause names the wrong cause
+(an off-app payment) and is dropped; the instruction is the same one.
+
+### Rejected
+
+- `原路退回`: not live anywhere in the product.
+- A new heading sentence such as *order cancelled, payment refunded*: three
+  live fragments joined by ` · ` say the same thing and need no declaration.
+

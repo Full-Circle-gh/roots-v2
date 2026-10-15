@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.536
+# Tacet shared-core consolidation — decisions record, v4.537
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-15 · v4.537 — **§478 · A WECHAT CHARGE EXPIRES WITH ITS ORDER, AND MONEY THAT STILL LANDS ON A CANCELLED ORDER IS REFUNDED AUTOMATICALLY AND THE SHOP TOLD — DECIDED BY ASH:** *"payment the same 15-minute limit as the order, so a late payment is refused. Catch it if it does: if money still arrives on a cancelled order, refund it automatically and alert the shop. do it"*. Raised by order TC001211. No schema change, no change to `.gitignore` or CI. See §478.
 
 2026-10-15 · v4.536 — **§477 · THE DORMANT 发票 AUTO-ISSUE MOVES TO `lib/fapiao.js`; `notifyForOrder` JOINS `lib/customer-notify.js` AND `integ` JOINS `lib/tenant-creds.js` — DECIDED BY ASH:** *"merge deploy then move then merge deploy"*, step 4 of the orders plan. 6 statements, a pure move; tests went in first (#1195). See the amendment at the end of §477.
 
@@ -31451,3 +31453,84 @@ Ash:** *"merge deploy then move then merge deploy"*.
    checks the auto-issue path where it went.
 5. **No CI change.** `scripts/verify-fulfilment-types.js` reads none of this
    code.
+
+## §478 — A WECHAT CHARGE EXPIRES WITH ITS ORDER; LATE MONEY ON A CANCELLED ORDER GOES BACK BY ITSELF
+
+**Decided by Ash, 2026-10-15:** *"payment the same 15-minute limit as the
+order, so a late payment is refused. Catch it if it does: if money still
+arrives on a cancelled order, refund it automatically and alert the shop.
+do it"*.
+
+**What raised it.** Order TC001211: ¥94.50, of which the wallet paid ¥78.50,
+points ¥2.00 and WeChat was to take the last ¥15.00. The order was cancelled
+unpaid. Wallet and points came back; the customer said the ¥15 did not. The
+payment row read `cancelled`, which only the unpaid-order cancels write.
+
+**The defect.** The reservation sweep cancels an unpaid order holding stock
+after 15 minutes, but nothing told WeChat. The charge carried no
+`time_expire` and was never closed, so it stayed payable on WeChat's side
+long after the order was gone. A payment made then reached the callback,
+which looks a payment up only as `'pending'`. The sweep had already flipped
+it to `'cancelled'`, so the callback found nothing, answered WeChat "OK", and
+the shop kept the money with nobody told. A staff cancel of an unpaid order
+does not flip the payment row at all, so a late payment there was marked
+`'success'` on a cancelled order and kept just the same.
+
+Whether TC001211's ¥15 was actually paid is not visible from the code. The
+WeChat Pay merchant platform answers it (merchant order number `FCTC001211`).
+This change does not reach back to it.
+
+**The rule.**
+
+1. **Every WeChat charge for an order carries a `time_expire`.** It is the
+   moment the earliest applicable sweep would cancel the order, less one
+   minute, which is one sweeper tick:
+   - the order's earliest active reservation, for a non-counter order;
+   - `placed_at` + `orders.autoCancelHours`, for a non-counter order;
+   - `placed_at` + the counter clock, for a counter order, whose reservations
+     the sweep exempts.
+
+   No clock applies → no expiry is sent, as before. It is worked out from
+   stored values only, so a second Pay tap asks for the same charge. It
+   covers all five places a WeChat order charge starts: mini app JSAPI,
+   storefront H5 and Native, guest pay, and the QR menu.
+2. **If WeChat refuses a charge carrying the expiry, it is asked for once
+   more without it.** An order raised before this change already has a
+   charge open with no expiry, and WeChat may refuse a repeat that differs.
+   The customer must still be able to pay. Rule 3 covers anything that then
+   lands late.
+3. **Money that lands on a cancelled order is refunded in full, at once, and
+   the shop is told.** The callback checks for this before its normal
+   lookup.
+   - The refund is what WeChat actually took, not what we expected.
+   - The refund number is fixed per payment row, so a re-sent notify asks for
+     the same refund and never a second one.
+   - The payment row ends `refunded`, and a refund event and an activity row
+     are written.
+   - If the refund fails, the row is held as `late_paid` (the drawer reads
+     *paid*, which is true: the shop holds the money). The shop is told to
+     refund by hand, and the callback answers non-200 so WeChat sends the
+     notify again and the refund is retried.
+
+**Where it lives.** `lib/wechat-pay-window.js` (the window and the refund),
+the three charge calls in `lib/payment-gateways.js`, the callback and the
+four charge sites in `routes/retail.js`, and the QR menu in
+`routes/shop-menu.js`. `lib/inventory.js` exports `counterCancelMinutes` so
+the counter clock has one reader. Pinned by
+`scripts/test_wechat_pay_window.js`. The alert's Chinese is all live; see
+the vocabulary document's *A payment that arrives after the order was
+cancelled*.
+
+**Left open, not decided here.**
+
+- **Alipay has the same gap.** Its notify also looks a payment up as
+  pending.
+- **Cancels with no clock still rely on rule 3 alone.** These are customer
+  cancels, staff cancels and supersede-on-new-order. Closing the WeChat
+  charge at the moment of every cancel would stop payment there too, but it
+  is a call to WeChat on every cancel path and was not asked for.
+- **A payment in the last seconds can race the sweep.** One that completes
+  just before the deadline, with its notify landing after the sweep, is
+  refunded rather than honoured. The one-minute margin makes this rare; it
+  does not make it impossible.
+
