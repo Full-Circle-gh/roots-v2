@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.538
+# Tacet shared-core consolidation — decisions record, v4.539
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-15 · v4.539 — **§477 · THE PRODUCT-ROW HELPERS MOVE TO `lib/product-rows.js` — DECIDED BY ASH:** *"merge deploy then move then merge deploy"*, step 5 of the orders plan and the last of the clean groups. 10 statements, a pure move; tests went in first (#1198). See the amendment at the end of §477.
 
 2026-10-15 · v4.538 — **§479 · A WECHAT CHARGE EXPIRES WITH ITS ORDER, AND MONEY THAT STILL LANDS ON A CANCELLED ORDER IS REFUNDED AUTOMATICALLY AND THE SHOP TOLD — DECIDED BY ASH:** *"payment the same 15-minute limit as the order, so a late payment is refused. Catch it if it does: if money still arrives on a cancelled order, refund it automatically and alert the shop. do it"*. Raised by order TC001211. No schema change, no change to `.gitignore` or CI. See §479.
 
@@ -31455,6 +31457,32 @@ Ash:** *"merge deploy then move then merge deploy"*.
    checks the auto-issue path where it went.
 5. **No CI change.** `scripts/verify-fulfilment-types.js` reads none of this
    code.
+
+**Amended 2026-10-15 — the orders area's fourth group: what a product row looks
+like for the shop. Decided by Ash:** *"merge deploy then move then merge
+deploy"*.
+
+1. **`lib/product-rows.js`** takes the four column sets
+   (`RETAIL_PRODUCT_COLS` and its `_LIST`, `_CARD` and `_HOME` cuts), the
+   sold-out policy and its pre-order questions (`effectiveOosPolicy`,
+   `isPreorderPolicy`, `isLocalRunPreorder`), and the row clean-up
+   (`lazifyProductImage`, `hydrateNutrition`, `resolveProductImage`).
+2. **`localPreorderLine` stays.** It reads the delivery and batch calendar
+   (`deliveryTz`, the batch dates), so it moves with the delivery group, tests
+   first.
+3. **The "Products" section heading stays in `routes/retail.js`**, with a
+   pointer, because the product routes under it stay. The "Variant photo
+   inheritance" section held only `resolveProductImage`, so it moves whole.
+4. **Proof.** Every top-level statement of main's `retail.js` is in exactly
+   one place, the moved ones in order; the only other changes are the require
+   line and pointers. Route order is identical.
+   `scripts/test_product_card_rows.js` (#1198) passes, and a break made inside
+   the new file (a column cut that stops matching) fails it.
+   `scripts/test_preorder_everywhere.js` now reads `retailSource()`.
+5. **The clean groups are done.** Payments, bundles and cost of sale,
+   invoices and product rows are out of `routes/retail.js`. What is left of
+   the orders plan (delivery and slots, the paid-order lifecycle) reads more
+   of the file and needs more tests before any move.
 
 ## §478 — ON ITS SHIP DAY, A PAID ORDER'S FRESH LINE TAKES ITS STOCK THE MOMENT THE SHELF CAN COVER IT (§58 AMENDED)
 
