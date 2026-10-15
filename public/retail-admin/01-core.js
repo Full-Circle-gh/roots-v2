@@ -1294,7 +1294,10 @@ function primaryPayment(o) {
 function paymentStatusLabel(s) {
   const T = (typeof cuT === 'function') ? cuT : ((en) => en);
   return { success: T('paid', '已付'), pending: T('pending', '待付'), created: T('pending', '待付'),
-           refunded: T('refunded', '已退'), failed: T('failed', '失败') }[s] || (s || '—');
+           refunded: T('refunded', '已退'), failed: T('failed', '失败'),
+           // §478: money that arrived after the order was cancelled and whose
+           // automatic refund has not gone through yet — the shop holds it.
+           late_paid: T('paid', '已付') }[s] || (s || '—');
 }
 
 // ── Tab switcher — supports flat tabs AND drill-down groups ──
