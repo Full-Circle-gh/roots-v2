@@ -43,7 +43,9 @@ const assert = require('assert');
 const ROOT = path.join(__dirname, '..');
 const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
 
-const RETAIL = read('routes', 'retail.js');
+// routes/retail.js and everything moved out of it (decisions §477): the
+// sold-out policy and its pre-order questions are in lib/product-rows.js.
+const RETAIL = require('./test-support/retail-source').retailSource();
 // Comments explain this design at length and must never be what satisfies a
 // rule about the code. Every structural assertion below runs against this.
 const CODE   = RETAIL.replace(/^\s*\/\/.*$/gm, '');
