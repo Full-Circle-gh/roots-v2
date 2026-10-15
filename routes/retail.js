@@ -199,6 +199,9 @@ const {
   wechatH5Prepare, wechatNativePrepare, wechatTradeState, wechatPayRefund, isMissingTransactionError,
   alipayPrecreate, alipayPageRedirectUrl, alipayTradeQuery, alipayVerifyNotify, verifyWxPayNotify,
 } = require('../lib/payment-gateways');
+// §479 — a WeChat charge for an order expires when the order would be
+// cancelled, and money that still lands on a cancelled order goes back.
+const { orderWechatTimeExpire, findLatePayment, refundLatePayment } = require('../lib/wechat-pay-window');
 // Bundle products (recipe, parts, stock made from parts, the stock lines a cart
 // reserves, a bundle's derived admin cost) and the cost stamped on a sold line,
 // moved to lib/ (decisions §477).
@@ -5101,6 +5104,22 @@ function sendWecomAddressChangeAlert(orderId, fromAddress) {
   } catch (e) { console.warn('[wecom addr change setup]', e.message); }
 }
 
+// The time_expire every WeChat charge for an order carries (§479): when the
+// sweeps would cancel it, read from the two settings those sweeps read. Never
+// throws — a charge with no expiry is what every charge was before, and the
+// callback's safety net covers it.
+function wechatPayExpiry(orderId) {
+  try {
+    return orderWechatTimeExpire(orderId, {
+      autoCancelHours: Number(cfgValue('orders.autoCancelHours', STALE_ORDER_CANCEL_HOURS_DEFAULT)),
+      counterMinutes: inventory.counterCancelMinutes(),
+    });
+  } catch (e) {
+    console.warn('[wechat-pay expiry]', orderId, e.message);
+    return null;
+  }
+}
+
 // §452 — A SHOPPER'S PAYMENT COULD NOT BE STARTED, SO TELL THE SHOP.
 //
 // Every staff signal for an order — the slip, the push, the WeCom card — fires
@@ -5551,6 +5570,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
           description: payDescription(order.order_no),
           amountCents: Math.round(Number(order.total) * 100),
           clientIp, redirectUrl: returnUrl,
+          timeExpire: wechatPayExpiry(orderId),
         }, payCtx);
         stampOutTradeNo();
         return res.json({ success: true, data: { method: 'wechat', mode: 'h5', h5_url: h5Url, order_no: order.order_no, total: order.total } });
@@ -5570,6 +5590,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
           outTradeNo:  wxOutTradeNo(order.order_no),
           description: payDescription(order.order_no),
           amountCents: Math.round(Number(order.total) * 100),
+          timeExpire:  wechatPayExpiry(orderId),
         }, payCtx);
         let qrPng = null;
         try { qrPng = qrpng.qrPngDataUrl(codeUrl, { scale: 10, quiet: 4 }); }
@@ -5599,7 +5620,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
         alertPaymentStartFailed(orderId, 'wechat', 'no_real_openid');
         return res.status(409).json({ success: false, error: 'no_real_openid' });
       }
-      const prepayId = await wechatPayCreate(order, cust.openid, payCtx);
+      const prepayId = await wechatPayCreate(order, cust.openid, payCtx, { timeExpire: wechatPayExpiry(orderId) });
       const params   = buildWxRequestPaymentParams(prepayId, payCtx);
       // Save the out_trade_no link for the async callback to find this order
       stampOutTradeNo();
@@ -5874,7 +5895,7 @@ const wxPayJson = express.json({
   limit: '256kb',
   verify: (req, _res, buf) => { req.rawBody = buf; },
 });
-function handleWechatPayCallback(req, res, tid) {
+async function handleWechatPayCallback(req, res, tid) {
   try {
     const body = req.body || {};
     const creds = getTenantCreds(tid).pay;
@@ -5911,6 +5932,7 @@ function handleWechatPayCallback(req, res, tid) {
     // txn.trade_state === 'SUCCESS' means paid. Settle inside the tenant's data
     // scope so tdb()/markOrderPaid() hit the right DB.
     let amountMismatch = false;
+    let latePayment = null;
     if (txn.trade_state === 'SUCCESS' && txn.out_trade_no) {
       tenantAls.run(rawTenantDb(tid), () => {
         // Wallet top-up settlement ('FCTU…'). A top-up lives in its own table,
@@ -5965,6 +5987,16 @@ function handleWechatPayCallback(req, res, tid) {
           }
           return;
         }
+        // §479 — MONEY ON AN ORDER THAT IS ALREADY CANCELLED. The lookup below
+        // only finds a 'pending' row, so a payment landing after a sweep had
+        // flipped the row to 'cancelled' found nothing and was answered "OK":
+        // the shop kept the money and nobody knew (TC001211). And a staff
+        // cancel leaves the row 'pending', so the same payment would have been
+        // marked 'success' on a cancelled order and kept just the same. Both
+        // are refunded below, outside this synchronous block. No amount check:
+        // what WeChat took is what goes back.
+        const late = findLatePayment(txn.out_trade_no);
+        if (late) { latePayment = late; return; }
         const pay = tdb().prepare(
           'SELECT order_id, amount FROM retail_payments WHERE out_trade_no = ? AND status = ?'
         ).get(txn.out_trade_no, 'pending');
@@ -5988,6 +6020,18 @@ function handleWechatPayCallback(req, res, tid) {
       });
     }
     if (amountMismatch) return res.status(400).json({ code: 'INVALID', message: 'amount_mismatch' });
+    if (latePayment) {
+      // A refund that did not go through answers non-200, so WeChat sends the
+      // notify again and the refund is tried again (same refund number, so a
+      // refund that did go through is never sent twice). The shop is told
+      // either way.
+      const out = await tenantAls.run(rawTenantDb(tid), () => refundLatePayment(latePayment, txn, plain, {
+        wechatPayRefund,
+        sendAlert: (text) => sendTenantAlert(tid, text),
+        logRefundEvent, logActivity,
+      }));
+      if (out.retry) return res.status(500).json({ code: 'FAIL', message: 'late_payment_refund_failed' });
+    }
     res.json({ code: 'SUCCESS', message: 'OK' });
   } catch (e) {
     console.error('[wechat-pay/callback]', e);
@@ -6053,6 +6097,7 @@ router.post('/api/pay/:token/create', express.json(), async (req, res) => {
         outTradeNo: wxOutTradeNo(order.order_no),
         description: payDescription(order.order_no),
         amountCents: Math.round(Number(order.total) * 100),
+        timeExpire: wechatPayExpiry(order.id),
       }, ctx);
       let qrPng = null;
       try { qrPng = qrpng.qrPngDataUrl(codeUrl, { scale: 10, quiet: 4 }); } catch (e) { console.error('[guest-pay/qr]', e.message); }
@@ -37868,6 +37913,8 @@ module.exports.wechatJsapiPrepare    = wechatJsapiPrepare;
 module.exports.buildWxPayParams      = buildWxRequestPaymentParams;
 module.exports.wxOutTradeNo          = wxOutTradeNo;
 module.exports.payDescription        = payDescription;
+// §479 — the QR menu's charge expires with its order, like every other rail's.
+module.exports.wechatPayExpiry       = wechatPayExpiry;
 // The replace-all writer for a product's customer-choice questions, exported so
 // its refusal can be tested against a REAL database rather than a reimplementation
 // of it. What needs holding is not that it saves — it is that it DECLINES to,

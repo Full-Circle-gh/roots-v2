@@ -96,6 +96,9 @@ const {
   // the storefront charge through, so a payment placed here settles through
   // the same callback into the same ledger.
   oaPayContext, wechatJsapiPrepare, buildWxPayParams, wxOutTradeNo, payDescription,
+  // §479 — and the same expiry, so a QR charge stops when its order would be
+  // cancelled.
+  wechatPayExpiry,
   // §426 — a voucher found from a phone typed at checkout. Found, priced and
   // counted by the till's own code, so the counter and its QR menu cannot give
   // two answers about the same voucher.
@@ -5229,6 +5232,7 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
       outTradeNo:  wxOutTradeNo(order.order_no),
       description: payDescription(order.order_no),
       amountCents: Math.round(Number(order.total) * 100),
+      timeExpire:  wechatPayExpiry(order.id),
     }, openid, p);
     // The callback finds the order by out_trade_no, exactly as every other
     // WeChat rail stamps it before returning.
