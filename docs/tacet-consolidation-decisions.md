@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.536
+# Tacet shared-core consolidation — decisions record, v4.537
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-15 · v4.537 — **§478 · ON ITS SHIP DAY, A PAID ORDER'S FRESH LINE TAKES ITS STOCK THE MOMENT THE SHELF CAN COVER IT (§58 AMENDED) — DECIDED BY ASH:** *"yes"*, to *"on the ship day, take advance-order fresh items automatically when stock lands"*. From TC001129, whose wraps were cooked for it, sat on the shelf looking free, and left on a shop transfer seven minutes before 备货.
 
 2026-10-15 · v4.536 — **§477 · THE DORMANT 发票 AUTO-ISSUE MOVES TO `lib/fapiao.js`; `notifyForOrder` JOINS `lib/customer-notify.js` AND `integ` JOINS `lib/tenant-creds.js` — DECIDED BY ASH:** *"merge deploy then move then merge deploy"*, step 4 of the orders plan. 6 statements, a pure move; tests went in first (#1195). See the amendment at the end of §477.
 
@@ -31451,3 +31453,40 @@ Ash:** *"merge deploy then move then merge deploy"*.
    checks the auto-issue path where it went.
 5. **No CI change.** `scripts/verify-fulfilment-types.js` reads none of this
    code.
+
+## §478 — ON ITS SHIP DAY, A PAID ORDER'S FRESH LINE TAKES ITS STOCK THE MOMENT THE SHELF CAN COVER IT (§58 AMENDED)
+
+Decided by Ash, 2026-10-15: *"yes"*, to *"on the ship day, take advance-order fresh items automatically when stock lands"*.
+
+### What was reported
+
+Ash, from two Stock activity screenshots: *"两张图片的鲜食部分都是等待补货才扣库存……当鲜食补上架之后，一张单自动扣库存，一张单没自动扣，需要我点备货才扣。"* Two orders, both waiting on fresh food; the restock released one by itself and left the other for 备货.
+
+### What the live ledger showed (read-only, 2026-10-14, Tianhe)
+
+- **TC001158** was a same-day order parked `awaiting_restock` (§80). The kitchen's add at 10:45:33 released it in the same second — `awaiting_restock_release`, no actor.
+- **TC001129** was an advance courier order, paid 10-13 12:09, `promised_ship_date` 10-14. Its grocery lines took stock at payment; its four batch-made lines were held back by §58 and nothing watched the shelf for them. They came off at 12:08:12 when Shun pressed 备货.
+- **In between, the shelf lent them out.** Shawarma Wrap: kitchen +5 at 10:24 → 5; TC001158 −1 → 4; a hand adjustment −1 → 3; **shop transfer RS-261014-002 sent 3 at 12:01 → 0**; TC001129 −1 at 12:08 → **−1**. Tofu Banh Mi Wrap ran the same course. The transfer takes whatever the picker typed and checks nothing (§39 rulings 1 and 7), and nothing on the shelf said those wraps were owed.
+
+### The ruling
+
+**On or after an order's `promised_ship_date`, a stock increase at its shop takes that order's held-back fresh line, if the shelf's free stock covers the line in full.** Same trigger as the §80 release, run straight after it, so a parked order keeps first claim.
+
+1. **Who qualifies is the kitchen list's term three** (`lib/batch-owed.js`, §265): channel `wechat`/`web`, `promised_ship_date` on or before the shop's business date, a batch-made line with no live hold and no `order%` ledger row for that product. The rows the kitchen is told to cook for are the rows this takes. **One narrowing: status `paid` only.** A `preparing` or `dispatched` order still holding a fresh line is a split order whose food parcel has not gone (§58 addendum); a parcel carries no ship date of its own, so that case keeps today's behaviour and waits for its parcel.
+2. **Free stock must cover the whole line, or nothing is taken.** The §80 release's own test (`getAvailable` ≥ need). This never drives a shelf negative; a short shelf leaves the order exactly as before, for 备货.
+3. **Oldest promise first** — `promised_ship_date`, then `paid_at`, then id — when one restock cannot cover every order owed.
+4. **Written as the order's own take, reason `order_restock`. Not a hold.** A hold would have copied the §80 release, but `reverseOrderStock` stops after the hold reverser returns anything, so an order carrying both a hold (its fresh line) and ledger rows (its groceries, taken at payment — TC001129's shape) would refund the fresh line and never the groceries. As an `order%` row it is read everywhere an order's take already is: the per-product guard in `commitUnreservedOrder` (so the later 备货 skips it), `hasUndeductedFreshLine` and the kitchen list (the line leaves "to make"), `reverseCommittedLedger` (refunds return it), and the §458 move (netted per shop). It does not match `order_reverse%`.
+5. **Labelled with the live pair the release already uses** — *Taken on restock* / *已补货，自动扣减* — on both Stock activity screens, because that is what happened. No string is composed; `docs/tacet-delivery-vocabulary.md` is untouched. The actor label *Auto · ship day* keeps the two kinds apart in the data.
+6. **Bundles are left alone.** An order holding any bundle line is skipped. The take is order-item deep, like term three, and taking a direct line while a bundle carried the same component would set the per-product guard and strand the bundle's share. Such an order waits for 备货, as today.
+7. **A partly refunded line takes only what is still owed** (`qty − refunded_qty`).
+
+### What is NOT changed
+
+- **§58's premise stands.** Nothing comes off a day early: a line is taken only on its ship day, and only out of free stock — on that day the food on the shelf is this order's food.
+- **Stock already on the shelf when the ship day starts is not swept.** The trigger is an increase, as for §80. Such an order still takes its stock at 备货 or packing.
+- **The transfer screen is not changed.** Recorded below.
+
+### Recorded, and deliberately NOT fixed here
+
+1. **The shop-transfer Pick screen still shows no owed figure.** A picker can still send units owed to an order whose ship day has not come, or whose line the shelf could not cover. A *keep N for today's orders* line was proposed and set aside for this fix; it stays available if the ledger shows it is needed.
+2. **A Meituan or mini-app sale can still take an owed unit that has not been taken yet.** Subtracting owed units from what every channel shows as in stock is a much wider change and is not implied by this ruling.

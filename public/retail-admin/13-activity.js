@@ -41,6 +41,9 @@ const ACT_REASON_NAME = {
   order_commit:             () => actT('Taken at payment', '付款时扣减'),
   order_prepare:            () => actT('Taken when preparing', '开始备货时扣减'),
   awaiting_restock_release: () => actT('Taken on restock', '已补货，自动扣减'),
+  // §478 — a paid order's fresh line taken on its ship day. Same words: it is
+  // the same event seen from an order that was not parked.
+  order_restock:            () => actT('Taken on restock', '已补货，自动扣减'),
   order_reverse:            () => actT('Stock returned', '库存退回'),
   order_reverse_partial:    () => actT('Stock returned', '库存退回'),
   order_reverse_ledger:     () => actT('Stock returned', '库存退回'),
