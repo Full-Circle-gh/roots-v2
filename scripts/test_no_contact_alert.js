@@ -81,7 +81,7 @@ it('lines from before the feature started never raise it (no retroactive flood)'
 
 function fixture() {
   const db = new Database(':memory:');
-  const cols = `tracking_status TEXT, tracking_scenario TEXT, tracking_events_json TEXT,
+  const cols = `tracking_number TEXT, tracking_status TEXT, tracking_scenario TEXT, tracking_events_json TEXT,
       tracking_no_contact_event TEXT, tracking_no_contact_seen_at TEXT,
       tracking_no_contact_cleared TEXT, tracking_no_contact_cleared_by TEXT,
       tracking_no_contact_cleared_at TEXT, tracking_no_contact_first_event TEXT`;
@@ -165,6 +165,34 @@ it('a plain carrier exception still raises the card as before', () => {
   const db = fixture();
   db.prepare("INSERT INTO retail_orders (id, status, tracking_status) VALUES (1, 'dispatched', 'exception')").run();
   assert.deepStrictEqual(onCard(db), [1]);
+});
+
+it('a missed call stamped on the order mirror leaves with the parcel it was on (§482, TC001153)', () => {
+  // The mirror held the land waybill when that courier's calls failed, then
+  // took the air waybill. The land parcel landed; the air one never failed.
+  const db = fixture();
+  db.prepare(`INSERT INTO retail_orders (id, status, tracking_number, tracking_status)
+    VALUES (1, 'dispatched', 'LAND', 'in_transit')`).run();
+  db.prepare(`INSERT INTO retail_shipments (id, order_id, tracking_number, tracking_status)
+    VALUES (1, 1, 'LAND', 'in_transit'), (2, 1, 'AIR', 'in_transit')`).run();
+  alerts.stampNoContact(db, 'retail_orders', 1, FAILED);
+  alerts.stampNoContact(db, 'retail_shipments', 1, FAILED);
+  assert.deepStrictEqual(onCard(db), [1], 'while the land parcel is out, it asks');
+  db.prepare("UPDATE retail_shipments SET tracking_status = 'delivered' WHERE id = 1").run();
+  db.prepare("UPDATE retail_orders SET tracking_number = 'AIR' WHERE id = 1").run();
+  assert.deepStrictEqual(onCard(db), [], 'landed — the mirror now names the air parcel, which never failed');
+  alerts.stampNoContact(db, 'retail_shipments', 2, [{ time: '2026-09-28 09:00:00', description_cn: '客户电话未接通' }]);
+  assert.deepStrictEqual(onCard(db), [1], 'a real failed call on the air parcel still raises it');
+});
+
+it('an order whose waybill no parcel carries is read off its own row, as before', () => {
+  const db = fixture();
+  db.prepare(`INSERT INTO retail_orders (id, status, tracking_number, tracking_status)
+    VALUES (1, 'dispatched', 'ONLY', 'in_transit'), (2, 'dispatched', NULL, 'in_transit')`).run();
+  db.prepare("INSERT INTO retail_shipments (id, order_id, tracking_number) VALUES (1, 1, NULL), (2, 2, NULL)").run();
+  alerts.stampNoContact(db, 'retail_orders', 1, FAILED);
+  alerts.stampNoContact(db, 'retail_orders', 2, FAILED);
+  assert.deepStrictEqual(onCard(db), [1, 2]);
 });
 
 it('the parcel view quotes the line and says whether it is still open', () => {

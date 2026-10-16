@@ -97,4 +97,22 @@ for (const s of all('SELECT id FROM retail_shipments WHERE order_id = ? ORDER BY
     FROM retail_shipments s WHERE s.id = ?`, s.id);
   console.log('parcel ' + s.id + ': ' + J(r));
 }
+// ── 5 · across the shop: which orders the §482 change takes off the card ──
+// The old order-row clause, written out, against the new whole rule. Any order
+// listed here is on the card today and would not be after the change.
+console.log('\n══ 5 · orders on the card today that §482 takes off ══');
+const OLD_ORDER_ROW = `${alerts.noContactOpenSql('o')} AND COALESCE(o.tracking_status, '') <> 'delivered'`;
+const dropped = all(`SELECT o.id, o.order_no, o.tracking_number, o.tracking_status,
+    o.tracking_no_contact_event,
+    (SELECT GROUP_CONCAT(s.tracking_number || ':' || COALESCE(s.tracking_status, '-') || ':'
+              || COALESCE(s.tracking_no_contact_event, '-'), ' | ')
+       FROM retail_shipments s WHERE s.order_id = o.id) AS parcels
+  FROM retail_orders o
+ WHERE o.status = 'dispatched' AND (${OLD_ORDER_ROW})
+   AND NOT (${alerts.carrierAlertSql('o')})
+   AND NOT (${alerts.airAlertSql('o', shift)})
+   AND NOT (${alerts.runningLateAlertSql('o', shift)})
+   AND NOT (${alerts.meituanAlertSql('o')})
+ ORDER BY o.id`);
+console.log(Array.isArray(dropped) && !dropped.length ? '(none)' : J(dropped));
 console.log('\ndone.');
