@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.541
+# Tacet shared-core consolidation — decisions record, v4.542
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-16 · v4.542 — **§477 · THE DELIVERY ZONES MOVE TO `lib/delivery-zones.js` AND THE DELIVERY FEE TO `lib/delivery-fees.js`; A DEAD SECOND `isGuangzhou` IS REMOVED — DECIDED BY ASH:** *"move fee zones"*, the second move of the delivery plan. 17 statements, a pure move, after a first commit that deletes a shadowed duplicate of `isGuangzhou` three suites had been testing in place of the live one. See the amendment at the end of §477.
 
 2026-10-16 · v4.541 — **§480 · A DELIVERY ORDER'S TIMES FOLLOW THE OPENING HOURS OF THE STORE THAT COOKS IT, NOT ONE SHARED ZONE SETTING — DECIDED BY ASH:** *"tianhe open at 10am close at 8pm. yuexiu open at 8am close at 8:30pm"*, then *"go"*. Also fixes a delivery window before 10:00 being offered and then refused at payment. No schema change, no mini-app upload, no change to `.gitignore` or CI. See §480.
 
@@ -31512,6 +31514,39 @@ reader. Decided by Ash:** *"move printer"*.
    one place; the only other changes are the require line and the pointer.
    Route order is identical. A break made inside the new file fails
    `scripts/test_printer_prefs.js`. No CI change.
+
+**Amended 2026-10-16 — the delivery plan's second move: zones and fees.
+Decided by Ash:** *"move fee zones"*.
+
+1. **A dead second `isGuangzhou` is removed first.** `routes/retail.js`
+   declared it twice, at the shipping helpers and with the delivery zones.
+   In JavaScript the later top-level declaration replaces the earlier one
+   everywhere, so the first never ran. Three suites lifted the first copy by
+   text and were testing it (`test_delivery_zones`,
+   `test_mirrored_channel_parcels`, `test_manual_order_fees`). The two copies
+   agree on every real spelling of Guangzhou, so nothing was wrong at run
+   time; but the live copy was less guarded than reported, and the move could
+   not proceed around it (an import beside the dead copy is a redeclaration
+   error or a silent swap to the dead one). Removing a declaration that is
+   already replaced changes no behaviour. The suites now lift the real copy,
+   and the zone and fee suites check that every function they test is
+   declared exactly once, which fails on the old main. A mutation sweep of the
+   live copy: 4 of 4 caught.
+2. **`lib/delivery-zones.js`** takes the Guangzhou aliases and name
+   normaliser, `isGuangzhou`, the rest-of-China default zone,
+   `deliveryIsAvailable`, `matchDeliveryZone`, the unmatched-address refusal,
+   `fulfillingStoreFor` (the out-of-city pin, its section moving whole), and
+   the admin table's English name and province lookups.
+3. **`lib/delivery-fees.js`** takes `weightDeliveryFee`,
+   `computeDeliveryAndPacking` and `freeShippingTargetFor`.
+4. **`parseWeightToGrams` stays** with the shipping and split-shipment
+   helpers it belongs to; `priceCart` and the slots stay. The "DELIVERY FEE,
+   PACKING FEE, POINTS, TOP-UP" heading stays in `routes/retail.js` with a
+   pointer, because points and top-up stay.
+5. **Proof.** Every top-level statement of the base `retail.js` is in
+   exactly one place, the moved ones in order; the only other changes are the
+   require lines and pointers. Route order is identical. A break made inside
+   each new file fails its suite. No CI change.
 
 ## §478 — ON ITS SHIP DAY, A PAID ORDER'S FRESH LINE TAKES ITS STOCK THE MOMENT THE SHELF CAN COVER IT (§58 AMENDED)
 
