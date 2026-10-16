@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.546
+# Tacet shared-core consolidation — decisions record, v4.547
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-16 · v4.547 — **§82 · THE DELIVERY TIMERS READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix"*, on the clock survey (`scripts/diagnose_server_clock.js`: production runs Asia/Shanghai; Tianhe and Yuexiu name no timezone). The auto-deliver sweep, the stuck-rider alert, the ship-today reminder, the Express day re-anchored at payment and a Qingyun arrival time sent as text read the host's clock, and each goes eight hours wrong on the UTC host §82 requires. All now read the shop's. The survey also found the auto-deliver sweep's SQL unrunnable since #1076, reported to Ash and not fixed here. See the amendment at the end of §82.
 
 2026-10-16 · v4.546 — **§482 · A MISSED CALL IS READ OFF THE PARCEL IT HAPPENED ON, NOT OFF THE ORDER'S MOVING COPY — DECIDED BY ASH:** *"fix"*, on the finding that TC001153 sat on *Delivery needs a call* after its land parcel was delivered: the order row had been stamped with that parcel's missed calls, then took the air parcel's waybill, so the stamp outlived the parcel. `lib/delivery-alerts.js` `noContactOrderSql`; test in `scripts/test_no_contact_alert.js`.
 
@@ -8782,6 +8784,48 @@ change and is not started.
    timezone" this section asks for, and pinning the production host to UTC in
    the deploy config, are still open. Delivery and pickup now both treat a
    missing zone as `SYSTEM_DEFAULT_TZ`, so they cannot disagree while it is.
+
+**Amended 2026-10-16 — the delivery timers. Decided by Ash:** *"fix"*.
+
+1. **What production runs.** `scripts/diagnose_server_clock.js` (read-only,
+   via `ro-query.yml`): the host is `Asia/Shanghai`, and the app and all seven
+   daemons inherit it — none sets its own `TZ`. Tianhe and Yuexiu have
+   `timezone` NULL and there is no `shop.timezone`, so every Roots order takes
+   its zone from the fallback. The five other tenant databases hold no stores.
+   **The host is therefore not yet the UTC this section requires, and must not
+   be switched until every host-clock reader is gone.**
+2. **Five readers fixed.** The auto-deliver sweep
+   (`autoDeliverLocalEtaForTenant`) and the stuck-rider alert
+   (`lib/delivery-alerts.js` `localStuckRows`) judged "a later day" and "HH:MM
+   today" on the host; both now read two shared helpers added to
+   `lib/business-date.js` — `dayOfStored` (a stored `scheduled_for`, bare day or
+   instant, as the shop's day) and `wallClockOnDay` — so they cannot judge the
+   same order apart. The ship-today reminder (`dueAtFor`) recognises a day pick
+   as the shop's midnight and reminds at 10:00 shop time. The Express day
+   re-anchored in `markOrderPaid` is stored at the shop's midnight
+   (`dateInZone`), as a day pick is. The Qingyun daemon reads an arrival time
+   sent as text with no zone as Beijing (+08:00), like the rest of that
+   function. On today's Asia/Shanghai host every answer is unchanged.
+3. **The gate cannot see this class of bug, and the new suite works around
+   it.** `scripts/run-suites.js` sets `TZ=Asia/Shanghai` for every suite unless
+   one is given, which is the clock that hid all five. Changing that is a change
+   to how tests run and is left to Ash; `scripts/test_delivery_clock.js` instead
+   re-runs itself on UTC, New York and Shanghai clocks, and refuses host-local
+   date reads in the five functions. Against the old code it fails 15 checks on
+   a UTC clock.
+4. **Found on the way, not fixed here: the auto-deliver sweep has not run since
+   #1076 (2026-10-09).** Its SELECT carries one unclosed bracket
+   (`AND NOT EXISTS (` … `OR j.cancelled_at IS NOT NULL )`), so SQLite refuses
+   it with "incomplete input", the sweep logs a warning and returns, every
+   minute. Orders a live Qingyun rider is tracking still close on the drop-off
+   sweep; an order with a typed or untracked ETA has not auto-closed since. The
+   suite that guards it matched the SQL's text and never ran it. Closing the
+   bracket would, on its first tick, mark every order stranded since then as
+   Delivered and send each its status notification, so it is Ash's decision, on
+   a measured count, and its own change.
+5. **Still open.** The invoice and low-stock reminders (the second half of the
+   survey), §82's boot-time refusal of a tenant with no zone, and pinning the
+   host to UTC.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 

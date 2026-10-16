@@ -297,7 +297,7 @@ it('the ETA fallback is blocked by a cancelled job with NO freshness window', ()
   // The window asks "is a rider being tracked right now?" and the honest answer
   // for a cancelled job is no — which would hand the order to the timer and mark
   // it Delivered over a parcel still sitting in the shop. TC000823 exactly.
-  const sql = sqlOf('function autoDeliverLocalEtaForTenant()');
+  const sql = sqlOf('function autoDeliverLocalEtaForTenant(now = new Date())');
   assert.ok(/NOT EXISTS/.test(sql), 'the live-tracking guard is gone');
   assert.ok(/OR j\.cancelled_at IS NOT NULL/.test(sql),
     'a cancelled job does not block the ETA auto-deliver sweep');
