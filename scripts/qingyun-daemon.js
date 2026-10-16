@@ -481,7 +481,11 @@ function beijingSameDayHHMM(val) {
       const n = Number(val);
       ms = n < 1e12 ? n * 1000 : n;   // seconds vs milliseconds
     } else {
-      ms = Date.parse(String(val).replace(' ', 'T'));
+      // A string with no zone of its own is Qingyun's Beijing wall clock. Read
+      // it as +08:00 — like the rest of this function — and never on the host's
+      // clock (§82), which only agreed while the host happened to run UTC+8.
+      const str = String(val).trim().replace(' ', 'T');
+      ms = Date.parse(/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(str) ? str : str + '+08:00');
     }
     if (!Number.isFinite(ms) || ms <= 0) return null;
     const bj  = new Date(ms + 8 * 3600 * 1000);

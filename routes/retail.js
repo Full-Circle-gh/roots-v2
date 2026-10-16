@@ -5183,10 +5183,12 @@ function markOrderPaid(orderId) {
           ? tdb().prepare('SELECT * FROM retail_delivery_zones WHERE id = ?').get(ord.delivery_zone_id)
           : null;
         const iso = expressEarliestIso(zone, new Date());
-        const [y, m, d] = iso.split('-').map(Number);
+        // Midnight of that day on the SHOP's clock (§82) — the same instant a
+        // day pick stores (resolveDeliverySlot), which the ship reminder reads
+        // as "date only". The host's midnight was 08:00 Beijing on a UTC host.
         tdb().prepare(
           "UPDATE retail_orders SET scheduled_for = ?, delivery_slot_label = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-        ).run(new Date(y, m - 1, d, 0, 0).toISOString(), `${isCn ? '最早' : 'Earliest'} ${iso}`, orderId);
+        ).run(businessDate.dateInZone(deliveryTz(), iso, 0, 0).toISOString(), `${isCn ? '最早' : 'Earliest'} ${iso}`, orderId);
       }
     } catch (e) { console.error('[markOrderPaid reanchor]', e); }
 
@@ -7522,7 +7524,7 @@ const AUTO_DELIVER_FROM_STATUSES = ['paid', 'preparing', 'dispatched', 'rider_pi
 // element is a hardcoded literal, never user input.
 const AUTO_DELIVER_FROM_SQL = AUTO_DELIVER_FROM_STATUSES.map(s => `'${s}'`).join(',');
 
-function autoDeliverLocalEtaForTenant() {
+function autoDeliverLocalEtaForTenant(now = new Date()) {
   const graceMin = Number(cfgValue('delivery.autoDeliverEtaMinutes', AUTO_DELIVER_DEFAULT_GRACE_MIN));
   if (!Number.isFinite(graceMin) || graceMin < 0) return 0;   // disabled
   let rows;
@@ -7564,8 +7566,12 @@ function autoDeliverLocalEtaForTenant() {
     if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
     throw e;
   }
-  const now = new Date();
   const graceMs = graceMin * 60_000;
+  // §82 — "today" and the ETA's instant are the SHOP's, never the host's. Both
+  // read through lib/business-date.js so this sweep and the stuck-rider alert
+  // (lib/delivery-alerts.js localStuckRows) cannot judge the same order apart.
+  const tz = deliveryTz();
+  const today = businessDate.businessDate(tz, now);
   let fired = 0;
   for (const o of rows) {
     const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(o.local_eta || '').trim());
@@ -7573,15 +7579,9 @@ function autoDeliverLocalEtaForTenant() {
     // Defensive: a same-day local ETA on a future-scheduled order would
     // otherwise deliver early. local_eta is same-day by design, so skip any
     // order scheduled for a later calendar day.
-    if (o.scheduled_for) {
-      const sched = new Date(o.scheduled_for);
-      if (!isNaN(sched.getTime()) &&
-          new Date(sched.getFullYear(), sched.getMonth(), sched.getDate()).getTime() >
-          new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) {
-        continue;
-      }
-    }
-    const eta = new Date(now.getFullYear(), now.getMonth(), now.getDate(), +m[1], +m[2], 0, 0);
+    const schedDay = businessDate.dayOfStored(tz, o.scheduled_for);
+    if (schedDay && schedDay > today) continue;
+    const eta = businessDate.wallClockOnDay(tz, now, +m[1], +m[2]);
     if (now.getTime() < eta.getTime() + graceMs) continue;   // eta+grace not reached yet
     // Atomic claim: the status guard means only the first tick that catches the
     // order actually flips + notifies; a concurrent/retry tick sees changes===0.
