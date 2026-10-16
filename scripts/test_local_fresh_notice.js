@@ -349,8 +349,11 @@ let PORT = 0;
   const shopSrc = require('fs').readFileSync(
     path.join(ROOT, 'miniapp', 'pages', 'shop', 'shop.js'), 'utf8');
   const stateFn = shopSrc.slice(shopSrc.indexOf('function _stockState'));
-  const _stockState = new Function(
-    `${stateFn.slice(0, stateFn.indexOf('\n}') + 2)}; return _stockState;`)();
+  // §481 — the verdict reads its count through utils/local-stock; the real
+  // module, which with no saved address loaded reads the row's own stock.
+  const localStock = require(path.join(ROOT, 'miniapp', 'utils', 'local-stock.js'));
+  const _stockState = new Function('localStock',
+    `${stateFn.slice(0, stateFn.indexOf('\n}') + 2)}; return _stockState;`)(localStock);
 
   const onRun = true;
   const freshVerdict   = _stockState({ ...freshRow,   stock: 0 }, onRun);

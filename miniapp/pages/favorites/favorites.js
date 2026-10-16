@@ -7,6 +7,7 @@ const cart     = require('../../utils/cart');
 const pickQueue = require('../../utils/pick-queue');
 const lang     = require('../../utils/lang');
 const delivery = require('../../utils/delivery');
+const localStock = require('../../utils/local-stock');
 const freshEta = require('../../utils/fresh-eta');
 const config   = require('../../utils/config');
 
@@ -56,6 +57,13 @@ function fmtSavedDate(s, L) {
   if (L === 'cn') return (m + 1) + '月' + day + '日';
   const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
   return months[m] + ' ' + (day < 10 ? '0' + day : day);
+}
+
+// §481 — sold out at the shopper's OWN shop when they are on the same-day
+// run; every shop added together otherwise (utils/local-stock).
+function _outAt(p) {
+  const st = localStock.of(p);
+  return st != null && st <= 0;
 }
 
 Page({
@@ -146,7 +154,7 @@ Page({
       // a PRE-ORDER tag; only a hard-out favourite goes dead. Mirrors the shop,
       // including the same-city rule: nothing is reservable for an address
       // inside Guangzhou, where the checkout gates today's run on real stock.
-      const out = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
+      const out = p.ship_from_supplier ? !!p.supplier_paused : _outAt(p);
       const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
         && (!this._onLocalRun || !!p.local_fresh_date || !!p.oos_preorder_local);
       const soldOut = out && !preorder;
@@ -257,7 +265,7 @@ Page({
     if (!id) return;
     const p = (this.data.all || []).find(x => x.id === id);
     if (!p) return;
-    const out = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
+    const out = p.ship_from_supplier ? !!p.supplier_paused : _outAt(p);
     const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
         && (!this._onLocalRun || !!p.local_fresh_date || !!p.oos_preorder_local);
     // …and WHICH word the toast gets, on the same test the tile's own tag uses
@@ -277,6 +285,7 @@ Page({
       return;
     }
     cart.add(p, 1, []);
+    if (cart.lastAdd().cap != null) return;   // §481 — cart.add said "Only N left"
     const cn = this.data.lang === 'cn';
     wx.showToast({
       title: kind === 'batch' ? (cn ? '已加入购物车，下批现做' : 'Added — next batch')

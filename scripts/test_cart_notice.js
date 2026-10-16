@@ -381,8 +381,10 @@ it('the mini app raises it from cart.add(), so no call site can forget', () => {
 });
 
 it('the mini app literals carry cart_notice (PDP add, bundle, size picker, grid +)', () => {
-  const pdp = PRODUCT_JS.match(/cart\.add\(\{[\s\S]*?\}, this\.data\.qty, chosen\)/);
-  const size = PRODUCT_JS.match(/cart\.add\(\{[\s\S]*?\}, this\.data\.qty, \[\]\)/);
+  // The PDP and size-picker adds may carry §481's `{ replacing }` as a fourth
+  // argument (the re-pick's old line does not count against the shop's limit).
+  const pdp = PRODUCT_JS.match(/cart\.add\(\{[\s\S]*?\}, this\.data\.qty, chosen(?:, \{ replacing: this\._replaceKey \})?\)/);
+  const size = PRODUCT_JS.match(/cart\.add\(\{[\s\S]*?\}, this\.data\.qty, \[\](?:, \{ replacing: this\._replaceKey \})?\)/);
   const bundle = PRODUCT_JS.match(/cart\.add\(\{\s*id: it\.id[\s\S]*?\}, 1, \[\]\)/);
   const grid = SHOP_JS.match(/cart\.add\(\{[\s\S]*?\}, 1, \[\]\)/);
   for (const [name, m] of [['PDP add', pdp], ['size picker', size], ['bundle', bundle], ['shop grid +', grid]]) {

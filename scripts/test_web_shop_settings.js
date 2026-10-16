@@ -84,7 +84,11 @@ is(ctx.SHOP_SORTS, ['newest', 'price_asc', 'price_desc', 'popular'], 'the sorts 
 withShop({ hideOutOfStock: true });
 is(ctx.shopHideOos([{ id: 1, stock: 0 }, { id: 2, stock: 3 }, { id: 3 }, { id: 4, stock: null }]).map(p => p.id), [2, 3, 4],
   'hide out of stock drops a zero, keeps a figure, and keeps a product with no stock figure — the mini app\'s rule');
-yes(/raw = raw\.filter\(p => p\.stock == null \|\| Number\(p\.stock\) > 0\);/.test(MINI), '…which is what the mini app does, character for character');
+// §481 — the mini app now reads the count through utils/local-stock, which is
+// the shopper's own shop on the same-day run and `p.stock` for everyone else.
+// The web has no run and no saved-address shop, so for it the rule is still
+// the one above: a zero goes, a figure or no figure stays.
+yes(/raw = raw\.filter\(p => \{ const st = localStock\.of\(p\); return st == null \|\| st > 0; \}\);/.test(MINI), '…which is what the mini app does, read through its own-shop count');
 
 ctx.state.lang = 'cn';
 withShop({});

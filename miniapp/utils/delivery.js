@@ -35,9 +35,20 @@ const api = require('./api');
 // we make ourselves (add / edit / delete / tap-to-select).
 const TTL_MS = 2 * 60 * 1000;
 
-let _rows = null;      // [{ id, local_run, is_default }] — trimmed, never the PII
+let _rows = null;      // [{ id, local_run, nearest_store, is_default }] — trimmed, never the PII
 let _at = 0;
 let _inflight = null;
+
+// The fields kept off each saved address. The address itself (name, phone,
+// street) never enters this cache.
+function _trim(a) {
+  return {
+    id: a.id,
+    local_run: !!a.local_run,
+    nearest_store: a.nearest_store || null,
+    is_default: !!a.is_default,
+  };
+}
 
 function _app() {
   try { return getApp(); } catch (e) { return null; }
@@ -63,6 +74,16 @@ function onLocalRun() {
   return !!(r && r.local_run);
 }
 
+// §481 — the shop a same-day order from this shopper is packed at: the store
+// code the server stamped on their chosen address (the one checkout calls
+// nearest). Null off the run, and null on it when the server sent none (an
+// older server, or the lookup failed) — utils/local-stock then reads the
+// summed number, as every surface did before.
+function localStoreCode() {
+  const r = _activeRow();
+  return (r && r.local_run && r.nearest_store) ? r.nearest_store : null;
+}
+
 // Pre-order may be offered to this shopper. The inverse of onLocalRun(), named
 // for what the caller is deciding.
 function preorderAllowed() {
@@ -84,11 +105,7 @@ function load(force) {
     .then(() => api.get('/api/retail/addresses'))
     .then((resp) => {
       const list = Array.isArray(resp) ? resp : (resp && resp.data) || [];
-      _rows = list.map(a => ({
-        id: a.id,
-        local_run: !!a.local_run,
-        is_default: !!a.is_default,
-      }));
+      _rows = list.map(_trim);
       _at = Date.now();
     })
     .catch(() => { /* signed out / offline — keep whatever we already knew */ })
@@ -101,15 +118,11 @@ function load(force) {
 // the new pick without another round-trip.
 function prime(list) {
   if (!Array.isArray(list)) return;
-  _rows = list.map(a => ({
-    id: a.id,
-    local_run: !!a.local_run,
-    is_default: !!a.is_default,
-  }));
+  _rows = list.map(_trim);
   _at = Date.now();
 }
 
 // Drop the cache after any address edit so the next load() sees the change.
 function invalidate() { _rows = null; _at = 0; }
 
-module.exports = { onLocalRun, preorderAllowed, load, prime, invalidate };
+module.exports = { onLocalRun, localStoreCode, preorderAllowed, load, prime, invalidate };
