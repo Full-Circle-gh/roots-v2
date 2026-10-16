@@ -8946,22 +8946,18 @@ function lowStockDefault() {
   return Number.isFinite(n) && n >= 0 ? n : 5;
 }
 
-// Local-time parts of a Date in an IANA timezone. When tz is falsy, fall back to
-// the host's local clock (UTC+8 in production) so existing China stores behave
-// EXACTLY as before. Never throws — a bad tz string degrades to host-local.
+// Local-time parts of a Date in an IANA timezone. NEVER THE HOST'S CLOCK (§82):
+// a falsy tz is read as the system default zone, as lib/business-date.js reads
+// it for delivery, and a tz string this runtime cannot read falls back to that
+// default rather than to the host. It used to fall back to the host's local
+// clock, which was right only while the production host happened to run UTC+8;
+// on the UTC host §82 requires, a store with no timezone was judged eight hours
+// out. Never throws.
 function localPartsInTz(date, tz) {
-  if (!tz) {
-    return {
-      mins: date.getHours() * 60 + date.getMinutes(),
-      hh: String(date.getHours()).padStart(2, '0'),
-      mm: String(date.getMinutes()).padStart(2, '0'),
-      weekday: date.getDay(), day: date.getDate(), month: date.getMonth() + 1,
-      dateKey: date.toDateString(),
-    };
-  }
+  const zone = tz && String(tz).trim() ? String(tz).trim() : businessDate.SYSTEM_DEFAULT_TZ;
   try {
     const p = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz, hour12: false, weekday: 'short',
+      timeZone: zone, hour12: false, weekday: 'short',
       year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
     }).formatToParts(date).reduce((a, x) => (a[x.type] = x.value, a), {});
     let hour = parseInt(p.hour, 10); if (hour === 24) hour = 0;   // some engines emit 24:00
@@ -8975,7 +8971,16 @@ function localPartsInTz(date, tz) {
       dateKey: `${p.year}-${p.month}-${p.day}`,
     };
   } catch (_) {
-    return localPartsInTz(date, null);
+    if (zone !== businessDate.SYSTEM_DEFAULT_TZ) return localPartsInTz(date, businessDate.SYSTEM_DEFAULT_TZ);
+    // The system zone itself unreadable (a runtime without timezone data):
+    // its fixed UTC+8 offset, read off UTC fields so the host never enters.
+    const s = new Date(date.getTime() + 8 * 3600000);
+    return {
+      mins: s.getUTCHours() * 60 + s.getUTCMinutes(),
+      hh: String(s.getUTCHours()).padStart(2, '0'), mm: String(s.getUTCMinutes()).padStart(2, '0'),
+      weekday: s.getUTCDay(), day: s.getUTCDate(), month: s.getUTCMonth() + 1,
+      dateKey: s.toISOString().slice(0, 10),
+    };
   }
 }
 
@@ -9041,7 +9046,10 @@ function resolvePickupTime(raw, now = new Date(), storeHours = null) {
   const leadMin = Math.max(0, parseInt(cfgValue('pickup.leadMinutes', 0), 10) || 0);
   if (leadMin > 0 && when.getTime() < now.getTime() + leadMin * 60_000) return { error: 'pickup_too_soon' };
 
-  const tz = storeHours && storeHours.timezone ? storeHours.timezone : null;
+  // The store's own zone when it has one, else the tenant's — the zone delivery
+  // already reads (deliveryTz, §82) — never the host's. Null from both is the
+  // system default, which localPartsInTz applies.
+  const tz = (storeHours && storeHours.timezone) || deliveryTz() || null;
   const win = pickupWindowFor(storeHours);
   const open  = hhmmToMinutes(win.open);
   const close = hhmmToMinutes(win.close);

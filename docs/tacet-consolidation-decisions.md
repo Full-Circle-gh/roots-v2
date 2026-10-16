@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.544
+# Tacet shared-core consolidation — decisions record, v4.545
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-16 · v4.545 — **§82 · A PICKUP TIME IS JUDGED ON THE SHOP'S CLOCK, NEVER THE HOST'S — DECIDED BY ASH:** *"fix pick up"*, on the finding that `scripts/pickup-window-check.js` failed 8 checks on a UTC host and passed on a UTC+8 one. A store with no timezone, or an order with no store, was judged on the host's local clock, so on the UTC host §82 requires "open 10:00" meant 18:00 in Guangzhou. The zone is now the store's, else the tenant's (`deliveryTz`), else the system default. The check joins the fast gate as `scripts/test_pickup_window.js`. See the amendment at the end of §82.
 
 2026-10-16 · v4.544 — **§481 · A SAME-DAY GUANGZHOU SHOPPER IS SHOWN THEIR NEAREST SHOP'S SHELF, NOT BOTH SHOPS ADDED TOGETHER — DECIDED BY ASH:** *"go"*, after *"i rather keep out-of-city orders on the old “both shops added together” rule."* Raised by TC001259, parked at 越秀 for kombucha the menu said it had. Sold out when their shop has none; the + stops at their shop's count. Everyone else unchanged. No schema change, no change to `.gitignore` or CI, no new Chinese. Needs a mini-app upload. See §481.
 
@@ -8745,6 +8747,39 @@ lists them (`routes/retail.js` — `parseYmdLocal` / `toYmdLocal`,
 `expressEarliestIso`, `rescheduleEligibility`); `lib/business-date.js` already
 does the right thing per location and is the shape to copy. That work is its own
 change and is not started.
+
+**Amended 2026-10-16 — pickup times. Decided by Ash:** *"fix pick up"*.
+
+1. **The finding.** `resolvePickupTime` read the time of day through
+   `localPartsInTz`, which fell back to the HOST's local clock whenever it had
+   no zone: a staff-made collection order with no store, a store row that is
+   gone, and any store with `timezone` NULL (the column has no default). Right
+   only while the host runs UTC+8; on the UTC host this section requires, the
+   window `10:00–20:00` was enforced as 18:00–04:00 Guangzhou time. The repo
+   holds no deploy setting that pins the host either way, so production is
+   presumably still UTC+8 and nobody has been refused yet — the failure was
+   waiting for this section to be applied.
+2. **The ruling, applied.** The zone is the store's own, else the tenant's —
+   `deliveryTz()`, the same answer the delivery calendar reads — else
+   `SYSTEM_DEFAULT_TZ`, exactly as `lib/business-date.js` reads a missing
+   zone. A zone string the runtime cannot read falls back to the system
+   default, and a runtime with no timezone data at all to its fixed UTC+8,
+   read off UTC fields. Nothing in the pickup path reads host-local date parts.
+   For Roots on a UTC+8 host every answer is unchanged.
+3. **The check was not running.** `scripts/pickup-window-check.js` had no
+   test-shaped name, so the gate never ran it, which is how a host-dependent
+   failure sat unseen. It is renamed `scripts/test_pickup_window.js` and is a
+   fast suite (a change to what the gate runs, called out here and in the PR).
+   It now passes on any host clock (UTC, New York, Shanghai, Kiritimati), runs
+   the same probes under a tenant zone that is not Guangzhou's, refuses host
+   clock reads in the functions it lifts, and covers the other pickup limits
+   (past, thirty days, packing lead, a backwards or empty shop window). Against
+   the old code on a UTC host it fails 14 checks. A mutation sweep of the four
+   pickup functions: all caught but two that give the same answer either way.
+4. **Not in this change.** The boot-time "fail loudly when a tenant has no
+   timezone" this section asks for, and pinning the production host to UTC in
+   the deploy config, are still open. Delivery and pickup now both treat a
+   missing zone as `SYSTEM_DEFAULT_TZ`, so they cannot disagree while it is.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 
