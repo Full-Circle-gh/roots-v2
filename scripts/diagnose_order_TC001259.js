@@ -51,15 +51,15 @@ const one = (sql, ...p) => { try { return db.prepare(sql).get(...p); } catch (e)
 // 0 — the order
 // ════════════════════════════════════════════════════════════════════════════
 console.log('══ 0 · order ══');
-const o = one(
-  `SELECT id, order_no, status, fallback_choice, routing_reason, store_id,
-          awaiting_restock_pids, delivery_slot_label, delivery_slot_kind, placed_at, paid_at, created_at,
-          channel, fulfillment_type
-     FROM retail_orders WHERE order_no = ?`, ORDER_NO);
+const row = one('SELECT * FROM retail_orders WHERE order_no = ?', ORDER_NO);
+const KEEP = ['id', 'order_no', 'status', 'fallback_choice', 'routing_reason', 'store_id',
+  'awaiting_restock_pids', 'delivery_slot_label', 'delivery_slot_kind', 'placed_at',
+  'paid_at', 'channel', 'fulfillment_type', 'city', 'district'];
+const o = row && !row.ERROR ? Object.fromEntries(KEEP.filter(k => k in row).map(k => [k, row[k]])) : row;
 if (!o || o.ERROR) { console.log('NOT FOUND / ' + J(o)); process.exit(1); }
 console.log(J(o));
 const ID = o.id;
-const AT = o.placed_at || o.created_at;
+const AT = o.placed_at || o.paid_at;
 console.log('');
 
 console.log('══ 1 · items ══');
