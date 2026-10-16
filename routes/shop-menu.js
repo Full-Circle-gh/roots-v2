@@ -2227,6 +2227,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   //
   // Somebody who asked their phone to stop animating gets neither the travel
   // nor the wait: the panel is simply gone, which is what they asked for.
+  // Set by the product page, called by the basket when a line goes in. Shared
+  // here because the two scripts below are separate closures.
+  `var dtAdded=null;` +
   `var shRM=function(){try{return window.matchMedia('(prefers-reduced-motion:reduce)').matches}` +
   `catch(x){return false}};` +
   /* IS ANY SHEET STILL UP? Asked of the DOM rather than kept in a counter,
@@ -2291,6 +2294,16 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(pushed){pushed=false;if(!fromPop){try{history.back()}` +
   `catch(e){/* a web view that refused the pushState above has nothing to go back to; the page is already closed, and the only cost is one dead history entry */}}}};` +
   `window.addEventListener('popstate',function(){if(!sh.hidden)close(true)},false);` +
+  /* A LINE WENT INTO THE BASKET, SO THE PAGE GOES AWAY — whichever path put
+     it there. The basket script calls this from addLine(), the one place a
+     line is created, because the product page cannot see the picker finish:
+     a product with a size or a question adds from the picker's own button,
+     long after this page's ADD TO BASKET handler has returned. Reported by Ash
+     from the live menu on an espresso: *"after I add a product to the cart it
+     should go back to the menu and not stay in product page."* A plain product
+     already did; only the picker paths left the customer on the page.
+     Cancelling the picker adds nothing, so it still lands back here. */
+  `dtAdded=function(){if(!sh.hidden)close()};` +
   `var open=function(card){` +
   `var t=card.querySelector('template[data-dt]');if(!t)return;` +
   `openPid=card.getAttribute('data-open');` +
@@ -2870,7 +2883,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // MAX_QTY on the server is 20 and it refuses past it. Stopping here as well
   // means the customer meets the ceiling as a button that stops moving rather
   // than as an error after they have filled in their name.
-  `if(cart[k].qty<20)cart[k].qty++;paintBar();if(!sheet.hidden&&!pk)paintSheet()};` +
+  `if(cart[k].qty<20)cart[k].qty++;paintBar();if(!sheet.hidden&&!pk)paintSheet();` +
+  `if(dtAdded)dtAdded()};` +
   /* THE + EITHER ADDS OR ASKS, and the card said which before it was tapped
      (data-ask). A product with no questions on it behaves exactly as it always
      has — one tap, one unit, the photo flies into the bar — because most of a
