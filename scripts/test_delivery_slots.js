@@ -77,8 +77,8 @@ class FakeDate extends Date {
 
 const NAMES = ['batchScheduleCfg', '_tzCache', 'DELIVERY_TZ_TTL_MS', 'deliveryTz', 'parseYmdLocal', 'toYmdLocal',
   'tzNowParts', 'nextBatchShipDate', 'batchItemsInCart', 'todaysBatchStillComing', 'slotWindowEnd',
-  'freshLinesCoveredToday', 'expressEarliestIso', 'computeDeliverySlots', 'matchScheduledTimeSlot',
-  'logSlotKindMismatch', 'resolveDeliverySlot'];
+  'freshLinesCoveredToday', 'expressEarliestIso', 'hhmmToMinutes', 'storeDeliveryWindow', 'computeDeliverySlots',
+  'matchScheduledTimeSlot', 'logSlotKindMismatch', 'resolveDeliverySlot'];
 const F = new Function('cfgValue', 'tdb', 'currentTenantId', 'businessDate', 'batchCadence', 'Date',
   `${NAMES.map(declSrc).join('\n')}\nreturn { ${NAMES.filter((n) => n !== 'DELIVERY_TZ_TTL_MS').join(', ')} };`)(
   cfgValue, () => db, () => { if (W.throwTid) throw new Error('no tenant'); return W.tid; },
@@ -689,6 +689,109 @@ it('one line when the client and the server disagree', () => {
 it('never throws, whatever it is handed', () => {
   const bad = { toString() { throw new Error('boom'); } };
   assert.deepStrictEqual(warned(() => F.logSlotKindMismatch(7, bad, 'today', 'orders.create')), []);
+});
+
+// ── 12. §480: the cooking store's own hours ────────────────────────────────
+section('12. the store that cooks the order sets the hours (§480)');
+// The two real shops: Yuexiu opens 08:00 and closes 20:30; Tianhe keeps the
+// zone default's 10:00–20:00. The zone below is the default (10–20) throughout,
+// so every difference comes from the store.
+const YUEXIU = { open: '08:00', close: '20:30' };
+const TIANHE = { open: '10:00', close: '20:00' };
+it('a store\'s hours become minutes for "open now" and whole hours inside them for the windows', () => {
+  assert.deepStrictEqual(F.storeDeliveryWindow(YUEXIU), { open: 480, close: 1230, startHour: 8, endHour: 20 });
+  assert.deepStrictEqual(F.storeDeliveryWindow({ open: '07:30', close: '20:00' }), { open: 450, close: 1200, startHour: 8, endHour: 20 });
+  // 23:59 is how "till midnight" is written; it keeps the window ending at 24:00.
+  assert.deepStrictEqual(F.storeDeliveryWindow({ open: '00:00', close: '23:59' }), { open: 0, close: 1439, startHour: 0, endHour: 24 });
+});
+it('no store, a missing or malformed end, close not after open, or no whole hour between: the zone\'s hours stand', () => {
+  for (const h of [null, undefined, {}, { open: '08:00' }, { open: '08:00', close: '' }, { open: '8am', close: '20:00' },
+    { open: '20:00', close: '08:00' }, { open: '08:00', close: '08:00' }, { open: '08:30', close: '09:15' }]) {
+    assert.strictEqual(F.storeDeliveryWindow(h), null, JSON.stringify(h));
+  }
+  const t = at('2026-10-15', 8, 15);
+  assert.deepStrictEqual(slots({}, t, { storeHours: { open: '08:00', close: null } }), slots({}, t));
+});
+it('08:15 near Yuexiu: "right away" is on, and today\'s windows run from the store\'s hours', () => {
+  const r = slots({}, at('2026-10-15', 8, 15), { storeHours: YUEXIU });
+  assert.strictEqual(r.kitchen_open_now, true);
+  assert.strictEqual(r.right_away_available, true);
+  assert.deepStrictEqual(r.kitchen_hours, { start: 8, end: 20 });
+  assert.deepStrictEqual(ids(r.today_slots), ['2026-10-15T10:00', '2026-10-15T12:00', '2026-10-15T14:00', '2026-10-15T16:00', '2026-10-15T18:00']);
+});
+it('07:50 near Yuexiu: closed, reopens today, and the 08:00 window is on offer', () => {
+  const r = slots({}, at('2026-10-15', 7, 50), { storeHours: YUEXIU });
+  assert.strictEqual(r.kitchen_open_now, false);
+  assert.strictEqual(r.right_away_available, false);
+  assert.strictEqual(r.kitchen_reopens_today, true);
+  assert.strictEqual(r.today_slots[0].slot_id, '2026-10-15T08:00');
+});
+it('08:15 near Tianhe: no "right away", reopens today, windows from 10:00 — exactly the zone default', () => {
+  const t = at('2026-10-15', 8, 15);
+  const r = slots({}, t, { storeHours: TIANHE });
+  assert.strictEqual(r.kitchen_open_now, false);
+  assert.strictEqual(r.right_away_available, false);
+  assert.strictEqual(r.kitchen_reopens_today, true);
+  assert.deepStrictEqual(r, slots({}, t));
+});
+it('the store\'s hours win over the zone\'s own kitchen hours', () => {
+  const r = slots({ slot_start_hour: 11, slot_end_hour: 17 }, at('2026-10-15', 8, 15), { storeHours: YUEXIU });
+  assert.deepStrictEqual(r.kitchen_hours, { start: 8, end: 20 });
+  assert.strictEqual(r.right_away_available, true);
+});
+it('20:15: Yuexiu still takes today\'s orders, Tianhe has closed', () => {
+  const y = slots({}, at('2026-10-15', 20, 15), { storeHours: YUEXIU });
+  assert.strictEqual(y.kitchen_open_now, true);
+  assert.strictEqual(y.right_away_available, true);
+  assert.strictEqual(y.same_day_cutoff_passed, false);
+  // No two-hour window still fits today, so the chips are tomorrow's, from 08:00.
+  assert.strictEqual(y.slot_day_kind, 'tomorrow');
+  assert.deepStrictEqual(ids(y.today_slots), ['2026-10-16T08:00', '2026-10-16T10:00', '2026-10-16T12:00', '2026-10-16T14:00', '2026-10-16T16:00', '2026-10-16T18:00']);
+  const t = slots({}, at('2026-10-15', 20, 15), { storeHours: TIANHE });
+  assert.strictEqual(t.kitchen_open_now, false);
+  assert.strictEqual(t.right_away_available, false);
+  assert.strictEqual(t.kitchen_reopens_today, false);
+});
+it('the same-day cutoff counts back from the store\'s half-hour close, and says so', () => {
+  const before = slots({}, at('2026-10-15', 20, 19), { storeHours: YUEXIU });
+  assert.strictEqual(before.same_day_cutoff_passed, false);
+  const r = slots({}, at('2026-10-15', 20, 20), { storeHours: YUEXIU });
+  assert.strictEqual(r.same_day_cutoff_passed, true);
+  assert.strictEqual(r.right_away_available, false);
+  assert.ok(r.same_day_cutoff_message.en.includes('close at 8:30pm'), r.same_day_cutoff_message.en);
+  assert.ok(r.same_day_cutoff_message.cn.includes('今日 20:30 关门'), r.same_day_cutoff_message.cn);
+  assert.ok(slots({}, at('2026-10-15', 19, 50)).same_day_cutoff_message.en.includes('close at 8pm'));
+});
+it('a whole-day zone keeps its Today chip until the store\'s own close', () => {
+  const zone = { day_only: 1, same_day_surcharge: 8 };
+  assert.ok(slots(zone, at('2026-10-15', 20, 5), { storeHours: YUEXIU }).today_day_chip);
+  assert.strictEqual(slots(zone, at('2026-10-15', 20, 5)).today_day_chip, null);
+});
+it('all four places that offer or check a delivery time hand over the cooking store\'s hours', () => {
+  // The checkout quote, the order itself, and the reschedule picker and its
+  // check. One that stopped passing them would quietly fall back to the zone.
+  const sites = SRC.match(/storeHours: deliveryStoreHours\(/g) || [];
+  assert.strictEqual(sites.length, 4);
+});
+it('a window before 10:00 carries a two-digit hour, so the one offered is the one accepted', () => {
+  // Was 'T8:00', which resolveDeliverySlot's 'THH:MM' refused at payment.
+  const t = at('2026-10-15', 7, 0);
+  for (const [zone, opts] of [[{ slot_start_hour: 8 }, {}], [{}, { storeHours: YUEXIU }]]) {
+    const offered = slots(zone, t, opts).today_slots[0];
+    assert.strictEqual(offered.slot_id, '2026-10-15T08:00');
+    assert.strictEqual(offered.label_cn, '今天 8:00–10:00');
+    assert.strictEqual(resolve(zone, offered.slot_id, t, opts).kind, 'today');
+  }
+});
+it('placing the order: "right away" at 08:15 is accepted for Yuexiu and refused for Tianhe', () => {
+  const t = at('2026-10-15', 8, 15);
+  assert.strictEqual(resolve({}, 'right_away', t, { storeHours: YUEXIU }).kind, 'right_away');
+  assert.deepStrictEqual(resolve({}, 'right_away', t, { storeHours: TIANHE }), { error: 'right_away_unavailable' });
+});
+it('placing the order: an 08:00 window on a later day is Yuexiu\'s to give, not Tianhe\'s', () => {
+  const t = at('2026-10-15', 11, 30);
+  assert.strictEqual(resolve({}, '2026-10-20T08:00', t, { storeHours: YUEXIU }).kind, 'schedule');
+  assert.deepStrictEqual(resolve({}, '2026-10-20T08:00', t, { storeHours: TIANHE }), { error: 'slot_unavailable' });
 });
 
 for (const run of pending) run();

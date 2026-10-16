@@ -8971,6 +8971,16 @@ function pickupStoreHoursForOrder(o) {
   return s ? { open: s.open_time, close: s.close_time, timezone: s.timezone } : null;
 }
 
+// §480 — the Opens/Closes of the store that will COOK a delivery order, in the
+// shape computeDeliverySlots takes as `opts.storeHours`. By id alone, for the
+// same reason as above: the store is already chosen, only its hours are read.
+// Null for no store; storeDeliveryWindow decides whether the hours are usable.
+function deliveryStoreHours(storeId) {
+  if (storeId == null) return null;
+  const s = tdb().prepare('SELECT open_time, close_time FROM retail_stores WHERE id = ?').get(storeId);
+  return s ? { open: s.open_time, close: s.close_time } : null;
+}
+
 // The window a given store actually enforces: its OWN hours when it carries
 // BOTH ends, else the single global window. Both ends are required together —
 // a store with an opening time and no closing time falls back whole, because
@@ -10883,6 +10893,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     // kitchen cannot reach.
     const slotResolved = resolveDeliverySlot(zone, deliverySlotId, orderNow, {
       batch: batchDecision, localFreshFloor: orderLocalFreshFloor,
+      // §480 — checked against the hours of the store this order now ships from.
+      storeHours: deliveryStoreHours(fulfillingStore ? fulfillingStore.id : null),
     });
     if (slotResolved.error) {
       return res.status(400).json({ success: false, error: slotResolved.error });
@@ -18952,6 +18964,7 @@ router.get('/api/retail/orders/:id/reschedule-options', requireRetailAuth, (req,
         zone, productIds, storeId: o.store_id ?? null, now: new Date(),
         channel: 'wechat',
       }),
+      storeHours: deliveryStoreHours(o.store_id ?? null),   // §480
     });
     data.zone = zone ? {
       id: zone.id, zone_type: zone.zone_type,
@@ -19009,6 +19022,7 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
       batch: earliestBatchMakeDate({
         zone, productIds, storeId: o.store_id ?? null, now, channel: 'wechat',
       }),
+      storeHours: deliveryStoreHours(o.store_id ?? null),   // §480, as the GET offered
     });
     if (resolved.error) return res.status(400).json({ success: false, error: resolved.error });
 
@@ -34371,6 +34385,26 @@ function expressEarliestIso(zone, now, tz = deliveryTz()) {
   return toYmdLocal(new Date(base.getTime() + days * 86400000), tz);
 }
 
+// §480 — a store's Opens/Closes as the delivery window computeDeliverySlots
+// reads: `open`/`close` in minutes for the open-now tests, and the whole hours
+// INSIDE them (open rounded up, close rounded down) for the slot windows. The
+// close is rounded down with the one minute of slack emitTimeSlots already
+// allows past close, so 23:59 — the only way to write "till midnight", since
+// 24:00 is not a time — keeps the window that ends at 24:00.
+// Null — and the zone's kitchen hours stand — when either end is missing or
+// malformed, when close is not after open, or when no whole hour fits between
+// them, so a half-filled or odd store row can never empty the slot list.
+function storeDeliveryWindow(storeHours) {
+  if (!storeHours) return null;
+  const open  = hhmmToMinutes(storeHours.open);
+  const close = hhmmToMinutes(storeHours.close);
+  if (open == null || close == null || !(close > open)) return null;
+  const startHour = Math.ceil(open / 60);
+  const endHour   = Math.floor((close + 1) / 60);
+  if (!(endHour > startHour)) return null;
+  return { open, close, startHour, endHour };
+}
+
 // `opts.batch` is earliestBatchMakeDate's answer. When the cart holds a
 // fresh item, the calendar must not offer a day the batch cannot reach — before
 // this, a customer could book a date the "made fresh · ship X" banner then
@@ -34451,13 +34485,23 @@ function computeDeliverySlots(zone, now, opts = {}) {
   // above — the two are the same day by construction (both read tzNow's
   // calendar date), and midday dodges any DST edge as earliestBatchMakeDate does.
   const floorBlocksToday = !!localFreshFloor && localFreshFloor > nowParts.ymd;
-  const startHour  = cfg.slot_start_hour;
-  const endHour    = cfg.slot_end_hour;
+  // §480 — WHOSE HOURS. The store that will cook this order, when the caller
+  // names one carrying both Opens and Closes; the zone's kitchen hours
+  // otherwise. Two readings of it, on purpose: "is the kitchen open now" (right
+  // away, the cutoff, the reopen copy) is read to the MINUTE, so a 20:30 close
+  // means 20:30; the slot WINDOWS stay on whole hours inside those hours,
+  // because the mini app builds later days' windows itself from
+  // kitchen_hours.start/end as whole hours, and a window the server then
+  // refuses is worse than a half hour not offered.
+  const storeWin   = storeDeliveryWindow(opts.storeHours);
+  const openMin    = storeWin ? storeWin.open  : cfg.slot_start_hour * 60;
+  const closeMin   = storeWin ? storeWin.close : cfg.slot_end_hour * 60;
+  const startHour  = storeWin ? storeWin.startHour : cfg.slot_start_hour;
+  const endHour    = storeWin ? storeWin.endHour   : cfg.slot_end_hour;
   const slotMins   = cfg.slot_duration_minutes;
   const isDayOnly  = cfg.day_only === 1;
-  const kitchenOpenNow =
-        nowParts.hour >= startHour &&
-        nowParts.hour <  endHour;
+  const nowMinutes = nowParts.hour * 60 + nowParts.minute;
+  const kitchenOpenNow = nowMinutes >= openMin && nowMinutes < closeMin;
 
   // Same-day cutoff buffer — how many minutes BEFORE kitchen close we stop
   // taking same-day / right-away delivery. A Guangzhou store closing at 20:00
@@ -34469,10 +34513,9 @@ function computeDeliverySlots(zone, now, opts = {}) {
   // sane bound so it can never swallow the whole business day.
   let sameDayCutoffMinutes = Number(cfgValue('delivery.sameDayCutoffMinutes', 10));
   if (!(sameDayCutoffMinutes >= 0)) sameDayCutoffMinutes = 0;
-  const openSpanMinutes = (endHour - startHour) * 60;
+  const openSpanMinutes = closeMin - openMin;
   if (sameDayCutoffMinutes > openSpanMinutes) sameDayCutoffMinutes = openSpanMinutes;
-  const nowMinutes   = nowParts.hour * 60 + nowParts.minute;
-  const closeMinutes = endHour * 60;
+  const closeMinutes = closeMin;
   // True only while the kitchen is still technically open but we're inside the
   // last `sameDayCutoffMinutes` before close — a distinct "too late for today"
   // state, separate from fully-closed (which the reopen copy already covers).
@@ -34556,7 +34599,10 @@ function computeDeliverySlots(zone, now, opts = {}) {
       }
       const requiresSurcharge = (isoDate === todayIso) && cfg.same_day_surcharge > 0;
       out.push({
-        slot_id:    `${isoDate}T${hhmm(slotStartH, slotStartM)}`,
+        // Two-digit hour: resolveDeliverySlot only accepts 'THH:MM', and the
+        // mini app's own later-day windows pad the same way. Unpadded, any
+        // window before 10:00 was offered here and then refused at payment.
+        slot_id:    `${isoDate}T${String(slotStartH).padStart(2, '0')}:${String(slotStartM).padStart(2, '0')}`,
         date_iso:   isoDate,
         start_hour: slotStartH,  start_minute: slotStartM,
         end_hour:   slotEndH,    end_minute:   slotEndM,
@@ -34586,7 +34632,7 @@ function computeDeliverySlots(zone, now, opts = {}) {
       // Day-only zones don't have per-slot times, so we need an explicit
       // "is today still fulfillable" check — kitchen must not be past
       // close. Ordering after kitchen close → no Today chip.
-      const todayStillFulfillable = nowParts.hour < endHour;
+      const todayStillFulfillable = nowMinutes < closeMin;
       if (todayStillFulfillable) {
         const requiresSurcharge = cfg.same_day_surcharge > 0;
         todayDayChip = {
@@ -34693,12 +34739,14 @@ function computeDeliverySlots(zone, now, opts = {}) {
   // order landed inside the cutoff buffer. Built server-side so both customer
   // apps read one authoritative bilingual string. `closeLabelEn` renders the
   // 24h close hour as a friendly 12h time (20 → "8pm").
+  const closeH = Math.floor(closeMin / 60);
+  const closeM = String(closeMin % 60).padStart(2, '0');
   const closeLabelEn = (() => {
-    const mer = endHour < 12 ? 'am' : 'pm';
-    const dh  = endHour % 12 === 0 ? 12 : endHour % 12;
-    return `${dh}${mer}`;
+    const mer = closeH < 12 ? 'am' : 'pm';
+    const dh  = closeH % 12 === 0 ? 12 : closeH % 12;
+    return closeM === '00' ? `${dh}${mer}` : `${dh}:${closeM}${mer}`;
   })();
-  const closeLabelCn = `${endHour}:00`;
+  const closeLabelCn = `${closeH}:${closeM}`;
   // Operator can override this copy in Settings → Delivery → Same-day cutoff
   // (delivery.sameDayCutoffMessage). Blank fields fall back to the auto-built
   // text above, which stays accurate as the zone's hours/buffer change.
@@ -34726,7 +34774,7 @@ function computeDeliverySlots(zone, now, opts = {}) {
     same_day_cutoff_message: sameDayCutoffMessage,
     // When closed, distinguishes "before today's opening" (reopens today) from
     // "after close" (reopens tomorrow) so the UI doesn't always say "tomorrow".
-    kitchen_reopens_today: !kitchenOpenNow && nowParts.hour < startHour,
+    kitchen_reopens_today: !kitchenOpenNow && nowMinutes < openMin,
     kitchen_hours:        { start: startHour, end: endHour },
     slot_duration_minutes: slotMins,
     holiday_mode:         holidayMode,
@@ -35772,6 +35820,9 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       },
       scheduling: computeDeliverySlots(zone, quoteNow, {
         batch: quoteBatchDecision, localFreshFloor: quoteLocalFreshFloor,
+        // §480 — the hours of the store that would cook it: the settled store
+        // (pin applied) on the happy path, else the shelves it is served off.
+        storeHours: deliveryStoreHours((quoteStore || quoteShelfStore)?.id ?? null),
       }),
       batch_notice: computeBatchNotice(
         zone, (items || []).map((i) => i.product_id), quoteNow, body.delivery_slot_id, body.slot_kind,
