@@ -9,6 +9,7 @@ const lang     = require('../../utils/lang');
 const cart     = require('../../utils/cart');
 const track    = require('../../utils/track');
 const delivery = require('../../utils/delivery');
+const localStock = require('../../utils/local-stock');
 const config   = require('../../utils/config');
 const freshEta = require('../../utils/fresh-eta');
 const cartNotice = require('../../utils/cart-notice');
@@ -95,7 +96,7 @@ function _reservable(m, onLocalRun) {
 // its own, would have announced a wait on a meal we were about to hand over.
 function _preKind(m, onLocalRun) {
   if (!m || m.ship_from_supplier) return '';
-  const stock = m.stock == null ? null : Number(m.stock);
+  const stock = localStock.of(m);   // §481 — their shop's count on the run
   if (!(stock != null && stock <= 0)) return '';
   if (!_reservable(m, onLocalRun)) return '';
   if (onLocalRun && m.local_fresh_today) return '';
@@ -337,9 +338,13 @@ Page({
     // They may have switched delivery address (the address book is one tap
     // away) — a move into or out of Guangzhou changes whether this product can
     // be pre-ordered, so re-badge before they tap Add.
+    // §481 — and a switch between two addresses nearest different shops
+    // changes the count itself.
     delivery.load().then((onLocalRun) => {
-      if (!!onLocalRun === !!this._onLocalRun) return;
+      const shop = delivery.localStoreCode();
+      if (!!onLocalRun === !!this._onLocalRun && shop === (this._localShop || null)) return;
       this._onLocalRun = !!onLocalRun;
+      this._localShop = shop;
       if (this.data.product) this.recomputeDisplay();
     }).catch((e) => console.warn('[product] delivery sync failed:', e.message));
     this.startFlashTick();
@@ -463,7 +468,10 @@ Page({
       // delivery.load() is cached and never rejects.
       const [p] = await Promise.all([
         api.get('/api/retail/products/' + this.data.id),
-        delivery.load().then((onLocalRun) => { this._onLocalRun = !!onLocalRun; }),
+        delivery.load().then((onLocalRun) => {
+          this._onLocalRun = !!onLocalRun;
+          this._localShop = delivery.localStoreCode();
+        }),
       ]);
       this.setData({ product: p, loading: false });
       this.recomputeDisplay();
@@ -631,6 +639,9 @@ Page({
        because the badge, the button, the size sheet and the add toast all ask
        it and had each answered differently. */
     let soldOut = false, preorder = false, preKind = '', stockTag = '', stockTagKind = '';
+    // §481 — the count this shopper can be sold: their own shop's on the
+    // same-day run, every shop added together for everyone else.
+    const pStock = localStock.of(p);
     if (p.ship_from_supplier) {
       // Supplier-direct: no stock of ours. Always available unless the operator
       // paused it (supplier is out), which shows a soft "Temporarily unavailable".
@@ -643,10 +654,12 @@ Page({
       // Variant product: sold out only when EVERY size is hard-out. A size that's
       // out but pre-orderable keeps the product available. Per-size "Only N left"
       // / "Pre-order" lives in the picker, so the hero badge stays quiet.
-      soldOut = this._variants.every(v =>
-        v.stock != null && Number(v.stock) <= 0 && !reservable(v));
-    } else if (p.stock != null) {
-      if (Number(p.stock) <= 0) {
+      soldOut = this._variants.every(v => {
+        const vst = localStock.of(v);
+        return vst != null && vst <= 0 && !reservable(v);
+      });
+    } else if (pStock != null) {
+      if (pStock <= 0) {
         if (reservable(p)) {
           // Orderable either way. What changes is whether we say anything, and
           // which word — see the two states above. `preorder` stays the
@@ -675,8 +688,8 @@ Page({
           stockTag = L === 'cn' ? '已售罄' : 'SOLD OUT';
           stockTagKind = 'out';
         }
-      } else if (Number(p.stock) <= 5) {
-        stockTag = L === 'cn' ? '仅剩 ' + p.stock + ' 件' : 'Only ' + p.stock + ' left';
+      } else if (pStock <= 5) {
+        stockTag = L === 'cn' ? '仅剩 ' + pStock + ' 件' : 'Only ' + pStock + ' left';
         stockTagKind = 'low';
       }
     }
@@ -1171,7 +1184,12 @@ Page({
   },
 
   decQty() { this.setData({ qty: Math.max(1, this.data.qty - 1) }); },
-  incQty() { this.setData({ qty: Math.min(99, this.data.qty + 1) }); },
+  // §481 — the stepper stops at the shopper's own shop's count, when it has one.
+  incQty() {
+    const cap = localStock.cap(this.data.product);
+    const max = (cap != null && cap > 0) ? Math.min(99, cap) : 99;
+    this.setData({ qty: Math.min(max, this.data.qty + 1) });
+  },
 
   // Hero gallery: keep the thumbnail strip in sync as the user swipes, and
   // let a thumbnail tap drive the hero swiper to that photo.
@@ -1337,7 +1355,9 @@ Page({
       // builds a literal rather than passing the product row. cart.add() reads
       // it off whatever it is handed.
       cart_notice: p.cart_notice,
-    }, this.data.qty, chosen);
+      // §481 — the literal carries no stock fields, so the limit goes with it.
+      stock_cap: localStock.cap(p),
+    }, this.data.qty, chosen, { replacing: this._replaceKey });
     return true;
   },
 
@@ -1389,6 +1409,14 @@ Page({
   // matched a button reading NEXT BATCH. It takes the page's own `preKind` now.
   _finishAdd(kind) {
     this._dropReplacedLine();
+    // §481 — the shopper's shop could not cover the quantity, and cart.add has
+    // already said "Only N left". Nothing went in → stay, so they can choose
+    // fewer; some went in → keep that message up rather than an "Added" over
+    // it, and leave once it has been read. The replaced line goes either way:
+    // the add did not count it (cart.add `replacing`), so it was never the
+    // reason for the limit.
+    const last = cart.lastAdd();
+    if (last.cap != null) { if (last.added) this._leaveAfterAdd(1500); return; }
     const cn = this.data.lang === 'cn';
     const title = kind === 'batch'
       ? (cn ? '已加入购物车，下批现做' : 'Added — next batch')
@@ -1513,7 +1541,7 @@ Page({
       const cmp = Number(m.compare_at_price) || 0;
       const wasN = isFlash ? regular : (cmp > eff && eff > 0 ? cmp : 0);
       const saveN = wasN > eff && eff > 0 ? Math.round((wasN - eff) * 100) / 100 : 0;
-      const stock = m.stock == null ? null : Number(m.stock);
+      const stock = localStock.of(m);   // §481
       const out = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
       // Out but pre-orderable (out-of-city) → keep it tappable with a Pre-order
       // badge; only a hard-out size shows the dead SOLD OUT pill. A same-city
@@ -1570,7 +1598,7 @@ Page({
     const id = Number(e.currentTarget.dataset.id);
     const m = (this._variants || []).find(x => Number(x.id) === id);
     if (!m) return;
-    const stock = m.stock == null ? null : Number(m.stock);
+    const stock = localStock.of(m);   // §481
     const out = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
     // A pre-orderable out-of-stock size stays orderable for an out-of-city
     // shopper; a same-city one can't reserve it (the checkout blocks same-day
@@ -1612,7 +1640,8 @@ Page({
       // that needs the fridge raises its card and the 330ml that does not stays
       // quiet — reading it off the hero would get that backwards half the time.
       cart_notice: m.cart_notice,
-    }, this.data.qty, []);
+      stock_cap: localStock.cap(m),   // §481 — this SIZE's own limit
+    }, this.data.qty, [], { replacing: this._replaceKey });
     this.setData({ vpShow: false });
     // §108 — this size's OWN word, not the page's: a shopper can open the sheet
     // from a hero that is silent and pick a size that is not. `_preKind` tests

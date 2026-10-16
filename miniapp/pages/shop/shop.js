@@ -17,6 +17,7 @@ const lang     = require('../../utils/lang');
 const cart     = require('../../utils/cart');
 const config   = require('../../utils/config');
 const delivery = require('../../utils/delivery');
+const localStock = require('../../utils/local-stock');
 const freshEta = require('../../utils/fresh-eta');
 const pickQueue = require('../../utils/pick-queue');
 const { plusQty, sameQty } = require('../../utils/plus-qty');
@@ -74,7 +75,9 @@ function _effPrice(p) {
 // construction. A row without the field — every grocery row, and every row
 // when no schedule is configured — is dead on the run exactly as before.
 function _stockState(p, onLocalRun) {
-  const stock = p.stock == null ? null : Number(p.stock);
+  // §481 — the shopper's own shop's count on the same-day run, the sum for
+  // everyone else (utils/local-stock). null = untracked, as before.
+  const stock = localStock.of(p);
   const out = p.ship_from_supplier ? !!p.supplier_paused : (stock != null && stock <= 0);
   const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
         && (!onLocalRun || !!p.local_fresh_date || !!p.oos_preorder_local);
@@ -330,10 +333,14 @@ Page({
   // reservable row may show PRE-ORDER (see _stockState). The answer arrives one
   // cached request after the first paint, so when it flips we re-render the
   // rows we already hold — no second catalog fetch.
+  // §481 adds the shop itself: switching between two addresses on the run that
+  // are nearest different shops changes every count, so that re-renders too.
   _syncDelivery() {
     delivery.load().then((onLocalRun) => {
-      if (!!onLocalRun === !!this._onLocalRun) return;
+      const shop = delivery.localStoreCode();
+      if (!!onLocalRun === !!this._onLocalRun && shop === (this._localShop || null)) return;
       this._onLocalRun = !!onLocalRun;
+      this._localShop = shop;
       const raw = this.data._raw;
       if (raw && raw.length) this._renderRows(raw);
     }).catch((e) => console.warn('[shop] delivery sync failed:', e.message));
@@ -521,7 +528,7 @@ Page({
       }
       const inStockOnly = this.data.inStockOnly || this.data.hideOutOfStock;
       if (inStockOnly) {
-        raw = raw.filter(p => p.stock == null || Number(p.stock) > 0);
+        raw = raw.filter(p => { const st = localStock.of(p); return st == null || st > 0; });
       }
 
       this._tree = (Array.isArray(treeResp) ? treeResp : treeResp?.data || []);
@@ -1414,7 +1421,12 @@ Page({
       // who never opens the product page is exactly the one who has not read
       // the notice anywhere else.
       cart_notice: raw.cart_notice,
+      // §481 — the literal carries no stock fields, so the limit goes with it.
+      stock_cap: localStock.cap(raw),
     }, 1, []);
+    // The shopper's shop has no more to give: cart.add has said "Only N left",
+    // and an "Added" toast or a flying dot over it would contradict it.
+    if (cart.lastAdd().cap != null) return;
 
     // §108 — the toast says what the card said. It used to say "pre-order" for
     // every reservable row, so a Guangzhou shopper whose band read NEXT BATCH

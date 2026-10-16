@@ -6,6 +6,7 @@
 const lang = require('../../utils/lang');
 const api = require('../../utils/api');
 const track = require('../../utils/track');
+const localStock = require('../../utils/local-stock');   // §481 — favourites block sold-out
 const { BASE } = api;
 
 // Block types whose root view paints a full-panel background. When framed,
@@ -1229,7 +1230,7 @@ Component({
               const regular = Number(p.price ?? p.sell_price) || 0;
               const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
               const isFlash = !!p.is_on_flash && eff < regular;
-              const soldOut = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
+              const soldOut = p.ship_from_supplier ? !!p.supplier_paused : (() => { const st = localStock.of(p); return st != null && st <= 0; })();
               return {
                 id: p.id,
                 image: absUrl(p.image_url) || p.image_data || '',

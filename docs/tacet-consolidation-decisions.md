@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.543
+# Tacet shared-core consolidation — decisions record, v4.544
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-16 · v4.544 — **§481 · A SAME-DAY GUANGZHOU SHOPPER IS SHOWN THEIR NEAREST SHOP'S SHELF, NOT BOTH SHOPS ADDED TOGETHER — DECIDED BY ASH:** *"go"*, after *"i rather keep out-of-city orders on the old “both shops added together” rule."* Raised by TC001259, parked at 越秀 for kombucha the menu said it had. Sold out when their shop has none; the + stops at their shop's count. Everyone else unchanged. No schema change, no change to `.gitignore` or CI, no new Chinese. Needs a mini-app upload. See §481.
 
 2026-10-16 · v4.543 — **§477 · THE DELIVERY CALENDAR MOVES TO `lib/delivery-calendar.js` — DECIDED BY ASH:** *"move slots"*, the last move of the delivery plan. 19 statements (the batch settings, the tenant's clock, today's batch, the time slots, §480's store hours and the order-time check), a pure move. Tests for two gaps in §480's new code went in first, as the PR's first commit. The customer notices stay. See the amendment at the end of §477.
 
@@ -31777,3 +31779,103 @@ checkout golden recording is unchanged. No new Chinese.
   batch, not about what a customer is offered.
 - **The zones' Kitchen hours are now only a fallback** while both stores
   carry their hours. They were left as they are.
+
+## §481 — A SAME-DAY GUANGZHOU SHOPPER IS SHOWN THEIR NEAREST SHOP'S SHELF, NOT BOTH SHOPS ADDED TOGETHER
+
+**Decided by Ash, 2026-10-16:** *"go"*, to: for a customer on the same-day
+Guangzhou run, the menu shows what their nearest shop holds — sold out when
+that shop has none, and the + button stops at that shop's count; everyone
+else keeps today's number. And on that last point, in Ash's words: *"i rather
+keep out-of-city orders on the old "both shops added together" rule."*
+
+**What raised it.** Order TC001259 parked in *Awaiting restock* at 越秀 for
+Mix Berries Kombucha ×5 and Passion Fruit Kombucha ×1. Ash's question was why
+an out-of-stock item could be ordered at all. Read off the live database
+(`scripts/diagnose_order_TC001259.js`, read-only): at 07:13 UTC 越秀 held 4 Mix
+Berries and 0 Passion Fruit, 天河 held 2 and 1. The menu's number is the SUM
+across open shops (`inventory.sellableStockSql`), so it showed 6 and 1, and
+the app has never limited quantity by stock at all. Checkout asks the nearest
+shop only (`inventory.analyzeShortage`): 越秀 was short, 天河 could not fill
+the whole order either, so the customer got the options sheet and chose to
+wait. Nothing malfunctioned. The menu promised stock that no one shop the
+order could be packed at actually had.
+
+A first proposal — cap every customer at the best single shop — was dropped
+before any code: replayed against TC001259 it still lets the Passion Fruit
+through (天河 has 1), so the order still parks. The cap has to follow the
+customer's own shop.
+
+**The rule.**
+
+1. **Who it applies to: a shopper whose chosen address is on the same-day
+   local run** — the same `local_run` verdict the pre-order pill already
+   reads (`stampSameCity`), on the address the app already treats as the one
+   the order goes to (`utils/delivery.js`: the last checkout pick, else the
+   saved default). Out-of-city, the outer ship-districts, a signed-out
+   shopper and a shopper with no saved address keep the summed number
+   exactly as before.
+2. **Their shop is the one checkout would call nearest.** The store order is
+   lifted out of `analyzeShortage` unchanged into
+   `inventory.orderStoresForAddress` and both use it: road distance where the
+   address has a pin, the zone's preferred store where it does not, then
+   district, then any; shops closed for the mini-app channel are left out,
+   as checkout leaves them out. Each local-run address carries the answer
+   as `nearest_store` (a store code) on `GET /api/retail/addresses`. The
+   rider-ETA `store_code` beside it is NOT reused: it is straight-line
+   distance and counts closed shops, so it can name a different shop from
+   the one checkout picks.
+3. **Their number is that shop's shelf**: `physical_qty − safety_buffer`,
+   floored at 0, read off the per-shop counts every product row now carries
+   as `stock_by_store` (`inventory.stockByStoreSql`; open shops only, the
+   same filter as the sum). The safety buffer is taken off because checkout
+   takes it off. Reservations are not: they move by the minute and the
+   summed number never took them off either. A product never stocked
+   per-shop carries no map and keeps the legacy number.
+4. **That number drives everything the summed number drove for them**: the
+   sold-out pill, the *Only N left* tag, the in-stock filter, pre-order and
+   next-batch bands (a reservable row that is out at their shop now says so),
+   on the shop grid, size sheet, product page and favourites.
+5. **The + stops at it.** `cart.add` clamps a product's total across its
+   cart lines to that number and says *Only N left* / *仅剩 N 件* (the live
+   pair the product page already shows — no new Chinese). The cart page's +
+   stops at the same number. Rows the shopper may reserve on the run
+   (`oos_preorder_local`, a dated fresh batch), supplier-direct rows and rows
+   with no per-shop map are not capped; their checkout handles going short.
+   Two edges are handled rather than left: the re-pick from checkout (§433)
+   does not count the line it is replacing (`cart.add`'s `replacing`), and a
+   shopper who switches to an address off the run is no longer held to a
+   cap a cart line picked up while they were on it.
+6. **Checkout is not changed.** The options sheet stays as the backstop for
+   stock that moves between browsing and paying, or an address switched at
+   checkout. The server's own order check is unchanged.
+
+**What the shopper loses, said plainly.** A shopper near 越秀 can no longer
+put something only 天河 holds into a same-day basket; it reads sold out. Before
+this they might have been offered *Ship from 天河* at checkout, when 天河 could
+fill the whole basket. The remedy is the shop transfer, which is how stock
+already moves.
+
+**Needs a mini-app upload.** The server half is inert on its own: two new
+fields that the published app ignores. The behaviour arrives with the upload.
+
+**Where it lives.** `orderStoresForAddress`, `nearestStoreForAddress` and
+`stockByStoreSql` in `lib/inventory.js`; the `stock_by_store` column in
+`RETAIL_PRODUCT_COLS` and the variant rows, parsed in `hydrateNutrition`
+(`lib/product-rows.js`); `nearest_store` on `GET /api/retail/addresses`;
+`miniapp/utils/local-stock.js` (`of`, `cap`) read by the pages and
+`utils/cart.js`. Pinned by `scripts/test_local_shop_stock.js`, which
+replays TC001259. Four suites that read the app's source text were moved onto
+the new lines, not loosened: `test_product_card_rows` (the clean-up now calls
+`parseStockByStore`), `test_local_fresh_notice` (`_stockState` reads through
+`localStock`), `test_web_shop_settings` (the in-stock filter, the same rule
+off the run) and `test_cart_notice` (the adds' optional fourth argument).
+
+**Left open, not decided here.**
+
+- **The out-of-city and later-date number stays the sum**, by Ash's choice
+  above. The app still has no quantity limit for them; the server's existing
+  check against the sum is the only one.
+- **"Buy together" cards and bundle components** keep the summed number.
+  They are built by their own queries and were not asked about.
+- **TC001259 itself** is not touched by this; it releases when 越秀 is
+  restocked, as before.

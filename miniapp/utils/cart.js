@@ -3,6 +3,7 @@
 
 const api = require('./api');
 const cartNotice = require('./cart-notice');
+const localStock = require('./local-stock');
 
 function absUrl(u) {
   if (!u) return '';
@@ -51,10 +52,56 @@ function couponableSubtotal() {
   );
 }
 
-function add(product, qty = 1, options = []) {
+// §481 — THE + STOPS AT THE SHOPPER'S OWN SHOP. For a shopper on the same-day
+// run a product's lines together may hold no more than the shop their order is
+// packed at has (utils/local-stock cap; null = no limit, which is everyone
+// else). A caller that built a literal without the row's stock fields passes
+// the cap as `stock_cap`; one that passes the row itself gets it worked out.
+// The cap rides on each line so the cart page's + can keep to it too.
+//
+// `opts.replacing` is the key of a line this add is about to replace (the
+// product page's re-pick from checkout, §433): that line is on its way out, so
+// it does not count against the room the new one needs.
+//
+// When the limit bites the customer is told here — Only N left / 仅剩 N 件, the
+// live pair the product page already prints — and lastAdd() says so, so a
+// screen that would follow with "Added" can say nothing instead.
+let _last = { added: 0, cap: null };
+function lastAdd() { return _last; }
+
+function _heldOf(productId, exceptKey) {
+  return state.items
+    .filter(it => it.product_id === productId && it.key !== exceptKey)
+    .reduce((s, it) => s + (it.qty || 0), 0);
+}
+
+function _sayOnlyLeft(n) {
+  let cn = false;
+  try { cn = getApp().globalData.lang === 'cn'; } catch (e) { /* no app yet */ }
+  try {
+    wx.showToast({ title: n > 0 ? (cn ? '仅剩 ' + n + ' 件' : 'Only ' + n + ' left') : (cn ? '已售罄' : 'Sold out'), icon: 'none' });
+  } catch (e) { /* cosmetic */ }
+}
+
+function add(product, qty = 1, options = [], opts = {}) {
   load();
   const key = product.id + '|' + (options.map(c => c.choice_id).sort().join(',') || '');
   const existing = state.items.find(it => it.key === key);
+  const cap = product.stock_cap !== undefined ? product.stock_cap : localStock.cap(product);
+  _last = { added: qty, cap: null };
+  // Every line of this product learns the latest cap — or that there is none —
+  // so a restock or an address switch seen here loosens the cart page's + too.
+  state.items.forEach(it => { if (it.product_id === product.id) it.stock_cap = cap; });
+  if (cap != null) {
+    const replacing = opts && opts.replacing && opts.replacing !== key ? opts.replacing : null;
+    const room = Math.max(0, cap - _heldOf(product.id, replacing));
+    if (qty > room) {
+      qty = room;
+      _last = { added: room, cap };
+      _sayOnlyLeft(cap);
+      if (room <= 0) { save(); return existing ? existing.key : null; }
+    }
+  }
   if (existing) {
     existing.qty += qty;
   } else {
@@ -84,6 +131,7 @@ function add(product, qty = 1, options = []) {
       // the cart/checkout show a "ships from supplier" tag instantly; reprice()
       // also backfills it from the server for rows added before this existed.
       ship_from_supplier: !!product.ship_from_supplier,
+      stock_cap: cap,
       qty,
       options,
     });
@@ -107,6 +155,12 @@ function setQty(key, qty) {
   load();
   const it = state.items.find(i => i.key === key);
   if (!it) return;
+  // An increase keeps to the line's cap (§481) while the shopper is still on
+  // the same-day run; a decrease is never refused.
+  if (it.stock_cap != null && qty > it.qty && localStock.limited()) {
+    const room = Math.max(it.qty, it.stock_cap - _heldOf(it.product_id, key));
+    if (qty > room) { qty = room; _sayOnlyLeft(it.stock_cap); }
+  }
   if (qty <= 0) state.items = state.items.filter(i => i.key !== key);
   else it.qty = qty;
   save();
@@ -181,4 +235,4 @@ function updateBadge() {
   } catch (e) { /* swallow — badge is cosmetic, never break cart writes */ }
 }
 
-module.exports = { get, count, subtotal, couponableSubtotal, add, setQty, remove, clear, subscribe, updateBadge, reprice };
+module.exports = { get, count, subtotal, couponableSubtotal, add, lastAdd, setQty, remove, clear, subscribe, updateBadge, reprice };

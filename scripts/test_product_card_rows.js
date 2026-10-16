@@ -58,7 +58,7 @@ addForkedStoreProducts(db, SCHEMA_SRC, DB_SRC);
 const inventory = require(path.join(ROOT, 'lib', 'inventory'));
 
 const COLS = ['RETAIL_PRODUCT_COLS', 'RETAIL_PRODUCT_COLS_LIST', 'RETAIL_PRODUCT_COLS_CARD', 'RETAIL_PRODUCT_COLS_HOME'];
-const FNS = ['lazifyProductImage', 'hydrateNutrition', 'resolveProductImage'];
+const FNS = ['lazifyProductImage', 'parseStockByStore', 'hydrateNutrition', 'resolveProductImage'];
 const X = new Function('inventory', 'tdb',
   `${COLS.map(constSrc).join('\n')}\n${FNS.map(fnSrc).join('\n')}\nreturn { ${[...COLS, ...FNS].join(', ')} };`)(
   inventory, () => db);
@@ -120,6 +120,17 @@ it('home: no description or keywords, but the tagline stays for the captions', (
   const r = pull(X.RETAIL_PRODUCT_COLS_HOME, 1);
   for (const k of ['description_en', 'keywords_en']) assert.ok(!(k in r), `home ships ${k}`);
   assert.strictEqual(r.tagline_en, 'tag');
+});
+it('every list carries the per-shop shelves (§481), and the clean-up hands the app an object', () => {
+  for (const cols of COLS.map(k => X[k])) {
+    assert.ok('stock_by_store' in pull(cols, 1), 'a list lost stock_by_store');
+  }
+  // Never stocked per-shop → NULL from the database → null to the app, which
+  // then reads the summed stock exactly as it did before §481.
+  assert.strictEqual(X.hydrateNutrition(pull(X.RETAIL_PRODUCT_COLS_CARD, 1)).stock_by_store, null);
+  assert.deepStrictEqual(X.parseStockByStore({ stock_by_store: '{"yuexiu":4}' }).stock_by_store, { yuexiu: 4 });
+  assert.strictEqual(X.parseStockByStore({ stock_by_store: 'not json' }).stock_by_store, null);
+  assert.strictEqual(X.parseStockByStore({ stock_by_store: '[1]' }).stock_by_store, null);
 });
 it('list (the fuller one): keeps the description for the blocks that show it', () => {
   assert.strictEqual(pull(X.RETAIL_PRODUCT_COLS_LIST, 1).description_en, 'long');

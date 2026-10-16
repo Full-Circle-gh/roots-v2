@@ -216,7 +216,7 @@ const { fapiaoSettings, finalizeInvoiceResult, maybeAutoIssueInvoice } = require
 const {
   RETAIL_PRODUCT_COLS, RETAIL_PRODUCT_COLS_LIST, RETAIL_PRODUCT_COLS_CARD, RETAIL_PRODUCT_COLS_HOME,
   effectiveOosPolicy, isPreorderPolicy, isLocalRunPreorder,
-  lazifyProductImage, hydrateNutrition, resolveProductImage,
+  lazifyProductImage, hydrateNutrition, parseStockByStore, resolveProductImage,
 } = require('../lib/product-rows');
 // The printer settings (auto-print switches, each shop's printer, the
 // kitchen's, the out-of-city shop), moved to lib/ (decisions §477).
@@ -3404,6 +3404,7 @@ router.get('/api/retail/products/:id', (req, res) => {
               p.image_url, p.updated_at,
               ${hasImageFallbackSql('p')} AS has_image,
               ${inventory.sellableStockSql('p.id', 'p.stock_qty')} AS stock,
+              ${inventory.stockByStoreSql('p.id')} AS stock_by_store,
               EXISTS(SELECT 1 FROM retail_product_options o WHERE o.product_id = p.id) AS has_options
          FROM store_products p
         WHERE p.variant_group_id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
@@ -3414,6 +3415,8 @@ router.get('/api/retail/products/:id', (req, res) => {
       }
       delete v.has_image;
       delete v.updated_at;
+      // Each size's per-shop shelves (§481), parsed as every product row's are.
+      parseStockByStore(v);
       // Whether an out-of-stock size may still be pre-ordered (out-of-city only;
       // the order gate re-checks the address). Lets the storefront offer
       // "Pre-order" instead of a dead "SOLD OUT" on a backorder_gz size.
@@ -8498,7 +8501,7 @@ function computeRiderEta(address, lat, lng) {
   };
 }
 
-router.get('/api/retail/addresses', requireRetailAuth, (req, res) => {
+router.get('/api/retail/addresses', requireRetailAuth, async (req, res) => {
   const rows = tdb().prepare(
     `SELECT ${ADDRESS_PUBLIC_COLS}, lat, lng FROM retail_customer_addresses
       WHERE customer_id = ? ORDER BY is_default DESC, updated_at DESC`
@@ -8512,8 +8515,30 @@ router.get('/api/retail/addresses', requireRetailAuth, (req, res) => {
   // round-trip every edit silently dropped a map-picked pin and the address
   // fell back to a re-geocoded guess.
   const data = stampSameCity(rows.map(r => ({ ...r, delivery_eta: computeRiderEta(r, r.lat, r.lng) })));
+  await stampNearestStore(data);
   res.json({ success: true, data });
 });
+
+// §481 — which shop a same-day order to this address is packed at, so the menu
+// can show THAT shop's shelf rather than every shop added together. Only a
+// local-run address gets one: everyone else keeps the summed number, by Ash's
+// choice, and is left without the field. The shop is the one checkout calls
+// nearest (inventory.nearestStoreForAddress, the tiers analyzeShortage uses) —
+// not delivery_eta.store_code above, which is straight-line and counts a
+// closed shop, so it can name a different one. A failure leaves the field off
+// and the menu on the sum: never worse than before.
+async function stampNearestStore(rows) {
+  for (const r of rows) {
+    if (!r.local_run) continue;
+    try {
+      const s = await inventory.nearestStoreForAddress(r, 'wechat');
+      if (s) r.nearest_store = s.code;
+    } catch (e) {
+      console.warn('[addresses] nearest store failed:', e.message);
+    }
+  }
+  return rows;
+}
 
 // Read a pin off an address request body. Returns { lat, lng, fresh } or null.
 // Bounds-checked to mainland China (plus a margin) — a pin outside it is a
