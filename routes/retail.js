@@ -9033,13 +9033,9 @@ function resolvePickupTime(raw, now = new Date(), storeHours = null) {
 }
 
 // ─── Shipping mode + split-shipment helpers ───────────────────────────
-// "Outside Guangzhou" detection. Province/city strings can vary —
-// 广州 / 广州市 / Guangzhou / GZ. Normalize then match.
-function isGuangzhou(city) {
-  if (!city) return false;
-  const s = String(city).trim().toLowerCase().replace(/市$|省$/g, '');
-  return s === '广州' || s === 'guangzhou' || s === 'gz';
-}
+// "Outside Guangzhou" detection is isGuangzhou, with the delivery zones. A
+// second, older copy sat here; the later declaration always replaced it, so it
+// never ran, and it was removed (decisions §477).
 
 // "Inside Guangdong province" detection (Guangzhou included). Guangdong always
 // ships by LAND — never air — so this zone overrides each product's air flag for

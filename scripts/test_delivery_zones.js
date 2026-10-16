@@ -251,6 +251,17 @@ it('province: Guangzhou districts their own group; Hong Kong; a city\'s province
   assert.deepStrictEqual(Z.zoneProvince({ zone_type: 'city', match_city: '不存在市' }), { cn: '其他', en: 'Other' });
 });
 
+section('6. one copy of each');
+it('every zone function and table tested here is declared exactly once', () => {
+  // A second top-level declaration of the same name is silent in JS: the later
+  // one replaces the earlier everywhere. isGuangzhou had two (decisions §477),
+  // and a suite lifting the first copy was testing code that never ran.
+  for (const name of NAMES) {
+    const n = (SRC.match(new RegExp(`^(?:async )?(?:function ${name}\\(|(?:const|let) ${name}\\b)`, 'gm')) || []).length;
+    assert.strictEqual(n, 1, `${name} is declared ${n} times`);
+  }
+});
+
 for (const step of pending) step();
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

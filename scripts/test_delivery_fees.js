@@ -242,6 +242,17 @@ it('the zone table cannot be read → offered (it fails open, never hides delive
   try { assert.strictEqual(F.deliveryIsAvailable(), true); } finally { zonesDb = real; }
 });
 
+section('6. one copy of each');
+it('every fee function and table tested here is declared exactly once', () => {
+  // A second top-level declaration of the same name is silent in JS: the later
+  // one replaces the earlier everywhere. isGuangzhou had two (decisions §477),
+  // and a suite lifting the first copy was testing code that never ran.
+  for (const name of NAMES) {
+    const n = (SRC.match(new RegExp(`^(?:async )?(?:function ${name}\\(|(?:const|let) ${name}\\b)`, 'gm')) || []).length;
+    assert.strictEqual(n, 1, `${name} is declared ${n} times`);
+  }
+});
+
 for (const step of pending) step();
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
