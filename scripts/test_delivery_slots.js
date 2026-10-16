@@ -704,8 +704,17 @@ it('a store\'s hours become minutes for "open now" and whole hours inside them f
   // 23:59 is how "till midnight" is written; it keeps the window ending at 24:00.
   assert.deepStrictEqual(F.storeDeliveryWindow({ open: '00:00', close: '23:59' }), { open: 0, close: 1439, startHour: 0, endHour: 24 });
 });
+it('a time is read as "HH:MM" on a 24-hour clock; 24:00, 23:60 and anything else are not times', () => {
+  assert.strictEqual(F.hhmmToMinutes('08:00'), 480);
+  assert.strictEqual(F.hhmmToMinutes(' 8:05 '), 485);
+  assert.strictEqual(F.hhmmToMinutes('23:59'), 1439);
+  for (const v of ['24:00', '23:60', '25:99', '8am', '0800', '', null, undefined]) {
+    assert.strictEqual(F.hhmmToMinutes(v), null, String(v));
+  }
+});
 it('no store, a missing or malformed end, close not after open, or no whole hour between: the zone\'s hours stand', () => {
   for (const h of [null, undefined, {}, { open: '08:00' }, { open: '08:00', close: '' }, { open: '8am', close: '20:00' },
+    { close: '20:00' }, { open: '', close: '20:00' },
     { open: '20:00', close: '08:00' }, { open: '08:00', close: '08:00' }, { open: '08:30', close: '09:15' }]) {
     assert.strictEqual(F.storeDeliveryWindow(h), null, JSON.stringify(h));
   }
