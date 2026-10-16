@@ -106,7 +106,9 @@ const LIFTED = [
   'noZoneMatchPayload',
   'manualOrderFees',
 ];
-let SRC = ['CN_PROVINCES', 'CN_PROVINCE_STEMS'].map(grabConst).concat(LIFTED.map(grab)).join('\n\n');
+// GZ_CITY_ALIASES is the alias set the one real isGuangzhou reads (§477 removed
+// a dead second copy that read nothing, which is the one this suite used to lift).
+let SRC = ['CN_PROVINCES', 'CN_PROVINCE_STEMS', 'GZ_CITY_ALIASES'].map(grabConst).concat(LIFTED.map(grab)).join('\n\n');
 
 if (MUTANT) {
   // Restore the defect: manualOrderFees answers zero for every order, which is

@@ -50,7 +50,8 @@ const { isMirroredChannel, MIRRORED_CHANNELS } = require('../lib/fulfilment');
 
 const ROOT = path.join(__dirname, '..');
 const DB_SRC = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
-const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+// retailSource(): routes/retail.js and the lib/ files its helpers moved to (§477).
+const RETAIL_SRC = require('./test-support/retail-source').retailSource();
 const SABOTAGE = process.env.MCP_SABOTAGE || '';
 
 let pass = 0, fail = 0;
@@ -155,8 +156,12 @@ function ensureTransactionMethod(db) {
  * nothing, which is the address every mirrored order has.
  */
 function realPlanner() {
-  const parts = ['isGuangzhou', 'isGuangdong', 'parseShipModes', 'bucketForItem', 'planShipments']
-    .map((n) => extractFunction(RETAIL, n)).join('\n');
+  // isGuangzhou reads the alias set and the name normaliser beside it, so they
+  // come too; the one real copy, not a stand-in.
+  const aliases = /^const GZ_CITY_ALIASES = .*$/m.exec(RETAIL);
+  assert.ok(aliases, 'const GZ_CITY_ALIASES not found');
+  const parts = [aliases[0], ...['normalizeAreaName', 'isGuangzhou', 'isGuangdong', 'parseShipModes', 'bucketForItem', 'planShipments']
+    .map((n) => extractFunction(RETAIL, n))].join('\n');
   return new Function('provinceForCity', 'inventory',
     `${parts}\nreturn planShipments;`)(
     () => null,
