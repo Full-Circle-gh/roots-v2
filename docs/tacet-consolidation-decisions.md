@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.542
+# Tacet shared-core consolidation — decisions record, v4.543
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-16 · v4.543 — **§477 · THE DELIVERY CALENDAR MOVES TO `lib/delivery-calendar.js` — DECIDED BY ASH:** *"move slots"*, the last move of the delivery plan. 19 statements (the batch settings, the tenant's clock, today's batch, the time slots, §480's store hours and the order-time check), a pure move. Tests for two gaps in §480's new code went in first, as the PR's first commit. The customer notices stay. See the amendment at the end of §477.
 
 2026-10-16 · v4.542 — **§477 · THE DELIVERY ZONES MOVE TO `lib/delivery-zones.js` AND THE DELIVERY FEE TO `lib/delivery-fees.js`; A DEAD SECOND `isGuangzhou` IS REMOVED — DECIDED BY ASH:** *"move fee zones"*, the second move of the delivery plan. 17 statements, a pure move, after a first commit that deletes a shadowed duplicate of `isGuangzhou` three suites had been testing in place of the live one. See the amendment at the end of §477.
 
@@ -31547,6 +31549,39 @@ Decided by Ash:** *"move fee zones"*.
    exactly one place, the moved ones in order; the only other changes are the
    require lines and pointers. Route order is identical. A break made inside
    each new file fails its suite. No CI change.
+
+**Amended 2026-10-16 — the delivery plan's last move: the delivery calendar.
+Decided by Ash:** *"move slots"*.
+
+1. **`lib/delivery-calendar.js`** takes `batchScheduleCfg`, the tenant's
+   clock (`deliveryTz` and its cache, `parseYmdLocal`, `toYmdLocal`,
+   `tzNowParts`; §82's section moves whole), `nextBatchShipDate`,
+   `batchItemsInCart`, `todaysBatchStillComing`, `slotWindowEnd`,
+   `freshLinesCoveredToday`, `expressEarliestIso`, §480's
+   `storeDeliveryWindow` with the `hhmmToMinutes` it reads, and the
+   "Delivery-slot enumerator" section whole (`computeDeliverySlots`,
+   `matchScheduledTimeSlot`, `logSlotKindMismatch`, `resolveDeliverySlot`).
+2. **The customer notices and the batch-date helpers stay**:
+   `earliestBatchMakeDate`, `localFreshFloorFor`, `nextFreshBatchDate`,
+   `computeBatchNotice`, `noticeProductIds`, the pre-order notice,
+   `computeLocalFreshNotice` and the store-move notice. They read the moved
+   code; nothing moved reads them. Their test coverage has not been swept, so
+   they move later, tests first.
+3. **`hhmmToMinutes` comes too.** It sat with the pickup hours; §480 made the
+   slot code read it, and a lib file cannot reach back into
+   `routes/retail.js`. The pickup code imports it back.
+4. **Tests first, in the same PR.** A sweep of §480's new code found two gaps
+   in `scripts/test_delivery_slots.js`: `hhmmToMinutes` accepting `24:00`,
+   and a store with a close and no open. Both are now caught; the remaining
+   survivors give the same answer either way.
+5. **Three scripts read the source by text** and now read `retailSource()`:
+   `test_batch_timing.js` (its no-host-clock check), `test_preorder_window.js`
+   (the cadence is delegated, never copied) and `pickup-window-check.js`. The latter is not in the test gate and fails
+   8 checks on main before this change, unchanged by it.
+6. **Proof.** Every top-level statement of the base `retail.js` is in exactly
+   one place, the moved ones in order; the only other changes are the require
+   lines (the now-unused `batchCadence` require goes) and the pointer. Route
+   order is identical. No CI change.
 
 ## §478 — ON ITS SHIP DAY, A PAID ORDER'S FRESH LINE TAKES ITS STOCK THE MOMENT THE SHELF CAN COVER IT (§58 AMENDED)
 
