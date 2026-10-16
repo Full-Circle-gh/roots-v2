@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.539
+# Tacet shared-core consolidation — decisions record, v4.540
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-16 · v4.540 — **§477 · THE PRINTER SETTINGS READER MOVES TO `lib/printer-prefs.js` — DECIDED BY ASH:** *"move printer"*, the first move of the delivery plan. 1 statement, `loadPrinterPrefs`, a pure move, so the delivery zone code that reads the out-of-city shop can follow it into `lib/`. Tests went in first, as the PR's first commit. See the amendment at the end of §477.
 
 2026-10-15 · v4.539 — **§477 · THE PRODUCT-ROW HELPERS MOVE TO `lib/product-rows.js` — DECIDED BY ASH:** *"merge deploy then move then merge deploy"*, step 5 of the orders plan and the last of the clean groups. 10 statements, a pure move; tests went in first (#1198). See the amendment at the end of §477.
 
@@ -31483,6 +31485,31 @@ deploy"*.
    invoices and product rows are out of `routes/retail.js`. What is left of
    the orders plan (delivery and slots, the paid-order lifecycle) reads more
    of the file and needs more tests before any move.
+
+**Amended 2026-10-16 — the delivery plan's first move: the printer settings
+reader. Decided by Ash:** *"move printer"*.
+
+1. **`lib/printer-prefs.js`** takes `loadPrinterPrefs`, which turns the
+   tenant's `printer.*` rows into one settings object (auto-print switches,
+   each shop's printer, the kitchen's printer and brand, the stock-request
+   slip switch, the slip name, the out-of-city shop).
+2. **Why it goes first.** The delivery zone code (`fulfillingStoreFor`) reads
+   the out-of-city shop from it. A lib file cannot reach back into
+   `routes/retail.js`, so this has to be in `lib/` before fees and zones move.
+3. **The print-routing helpers stay** (`printerForStore`, `orderDestCity`,
+   `outOfCityPrinter`, `printerForOrder`, `printOrderById` and the rest).
+   `printerForOrder` asks `isGuangzhou`, which is zone code still in
+   `routes/retail.js`; they move with the paid-order lifecycle, tests first.
+   The "Feie cloud printer" section heading stays, with a pointer.
+4. **Tests first, in the same PR.** `loadPrinterPrefs` had no suite: a
+   mutation sweep broke it four ways and nothing noticed. The PR's first
+   commit adds `scripts/test_printer_prefs.js`, which catches all four, and
+   the second commit is the move. Kept as one PR because the move is one
+   function and the test is shown passing on both sides of it.
+5. **Proof.** Every top-level statement of main's `retail.js` is in exactly
+   one place; the only other changes are the require line and the pointer.
+   Route order is identical. A break made inside the new file fails
+   `scripts/test_printer_prefs.js`. No CI change.
 
 ## §478 — ON ITS SHIP DAY, A PAID ORDER'S FRESH LINE TAKES ITS STOCK THE MOMENT THE SHELF CAN COVER IT (§58 AMENDED)
 
