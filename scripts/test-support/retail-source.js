@@ -35,6 +35,7 @@ const RETAIL_LIBS = [
   'lib/shop-clock.js', 'lib/broadcast-audience.js', 'lib/customers.js',
   'lib/tenant-brand.js', 'lib/payment-gateways.js', 'lib/bundles.js', 'lib/cost-at-sale.js',
   'lib/fapiao.js', 'lib/product-rows.js', 'lib/printer-prefs.js', 'lib/delivery-zones.js', 'lib/delivery-fees.js',
+  'lib/delivery-calendar.js',
 ];
 
 function retailSource() {

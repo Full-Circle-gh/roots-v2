@@ -504,7 +504,9 @@ section('7 · every channel reads the one publish function (source assertions)')
     }
   });
   it('the cadence MOVED and was not copied — §80\'s one-copy rule holds', () => {
-    const rt = read('routes/retail.js');
+    // retailSource(): routes/retail.js and the lib/ files its helpers moved to
+    // (decisions §477) — nextBatchShipDate is in lib/delivery-calendar.js.
+    const rt = require('./test-support/retail-source').retailSource();
     assert.ok(/return batchCadence\.nextBatchDate\(/.test(rt), 'retail.js delegates');
     // The arithmetic itself must exist in exactly one place.
     assert.ok(!/const rem = \(\(diff % interval\) \+ interval\) % interval/.test(rt),

@@ -298,8 +298,9 @@ if (BASELINE) {
     // Comments are stripped first: several of these functions explain the host
     // form they replaced, right where it used to sit, and a guard a comment can
     // trip is one people learn to edit rather than read.
-    const src = require('fs')
-      .readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8')
+    // retailSource(): routes/retail.js and the lib/ files its helpers moved
+    // to (decisions §477), so a function that moved is still checked.
+    const src = require('./test-support/retail-source').retailSource()
       .replace(/^\s*\/\/.*$/gm, '');
     const NAMES = ['parseYmdLocal', 'toYmdLocal', 'nextBatchShipDate',
       'todaysBatchStillComing', 'earliestBatchMakeDate', 'nextFreshBatchDate',

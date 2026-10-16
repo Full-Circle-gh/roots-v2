@@ -37,11 +37,10 @@
    making that case host-independent belongs to the timezone cleanup, not
    here. */
 'use strict';
-const fs = require('fs');
-const path = require('path');
 
-const SRC_PATH = path.join(__dirname, '..', 'routes', 'retail.js');
-const SRC = fs.readFileSync(SRC_PATH, 'utf8');
+// retailSource(): routes/retail.js and the lib/ files its helpers moved to
+// (decisions §477) — hhmmToMinutes is in lib/delivery-calendar.js.
+const SRC = require('./test-support/retail-source').retailSource();
 
 let pass = 0, fail = 0;
 function is(got, want, label) {
