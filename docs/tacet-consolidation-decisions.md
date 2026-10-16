@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.540
+# Tacet shared-core consolidation — decisions record, v4.541
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-16 · v4.541 — **§480 · A DELIVERY ORDER'S TIMES FOLLOW THE OPENING HOURS OF THE STORE THAT COOKS IT, NOT ONE SHARED ZONE SETTING — DECIDED BY ASH:** *"tianhe open at 10am close at 8pm. yuexiu open at 8am close at 8:30pm"*, then *"go"*. Also fixes a delivery window before 10:00 being offered and then refused at payment. No schema change, no mini-app upload, no change to `.gitignore` or CI. See §480.
 
 2026-10-16 · v4.540 — **§477 · THE PRINTER SETTINGS READER MOVES TO `lib/printer-prefs.js` — DECIDED BY ASH:** *"move printer"*, the first move of the delivery plan. 1 statement, `loadPrinterPrefs`, a pure move, so the delivery zone code that reads the out-of-city shop can follow it into `lib/`. Tests went in first, as the PR's first commit. See the amendment at the end of §477.
 
@@ -31637,3 +31639,71 @@ cancelled*.
   refunded rather than honoured. The one-minute margin makes this rare; it
   does not make it impossible.
 
+## §480 — A DELIVERY ORDER'S TIMES FOLLOW THE OPENING HOURS OF THE STORE THAT COOKS IT
+
+**Decided by Ash, 2026-10-16:** *"tianhe open at 10am close at 8pm. yuexiu
+open at 8am close at 8:30pm"*, then *"go"* to: delivery times come from the
+store that will cook the order, using its own Opens/Closes; the zone's
+kitchen hours stay as the fallback; no redirecting a customer to the other
+store because it is open.
+
+Asked first whether customers should still order at night for delivery the
+next day: *"yes but that's something that is already available"*. It is, and
+this does not change it.
+
+**What raised it.** 越秀 opens at 08:00 and closes at 20:30; 天河 keeps
+10:00–20:00. The store's Opens/Closes fields only ever governed pickup (and
+the channel sync start). Delivery times — "right away", today's windows, the
+same-day cutoff — came from the delivery zone's Kitchen hours. A zone is the
+CUSTOMER's district, not a store, and orders go to the nearest store, so one
+zone is served by both shops. One shared setting could not say "越秀 from 8,
+天河 from 10", and it only takes whole hours, so 20:30 could not be written.
+
+**The rule.**
+
+1. **The cooking store's hours decide.** Where checkout knows which store
+   will cook a delivery order, its Opens/Closes are the hours, in place of
+   the zone's Kitchen hours. That store is:
+   - the checkout quote: the store routing settled on (out-of-city pin
+     applied), else the shelves the order would be served off;
+   - placing the order: the fulfilling store, after routing and the pin;
+   - the reschedule picker and its check: the store the order is on.
+2. **"Is the kitchen open now" is read to the minute.** "Right away", the
+   same-day cutoff, "reopens today" and the whole-day Today chip all use the
+   exact times, so a 20:30 close means 20:30 and the cutoff counts back from
+   it. The cutoff message prints the half hour (*8:30pm*, *20:30*).
+3. **The delivery WINDOWS stay on whole hours, inside the store's hours.**
+   Open is rounded up and close rounded down (23:59 counts as midnight, the
+   same one minute of slack the windows already allow past close). This is
+   not a preference: the mini app builds later days' windows itself from
+   `kitchen_hours.start/end` as whole hours, and the server checks a pick
+   against the same. Sending minutes there would need a mini-app release;
+   keeping whole hours means none is needed. So a 20:30 store still offers
+   "right away" until the cutoff, but its last window is 18:00–20:00.
+4. **No usable store hours → the zone's Kitchen hours, exactly as before.**
+   No store, a blank or malformed end, close not after open, or no whole hour
+   between them. A store half filled in can never empty the slot list.
+5. **Nothing is rerouted by hours.** At 08:15 a customer nearest 天河 is not
+   sent to 越秀 because it is open; they see 天河's times. Rerouting by hours
+   is a separate decision and was not asked for.
+
+**A defect fixed on the way.** A window before 10:00 got the slot id
+`…T8:00`; the order check accepts only `…THH:MM`, so the window was offered
+and then refused at payment. It fired for any zone whose Kitchen hours
+start before 10; 越秀's 08:00 would have fired it every morning. The id
+now carries a two-digit hour, as the mini app's own later-day ids already
+did. The Chinese label (`今天 8:00–10:00`) is unchanged.
+
+**Where it lives.** `storeDeliveryWindow` and `deliveryStoreHours` beside
+`computeDeliverySlots` and `pickupStoreHoursForOrder` in `routes/retail.js`;
+the four call sites named in rule 1. Pinned by section 12 of
+`scripts/test_delivery_slots.js`, which also counts the four call sites. The
+checkout golden recording is unchanged. No new Chinese.
+
+**Left open, not decided here.**
+
+- **A whole-day zone's window end** (`slotWindowEnd`, used by the fresh-batch
+  coverage check) still reads the zone's Kitchen hours. It is about the
+  batch, not about what a customer is offered.
+- **The zones' Kitchen hours are now only a fallback** while both stores
+  carry their hours. They were left as they are.
