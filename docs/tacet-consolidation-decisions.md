@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.545
+# Tacet shared-core consolidation — decisions record, v4.546
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-16 · v4.546 — **§482 · A MISSED CALL IS READ OFF THE PARCEL IT HAPPENED ON, NOT OFF THE ORDER'S MOVING COPY — DECIDED BY ASH:** *"fix"*, on the finding that TC001153 sat on *Delivery needs a call* after its land parcel was delivered: the order row had been stamped with that parcel's missed calls, then took the air parcel's waybill, so the stamp outlived the parcel. `lib/delivery-alerts.js` `noContactOrderSql`; test in `scripts/test_no_contact_alert.js`.
 
 2026-10-16 · v4.545 — **§82 · A PICKUP TIME IS JUDGED ON THE SHOP'S CLOCK, NEVER THE HOST'S — DECIDED BY ASH:** *"fix pick up"*, on the finding that `scripts/pickup-window-check.js` failed 8 checks on a UTC host and passed on a UTC+8 one. A store with no timezone, or an order with no store, was judged on the host's local clock, so on the UTC host §82 requires "open 10:00" meant 18:00 in Guangzhou. The zone is now the store's, else the tenant's (`deliveryTz`), else the system default. The check joins the fast gate as `scripts/test_pickup_window.js`. See the amendment at the end of §82.
 
@@ -31914,3 +31916,44 @@ off the run) and `test_cart_notice` (the adds' optional fourth argument).
   They are built by their own queries and were not asked about.
 - **TC001259 itself** is not touched by this; it releases when 越秀 is
   restocked, as before.
+
+## §482 — A MISSED CALL IS READ OFF THE PARCEL IT HAPPENED ON, NOT OFF THE ORDER'S MOVING COPY
+
+**Decided by Ash, 2026-10-16:** *"fix"*, after being shown why TC001153
+still said *Delivery needs a call* when, in Ash's words, *"the delivery was
+delivered and it still saying that delivery needs a call"*.
+
+**What raised it.** Read off the live database
+(`scripts/diagnose_order_TC001153.js`, read-only). TC001153 has two JD
+parcels: land `JDVC38673933159` and air `JDVC38708697116`. The land courier
+could not get through at 13:16 and 13:20 (Beijing) on 2026-10-16 and
+delivered at 13:26. The land parcel's own row is correct: delivered, so §284
+already lets it go. But the order row is a mirror of the "primary" parcel,
+and the mirror moved. It held the land waybill when the failed calls were
+stamped (§284 `stampNoContact`), then took the air waybill when the air
+parcel was booked. The stamp stayed; the status became the air parcel's
+`in_transit`. §284's "until the parcel lands" exemption reads the mirror's
+status, so it never fired. Of the card's five rules only this one was true
+for the order (no carrier exception, not late, not running late).
+
+It could not be cleared from the screen either. The *I called the customer*
+button sits on a parcel card (`noContactCard` in `public/m.html`). The land
+parcel is delivered, so its card shows none, and the air parcel has no
+missed call, so neither does its card.
+
+**The rule.** The order row's §284 stamp counts only when no parcel on the
+order carries the order row's current waybill. Where one does, that parcel's
+own stamp is the answer: every tracking writer (the JD pull and the kd100
+push) stamps a parcel row and a mirror with the same number together, so
+nothing is lost by skipping the mirror. An order row whose number no parcel
+carries is read exactly as before. The pre-§284 "newest line says no answer,
+nothing stamped yet" clause is untouched.
+
+**Why this and not clearing the stamp when the waybill changes.** Many
+routes write `tracking_number`, and §421 already chose "honour it only while
+it is still the number" over making every writer remember to clear
+something. This follows that choice.
+
+**Where it applies.** `noContactOrderSql` is the one definition, and the
+card count, the orders list badge, the drawer's `no_contact_open` and the
+dashboard's Needs-you row all read it. So all four drop TC001153 together.

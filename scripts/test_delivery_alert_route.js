@@ -93,7 +93,7 @@ function fixture() {
   db.exec(`
     CREATE TABLE retail_orders (
       id INTEGER PRIMARY KEY, order_no TEXT, status TEXT, channel TEXT,
-      tracking_status TEXT, tracking_scenario TEXT, channel_eta TEXT,
+      tracking_number TEXT, tracking_status TEXT, tracking_scenario TEXT, channel_eta TEXT,
       channel_status_at TEXT, placed_at TEXT, fulfillment_type TEXT,
       scheduled_for TEXT, customer_id INTEGER, recipient_name TEXT, recipient_phone TEXT,
       tracking_no_contact_event TEXT, tracking_no_contact_cleared TEXT);
