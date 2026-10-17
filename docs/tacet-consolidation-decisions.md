@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.549
+# Tacet shared-core consolidation — decisions record, v4.550
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-17 · v4.550 — **§483 · A PURCHASE RETURN TAKES OFF WHAT THE SUPPLIER ACTUALLY REFUNDED; WHAT THEY KEPT STAYS UNDER FREIGHT & FEES — DECIDED BY ASH:** *"as you recommend build it"*, off RPO-0092, where a returned item's freight was not refunded and Finance had taken the full value off. New column `po_line_items.return_refund` (NULL = all of it, so no backfill). Desktop and phone. 2 Chinese strings composed (vocabulary v1.338). No change to `.gitignore` or CI. See §483.
 
 2026-10-17 · v4.549 — **§82 · THE INVOICE AND LOW-STOCK REMINDERS READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix both"*. The 发票 reminder's 10:00, its month-end and its "not today" snooze, and the low-stock digest's hour and once-a-day key, read the host's clock; and an order's `placed_at` (SQLite's zone-less UTC) was read on the host's clock, so a request made between 10:00 and 18:00 was asked about a day early even on today's UTC+8 host. All read the shop's clock now, and `placed_at` is read as UTC. See the amendment at the end of §82.
 
@@ -32063,3 +32065,64 @@ something. This follows that choice.
 **Where it applies.** `noContactOrderSql` is the one definition, and the
 card count, the orders list badge, the drawer's `no_contact_open` and the
 dashboard's Needs-you row all read it. So all four drop TC001153 together.
+
+## §483 — A PURCHASE RETURN TAKES OFF WHAT THE SUPPLIER ACTUALLY REFUNDED
+
+**Decided by Ash, 2026-10-17:** *"as you recommend build it"*, on two
+recommendations: book the part the supplier kept under 运费及杂费 Freight &
+fees, and put the same box on the phone.
+
+**What raised it.** RPO-0092 (越秀). One `tableware new location` at ¥47.80
+went back to the supplier and the freight could not be refunded. In Ash's
+words: the actual refund has to be set on the purchase order, because Finance
+only views the order and cannot change it. That read-only view is by design
+(order rows are posted by `postRetailPOExpenses`, never hand-edited), so the
+fix belongs on the order.
+
+**What was wrong.** A return took the full value of the returned units off the
+books — `billableQtySql` drops `returned_qty` at `cost_per_unit` — which is
+right only when the supplier pays back every yuan. When they keep the freight,
+Finance showed the order costing less than was actually spent, with no way to
+say so. The order's own freight box (`extra_freight`) was never the answer: it
+is the freight on the order and already stays whole on a return
+(`docs/purchase-returns.md`, *What this does not do* #7). This is a refund
+smaller than the goods.
+
+**The rule.**
+
+1. `po_line_items.return_refund` is the money that came back for the line's
+   returned units, for the whole line, cumulative like `returned_qty`. NULL
+   means all of it, which is what every return meant before, so nothing needs
+   a backfill and an order nobody touches posts exactly as before.
+2. It may not be negative and may not exceed the full value of what is
+   returned (`returned_qty × cost_per_unit`). It is cleared with the return, by
+   a save and by *Undo receiving*. A refund on a line with nothing returned is
+   refused. A payload that lowers a return under a refund it stored without
+   restating it is refused, not clamped, the same stance `planReturns` takes on
+   quantities.
+3. The goods rows still net the full returned value: the units are gone
+   either way, so each item's category says what the goods cost. The part the
+   supplier kept (full value − refund) is added to the order's **运费及杂费
+   Freight & fees** row, beside its landed extras, because that is what it is.
+   It joins that row rather than opening a second one in the same category, so
+   an order keeps one row per category.
+4. Absent keeps what is stored; null or empty means "all of it". A payload
+   that sends only the refund is judged as if it restated the quantity, so the
+   refund can be corrected on its own. That re-posts Finance and records no new
+   return event, because no unit moved.
+
+**Where it lives.** `lib/po-returns.js` (`returnValueMinor`,
+`keptOnReturnMinor`, `unrefundedReturns`, and the refund rules inside
+`planReturns`); `postRetailPOExpenses` in `routes/retail-purchasing.js`; the
+receive route writes the column and re-posts on a refund-only change. The
+desktop receive screen shows a *Refunded · 已退款* box under the return reason,
+its placeholder the full value, and the Finance panel names the kept amount.
+The phone's return sheet has the same field. Test:
+`scripts/test_po_return_refund.js`.
+
+**What it does not do.** The 发票 chase is unchanged: it chases the supplier
+for the goods we kept, and a supplier's credit note for the refund is still
+outside this model (*What this does not do* #1). The kitchen poster
+(`postPOExpenses`) is unchanged; no screen or route can record a return on a
+kitchen order since §81, so it has no refund to read.
+

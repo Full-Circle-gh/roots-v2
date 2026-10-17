@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.338 · 2026-10-17 · §483 WHAT A SUPPLIER ACTUALLY REFUNDED ON A PURCHASE RETURN — 2 STRINGS COMPOSED BY CLAUDE (`退款金额无效。`, `只有退货的项才需要填写退款。`), EACH A LIVE RETURNS REFUSAL WITH ONE LIVE NOUN SWAPPED; THE BOX'S LABEL `Refunded · 已退款` AND THE CATEGORY `运费及杂费 Freight & fees` COPIED WHOLE; THE OVER-REFUND REFUSAL REUSES §269's `退货金额不能超过支出金额`.** See *What came back on a purchase return (§483)*.
+
 **v1.337 · 2026-10-15 · §479 TELLS THE SHOP WHEN A WECHAT PAYMENT LANDS ON A CANCELLED ORDER — NOTHING COMPOSED; EVERY CHINESE FRAGMENT IS LIVE (`微信支付`, `已取消`, `已退款`, `退款失败`, `订单号`, `金额`) AND `请手动退款给顾客` IS LIFTED FROM A LIVE SENTENCE.** See *A payment that arrives after the order was cancelled*.
 
 **v1.336 · 2026-10-14 · STOCK ACTIVITY SAYS WHY A MINI-APP ORDER'S STOCK MOVED — 3 STRINGS COMPOSED BY CLAUDE (`付款时扣减`, `开始备货时扣减`, `已补货，自动扣减`), EACH BUILT ON LIVE `扣减`, `开始备货`, `已补货` AND `自动扣减`; `库存退回` LIFTED WHOLE.** See *Stock activity — the reason beside a mini-app order*.
@@ -14208,4 +14210,30 @@ preference, rather than a new sentence being minted.
 - `原路退回`: not live anywhere in the product.
 - A new heading sentence such as *order cancelled, payment refunded*: three
   live fragments joined by ` · ` say the same thing and need no declaration.
+
+## What came back on a purchase return (§483)
+
+**Composed by Claude, 2026-10-17, under the 2026-09-06 amendment.** Operator
+register. The Returned cell of Purchasing's receive screen
+(`public/retail-admin/16-purchasing.js`, `returnCell`, `PU_RECEIVE_ERRORS`)
+and the phone's return sheet (`public/m.html`, `recvReturn`, `recvXErrFor`).
+Asked by Ash off RPO-0092, where the supplier kept the freight on a returned
+item: *"as you recommend build it"*.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `That refund amount is not a number.` / `退款金额无效。` | refusal `return_refund_invalid`, desktop and phone | The live `That returned quantity is not a number. · 退货数量无效。` with `退货数量` swapped for `退款金额`, which is live on the printed refund slip (`退款金额 Refund`, `lib/feie.js`). |
+| `A refund belongs only on a line with a return.` / `只有退货的项才需要填写退款。` | refusal `return_refund_not_applicable` | The live `A reason belongs only on a line with a return. · 只有退货的项才需要填写原因。` with `原因` swapped for the live `退款` (`Refund · 退款`). |
+
+### Copied whole
+
+`Refunded · 已退款` (the box's label and the note under the Finance panel; guest pay and the order drawer), `运费及杂费 Freight & fees` (the expense category the kept part is booked under, rendered through `catLabel`), `A return cannot be more than was spent · 退货金额不能超过支出金额` (§269's composed pair, for `return_refund_exceeds`), `Returned to supplier · 已退回供应商`.
+
+### Rejected
+
+- `实退金额` / *Actually refunded*: not live anywhere; `已退款` is, and next to a returned quantity it already reads as "what came back".
+- `退款金额不能超过退货金额` for the over-refund refusal: two new nouns joined; §269's live pair says the same thing to the same operator.
+- A label naming the kept part (`未退运费`, *freight not refunded*): not live. The note uses the category's own name instead, which is what Finance shows for the same money.
 

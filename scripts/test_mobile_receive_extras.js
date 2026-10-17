@@ -51,6 +51,9 @@ function slice(from, to) {
   return M.slice(a, b);
 }
 const SRC = [
+  // The page's own money formatter, lifted rather than restated — the return
+  // sheet and the line note print a refund with it (§483).
+  slice('const money=(cur,n)=>{', '// Whole yuan'),
   slice('function recvErrText(e){', '/* ── The screen records itself'),
   slice('const rcvBooked=', "reg('recvRetry'"),
   slice('const RCV_FLAGS=', 'function rcvLine(it){'),
@@ -84,6 +87,7 @@ function mk(opts = {}) {
   const fresh = opts.fresh || null;
   const ctx = {
     LANG: opts.lang || 'en',
+    CUR: '¥',
     state: { caps, recvPo: opts.po || PO(), recvVals: VALS(), recvXBusy: null, recvXErr: null, ask: null, askErr: null,
       rcvTried: true, rcvToTried: true },
     escAttr: (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
@@ -245,7 +249,7 @@ section('4 · a return');
     e.CMD.recvReturn('1');
     e.s.ask.run({ qty: '3', reason: 'quality' }); await flush();
     assert.deepStrictEqual(e.calls.writes, [{ p: '/purchases/7/receive', method: 'PUT',
-      body: { receipts: [{ line_id: 1, returned_qty: 3, return_reason: 'quality' }] } }]);
+      body: { receipts: [{ line_id: 1, returned_qty: 3, return_reason: 'quality', return_refund: null }] } }]);
     assert.deepStrictEqual(e.calls.toasts, ['Saved']);
     assert.strictEqual(e.s.rcvTried, false, 'the Received journal is read again — it gains a return row');
   });
@@ -253,7 +257,42 @@ section('4 · a return');
     const e = mk();
     e.CMD.recvReturn('3');
     e.s.ask.run({ qty: '0', reason: 'quality' }); await flush();
-    assert.deepStrictEqual(e.calls.writes[0].body.receipts[0], { line_id: 3, returned_qty: 0, return_reason: null });
+    assert.deepStrictEqual(e.calls.writes[0].body.receipts[0], { line_id: 3, returned_qty: 0, return_reason: null, return_refund: null });
+  });
+  // §483 — what the supplier actually paid back. Empty means all of it.
+  it('the sheet asks what was refunded, and the empty box shows the full value', () => {
+    const e = mk();
+    e.s.recvPo.items[2].cost_per_unit = 47.8;
+    e.s.recvPo.items[2].return_refund = 40;
+    e.CMD.recvReturn('3');
+    const f = e.s.ask.fields[2];
+    assert.strictEqual(f.id, 'refund');
+    assert.strictEqual(f.label, 'Refunded (¥)');
+    assert.strictEqual(f.value, '40', 'the stored refund is shown');
+    assert.strictEqual(f.placeholder, '95.60', 'two bags at ¥47.80 — what an empty box means');
+  });
+  it('a refund is checked before the round trip, and sent as a number', async () => {
+    const e = mk();
+    e.s.recvPo.items[0].cost_per_unit = 47.8;
+    e.CMD.recvReturn('1');
+    const v = e.s.ask.validate;
+    assert.strictEqual(v({ qty: '1', reason: 'quality', refund: '50' }), 'A return cannot be more than was spent');
+    assert.strictEqual(v({ qty: '1', reason: 'quality', refund: 'x' }), 'That refund amount is not a number.');
+    assert.strictEqual(v({ qty: '1', reason: 'quality', refund: '40' }), null);
+    e.s.ask.run({ qty: '1', reason: 'quality', refund: '40' }); await flush();
+    assert.deepStrictEqual(e.calls.writes[0].body.receipts[0],
+      { line_id: 1, returned_qty: 1, return_reason: 'quality', return_refund: 40 });
+  });
+  it('the line says what was refunded', () => {
+    const e = mk();
+    e.s.recvPo.items[2].return_refund = 40;
+    assert.ok(text(extras(e, 2)).includes('Refunded ¥40'));
+  });
+  it('the server\'s refund refusals are the desktop\'s sentences', () => {
+    const e = mk();
+    assert.strictEqual(e.ctx.recvXErrFor(fail('return_refund_exceeds')).msg, 'A return cannot be more than was spent');
+    assert.strictEqual(e.ctx.recvXErrFor(fail('return_refund_invalid')).msg, 'That refund amount is not a number.');
+    assert.strictEqual(e.ctx.recvXErrFor(fail('return_refund_not_applicable')).msg, 'A refund belongs only on a line with a return.');
   });
   it('a return the shelf cannot cover: the locked words, the goods named, on its line, and it stays', async () => {
     const e = mk({ write: () => fail('return_blocked', { blocking: [{ product_id: 3, name_en: 'Tahini', short: 3 }] }) });

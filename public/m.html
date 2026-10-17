@@ -16519,12 +16519,15 @@ function poFinanceHtml(p){
   const items=p.items||[];
   const retUnits=items.reduce((n,i)=>n+(Number(i.returned_qty)||0),0);
   const retVal=items.reduce((n,i)=>n+(Number(i.returned_qty)||0)*(Number(i.cost_per_unit)||0),0);
+  /* §483 — the part a supplier kept, still in the total under Freight & fees. */
+  const kept=items.reduce((n,i)=>n+(i.return_refund==null?0:Math.max(0,rcvRetValue(i.returned_qty,i.cost_per_unit)-(Number(i.return_refund)||0))),0);
   return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px">
     <div class="eyebrow">${T('Finance','财务')}</div>
     ${ex.length?ex.map(x=>`<div style="display:flex;justify-content:space-between;gap:12px;font-size:14px"><span style="min-width:0">${escAttr(catLabel(x.category))}</span><span class="num" style="flex:none">${money(CUR,x.amount)}</span></div>`).join('')
       +`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Posted to Expenses','已记入支出')} · ${money(CUR,tot)}</div>`
       :`<div style="font-size:13.5px;color:var(--text-secondary)">${T('Posts to Expenses when the order is placed.','下单后自动记入支出。')}</div>`}
-    ${retUnits?`<div class="num" style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Returned to supplier','已退回供应商')} · ${money(CUR,retVal)} — ${T('already taken off the total above, dated to the order','已从上方合计中扣除，记在采购单原日期')} ${escAttr(p.date?fmtDateOnly(p.date):'')}</div>`:''}</div>`;
+    ${retUnits?`<div class="num" style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Returned to supplier','已退回供应商')} · ${money(CUR,retVal)} — ${T('already taken off the total above, dated to the order','已从上方合计中扣除，记在采购单原日期')} ${escAttr(p.date?fmtDateOnly(p.date):'')}</div>`:''}${
+    retUnits&&kept>0.004?`<div class="num" style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Refunded','已退款')} ${money(CUR,retVal-kept)} · ${escAttr(catLabel('运费及杂费 Freight & fees'))} ${money(CUR,kept)}</div>`:''}</div>`;
 }
 /* The card under the order: Back-order the short lines, Landed cost, and the
    Finance panel — where the desktop's receive screen has them, which is every
@@ -19029,13 +19032,15 @@ function rcvLocation(){
    codes, and a return the shelf cannot cover is refused whole (return_blocked)
    with nothing written. Offered only on a line whose arrival the server holds:
    nothing can go back that has not come in. */
+/* The full value of a return, to the cent — what an empty refund box means. */
+const rcvRetValue=(q,cost)=>Math.round((Number(q)||0)*(Number(cost)||0)*100)/100;
 const recvAccepted=it=>{ const w=rcvVal(it.id).was; return w&&w.recv!=null?Math.max(0,(Number(w.recv)||0)-(Number(w.dmg)||0)):0; };
 function recvXRefresh(poId){
   return api('/purchases/'+poId).then(d=>{
     const po=state.recvPo; if(!po||po.id!==poId||!d) return;
     const by=new Map((d.items||[]).map(i=>[String(i.id),i]));
     (po.items||[]).forEach(it=>{ const f=by.get(String(it.id)); if(!f) return;
-      ['returned_qty','return_reason','returned_at','tracking_number','invoice_status','no_invoice_expected'].forEach(k=>{ it[k]=f[k]; }); });
+      ['returned_qty','return_reason','return_refund','returned_at','tracking_number','invoice_status','no_invoice_expected'].forEach(k=>{ it[k]=f[k]; }); });
     po.no_invoice_expected=d.no_invoice_expected; render();
   }).catch(()=>{});
 }
@@ -19053,6 +19058,10 @@ function recvXErrFor(e){
     return_reason_invalid:['That return reason is not one this app knows. Reopen the order and try again.','该退货原因无效，请重新打开采购单后重试。'],
     return_reason_not_applicable:['A reason belongs only on a line with a return.','只有退货的项才需要填写原因。'],
     return_invalid:['That returned quantity is not a number.','退货数量无效。'],
+    /* §483 — the desktop's three, same pairs. */
+    return_refund_exceeds:['A return cannot be more than was spent','退货金额不能超过支出金额'],
+    return_refund_invalid:['That refund amount is not a number.','退款金额无效。'],
+    return_refund_not_applicable:['A refund belongs only on a line with a return.','只有退货的项才需要填写退款。'],
   };
   if(M[c]) return {msg:T(...M[c])};
   return {msg:recvErrText(e)};
@@ -19097,7 +19106,13 @@ reg('recvReturn', id=>{
     fields:[
       {id:'qty',label:T('Returned','退货')+(unit?' ('+unit+')':''),value:had?rcvFmt(had):'',numeric:true,placeholder:'0'},
       {id:'reason',label:T('Why?','原因？'),value:it.return_reason||'',
-       choices:[['',T('Why?','原因？')]].concat(RCV_RETURN_REASONS.map(r=>[r.key,T(r.en,r.zh)]))}],
+       choices:[['',T('Why?','原因？')]].concat(RCV_RETURN_REASONS.map(r=>[r.key,T(r.en,r.zh)]))},
+      /* §483 — what the supplier actually paid back. Empty = the full value,
+         which the placeholder shows for what is returned now; less means they
+         kept the difference (the freight, usually) and Finance books it under
+         Freight & fees. Same box, same rule as the desktop's. */
+      {id:'refund',label:T('Refunded','已退款')+' ('+CUR+')',value:had&&it.return_refund!=null?String(it.return_refund):'',numeric:true,
+       placeholder:had?rcvRetValue(had,it.cost_per_unit).toFixed(2):''}],
     confirmLabel:T('Save','保存'),
     /* Caught here as well as on the server — the courtesy, not the rule: the
        server still refuses both. */
@@ -19105,9 +19120,13 @@ reg('recvReturn', id=>{
       if(String(v.qty).trim()!==''&&!/^\s*\d*\.?\d+\s*$/.test(String(v.qty))) return T('That returned quantity is not a number.','退货数量无效。');
       if(q>acc+1e-9) return T('That is more than the line accepted. A return can only send back what was taken in.','退货数量超过该行实收数量。退货不能超过已接收的数量。');
       if(q>0&&!v.reason) return T('Pick a reason for the return','请选择退货原因');
+      const rf=String(v.refund==null?'':v.refund).trim();
+      if(rf!==''&&!/^\d*\.?\d+$/.test(rf)) return T('That refund amount is not a number.','退款金额无效。');
+      if(q>0&&rf!==''&&Number(rf)>rcvRetValue(q,it.cost_per_unit)+0.004) return T('A return cannot be more than was spent','退货金额不能超过支出金额');
       return null; },
-    run:v=>{ const q=rcvNum(v.qty);
-      recvXWrite('ret',it,['/purchases/'+po.id+'/receive',{receipts:[{line_id:it.id,returned_qty:q,return_reason:q>0?v.reason:null}]},'PUT'],
+    run:v=>{ const q=rcvNum(v.qty), rf=String(v.refund==null?'':v.refund).trim();
+      recvXWrite('ret',it,['/purchases/'+po.id+'/receive',{receipts:[{line_id:it.id,returned_qty:q,return_reason:q>0?v.reason:null,
+        return_refund:q>0&&rf!==''?Number(rf):null}]},'PUT'],
         T('Saved','已保存')); }};
   render();
 });
@@ -19129,7 +19148,8 @@ function rcvExtras(it){
   const ret=Number(it.returned_qty)||0;
   const retLine=ret>0?`<div class="num" style="font-size:12.5px;color:var(--brick-ink)">${LANG==='en'
       ?(rcvFmt(ret)+' '+escAttr(it.unit||'')+' sent back'):('退回 '+rcvFmt(ret)+' '+escAttr(it.unit||''))}${
-      it.return_reason?' · '+rcvReturnReason(it.return_reason):''}${it.returned_at?' · '+escAttr(fmtDateOnly(it.returned_at)):''}</div>`:'';
+      it.return_reason?' · '+rcvReturnReason(it.return_reason):''}${it.returned_at?' · '+escAttr(fmtDateOnly(it.returned_at)):''}${
+      it.return_refund!=null?' · '+T('Refunded','已退款')+' '+money(CUR,it.return_refund):''}</div>`:'';
   const retBtn=rcvBooked(it)&&recvAccepted(it)>0
     ?`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:13px" ${busy?'disabled':''} onclick="APP.cmd('recvReturn','${it.id}')">${ic('rotate-ccw',15)}${T('Return','退货')}</button>`:'';
   return `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-default);display:flex;flex-direction:column;gap:10px">

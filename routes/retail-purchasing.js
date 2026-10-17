@@ -73,7 +73,7 @@ const { planRematch, applyRematch } = require('../lib/po-rematch');
 // 发票 chase — this file reads all three of those numbers and must not invent a
 // fourth. Read that header before changing anything below that mentions a
 // return.
-const { planReturns, billableQtySql, billableQty, onHandQty } = require('../lib/po-returns');
+const { planReturns, billableQtySql, billableQty, onHandQty, unrefundedReturns } = require('../lib/po-returns');
 const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
 // The one unit-spelling normaliser — shared with firePriceAlertsForPO's own
 // guard (routes/purchases.js), so 'pc' vs 'pcs' cannot pass on one cost path
@@ -176,11 +176,22 @@ function postRetailPOExpenses(poId) {
     inserted++; posted.push(amount);
   }
   // Landed-cost extras (freight/tax/handling) post as one shipping & fees line.
+  //
+  // AND WHAT A SUPPLIER KEPT ON A RETURN (§483). The goods rows above already
+  // net every returned unit at full value; where the refund that actually came
+  // back was smaller, the difference is still money spent, and it is the
+  // freight on goods that went back. It joins this row rather than opening a
+  // second one under the same category, so the order keeps one row per
+  // category — the shape Finance's category subtotals count on.
   const extras = money.addMajor(po.extra_freight, po.extra_tax, po.extra_handling);
-  if (extras > 0) {
-    insert.run(po.date, extras, '运费及杂费 Freight & fees',
-      `${po.po_number}${po.supplier ? ' · ' + po.supplier : ''} · shipping & fees`, poId);
-    inserted++; posted.push(extras);
+  const kept = unrefundedReturns(tdb(), poId);
+  const fees = money.addMajor(extras, kept);
+  if (fees > 0) {
+    const what = extras > 0 && kept > 0 ? 'shipping & fees + return not refunded'
+               : kept > 0 ? 'return not refunded' : 'shipping & fees';
+    insert.run(po.date, fees, '运费及杂费 Freight & fees',
+      `${po.po_number}${po.supplier ? ' · ' + po.supplier : ''} · ${what}`, poId);
+    inserted++; posted.push(fees);
   }
   // The reported total is the sum of what was actually WRITTEN, added exactly —
   // not a running float beside it, which could disagree with the rows by a cent
@@ -2987,7 +2998,8 @@ router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, e
   // back is still readable in Receiving after the undo.
   tdb().prepare(`UPDATE po_line_items
                  SET qty_received = NULL, damaged_qty = 0,
-                     returned_qty = 0, return_reason = NULL, returned_at = NULL
+                     returned_qty = 0, return_reason = NULL, returned_at = NULL,
+                     return_refund = NULL
                WHERE po_id = ?`).run(po.id);
   tdb().prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('Ordered', po.id);
   postRetailPOExpensesWithSource(po.id);
@@ -3149,6 +3161,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
       if (rPlan && rPlan.write) {
         sets.push('returned_qty = ?');   vals.push(rPlan.qty);
         sets.push('return_reason = ?');  vals.push(rPlan.reason);
+        sets.push('return_refund = ?');  vals.push(rPlan.refund);
         if (rPlan.delta > 0) sets.push('returned_at = CURRENT_TIMESTAMP');
         else if (rPlan.qty === 0) sets.push('returned_at = NULL');
         if (rPlan.delta > 0) { returnMoves.set(lineId, rPlan.delta); returned_lines++; returned_units += rPlan.delta; }
@@ -3230,7 +3243,9 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   // (nothing turned up) and it must not write a phantom row in the Received
   // list — which is why `delivered` and the receipt record above stay gated on
   // an arrived count while stock and Finance follow either kind of change.
-  const anyReturnChange = returns.increased > 0 || returns.decreased > 0;
+  // A refund corrected on its own (§483) moves money and no unit — Finance
+  // follows it, stock and the Received list do not.
+  const anyReturnChange = returns.increased > 0 || returns.decreased > 0 || returns.refunds > 0;
   const delivered = any_qty && po.status === 'Ordered';
   if (delivered) {
     tdb().prepare("UPDATE purchase_orders SET status = 'Delivered', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(po.id);
