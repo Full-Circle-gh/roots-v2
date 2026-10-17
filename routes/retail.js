@@ -25285,7 +25285,8 @@ router.post('/api/retail-admin/invoices/:id/snooze', requireRetailAdmin, express
   // The sweep and this route must agree about what "tomorrow" means, so the
   // date comes from the sweeper's own exported calculator rather than a second
   // copy of the arithmetic here.
-  const until = on ? fapiaoReminders.snoozeTarget(new Date()) : null;
+  // The shop's zone (§82), the one the sweep reads off the same tenant.
+  const until = on ? fapiaoReminders.snoozeTarget(new Date(), deliveryTz()) : null;
   tdb().prepare('UPDATE retail_orders SET invoice_reminder_snoozed_until = ? WHERE id = ?')
     .run(until ? until.toISOString() : null, id);
   res.json({ success: true, data: { id, snoozed_until: until ? until.toISOString() : null } });

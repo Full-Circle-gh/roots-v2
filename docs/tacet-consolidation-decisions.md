@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.549
+# Tacet shared-core consolidation — decisions record, v4.550
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,7 +22,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-17 · v4.549 — **§483 · A PURCHASE RETURN TAKES OFF WHAT THE SUPPLIER ACTUALLY REFUNDED; WHAT THEY KEPT STAYS UNDER FREIGHT & FEES — DECIDED BY ASH:** *"as you recommend build it"*, off RPO-0092, where a returned item's freight was not refunded and Finance had taken the full value off. New column `po_line_items.return_refund` (NULL = all of it, so no backfill). Desktop and phone. 2 Chinese strings composed (vocabulary v1.338). No change to `.gitignore` or CI. See §483.
+2026-10-17 · v4.550 — **§483 · A PURCHASE RETURN TAKES OFF WHAT THE SUPPLIER ACTUALLY REFUNDED; WHAT THEY KEPT STAYS UNDER FREIGHT & FEES — DECIDED BY ASH:** *"as you recommend build it"*, off RPO-0092, where a returned item's freight was not refunded and Finance had taken the full value off. New column `po_line_items.return_refund` (NULL = all of it, so no backfill). Desktop and phone. 2 Chinese strings composed (vocabulary v1.338). No change to `.gitignore` or CI. See §483.
+
+2026-10-17 · v4.549 — **§82 · THE INVOICE AND LOW-STOCK REMINDERS READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix both"*. The 发票 reminder's 10:00, its month-end and its "not today" snooze, and the low-stock digest's hour and once-a-day key, read the host's clock; and an order's `placed_at` (SQLite's zone-less UTC) was read on the host's clock, so a request made between 10:00 and 18:00 was asked about a day early even on today's UTC+8 host. All read the shop's clock now, and `placed_at` is read as UTC. See the amendment at the end of §82.
 
 2026-10-17 · v4.548 — **§82 · THE AUTO-DELIVER SWEEP RUNS AGAIN — DECIDED BY ASH:** *"fix both"*. The one unclosed bracket in `autoDeliverLocalEtaForTenant`'s SELECT since #1076 is closed. A read-only count on production (`scripts/diagnose_auto_deliver_backlog.js`) found 0 orders the repaired sweep would flip on its first tick. `scripts/test_auto_deliver_sweep.js` now RUNS the query on real tables. See the amendment at the end of §82.
 
@@ -8853,6 +8855,41 @@ change and is not started.
    rider, a cancelled job however old, other statuses, pickup and courier
    parcels, no or bad ETA, an ETA inside its grace), and that a second tick
    closes nothing. Against the #1076 query it fails 13 of 14.
+
+**Amended 2026-10-17 — the invoice and low-stock reminders. Decided by Ash:**
+*"fix both"*.
+
+1. **`lib/fapiao-reminders.js`.** `isMonthEnd`, `dueAfter`, `nextDueAt` and
+   `snoozeTarget` take the shop's zone (null → the system default) and read it
+   through `lib/business-date.js`; the sweep passes `shopTimezone(db)` and the
+   snooze route `deliveryTz()`, so the two still agree what "tomorrow at ten"
+   is. On the UTC host the 10:00 reminder was 18:00 and month-end began on the
+   wrong day.
+2. **A bug live today, fixed with it.** `placed_at` is SQLite's
+   `CURRENT_TIMESTAMP` (or a channel daemon's UTC stamp) — UTC with no zone
+   written. `new Date()` read it on the host's clock, eight hours early on the
+   UTC+8 host, so a request made between 10:00 and 18:00 had its 24 hours of
+   silence end a day early: asked about at 10:00 the next morning, nineteen
+   hours on. A new `parseStoredUtc` in `lib/business-date.js` reads SQLite's own
+   shape (date SPACE time, no zone) as UTC and anything else as written; the
+   sweep and the digest's "oldest" age use it.
+3. **`lib/low-stock-digest.js`.** The configured hour and the once-a-day key
+   are the shop's; on the UTC host a 09:00 digest went out at 17:00 and the day
+   turned at 08:00.
+4. **Tests.** `scripts/test_fapiao_reminders.js` built its times and read its
+   answers on the host's clock, so with the code doing the same it passed on
+   every clock and proved nothing about the zone. Its times are now Guangzhou
+   wall-clock instants, its answers are read on Guangzhou's clock, its stored
+   `placed_at` is the production UTC shape, it re-runs itself on UTC, New York
+   and Shanghai clocks, and a new case pins the early first reminder. Against
+   the old code it fails on every clock (once on Shanghai, the live bug).
+   `scripts/test_low_stock_digest_clock.js` is new: the real digest sweep over
+   real tables, at the shop's hour, once per shop's day, for a shop in another
+   zone, on three clocks; the old code fails it on every clock.
+5. **What is left before the host can go to UTC**: §82's boot-time refusal of a
+   tenant with no zone, the remaining "today as the UTC day" and `+8` sites the
+   survey listed (they do not depend on the host), the `run-suites.js` TZ pin
+   (Ash's), and the deploy setting itself.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 

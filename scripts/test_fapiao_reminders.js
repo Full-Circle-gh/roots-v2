@@ -26,6 +26,25 @@
 const fs   = require('fs');
 const path = require('path');
 
+// THE SHOP'S CLOCK, ON ANY SERVER CLOCK (§82). Every time below is a Guangzhou
+// wall-clock time and every answer is read on Guangzhou's clock, and the suite
+// re-runs itself on three server clocks — scripts/run-suites.js pins suites to
+// Asia/Shanghai, which is the one clock under which a host-clock read looks
+// right. Until §82 this file and the code both read the host's clock, so it
+// passed everywhere and proved nothing about the zone.
+if (!process.env.FAPIAO_CLOCK_CHILD) {
+  let bad = 0;
+  for (const tz of ['UTC', 'America/New_York', 'Asia/Shanghai']) {
+    const r = require('child_process').spawnSync(process.execPath, [__filename], {
+      env: { ...process.env, TZ: tz, FAPIAO_CLOCK_CHILD: '1' }, encoding: 'utf8',
+    });
+    const last = (r.stdout || '').trim().split('\n').pop();
+    console.log(`server clock ${tz.padEnd(18)} ${last}`);
+    if (r.status !== 0) { bad++; console.log(r.stdout.split('\n').filter((l) => /✗/.test(l)).join('\n')); }
+  }
+  process.exit(bad ? 1 : 0);
+}
+
 const ROOT      = path.join(__dirname, '..');
 const DB_SRC    = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
 const SRV_SRC   = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
@@ -51,33 +70,39 @@ const fr = require('../lib/fapiao-reminders');
 
 console.log(`\ntest_fapiao_reminders — driver: ${driver}\n`);
 
-const D = (s) => new Date(s);
+// A Guangzhou wall-clock time, 'YYYY-MM-DDTHH:MM:SS', as the instant it is.
+const businessDate = require('../lib/business-date');
+const D = (s) => businessDate.dateInZone('Asia/Shanghai', s.slice(0, 10), +s.slice(11, 13), +s.slice(14, 16));
+// …and an instant read back on Guangzhou's clock: { y, m, d, hour, minute }.
+const gz = (d) => businessDate.zoneParts('Asia/Shanghai', d);
+// placed_at as production stores it: SQLite's zone-less UTC stamp.
+const STORED = (s) => D(s).toISOString().slice(0, 19).replace('T', ' ');
 
 // ── 1. The cadence, in pure functions ───────────────────────────────────────
 console.log('The cadence');
 
 // A request at 23:40 must not spend its life waking people at 23:40.
 const late = fr.dueAfter(D('2026-09-01T23:40:00'), fr.FIRST_DELAY_H);
-ok(late.getHours() === fr.REMIND_HOUR && late.getMinutes() === 0,
+ok(gz(late).hour === fr.REMIND_HOUR && gz(late).minute === 0,
    'a reminder lands at 10:00 whatever hour the request came in', late.toString());
 ok(late.getTime() >= D('2026-09-01T23:40:00').getTime() + fr.FIRST_DELAY_H * 3600_000,
    'and never before the gap has actually elapsed', late.toString());
 
 // Silence on day one.
 const first = fr.nextDueAt(null, D('2026-09-01T09:00:00'), false);
-ok(first.getDate() === 2 && first.getHours() === 10,
+ok(gz(first).d === 2 && gz(first).hour === 10,
    'a request at 09:00 is first asked about at 10:00 the NEXT day, not the same morning',
    first.toString());
 
 // The repeat anchors on the LAST SEND, not on the request — otherwise an old
 // debt is permanently overdue and fires on every single tick.
 const repeat = fr.nextDueAt(D('2026-09-05T10:00:00'), D('2026-08-01T09:00:00'), false);
-ok(repeat.getDate() === 7 && repeat.getMonth() === 8,
+ok(gz(repeat).d === 7 && gz(repeat).m === 9,
    'the repeat is 48h from the last reminder, not from the request — a months-old '
    + 'debt must not be permanently due', repeat.toString());
 
 const monthEndRepeat = fr.nextDueAt(D('2026-08-29T10:00:00'), D('2026-08-01T09:00:00'), true);
-ok(monthEndRepeat.getDate() === 30,
+ok(gz(monthEndRepeat).d === 30,
    'inside month-end the repeat is 24h — it asks every day', monthEndRepeat.toString());
 
 // ── 2. Month-end is derived from the month, not a fixed date ────────────────
@@ -109,11 +134,11 @@ CREATE TABLE retail_orders (
 CREATE TABLE retail_customers (id INTEGER PRIMARY KEY, nickname TEXT);
 INSERT INTO retail_customers (id, nickname) VALUES (1, 'Anders Sloth Nielsen');
 INSERT INTO retail_orders (id, order_no, status, total, needs_invoice, invoice_status, invoice_title, placed_at, customer_id) VALUES
-  (1, 'TC000342', 'delivered', 1061, 1, 'requested', NULL, '2026-08-21T09:00:00', 1),
+  (1, 'TC000342', 'delivered', 1061, 1, 'requested', NULL, '${STORED('2026-08-21T09:00:00')}', 1),
   -- The cancelled one from the same screenshot: it must never be reminded about.
-  (2, 'TC000407', 'cancelled', 208.5, 1, 'requested', '广州海珠桐森品牌策划工作室', '2026-08-26T09:00:00', NULL),
+  (2, 'TC000407', 'cancelled', 208.5, 1, 'requested', '广州海珠桐森品牌策划工作室', '${STORED('2026-08-26T09:00:00')}', NULL),
   -- Already issued. Done.
-  (3, 'TC000408', 'delivered', 228.5, 1, 'issued', NULL, '2026-08-27T09:00:00', NULL);
+  (3, 'TC000408', 'delivered', 228.5, 1, 'issued', NULL, '${STORED('2026-08-27T09:00:00')}', NULL);
 `);
 
 const sent = [];
@@ -168,7 +193,7 @@ ok(fired === 1 && sent.length === 1,
 ok(rowOf(1).invoice_reminder_count === 2, 'and the second ask is recorded too');
 
 // Month-end: daily.
-db.prepare("UPDATE retail_orders SET invoice_reminder_last_at = '2026-08-29T10:00:00' WHERE id = 1").run();
+db.prepare(`UPDATE retail_orders SET invoice_reminder_last_at = '${D('2026-08-29T10:00:00').toISOString()}' WHERE id = 1`).run();
 sent.length = 0;
 fired = frLive.sweepDbOnce(db, D('2026-08-30T10:00:00'), 1);
 ok(fired === 1,
@@ -197,10 +222,10 @@ console.log('\nThe snooze');
 // Where tomorrow lands. Not now+24h, which would walk the reminder hour later
 // into the evening on every press.
 const late23 = frLive.snoozeTarget(D('2026-09-03T23:40:00'));
-ok(late23.getDate() === 4 && late23.getHours() === frLive.REMIND_HOUR,
+ok(gz(late23).d === 4 && gz(late23).hour === frLive.REMIND_HOUR,
    'a press at 23:40 lands on TOMORROW at 10:00, not 23:40 the next night', late23.toString());
 const early = frLive.snoozeTarget(D('2026-09-03T09:00:00'));
-ok(early.getDate() === 4,
+ok(gz(early).d === 4,
    'and a press at 09:00 does not leave an ask an hour later the same morning', early.toString());
 
 ok(!frLive.isSnoozed(null, D('2026-09-03T10:00:00'))
@@ -208,12 +233,12 @@ ok(!frLive.isSnoozed(null, D('2026-09-03T10:00:00'))
    && !frLive.isSnoozed('not a date', D('2026-09-03T10:00:00')),
    'a null, blank or UNREADABLE stamp reads as not snoozed — failing towards asking '
    + 'is the safe direction for a debt');
-ok(!frLive.isSnoozed('2026-09-03T10:00:00', D('2026-09-03T10:00:00')),
+ok(!frLive.isSnoozed(D('2026-09-03T10:00:00').toISOString(), D('2026-09-03T10:00:00')),
    'and a stamp that has arrived is spent, so nothing has to clear the column');
 
 // A fresh pending row, reminded once, then deferred.
 db.exec(`INSERT INTO retail_orders (id, order_no, status, total, needs_invoice, invoice_status, placed_at)
-         VALUES (20, 'TC000700', 'paid', 700, 1, 'requested', '2026-09-01T09:00:00');`);
+         VALUES (20, 'TC000700', 'paid', 700, 1, 'requested', '${STORED('2026-09-01T09:00:00')}');`);
 sent.length = 0;
 frLive.sweepDbOnce(db, D('2026-09-02T10:00:00'), 1);
 ok(rowOf(20).invoice_reminder_count === 1, 'it is asked about once as normal');
@@ -260,7 +285,7 @@ ok(stillPending === 1,
 // pressed BEFORE the day's ask has gone out. Pressed after it, tomorrow is when
 // the next one was coming anyway and the press changes nothing — which is the
 // button telling the truth, not failing.
-db.prepare("UPDATE retail_orders SET invoice_reminder_last_at = '2026-08-29T10:00:00', invoice_reminder_snoozed_until = ? WHERE id = 20")
+db.prepare(`UPDATE retail_orders SET invoice_reminder_last_at = '${D('2026-08-29T10:00:00').toISOString()}', invoice_reminder_snoozed_until = ? WHERE id = 20`)
   .run(frLive.snoozeTarget(D('2026-08-30T09:00:00')).toISOString());
 sent.length = 0;
 frLive.sweepDbOnce(db, D('2026-08-30T10:00:00'), 1);
@@ -269,7 +294,7 @@ ok(sent.length === 0,
    + 'disabled for three days a month, because a button that reads as set and buzzes '
    + 'anyway is a lying control, and Home is showing the row in brick regardless');
 
-db.prepare("UPDATE retail_orders SET invoice_reminder_last_at = '2026-08-29T10:00:00', invoice_reminder_snoozed_until = ? WHERE id = 20")
+db.prepare(`UPDATE retail_orders SET invoice_reminder_last_at = '${D('2026-08-29T10:00:00').toISOString()}', invoice_reminder_snoozed_until = ? WHERE id = 20`)
   .run(frLive.snoozeTarget(D('2026-08-29T11:00:00')).toISOString());
 sent.length = 0;
 frLive.sweepDbOnce(db, D('2026-08-30T10:00:00'), 1);
@@ -281,14 +306,33 @@ db.prepare('UPDATE retail_orders SET invoice_reminder_snoozed_until = NULL WHERE
 
 db.prepare('UPDATE retail_orders SET needs_invoice = 0 WHERE id = 20').run();  // out of the way of the digest
 
+// ── 4b. The request's own time, read as the UTC it is stored in ─────────────
+// placed_at is SQLite's zone-less UTC stamp. Read on the host's clock it was
+// eight hours early, so a request made at 15:00 looked like 07:00 and its
+// "24 hours of silence" ran out a day too soon: asked about at 10:00 the next
+// morning, nineteen hours after the customer asked.
+console.log('\nThe request\'s own time');
+db.prepare('UPDATE retail_orders SET needs_invoice = 0 WHERE id = 1').run();     // only row 30 pending
+db.exec(`INSERT INTO retail_orders (id, order_no, status, total, needs_invoice, invoice_status, placed_at)
+         VALUES (30, 'TC000900', 'paid', 90, 1, 'requested', '${STORED('2026-09-10T15:00:00')}');`);
+sent.length = 0;
+frLive.sweepDbOnce(db, D('2026-09-11T10:00:00'), 1);
+ok(!sent.some((x) => x.tag === 'retail-fapiao-30'),
+   'a request at 15:00 is NOT asked about at 10:00 the next morning — 24 hours have not passed', sent.map((x) => x.tag));
+frLive.sweepDbOnce(db, D('2026-09-12T10:00:00'), 1);
+ok(sent.some((x) => x.tag === 'retail-fapiao-30'),
+   'it is asked about at 10:00 the morning after that', sent.map((x) => x.tag));
+db.prepare('UPDATE retail_orders SET needs_invoice = 0 WHERE id = 30').run();
+db.prepare('UPDATE retail_orders SET needs_invoice = 1 WHERE id = 1').run();
+
 // ── 5. The digest ───────────────────────────────────────────────────────────
 console.log('\nThe digest');
 db.exec(`
 INSERT INTO retail_orders (id, order_no, status, total, needs_invoice, invoice_status, placed_at) VALUES
-  (10, 'TC000600', 'paid', 10, 1, 'requested', '2026-09-01T09:00:00'),
-  (11, 'TC000601', 'paid', 11, 1, 'requested', '2026-09-01T09:00:00'),
-  (12, 'TC000602', 'paid', 12, 1, 'requested', '2026-09-01T09:00:00'),
-  (13, 'TC000603', 'paid', 13, 1, 'requested', '2026-09-01T09:00:00');
+  (10, 'TC000600', 'paid', 10, 1, 'requested', '${STORED('2026-09-01T09:00:00')}'),
+  (11, 'TC000601', 'paid', 11, 1, 'requested', '${STORED('2026-09-01T09:00:00')}'),
+  (12, 'TC000602', 'paid', 12, 1, 'requested', '${STORED('2026-09-01T09:00:00')}'),
+  (13, 'TC000603', 'paid', 13, 1, 'requested', '${STORED('2026-09-01T09:00:00')}');
 `);
 sent.length = 0;
 fired = frLive.sweepDbOnce(db, D('2026-09-03T10:00:00'), 1);
