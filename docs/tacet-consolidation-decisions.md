@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.550
+# Tacet shared-core consolidation — decisions record, v4.551
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-17 · v4.551 — **§82 · THE TEST RUNNER NO LONGER FORCES CHINA TIME — DECIDED BY ASH:** *"remove pin"*. `scripts/run-suites.js` started every suite on Asia/Shanghai unless a TZ was given, the one clock under which a host-clock read gets Guangzhou right by luck. It now passes the host's clock through; CI already gives UTC. Two suites read the host clock themselves and are fixed to read the shop's. **A change to how tests run, called out.** See the amendment at the end of §82.
 
 2026-10-17 · v4.550 — **§483 · A PURCHASE RETURN TAKES OFF WHAT THE SUPPLIER ACTUALLY REFUNDED; WHAT THEY KEPT STAYS UNDER FREIGHT & FEES — DECIDED BY ASH:** *"as you recommend build it"*, off RPO-0092, where a returned item's freight was not refunded and Finance had taken the full value off. New column `po_line_items.return_refund` (NULL = all of it, so no backfill). Desktop and phone. 2 Chinese strings composed (vocabulary v1.338). No change to `.gitignore` or CI. See §483.
 
@@ -8890,6 +8892,28 @@ change and is not started.
    tenant with no zone, the remaining "today as the UTC day" and `+8` sites the
    survey listed (they do not depend on the host), the `run-suites.js` TZ pin
    (Ash's), and the deploy setting itself.
+
+**Amended 2026-10-17 — the test runner's clock. Decided by Ash:** *"remove pin"*.
+
+1. **A CHANGE TO HOW TESTS RUN, CALLED OUT.** `scripts/run-suites.js` spawned
+   every suite with `TZ: process.env.TZ || 'Asia/Shanghai'`. It now sets no TZ
+   of its own: a suite runs on the clock the runner was given. In CI that was
+   already UTC (`.github/workflows/tests.yml` sets `TZ: UTC`, unchanged), so
+   the pin only ever applied to a run with no TZ — a session's or a laptop's
+   `npm run test:fast` — and that is exactly where it hid host-clock reads.
+2. **Measured before removing it.** On a UTC clock one suite failed, on a New
+   York clock two; both were the test reading the host's clock, not the code.
+   `test_fapiao_snooze_route.js` checked the snooze's hour with `getHours()`;
+   it now reads it on the shop's clock (`zoneParts`). `test_delivery_alert_route.js`
+   built its fixed midday with `setHours(12)` and wrote ETAs from `getHours()`;
+   it now builds midday on the shop's clock (`wallClockOnDay`) and reads ETAs
+   back the same way. Both pass on UTC, New York, Shanghai, UTC+14 and UTC−12.
+3. **What stays.** The three suites that re-run themselves on UTC, New York and
+   Shanghai clocks keep doing so: removing the default does not make every run
+   cover every clock. Their comments no longer cite the pin as the reason.
+4. **Left before the host can go to UTC**: the boot-time refusal of a tenant
+   with no zone, the remaining "today as the UTC day" and `+8` sites, and the
+   deploy setting itself.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 

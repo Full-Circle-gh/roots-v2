@@ -24,8 +24,9 @@
  * HOW. The real code is run: the sweep lifted from the source over real tables,
  * the two lib modules required, the daemon's function lifted from its file.
  * Every instant is built in a named zone. THE SUITE RE-RUNS ITSELF on three
- * server clocks (UTC, New York, Shanghai), because scripts/run-suites.js pins
- * every suite to Asia/Shanghai — which is exactly the clock that hid these.
+ * server clocks (UTC, New York, Shanghai), because a suite runs on whatever
+ * clock its host has, and Asia/Shanghai — production's today, and the runner's
+ * default until §82 — is exactly the clock that hid these.
  * Finally it refuses a host-local date read in any of the five.
  */
 'use strict';

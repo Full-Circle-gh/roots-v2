@@ -65,8 +65,8 @@ function it(name, fn) {
  * rider, and four of this suite's cases fail.
  *
  * It ran red every night between 00:00 and 01:00 Guangzhou — scripts/
- * run-suites.js pins TZ=Asia/Shanghai, so that is the hour that counts however
- * the host is set — and green every working day. Nobody who saw it fail could
+ * run-suites.js then pinned TZ=Asia/Shanghai, so that was the hour that counted
+ * however the host was set — and green every working day. Nobody who saw it fail could
  * reproduce it; nobody who could reproduce it was looking. Proven by running
  * this file under TZ=Etc/GMT+1, where the same four cases fail on demand.
  *
@@ -81,9 +81,18 @@ function it(name, fn) {
  * test, so pinning one side of that comparison and not the other is how a
  * fixture starts lying. Only the JS-side wall-clock reading is pinned, because
  * only that one is resolved against a bare HH:MM.
+ *
+ * MIDDAY ON THE SHOP'S CLOCK, not the host's (§82). lib/delivery-alerts reads
+ * the bare HH:MM on the shop's zone; this fixture has no store, so that is the
+ * system default, Guangzhou. A host-clock midday is 20:00 Guangzhou on a New
+ * York host, and the 11:00 ETA is then in the past by the wrong nine hours.
  */
-const NOON = (() => { const d = new Date(); d.setHours(12, 0, 0, 0); return d; })();
-const hhmmOf = (d) => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+const businessDate = require('../lib/business-date');
+const NOON = businessDate.wallClockOnDay(null, new Date(), 12, 0);
+const hhmmOf = (d) => {
+  const p = businessDate.zoneParts(null, d);
+  return String(p.hour).padStart(2, '0') + ':' + String(p.minute).padStart(2, '0');
+};
 /** A local ETA an hour before NOON — 11:00, whatever hour this suite runs at. */
 const ETA_PAST = hhmmOf(new Date(NOON.getTime() - 3600e3));
 
@@ -150,8 +159,8 @@ console.log('\nthe fixture answers the same at every hour of the day');
 it('the pinned clock is a fixed midday, not a reading of the wall', () => {
   // If this ever goes back to `new Date()`, the suite goes back to failing for
   // one hour a night and passing every time anybody looks at it.
-  assert.strictEqual(NOON.getHours(), 12, 'NOON must be midday, whatever hour this runs at');
-  assert.strictEqual(NOON.getMinutes(), 0);
+  assert.strictEqual(businessDate.zoneParts(null, NOON).hour, 12, 'NOON must be midday, whatever hour this runs at');
+  assert.strictEqual(businessDate.zoneParts(null, NOON).minute, 0);
 });
 
 it('the promised arrival is earlier the SAME day, so it can never read as tonight', () => {
