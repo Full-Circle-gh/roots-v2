@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.547
+# Tacet shared-core consolidation — decisions record, v4.548
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-17 · v4.548 — **§82 · THE AUTO-DELIVER SWEEP RUNS AGAIN — DECIDED BY ASH:** *"fix both"*. The one unclosed bracket in `autoDeliverLocalEtaForTenant`'s SELECT since #1076 is closed. A read-only count on production (`scripts/diagnose_auto_deliver_backlog.js`) found 0 orders the repaired sweep would flip on its first tick. `scripts/test_auto_deliver_sweep.js` now RUNS the query on real tables. See the amendment at the end of §82.
 
 2026-10-16 · v4.547 — **§82 · THE DELIVERY TIMERS READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix"*, on the clock survey (`scripts/diagnose_server_clock.js`: production runs Asia/Shanghai; Tianhe and Yuexiu name no timezone). The auto-deliver sweep, the stuck-rider alert, the ship-today reminder, the Express day re-anchored at payment and a Qingyun arrival time sent as text read the host's clock, and each goes eight hours wrong on the UTC host §82 requires. All now read the shop's. The survey also found the auto-deliver sweep's SQL unrunnable since #1076, reported to Ash and not fixed here. See the amendment at the end of §82.
 
@@ -8826,6 +8828,29 @@ change and is not started.
 5. **Still open.** The invoice and low-stock reminders (the second half of the
    survey), §82's boot-time refusal of a tenant with no zone, and pinning the
    host to UTC.
+
+**Amended 2026-10-17 — the auto-deliver sweep runs again. Decided by Ash:**
+*"fix both"*.
+
+1. **The fix is one bracket.** `AND NOT EXISTS ( SELECT … AND ( (…) OR
+   j.cancelled_at IS NOT NULL ) )` — the second close was missing from #1076
+   (2026-10-09) on. Nothing else in the query or the sweep changes.
+2. **Measured before closing it.** `scripts/diagnose_auto_deliver_backlog.js`
+   (read-only, production): the sweep last delivered on 2026-09-17 and about
+   thirty times in all — it is the rare fallback; in the last fourteen days 58
+   orders closed on the Qingyun drop-off and 11 by staff. Of the 11 orders in
+   its statuses with no live or cancelled courier job, none carries a usable
+   ETA, so **the first tick of the repaired sweep marks 0 orders Delivered**.
+   Re-measured immediately before merge.
+3. **Why nothing caught it, and what does now.**
+   `test_qingyun_cancel_detect.js` asserts the query's TEXT contains `NOT
+   EXISTS` and the cancelled clause, which a missing bracket leaves intact.
+   `scripts/test_auto_deliver_sweep.js` lifts the sweep and runs it over real
+   `retail_orders`, `retail_shipments` and `delivery_jobs`: what it closes (each
+   in-hand status, a quiet or finished courier job), what it leaves (a live
+   rider, a cancelled job however old, other statuses, pickup and courier
+   parcels, no or bad ETA, an ETA inside its grace), and that a second tick
+   closes nothing. Against the #1076 query it fails 13 of 14.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 

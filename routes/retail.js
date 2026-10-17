@@ -7560,7 +7560,8 @@ function autoDeliverLocalEtaForTenant(now = new Date()) {
                          -- this one demonstrably did not. It stays blocked until a new
                          -- delivery is created (a new row, cancelled_at NULL) or staff
                          -- close the order by hand.
-                         OR j.cancelled_at IS NOT NULL )`
+                         OR j.cancelled_at IS NOT NULL )
+              )`
     ).all();
   } catch (e) {
     if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
