@@ -1191,6 +1191,18 @@ const httpServer = app.listen(PORT, () => {
       getTenantDb: tenantDb.getTenantDb,
     });
   } catch (e) { console.warn('[review.topup] start failed:', e.message); }
+  // A tenant with no timezone, or one the runtime cannot read, is named here at
+  // every start and paged to its group (decisions §82). Loud about the one
+  // tenant, never the whole server down: every shop shares this process.
+  try {
+    require('./lib/tenant-zone-check').runAtStartup({
+      mainDb:      require('./database'),
+      getTenantDb: tenantDb.getTenantDb,
+      // Account 1 is the main database; anyone else must already have a file,
+      // or getTenantDb would create one.
+      hasTenantDb: (id) => Number(id) === tenantDb.ROOTS_TENANT_ID || fs.existsSync(tenantDb.pathForTenant(id)),
+    });
+  } catch (e) { console.warn('[tz] tenant timezone check skipped:', e.message); }
   // Secrets-at-rest health (Platform readiness ⑩). A non-Roots tenant's creds
   // are AES-256-GCM encrypted under TENANT_SECRET_KEY; if that key is missing
   // on a box that already has tenants, none of their secrets can be decrypted

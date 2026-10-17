@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.551
+# Tacet shared-core consolidation — decisions record, v4.552
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-17 · v4.552 — **§82 · A TENANT WITH NO TIMEZONE IS NAMED LOUDLY AT EVERY START, AND THE SERVER STAYS UP — DECIDED BY ASH:** *"tz check then build step 2 then deploy live"*, to Claude's proposal that "fail loudly at startup" means loud about the one tenant, never the whole shared server going down. Every start checks each active tenant's zone and names one that is missing or misspelled in the log and to its alert group. **Refusing that tenant's time-based work is held back** — Roots itself has no zone today, so refusal would stop Roots' own delivery and pickup — and goes with step 3, once Roots has one. See the amendment at the end of §82.
 
 2026-10-17 · v4.551 — **§82 · THE TEST RUNNER NO LONGER FORCES CHINA TIME — DECIDED BY ASH:** *"remove pin"*. `scripts/run-suites.js` started every suite on Asia/Shanghai unless a TZ was given, the one clock under which a host-clock read gets Guangzhou right by luck. It now passes the host's clock through; CI already gives UTC. Two suites read the host clock themselves and are fixed to read the shop's. **A change to how tests run, called out.** See the amendment at the end of §82.
 
@@ -8914,6 +8916,36 @@ change and is not started.
 4. **Left before the host can go to UTC**: the boot-time refusal of a tenant
    with no zone, the remaining "today as the UTC day" and `+8` sites, and the
    deploy setting itself.
+
+**Amended 2026-10-17 — what "fail loudly at startup" means on a shared server.
+Decided by Ash:** *"tz check then build step 2 then deploy live"*.
+
+1. **The ruling, read for a shared server.** Every tenant runs in one process.
+   A tenant with no zone crashing that process at startup takes every shop
+   offline, Roots included, over one tenant's missing setting — and turns a
+   deploy into an outage. So: **loud about the one tenant, never the whole
+   server down.** The server always starts.
+2. **What production holds** (`scripts/diagnose_tenant_zones.js`, read-only,
+   2026-10-17). One tenant is real and active: Roots — 2 stores, 379 products,
+   about 830 orders in the last 30 days — and it has **no zone**: neither store
+   carries one and there is no `shop.timezone`. Databases 2, 4, 5, 6 and 7 have
+   no tenants row, no operators, no products and no orders; every sweep lists
+   tenants from the tenants table, so nothing reads them. New sign-ups are
+   seeded `shop.timezone` (since #1076), so a new tenant does not start empty.
+3. **Built.** `lib/tenant-zone-check.js` runs once at every start. For each
+   active tenant it reads the zone the code would use (`shopTimezone`) and every
+   zone a store names, and reports one that is missing or that the runtime
+   cannot read (a misspelling such as `Asia/Shangai`), as one `[tz] ⛔` log line
+   per tenant and one alert to that tenant's group (falling back to the
+   platform's). A check that cannot run logs that it was skipped; it never
+   stops the server.
+4. **Held back, deliberately: refusing the tenant's time-based work.** Refusal
+   while Roots has no zone stops Roots' own slots, cutoffs and reminders. It is
+   the same change as step 3 — a missing zone stops being answered with
+   Guangzhou's — and goes with it, once Roots has a zone. Until then the
+   fallback stands and this check is what makes it visible.
+5. **Next**: give Roots its zone (the store wizard, for Tianhe and Yuexiu), then
+   step 3.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 
