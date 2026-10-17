@@ -257,6 +257,13 @@ change; each is a boundary.
 7. **Freight and fees are not netted.** The landed-cost extras post as their own
    expense row and stay whole: the shipping was paid whether or not the goods
    came back.
+
+   **EXTENDED 2026-10-17 by §483.** The same reasoning now reaches the goods:
+   when the supplier refunds less than the returned units cost (they kept the
+   freight), `po_line_items.return_refund` records what came back, and the
+   difference is added to that same Freight & fees row. Empty means the full
+   value came back, exactly as before. See §483 in
+   `docs/tacet-consolidation-decisions.md`.
 8. **A return does not create a back-order.** Short means the supplier owes us
    goods; returned means we sent them back deliberately. The back-order route
    still keys on the shortfall only.

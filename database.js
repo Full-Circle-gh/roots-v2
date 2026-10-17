@@ -322,6 +322,16 @@ addColumn('po_line_items', 'return_reason', 'TEXT');
 // entry in a later month); this column is what lets a screen say "returned
 // 1 Sep" next to a purchase dated 25 Aug instead of silently restating it.
 addColumn('po_line_items', 'returned_at',   'DATETIME');
+// WHAT THE SUPPLIER ACTUALLY PAID BACK for the units in returned_qty, in yuan,
+// for the whole line (cumulative, like the quantity it sits beside). NULL means
+// the full value came back — returned_qty × cost_per_unit — which is what every
+// return meant before this column existed, so no row needs a backfill. A figure
+// below that full value means the supplier kept the difference (typically the
+// freight, which a supplier will not refund on goods sent back); the expense
+// poster books that kept part under 运费及杂费 Freight & fees rather than letting
+// the return take it off the books. Cleared with the return. lib/po-returns.js
+// holds the rule (§483).
+addColumn('po_line_items', 'return_refund', 'REAL');
 
 // ── Receipts — one record per delivery actually taken in ────────────────────
 // A purchase order is what was ASKED FOR. A receipt is what TURNED UP, and the

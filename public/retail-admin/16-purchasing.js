@@ -2233,9 +2233,18 @@
     const items = p.items || [];
     const units = items.reduce((n, i) => n + (Number(i.returned_qty) || 0), 0);
     if (!units) return '';
-    const value = items.reduce((n, i) => n + (Number(i.returned_qty) || 0) * (Number(i.cost_per_unit) || 0), 0);
+    const value = items.reduce((n, i) => n + returnFullValue(i.returned_qty, i.cost_per_unit), 0);
+    // §483: what the supplier kept is still in the total, under Freight & fees,
+    // so the note names it rather than claim the whole value came off.
+    const kept = items.reduce((n, i) => n + (i.return_refund == null ? 0
+      : Math.max(0, returnFullValue(i.returned_qty, i.cost_per_unit) - (Number(i.return_refund) || 0))), 0);
+    // Its own line, under the sentence that stays true as written: the goods
+    // rows did lose the full value; the kept part came back in as a fee.
+    const keptBit = kept > 0.004
+      ? `<div class="sub pu2-num">${esc(T('Refunded', '已退款'))} ${money(value - kept)} · ${esc(catLabel('运费及杂费 Freight & fees'))} ${money(kept)}</div>`
+      : '';
     return `<div class="sub" style="margin-top:6px">${esc(T('Returned to supplier', '已退回供应商'))} · ${money(value)}
-      — ${esc(T('already taken off the total above, dated to the order', '已从上方合计中扣除，记在采购单原日期'))} ${esc(p.date || '')}</div>`;
+      — ${esc(T('already taken off the total above, dated to the order', '已从上方合计中扣除，记在采购单原日期'))} ${esc(p.date || '')}</div>${keptBit}`;
   }
   // The invoice picker and the Invoices screen's no-invoice mark are ONE fact,
   // not two. "None" here writes po_line_items.no_invoice_expected — the column
@@ -2337,11 +2346,20 @@
   // is not optional decoration: the server requires a reason for any return, so
   // that "what do we keep sending back to this supplier" is a countable
   // question rather than one answered note by note.
+  // WHAT CAME BACK IN MONEY (§483) rides under the reason, and on the same
+  // show-and-hide: empty means the supplier refunded the full value, which the
+  // placeholder shows; a smaller figure means they kept the difference — the
+  // freight, usually — and Finance books that under Freight & fees instead of
+  // taking it off the order. "Refunded / 已退款" is a live pair, not a new one.
+  function returnFullValue(qty, cost) {
+    return Math.round((parseFloat(qty) || 0) * (parseFloat(cost) || 0) * 100) / 100;
+  }
   function returnCell(it, canReceive) {
     const arrived = it.qty_received != null;
     const dis = canReceive && arrived ? '' : 'disabled';
     const qty = (it.returned_qty || 0) > 0 ? it.returned_qty : '';
     const sel = it.return_reason || '';
+    const refund = qty && it.return_refund != null ? it.return_refund : '';
     const opt = (v, en, cn) => `<option value="${v}"${sel === v ? ' selected' : ''}>${esc(T(en, cn))}</option>`;
     // `错货` is the pair the mobile receive screen already ships for
     // wrong_item (RCV_REASONS, public/m.html) and is reused here rather than
@@ -2356,6 +2374,10 @@
         ${opt('over_delivery', 'Over-delivered', '多送')}
         ${opt('not_needed', 'Not needed', '无需要')}
       </select>
+      <label class="pu2-rrfw sub" style="display:${qty ? 'flex' : 'none'};align-items:center;gap:4px;margin-top:4px">${esc(T('Refunded', '已退款'))}
+        <input type="number" min="0" step="0.01" class="pu2-input pu2-rrf pu2-num" style="width:84px"
+          data-cost="${Number(it.cost_per_unit) || 0}" value="${refund}"
+          placeholder="${qty ? returnFullValue(qty, it.cost_per_unit).toFixed(2) : ''}" ${dis}></label>
       ${it.returned_at ? `<div class="sub pu2-num">${esc(String(it.returned_at).slice(0, 10))}</div>` : ''}`;
   }
   // The picker follows the box: a return with no reason is refused by the
@@ -2367,6 +2389,15 @@
     const on = (parseFloat(input.value) || 0) > 0;
     sel.hidden = !on;
     if (!on) sel.value = '';
+    // The refund box follows too, and its placeholder tracks the full value of
+    // what is now going back, so an empty box always shows what it will mean.
+    const wrap = input.closest('td')?.querySelector('.pu2-rrfw');
+    const rf = wrap && wrap.querySelector('.pu2-rrf');
+    if (rf) {
+      wrap.style.display = on ? 'flex' : 'none';
+      rf.placeholder = on ? returnFullValue(input.value, rf.dataset.cost).toFixed(2) : '';
+      if (!on) rf.value = '';
+    }
   };
 
   function receiveRow(it, canReceive, poNoInvoice) {
@@ -2602,6 +2633,7 @@
       const rq = tr.querySelector('.pu2-rq');
       const rr = tr.querySelector('.pu2-rr');
       const rrn = tr.querySelector('.pu2-rrn');
+      const rrf = tr.querySelector('.pu2-rrf');
       const retQty = rr ? (parseFloat(rr.value) || 0) : 0;
       receipts.push({
         line_id: parseInt(tr.dataset.line, 10),
@@ -2629,6 +2661,8 @@
         ...(rr && !rr.disabled ? {
           returned_qty: rr.value === '' ? 0 : rr.value,
           return_reason: retQty > 0 ? (rrn ? rrn.value : null) : null,
+          // Empty = the full value came back (§483).
+          ...(rrf ? { return_refund: retQty > 0 && rrf.value !== '' ? rrf.value : null } : {}),
         } : {}),
       });
       // Caught here as well as on the server, because the server's refusal
@@ -2672,6 +2706,11 @@
                              '该退货原因无效，请重新打开采购单后重试。'),
     return_reason_not_applicable: T('A reason belongs only on a line with a return.', '只有退货的项才需要填写原因。'),
     return_invalid: T('That returned quantity is not a number.', '退货数量无效。'),
+    // §483. The first is §269's pair, reused; the other two are composed and
+    // declared in docs/tacet-delivery-vocabulary.md.
+    return_refund_exceeds: T('A return cannot be more than was spent', '退货金额不能超过支出金额'),
+    return_refund_invalid: T('That refund amount is not a number.', '退款金额无效。'),
+    return_refund_not_applicable: T('A refund belongs only on a line with a return.', '只有退货的项才需要填写退款。'),
   });
   async function puReceiveError(e) {
     if (e && e.code === 'return_blocked') { await puShowReturnBlocked(e.data && e.data.blocking); return; }
