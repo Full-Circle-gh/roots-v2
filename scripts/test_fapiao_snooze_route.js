@@ -117,6 +117,7 @@ try { express = require('express'); retailRouter = require(RETAIL_PATH); }
 catch (e) { console.error('[test_fapiao_snooze_route] could not load the router:', e.message); process.exit(2); }
 
 const fr = require('../lib/fapiao-reminders');
+const businessDate = require('../lib/business-date');
 
 (async () => {
   console.log(`\ntest_fapiao_snooze_route — driver: ${driver}\n`);
@@ -150,7 +151,9 @@ const fr = require('../lib/fapiao-reminders');
      'THE DATE IS THE SWEEPER\'S OWN snoozeTarget — two copies of "tomorrow" would '
      + 'eventually disagree by an hour on one day of the year',
      { wrote: snoozeOf(1), sweeper: fr.snoozeTarget(new Date()).toISOString() });
-  ok(new Date(snoozeOf(1)).getHours() === fr.REMIND_HOUR,
+  // Read on the SHOP's clock, not the host's: this tenant has no zone, so it is
+  // the system default, as it is for snoozeTarget above.
+  ok(businessDate.zoneParts(null, new Date(snoozeOf(1))).hour === fr.REMIND_HOUR,
      'landing on the reminder hour, not on now+24h', snoozeOf(1));
   ok(!fr.isSnoozed(snoozeOf(1), fr.snoozeTarget(new Date())),
      'and spent exactly when it arrives, so nothing has to clear the column');

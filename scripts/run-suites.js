@@ -246,8 +246,11 @@ function discover() {
 function run(entry) {
   const started = Date.now();
   const r = spawnSync(process.execPath, [path.join(SCRIPTS, entry.file)], {
+    // No TZ of its own (decisions §82). This used to default every suite to
+    // Asia/Shanghai — the one host clock under which code that reads the host
+    // clock gets Guangzhou right by luck, which is how five such reads hid. A
+    // suite runs on the clock it is given; CI gives it UTC (tests.yml).
     cwd: ROOT, encoding: 'utf8', timeout: 15 * 60 * 1000,
-    env: { ...process.env, TZ: process.env.TZ || 'Asia/Shanghai' },
   });
   const out = `${r.stdout || ''}${r.stderr || ''}`;
   const seconds = Math.round((Date.now() - started) / 1000);

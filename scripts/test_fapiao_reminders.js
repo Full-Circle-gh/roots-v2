@@ -28,9 +28,9 @@ const path = require('path');
 
 // THE SHOP'S CLOCK, ON ANY SERVER CLOCK (§82). Every time below is a Guangzhou
 // wall-clock time and every answer is read on Guangzhou's clock, and the suite
-// re-runs itself on three server clocks — scripts/run-suites.js pins suites to
-// Asia/Shanghai, which is the one clock under which a host-clock read looks
-// right. Until §82 this file and the code both read the host's clock, so it
+// re-runs itself on three server clocks, because a suite runs on whatever clock
+// its host has, and Asia/Shanghai — production's today — is the one clock under
+// which a host-clock read looks right. Until §82 this file and the code both read the host's clock, so it
 // passed everywhere and proved nothing about the zone.
 if (!process.env.FAPIAO_CLOCK_CHILD) {
   let bad = 0;
@@ -250,9 +250,8 @@ sent.length = 0;
 frLive.sweepDbOnce(db, D('2026-09-04T10:00:00'), 1);
 ok(sent.length === 0 && rowOf(20).invoice_reminder_count === 1,
    'the ask it would have made is skipped');
-// Derived, never a UTC literal: the runner pins TZ=Asia/Shanghai and a
-// hardcoded Z-string passes on a UTC box and fails on the real one — which is
-// the whole reason the shop's clock is pinned in the first place.
+// Derived, never a UTC literal: a hardcoded Z-string bakes one zone's
+// arithmetic into the fixture, and this suite runs on three server clocks.
 ok(rowOf(20).invoice_reminder_last_at === D('2026-09-02T10:00:00').toISOString(),
    'AND THE STAMP IS UNTOUCHED — the row is skipped, never claimed, so a snooze '
    + 'defers the cadence rather than restarting it', rowOf(20).invoice_reminder_last_at);

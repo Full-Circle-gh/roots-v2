@@ -15,8 +15,8 @@
  * HOW. The real sweep runs over real tables (store_products, retail_stores,
  * retail_store_stock, storefront_config) in memory; only the push is a recorder.
  * The suite re-runs itself on UTC, New York and Shanghai server clocks, because
- * scripts/run-suites.js pins every suite to Asia/Shanghai — the one clock under
- * which a host-clock read looks right.
+ * a suite runs on whatever clock its host has, and Asia/Shanghai — production's
+ * today — is the one clock under which a host-clock read looks right.
  */
 'use strict';
 
