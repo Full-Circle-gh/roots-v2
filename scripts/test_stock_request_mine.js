@@ -51,9 +51,10 @@ const server = app.listen(0);
 const base = () => 'http://127.0.0.1:' + server.address().port;
 
 const TIANHE = 1, YUEXIU = 2;
+// Guangzhou shops, zoned as Roots' are (§82).
 const store = (id, code, en, cn) => h.db.prepare(
-  `INSERT OR REPLACE INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order)
-   VALUES (?,?,?,?,1,?)`).run(id, code, en, cn, id);
+  `INSERT OR REPLACE INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order, timezone)
+   VALUES (?,?,?,?,1,?,'Asia/Shanghai')`).run(id, code, en, cn, id);
 store(TIANHE, 'tianhe', 'Tianhe', '天河');
 store(YUEXIU, 'yuexiu', 'Yuexiu', '越秀');
 

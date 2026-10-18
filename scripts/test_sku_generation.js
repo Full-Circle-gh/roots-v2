@@ -83,7 +83,13 @@ eq('{NAME:3} takes letters only',
   fmt.render('{NAME:3}{SEQ:2}', { seq: 3, name: 'Dried  Mango 2' }), 'DRI03');
 eq('the output is uppercased', fmt.render('b-{SEQ:2}', { seq: 1 }), 'B-01');
 eq('a date token reads the supplied date',
-  fmt.render('{YY}{MM}-{SEQ:2}', { seq: 1, date: new Date(2026, 8, 4) }), '2609-01');
+  fmt.render('{YY}{MM}-{SEQ:2}', { seq: 1, date: new Date('2026-09-04T12:00:00+08:00'), tz: 'Asia/Shanghai' }), '2609-01');
+// The date parts are the SHOP's date, not the host's (§82): 07:30 on 1 October in
+// Guangzhou is still 30 September in UTC, and the code says October.
+eq('the date is the shop\'s, on any server clock',
+  fmt.render('{YYYY}{MM}{DD}', { seq: 1, date: new Date('2026-09-30T23:30:00Z'), tz: 'Asia/Shanghai' }), '20261001');
+eq('…and another shop reads its own',
+  fmt.render('{YYYY}{MM}{DD}', { seq: 1, date: new Date('2026-09-30T23:30:00Z'), tz: 'Europe/London' }), '20261001');
 
 ok('an unknown token is an error', !fmt.validate('X-{NOPE}').ok);
 ok('a space is an error', !fmt.validate('B {SEQ}').ok);

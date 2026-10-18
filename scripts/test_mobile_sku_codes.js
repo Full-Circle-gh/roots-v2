@@ -343,7 +343,11 @@ it('the preview twins agree with lib/sku-format.js — the engine that issues th
   const h = await opened();
   for (const [pattern, c] of [['{CAT}{SEQ:4}', { seq: 3, categoryCode: 'F' }], ['{SUB}-{YY}-{SEQ:3}', { seq: 7, subcategoryCode: 'DF' }],
     ['X{CAT}{NAME}{SEQ:4}', { seq: 1, categoryCode: 'P', name: 'Dried Mango' }], ['{SEQ:5}', { seq: 12 }]]) {
-    assert.strictEqual(h.ctx.skuRender(pattern, c), FMT.render(pattern, c), pattern);
+    // The phone's preview reads its own device clock; here the device is this
+    // machine, so the engine is given this machine's zone to compare against.
+    // The engine itself issues codes on the shop's zone (§82).
+    const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    assert.strictEqual(h.ctx.skuRender(pattern, c), FMT.render(pattern, { ...c, tz: deviceTz }), pattern);
   }
   for (const d of [{ code: 'B', simple: { digits: 4, sep: '-', year: 2 } }, { code: '', simple: { digits: 5, sep: '', year: 0 } }, { code: 'DF', subcategory: 'x', simple: { digits: 3, sep: '.', year: 4 } }]) {
     const scope = d.subcategory ? 'subcategory' : 'category';

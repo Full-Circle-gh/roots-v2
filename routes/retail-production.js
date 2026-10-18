@@ -182,7 +182,9 @@ router.post('/api/retail-admin/production', requireRetailAdmin, express.json(), 
   // snapshot is the product's own name — it is what was made.
   const madeName = product.name_en || product.name_cn || ('#' + product.id);
   const requestId = parseInt(b.request_id, 10) || null;
-  const today = new Date().toISOString().slice(0, 10);
+  // The day the store made it, on its own clock (§82) — not the UTC day, which
+  // dated a batch made at 07:00 in Guangzhou to the day before.
+  const today = businessDateForLocation(conn, storeId);
 
   try {
     const out = conn.transaction(() => {
