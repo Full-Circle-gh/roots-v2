@@ -396,6 +396,25 @@ section('4 · Qingyun riders');
     const empty = await qy({ success: true, data: [] });
     assert.ok(empty.text(empty.ctx.SUBS.qycfg.render()).includes('No active stores yet.'));
   });
+  // 2026-10-18: yuexiu was signed out of Qingyun for 22 hours while this screen
+  // said Connected, and a store that is not connected was always "Not set up"
+  // with Request setup — the wrong remedy for a login.
+  it('a signed-out store and an offline one say so, and neither is offered Request setup', async () => {
+    const S = { success: true, autoPush: true, anyConnected: true, data: [
+      { code: 'th', name_en: 'Tianhe', name_cn: '天河店', connected: true, state: 'connected' },
+      { code: 'yx', name_en: 'Yuexiu', name_cn: '', connected: false, state: 'signed_out' },
+      { code: 'zz', name_en: 'Zhuzhou', name_cn: '', connected: false, state: 'offline' }] };
+    const h = await qy(plain(S));
+    const t = h.text(h.ctx.SUBS.qycfg.render());
+    assert.ok(t.includes('Signed out'), 'a signed-out store does not say so');
+    assert.ok(t.includes('Sync service offline'), 'an offline store does not say so');
+    assert.ok(!t.includes('Not set up') && !t.includes('Request setup'), 'a store that was set up is offered setup');
+    h.CMD.x7QyAsk('yx'); h.CMD.x7QyAsk('zz');
+    assert.strictEqual(h.calls.writes.length, 0, 'the command refuses what the screen does not offer');
+    const zh = await qy(plain(S), { lang: 'zh' });
+    const tz = zh.text(zh.ctx.SUBS.qycfg.render());
+    assert.ok(tz.includes('已退出登录') && tz.includes('同步服务离线'), 'the Chinese halves are missing');
+  });
   it('Request setup POSTs {store_code}, then says Requested', async () => {
     const h = await qy(plain(J));
     h.CMD.x7QyAsk('th'); assert.strictEqual(h.calls.writes.length, 0, 'a connected store is not asked');

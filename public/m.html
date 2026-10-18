@@ -34558,7 +34558,8 @@ function x7Note(card){
   return '';
 }
 const X7_PILL={live:['LIVE','已启用','success'], off:['NOT CONFIGURED','未配置','danger'], unset:['NOT SET','未配置','muted'],
-  jdwait:['PENDING JD ACCOUNT','待开通京东账号','warning'], conn:['Connected','已连接','success'], noconn:['Not set up','未开通','danger']};
+  jdwait:['PENDING JD ACCOUNT','待开通京东账号','warning'], conn:['Connected','已连接','success'], noconn:['Not set up','未开通','danger'],
+  signedout:['Signed out','已退出登录','warning'], qyoffline:['Sync service offline','同步服务离线','warning']};
 function x7Pill(k){ const [en,zh,tone]=X7_PILL[k]; const [bg,fg]=PILL[tone]||PILL.muted;
   return `<span class="pill" style="background:${bg};color:${fg};flex:none">${T(en,zh)}</span>`; }
 const x7Lbl=(t,hint)=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${t}</span>${hint?`<span style="display:block;font-size:12px;color:var(--text-secondary);line-height:1.5;margin:-2px 0 6px">${hint}</span>`:''}`;
@@ -34871,7 +34872,7 @@ function x7LoadQy(){
 }
 reg('x7QyAsk', code=>{
   const s=x7(); if(s.busy||!s.qy||!canRoute('qycfg')) return;
-  const st=s.qy.stores.find(x=>x.code===code); if(!st||st.connected||s.qyAsked[code]) return;
+  const st=s.qy.stores.find(x=>x.code===code); if(!st||(st.state||(st.connected?'connected':'not_set_up'))!=='not_set_up'||s.qyAsked[code]) return;
   x7Begin('qy'); s.busy='qy:'+code; render();
   apiWrite('/integrations/qingyun/request',{store_code:code},'POST').then(j=>{
     if(!j||!j.success) throw new Error((j&&j.error)||'');
@@ -34892,8 +34893,11 @@ function screenQingyun(){
   if(s.qyErr&&!s.qy) return x1Err(escAttr(String(s.qyErr)),'x7Retry');
   if(!s.qy) return x1Loading();
   const q=s.qy;
+  /* Three ways not to be connected (the server's _qingyunStoreStatus); only a store
+     never set up is offered Request setup — a signed-out one needs a QR scan. */
+  const qyState=st=>st.state||(st.connected?'connected':'not_set_up');
   const rows=q.stores.map(st=>tmRow({label:escAttr([st.name_en||st.code,st.name_cn].filter(Boolean).join(' · ')),
-    right:`${x7Pill(st.connected?'conn':'noconn')}${st.connected?'':s.qyAsked[st.code]
+    right:`${x7Pill({connected:'conn',signed_out:'signedout',offline:'qyoffline'}[qyState(st)]||'noconn')}${qyState(st)!=='not_set_up'?'':s.qyAsked[st.code]
       ?`<span style="font-size:13px;color:var(--text-secondary)">${T('Requested','已申请')}</span>`
       :`<button class="btn2" style="width:auto;min-height:34px;padding:0 10px;font-size:13px" ${s.busy?'disabled':''} onclick="APP.cmd('x7QyAsk','${escAttr(st.code)}')">${s.busy==='qy:'+st.code?T('Sending…','提交中…'):T('Request setup','申请开通')}</button>`}`}));
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
@@ -39833,10 +39837,13 @@ function shipFromCard(o){
     }
     const refused=!!sf.needs_attention, held=!refused&&!!sf.push_held,
           booked=!refused&&!held&&!!sf.awaiting_dispatch;
+    /* The store's Qingyun session is gone: nothing leaves the queue until someone
+       signs it in again, so the wait says why (TC001334, 2026-10-18). */
+    const qyOut=sf.store_signed_out?' · '+T('Qingyun is signed out','青云 已退出登录'):'';
     const line=refused?head(T('Push refused — nobody is collecting this','发单被拒 — 无人接单'),'amber-ink')
       :held?head(T('Held — map service unavailable, retrying','已挂起 — 地图服务不可用,正在重试')+(sf.push_held_since&&fmtTime(sf.push_held_since)?' · '+T('since','自')+' '+escAttr(fmtTime(sf.push_held_since)):''),'amber-ink')
-      :booked?head(T('No courier called yet','尚未呼叫运力'))
-      :head(T('Queued for push…','排队发单中…')+(sf.push_since&&courierAgo(sf.push_since)?' · '+courierAgo(sf.push_since):''));
+      :booked?head(T('No courier called yet','尚未呼叫运力')+qyOut,qyOut?'amber-ink':undefined)
+      :head(T('Queued for push…','排队发单中…')+(sf.push_since&&courierAgo(sf.push_since)?' · '+courierAgo(sf.push_since):'')+qyOut,qyOut?'amber-ink':undefined);
     return card(line
       +(sf.push_error?`<div class="num" style="font-size:12px;line-height:1.5;color:var(--text-secondary);margin-top:4px;overflow-wrap:anywhere">${escAttr(sf.push_error)}</div>`:'')
       +(held?sub(T('Nothing is wrong with this address — the geocoder is down. It pushes itself once the service is back.','地址没有问题 — 地图服务暂时不可用,恢复后会自动发出。')):'')

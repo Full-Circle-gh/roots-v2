@@ -941,6 +941,29 @@ async function drainPushQueue(storeCode, br) {
   checkGeoHoldAlert(storeCode);
 }
 
+// The session is down: count it, page once it has stayed down, and record it.
+// Shared by the login gate and by an order list Qingyun refused as signed out,
+// so both say the same thing and both reach Settings through the heartbeat.
+// Stores whose last order list Qingyun refused as signed out (see pollStore).
+const listSignedOut = {};
+function noteLoginDown(storeCode, why) {
+  loginFailStreak[storeCode] = (loginFailStreak[storeCode] || 0) + 1;
+  const held = loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE && !alertsAllowed(storeCode);
+  log(storeCode, `${why} — skipping poll (${loginFailStreak[storeCode]}/${LOGIN_DOWN_GRACE})`
+    + (held ? ' — store shut, holding the page until it opens' : ''));
+  // Debounce: only page ops once the session has stayed down for GRACE consecutive
+  // polls — a lone transient blip clears before we ever alert (no more 3am false alarms).
+  // The streak keeps counting while the store is shut, so a session that's still
+  // down at opening pages on the first poll of the day rather than 90s later.
+  if (!downFlagged['login:' + storeCode] && loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE
+      && alertsAllowed(storeCode)) {
+    downFlagged['login:' + storeCode] = true;
+    logSync(storeCode, 'needs_login', 'error', null, '青云 Chrome not logged in — scan the QR on the box');
+    alertMerchant(ACCOUNT, `🔴 青云聚信 ${storeCode} 未登录，配送跟踪已停止，需要扫码重新登录\nQingyun ${storeCode} not logged in — tracking stopped, scan QR to re-login`);
+  }
+  heartbeat(storeCode, false);
+}
+
 async function pollStore(storeCode) {
   if (inVerifyCooldown(storeCode)) return;
   let br;
@@ -948,22 +971,14 @@ async function pollStore(storeCode) {
     br = await getQingyunBrowser(storeCode);
     if (!(await br.isLoggedIn())) {
       if (br.verificationRequired) { noteVerifyResult(storeCode, true); return; }
-      loginFailStreak[storeCode] = (loginFailStreak[storeCode] || 0) + 1;
-      const held = loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE && !alertsAllowed(storeCode);
-      log(storeCode, `not logged in — skipping poll (${loginFailStreak[storeCode]}/${LOGIN_DOWN_GRACE})`
-        + (held ? ' — store shut, holding the page until it opens' : ''));
-      // Debounce: only page ops once the session has stayed down for GRACE consecutive
-      // polls — a lone transient blip clears before we ever alert (no more 3am false alarms).
-      // The streak keeps counting while the store is shut, so a session that's still
-      // down at opening pages on the first poll of the day rather than 90s later.
-      if (!downFlagged['login:' + storeCode] && loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE
-          && alertsAllowed(storeCode)) {
-        downFlagged['login:' + storeCode] = true;
-        logSync(storeCode, 'needs_login', 'error', null, '青云 Chrome not logged in — scan the QR on the box');
-        alertMerchant(ACCOUNT, `🔴 青云聚信 ${storeCode} 未登录，配送跟踪已停止，需要扫码重新登录\nQingyun ${storeCode} not logged in — tracking stopped, scan QR to re-login`);
-      }
-      heartbeat(storeCode, false);
+      noteLoginDown(storeCode, 'not logged in');
       return;
+    }
+    // The last poll's order list was refused as signed out. Ask that call again
+    // before trusting the gate above: passing it resets the logout count.
+    if (listSignedOut[storeCode]) {
+      if (!(await br.orderListSignedIn())) { noteLoginDown(storeCode, 'Qingyun still says signed out'); return; }
+      listSignedOut[storeCode] = false;
     }
     // Keep the latch until we're allowed to say it's over, so a session that dropped
     // at 19:00 and came back at 02:00 still gets its all-clear when someone's there.
@@ -983,6 +998,15 @@ async function pollStore(storeCode) {
     const active = await br.getActiveDeliveries();
     const { ok, bootstrap, orders, reason } = active;
     if (br.verificationRequired) { noteVerifyResult(storeCode, true); return; }
+    // Qingyun refused the order list with a signed-out answer (code 901). That
+    // is a logout, not a page to self-heal: on 2026-10-18 yuexiu sat here for 22
+    // hours paging "order/list unavailable" while Settings said Connected and
+    // the scan-QR alert, which is the one with the remedy in it, never fired.
+    if (bootstrap && active.signedOut) {
+      listSignedOut[storeCode] = true;
+      noteLoginDown(storeCode, `Qingyun says signed out (${reason})`);
+      return;
+    }
     if (bootstrap) {
       // EVERY order/list tab call failed and the self-heal drive (re-arm capture →
       // order page → 配送中 tab → reload) didn't restore it. The old alert here said

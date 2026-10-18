@@ -139,6 +139,26 @@ it('the age is spent only on the plain wait — a booked order does not carry on
   assert.ok(!html.includes('4m ago'), 'the booked state printed a queue age');
 });
 
+// TC001334, 2026-10-18: the store's Qingyun session was gone and the line
+// said only "Queued for push…" for half an hour.
+it('a queued order at a signed-out store says the store is signed out, in the warning colour', () => {
+  const html = render(Object.assign(base(), { store_signed_out: true }));
+  assert.ok(html.includes('Queued for push') && html.includes('Qingyun is signed out'), 'the reason is missing from the wait');
+  assert.ok(html.includes('var(--warn)'), 'a wait with a cause still reads as a normal wait');
+  assert.ok(render(Object.assign(base(), { store_signed_out: true }), { lang: 'cn' }).includes('青云 已退出登录'), 'no Chinese half');
+});
+
+it('…a booked order there says it too, and without the flag neither does', () => {
+  assert.ok(render(Object.assign(base(), { push_status: 'ready', awaiting_dispatch: true, store_signed_out: true })).includes('Qingyun is signed out'));
+  assert.ok(!render(base()).includes('signed out'), 'the note leaked without its flag');
+});
+
+it('…and a refusal or a geocoder hold keeps its own line, without the note', () => {
+  const refused = render(Object.assign(base(), { push_status: 'error', needs_attention: true, store_signed_out: true }));
+  const held = render(Object.assign(base(), { push_held: true, push_held_since: '2026-09-21 02:09:07', store_signed_out: true }));
+  assert.ok(!refused.includes('signed out') && !held.includes('signed out'));
+});
+
 it('a refusal still outranks everything and keeps its Retry', () => {
   const html = render(Object.assign(base(), {
     push_status: 'error', needs_attention: true, awaiting_dispatch: true, push_error: 'bad phone',

@@ -27222,6 +27222,14 @@ const QY_GOODS_PIC_DEFAULT = 'https://s3plus.meituan.net/dap-orderdetail/qy/1783
 
 // Active stores + whether each one's Qingyun session is live right now. Shared with
 // the Delivery settings card so "connected" means exactly one thing everywhere.
+// One store's state from the same read, or null for an unknown store.
+function _qingyunStoreState(storeCode) {
+  try {
+    const s = _qingyunStoreStatus().find(x => x.code === storeCode);
+    return s ? s.state : null;
+  } catch (_) { return null; }
+}
+
 function _qingyunStoreStatus() {
   const stores = tdb().prepare(
     'SELECT code, name_en, name_cn FROM retail_stores WHERE is_active = 1 ORDER BY sort_order, id'
@@ -27237,7 +27245,16 @@ function _qingyunStoreStatus() {
     const h = hb[s.code];
     const fresh = h && h.updated_at &&
       (now - Date.parse(String(h.updated_at).replace(' ', 'T') + 'Z')) < QY_FRESH_MS;
-    return { code: s.code, name_en: s.name_en, name_cn: s.name_cn, connected: !!(fresh && h.logged_in) };
+    const connected = !!(fresh && h.logged_in);
+    // Why a store is not connected, because the remedy differs and the screen
+    // used to offer one answer for all three: "Not set up · Request setup".
+    //   signed_out   the sync service is polling and Qingyun refuses the session
+    //                — a QR scan fixes it (2026-10-18, yuexiu, 22 hours unseen)
+    //   offline      a store that was set up has stopped reporting at all —
+    //                the sync service, not the login
+    //   not_set_up   never connected here — the request-setup path
+    const state = connected ? 'connected' : !h ? 'not_set_up' : fresh ? 'signed_out' : 'offline';
+    return { code: s.code, name_en: s.name_en, name_cn: s.name_cn, connected, state };
   });
 }
 
@@ -27605,6 +27622,9 @@ function qingyunShipFromState(retailOrderId) {
       // Sent raw (SQLite UTC 'YYYY-MM-DD HH:MM:SS'); the drawer renders it with
       // the same ago-helper the courier card already uses.
       push_since: q.created_at || null,
+      // The store's Qingyun session is gone (the same state Settings shows), so
+      // this row cannot leave the queue until someone signs the store in again.
+      store_signed_out: _qingyunStoreState(q.store_code) === 'signed_out',
       blocked_by: null,
       stale: null,
       // ── Waiting for a delivery point ──────────────────────────────────
