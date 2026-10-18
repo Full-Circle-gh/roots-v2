@@ -42,19 +42,25 @@ function it(name, fn) {
 const section = (t) => console.log('\n' + t);
 
 const MIN = 60_000, HOUR = 60 * MIN;
-// Shanghai midnight (fixed +8, this module's own convention) for a known day.
+// Midnight in Guangzhou — the zone this shop's hours carry (below) — for a known day.
 // 2026-09-08 is a batch day on the anchor below; 2026-09-09 is not.
 const day = (ymd) => Date.parse(`${ymd}T00:00:00+08:00`);
 const at = (ymd, h, m = 0) => day(ymd) + h * HOUR + m * MIN;
 const BATCH = '2026-09-08', NON_BATCH = '2026-09-09';
 
 // A 10:00–20:00 shop with no explicit sync start ⇒ syncWindow opens at 08:00.
-const HOURS = { open: 10 * 60, close: 20 * 60, syncStart: null };
+// Its zone rides on the hours, as lib/store-hours.js puts it there (§82).
+const HOURS = { open: 10 * 60, close: 20 * 60, syncStart: null, tz: 'Asia/Shanghai' };
 
-// A db that answers exactly the one read lib/batch-cadence performs.
+// A db that answers the reads lib/batch-cadence performs: the schedule, and the
+// shop's zone (§82 — the cadence is asked in it, and there is no default).
 const fakeDb = (batchSchedule) => ({
-  prepare: () => ({
-    get: () => (batchSchedule ? { value_json: JSON.stringify(batchSchedule) } : undefined),
+  prepare: (sql) => ({
+    get: () => {
+      if (/retail_stores/.test(sql)) return undefined;
+      if (/shop\.timezone/.test(sql)) return { value_json: JSON.stringify('Asia/Shanghai') };
+      return batchSchedule ? { value_json: JSON.stringify(batchSchedule) } : undefined;
+    },
   }),
 });
 const SCHEDULE = {

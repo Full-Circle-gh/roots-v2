@@ -111,9 +111,10 @@ it('the order date takes the SHOP\'s clock when one is given (audit A-05)', () =
     "date(COALESCE(paid_at, placed_at), '+345 minutes')");
   assert.strictEqual(odateFor('-300 minutes'),
     "date(COALESCE(paid_at, placed_at), '-300 minutes')");
-  // And with nothing given it is the documented fallback, unchanged.
-  assert.strictEqual(odateFor(), ODATE);
-  assert.strictEqual(odateFor(null), ODATE);
+  // And with nothing given it REFUSES (§82 step 3 full) — it used to close the
+  // books on Guangzhou's midnight, the default every merchant was given.
+  assert.throws(() => odateFor(), /no default boundary/);
+  assert.throws(() => odateFor(null), /no default boundary/);
 });
 
 it('the summary asks for the shop\'s shift rather than pasting one', () => {

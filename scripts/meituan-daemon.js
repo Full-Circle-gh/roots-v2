@@ -146,9 +146,12 @@ const PREOPEN_LEAD_MIN = envLeadMin(process.env.MEITUAN_PREOPEN_LEAD_MIN);
 // hours), and they do not gate the 置休 open/close command — see
 // syncBusinessStatus, which stays outside this check so an operator can close or
 // reopen the shop at any hour.
+// Both are Guangzhou shops, and the zone is said rather than assumed (§82):
+// store-hours' within() reads hours on their own clock and treats hours with
+// no zone as closed.
 const LEGACY_STORE_HOURS = {
-  yuexiu: { open: 11 * 60 + 0,  close: 20 * 60 + 15 }, // 11:00–20:15
-  tianhe: { open: 10 * 60 + 0,  close: 20 * 60 + 0  }, // 10:00–20:00
+  yuexiu: { open: 11 * 60 + 0,  close: 20 * 60 + 15, tz: 'Asia/Shanghai' }, // 11:00–20:15
+  tianhe: { open: 10 * 60 + 0,  close: 20 * 60 + 0,  tz: 'Asia/Shanghai' }, // 10:00–20:00
 };
 
 // Self-expiring manual override (for testing a push outside opening hours):

@@ -58,7 +58,7 @@ const sweep = new Function('cfgValue', 'tdb', 'deliveryTz', 'businessDate',
 // Late in the shop's day, so every ETA below has passed with its grace. The
 // courier-job freshness test inside the SQL reads SQLite's own clock, so job
 // timestamps below are written relative to that, not to this instant.
-const NOW = businessDate.wallClockOnDay(null, new Date(), 23, 59);
+const NOW = businessDate.wallClockOnDay('Asia/Shanghai', new Date(), 23, 59);
 
 let nextId = 1;
 function order({ status = 'dispatched', type = 'delivery', eta = '08:00', mode = 'local', job = null } = {}) {

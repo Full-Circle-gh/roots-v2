@@ -34,8 +34,9 @@
    no timezone — and an order with no store at all — was judged on the host's
    local clock, so this file passed on a UTC+8 machine and failed eight checks
    on a UTC one: "open 10:00" meant 18:00 in Guangzhou. The zone is now the
-   store's, else the tenant's (deliveryTz), else the system default, and the
-   cases below pass on any host clock. Section 3 says so directly: it runs the
+   store's, else the tenant's (deliveryTz), and — since §82 step 3 full —
+   nothing else: no readable zone at all is refused, not read as Guangzhou's.
+   The cases below pass on any host clock. Section 3 says so directly: it runs the
    same probes under a tenant zone that is not Guangzhou's, and refuses any host
    clock read in the functions it lifts. */
 'use strict';
@@ -71,7 +72,7 @@ const LIFTED = ['pickupStoreHoursForOrder', 'pickupWindowFor', 'hhmmToMinutes',
 /* Stubs. STORE_ROW stands in for the retail_stores row and is swapped per
    case; cfgValue answers only the two keys these functions read. */
 let STORE_ROW = null;
-let TENANT_TZ = null;          // what deliveryTz() answers: the tenant's zone, or null
+let TENANT_TZ = 'Asia/Shanghai'; // what deliveryTz() answers: the tenant's zone (Roots'), or null
 const CFG_DEFAULT = { 'pickup.window': { open: '10:00', close: '20:00' }, 'pickup.leadMinutes': 0 };
 let CFG = { ...CFG_DEFAULT };
 const stubs = {
@@ -134,7 +135,7 @@ for (const c of CASES) {
 }
 
 /* The zone that decides, when the store does not name one. */
-console.log('\nThe zone is the store\'s, else the tenant\'s, else the system default');
+console.log('\nThe zone is the store\'s, else the tenant\'s — and nothing else (§82)');
 const noTzStore = { store_id: 6 };
 const noTzRow = { open_time: '10:00', close_time: '20:00', timezone: null };
 const atZone = (tz, ymd, h, m) => require('../lib/business-date').dateInZone(tz, ymd, h, m);
@@ -148,10 +149,17 @@ is(verdictAt(noTzStore, gzAt(10, 0)), 'REJECT', 'tenant in London: 10:00 Guangzh
 STORE_ROW = { ...noTzRow, timezone: 'Asia/Shanghai' };
 is(verdictAt(noTzStore, gzAt(10, 0)), 'ACCEPT', 'a store naming its own zone wins over the tenant\'s');
 STORE_ROW = { ...noTzRow, timezone: 'Mars/Olympus_Mons' };
-TENANT_TZ = null;
-is(verdictAt(noTzStore, gzAt(10, 0)), 'ACCEPT', 'a zone the runtime cannot read falls back to the system default, not the host');
+TENANT_TZ = 'Asia/Shanghai';
+is(verdictAt(noTzStore, gzAt(10, 0)), 'ACCEPT', 'a store zone the runtime cannot read falls to the TENANT\'s, not the host\'s');
 is(verdictAt(noTzStore, gzAt(9, 59)), 'REJECT', '…and is enforced there');
+TENANT_TZ = null;
+{
+  let thrown = null;
+  try { verdictAt(noTzStore, gzAt(10, 0)); } catch (e) { thrown = e.code; }
+  is(thrown, 'shop_timezone_missing', 'NO READABLE ZONE ANYWHERE IS REFUSED, not read as Guangzhou\'s (§82 step 3 full)');
+}
 STORE_ROW = noTzRow;
+TENANT_TZ = 'Asia/Shanghai';
 is(R.resolvePickupTime(gzAt(10, 0).toISOString(), NOW, R.pickupStoreHoursForOrder(noTzStore)).label,
   'Pickup Today 10:00', 'the label reads the same clock: today, at 10:00');
 is(R.resolvePickupTime(gzAt(34, 0).toISOString(), NOW, R.pickupStoreHoursForOrder(noTzStore)).label,
@@ -169,7 +177,7 @@ console.log('\nNo host clock read in the lifted code');
 
 console.log('\nThe other limits on a pickup time');
 {
-  STORE_ROW = null; TENANT_TZ = null;
+  STORE_ROW = null; TENANT_TZ = 'Asia/Shanghai';
   const now = gzAt(11, 0);
   const at = (ms) => R.resolvePickupTime(new Date(now.getTime() + ms).toISOString(), now, null).error || 'ok';
   is(at(0), 'ok', 'right now is not in the past');
@@ -202,22 +210,19 @@ console.log('\nThe other limits on a pickup time');
   is(R.pickupStoreHoursForOrder(null), null, 'no order at all has no store hours');
 }
 
-console.log('\nA runtime with no timezone data still never reads the host');
+console.log('\nA runtime with no timezone data refuses, rather than guessing +8');
 {
-  // Build the same code against an Intl that cannot read ANY zone. The last
-  // fallback is the system default's fixed UTC+8, read off UTC fields.
+  // Build the same code against an Intl that cannot read ANY zone. It used to
+  // fall back to a fixed UTC+8 read off UTC fields — right for Guangzhou, wrong
+  // for London. With no house zone (§82 step 3 full) it says it cannot tell.
   const NoZones = { DateTimeFormat: function () { throw new RangeError('no timezone data'); } };
   const R2 = new Function(...Object.keys(stubs), 'Intl',
     LIFTED.map(lift).join('\n') + '\nreturn { ' + LIFTED.join(', ') + ' };')(...Object.values(stubs), NoZones);
   STORE_ROW = null; TENANT_TZ = 'Europe/London';
-  const v = (when) => { const r = R2.resolvePickupTime(when.toISOString(), NOW, null); return r.error || 'ACCEPT'; };
-  is(v(gzAt(10, 0)), 'ACCEPT', 'Guangzhou 10:00 is open');
-  is(v(gzAt(9, 59)), 'pickup_time_outside_hours', 'Guangzhou 09:59 is not');
-  is(v(gzAt(20, 0)), 'ACCEPT', 'Guangzhou 20:00 is open');
-  is(v(gzAt(20, 1)), 'pickup_time_outside_hours', 'Guangzhou 20:01 is not');
-  is(R2.resolvePickupTime(gzAt(34, 0).toISOString(), NOW, null).label, 'Pickup Thu 13/8 10:00',
-    'and its day and date are Guangzhou\'s');
-  TENANT_TZ = null;
+  let thrown = null;
+  try { R2.resolvePickupTime(gzAt(10, 0).toISOString(), NOW, null); } catch (e) { thrown = e.name; }
+  is(thrown, 'RangeError', 'the pickup time is not judged on a clock the runtime cannot read');
+  TENANT_TZ = 'Asia/Shanghai';
 }
 
 /* The predicate itself, stated once so a future edit to pickupWindowFor has
