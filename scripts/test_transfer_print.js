@@ -81,9 +81,10 @@ const feie = require(path.join(h.REPO, 'lib/feie.js'));
 
 // Two real shops, because the whole point is which of them the paper lands at.
 const TIANHE = 1, YUEXIU = 2;
+// Guangzhou shops, zoned as Roots' are (§82).
 const store = (id, code, en, cn) => h.db.prepare(
-  `INSERT OR REPLACE INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order)
-   VALUES (?,?,?,?,1,?)`).run(id, code, en, cn, id);
+  `INSERT OR REPLACE INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order, timezone)
+   VALUES (?,?,?,?,1,?,'Asia/Shanghai')`).run(id, code, en, cn, id);
 store(TIANHE, 'tianhe', 'Tianhe', '天河');
 store(YUEXIU, 'yuexiu', 'Yuexiu', '越秀');
 

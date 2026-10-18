@@ -167,6 +167,7 @@ router.post('/api/retail-admin/sku/:entity/pattern-preview', requireRetailAdmin,
       categoryCode: b.category_code || '',
       subcategoryCode: b.subcategory_code || '',
       name: b.name || 'Dried Mango',
+      tz: require('../lib/business-date').shopTimezone(tdb()),   // today's date parts, on the shop's clock (§82)
     })),
   });
 });

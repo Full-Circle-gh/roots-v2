@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.556
+# Tacet shared-core consolidation — decisions record, v4.557
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-18 · v4.557 — **§82 · "TODAY" IS THE SHOP'S DAY, AND NOTHING READS THE HOST'S CLOCK — DECIDED BY ASH:** *"fix all"*. Four places took "today" as the UTC day, so between midnight and 08:00 in Guangzhou a restock request and a batch "made today" were dated the day before; two read the host's local clock (restock numbers, SKU date parts). All read the shop's clock now, and a guard fails on any new host-clock read. The first of the batches Ash asked for; the shop-time `+8` sites follow. See the amendment at the end of §82.
 
 2026-10-18 · v4.556 — **§484 · QINGYUN IS SIGNED BACK IN FROM A LIVE PICTURE OF ITS OWN BROWSER, NOT A REMOTE SCREEN — DECIDED BY ASH:** *"Live picture"*, chosen over adding Qingyun to the §260 holder screen, after a read-only survey found that path needs two new displays, two VNC servers and a hand-copied trigger on the box, and a restart of both Qingyun browsers. Settings shows a signed-out Qingyun store a *Sign in again* button; it opens a page that shows a picture of that store's Qingyun browser on its QR code, refreshed every two seconds, for someone to scan with the 青云 App. Tacet confirms the sign-in itself and stops showing pictures the moment it has. §260's sentence that Qingyun is "next" on the shared screen is overtaken by this. See §484.
 
@@ -9060,6 +9062,34 @@ Ash:** *"yes do it all"*, after Claude had twice advised against it.
    Beijing time whatever the shop's zone. Others are a shop's day written as
    Guangzhou's. Telling them apart is a survey of its own; it is the next item
    before the host can move to UTC.
+
+**Amended 2026-10-18 — the `+8` survey, and "today". Decided by Ash:** *"fix all"*,
+having been told that the shop-time `+8` sites change nothing for Roots.
+
+1. **The survey** (read-only, 57 sites outside the helpers): 17 are a Chinese
+   PLATFORM's time — Meituan, Eleme, Shangou, JD, WeChat Pay, Alipay, Qingyun,
+   the GZ Grocery sheet — and are right as written; 6 are operator-log stamps;
+   32 are the shop's own day or hour written as Guangzhou's (reports, receipts,
+   slot labels, the Qingyun "today", CSV names); 2 unclear (the payment-proof
+   reader, and finance-window's inert named constant).
+2. **A correction to item 6 above:** the `+8` literals do not read the host's
+   clock, so they do NOT stand between production and a UTC host. What did:
+   code reading host-local date parts. After this change there is none in
+   `lib/`, `routes/`, `server.js` or the daemons, and
+   `scripts/test_shop_today.js` fails on a new one.
+3. **Fixed here.** "Today" as the UTC day — wrong for Roots NOW between 00:00
+   and 08:00 Guangzhou: `routes/restock.js` (a request's default date, and the
+   suggestions' window and today) and `routes/retail-production.js` ("made
+   today", now the store's own day). Host-clock reads: restock request numbers
+   (`genRsNumber`, RS/PR-YYMMDD) and the `{YYYY}{YY}{MM}{DD}` parts of new SKUs
+   (`lib/sku-format.js`, given the shop's zone by `lib/sku-rules.js` and the
+   pattern preview; a date part with no zone is refused). The referral
+   lifetime cutoff counts months the same on any host.
+4. **Next, in batches, one PR each, riskiest last:** labels and filenames;
+   reports (whose SQL already reads the shop's day and whose JS "today" did
+   not); back-office record dates; printed and customer-facing display;
+   Qingyun jobs and the day-only midnight test. The 17 platform sites and the
+   operator stamps stay as they are.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 

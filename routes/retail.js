@@ -18488,7 +18488,9 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
     const months0 = Number(s0.lifetimeMonths) || 0;
     const sel0 = s0.lifetimeMode === 'selected';
     let cutoff = null;
-    if (rate0 > 0 && months0 > 0) { cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - months0); }
+    // N months back from now, counted the same on any host (§82) — the host's
+    // local month moved the cutoff by its offset at a month boundary.
+    if (rate0 > 0 && months0 > 0) { cutoff = new Date(); cutoff.setUTCMonth(cutoff.getUTCMonth() - months0); }
     for (const row of rows) {
       row.lifetime_active = (rate0 > 0 && row.status === 'ordered'
         && (!sel0 || row.referrer_lifetime_eligible === 1)

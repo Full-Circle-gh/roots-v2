@@ -13,6 +13,17 @@ const inventory = require('../lib/inventory');
 // is a behavioural no-op today; it closes the cross-tenant split before data
 // isolation is switched on.
 const { tdb, currentTenantId } = require('../lib/tenant-db');
+// The shop's own day (decisions §82). This file took "today" as the UTC day
+// and numbered requests off the host's clock, so between midnight and 08:00 in
+// Guangzhou a request was dated, and numbered, the day before.
+const businessDate = require('../lib/business-date');
+const shopToday = () => businessDate.businessDate(businessDate.shopTimezone(tdb()));
+// 'YYYY-MM-DD' minus whole days, as plain calendar arithmetic on the shop's day.
+const shopDaysAgo = (n) => {
+  const d = new Date(shopToday() + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+};
 const { cfgValue } = require('../lib/store-config');
 const { logActivity } = require('../middleware/auth');
 // Lazily, and deliberately: routes/retail.js requires this file's siblings, so
@@ -950,7 +961,7 @@ function _inferDirection(req) {
 // A product is "due" when days_since_last >= typical_cadence × 0.8.
 // Score = days_since_last / typical_cadence, sorted descending.
 function buildRestockSuggestions(daysWindow = 60) {
-  const since = new Date(Date.now() - daysWindow * 86400000).toISOString().slice(0, 10);
+  const since = shopDaysAgo(daysWindow);
   const rows = tdb().prepare(`
     SELECT ri.product_id, ri.product_name, ri.product_cn, ri.sku, ri.qty_requested AS qty,
            ri.unit, r.date
@@ -972,7 +983,7 @@ function buildRestockSuggestions(daysWindow = 60) {
     buckets[r.product_id].qtys.push(r.qty);
     buckets[r.product_id].dates.push(r.date);
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = shopToday();
   const out = [];
   for (const b of Object.values(buckets)) {
     if (b.dates.length < 2) {
@@ -1039,8 +1050,8 @@ router.get('/api/restock/suggest', requireRestockAccess, tacetOnly, (req, res) =
  * width, so the existing index-free scan reads either.
  */
 function genRsNumber(prefix = 'RS') {
-  const d = new Date();
-  const ymd = d.getFullYear().toString().slice(2) + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+  // The shop's date, not the host's: RS-YYMMDD is the day the shop raised it.
+  const ymd = shopToday().replace(/-/g, '').slice(2);
   const todayCount = tdb().prepare(
     'SELECT COUNT(*) AS c FROM restock_orders WHERE substr(rs_number,1,3) = ? AND substr(rs_number,4,6) = ?'
   ).get(prefix + '-', ymd).c;
@@ -1675,7 +1686,7 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
   // note on genRsNumber. Read off the resolved direction rather than the body,
   // so a caller cannot pick its own prefix.
   const rs_number = genRsNumber(dir.to_role === 'kitchen' ? 'PR' : 'RS');
-  const today = date || new Date().toISOString().slice(0,10);
+  const today = date || shopToday();
   const initialStatus = status === 'sent' ? 'sent' : 'draft';
   const sent_at = initialStatus === 'sent' ? new Date().toISOString() : null;
 
