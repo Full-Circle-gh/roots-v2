@@ -48,13 +48,17 @@ function extractFn(name, src) {
 let bookedSrc = extractFn('bookedLaterDay', RETAIL_SRC);
 if (MUTANT) bookedSrc = bookedSrc.replace("if (kind && kind !== 'schedule') return null;", '');
 
-const { bookedLaterDay, buildWecomOrderCard } = new Function('isCounter', `
+// The shop's zone, as deliveryTz() answers it (§82). Guangzhou, as Roots' is,
+// unless a case below says otherwise.
+const businessDate = require('../lib/business-date');
+let ZONE = 'Asia/Shanghai';
+const { bookedLaterDay, buildWecomOrderCard } = new Function('isCounter', 'businessDate', 'deliveryTz', `
   ${extractFn('_gzDateStr', INV_SRC)}
   const inventory = { gzDateStr: _gzDateStr };
   ${bookedSrc}
   ${extractFn('buildWecomOrderCard', RETAIL_SRC)}
   return { bookedLaterDay, buildWecomOrderCard };
-`)(isCounter);
+`)(isCounter, businessDate, () => ZONE);
 
 // Paid 2026-10-12 08:43 Guangzhou = 00:43 UTC, as SQLite CURRENT_TIMESTAMP stores it.
 const PAID = '2026-10-12 00:43:00';
@@ -100,6 +104,23 @@ it('a scheduled day equal to the paid day (GZ calendar) is not "later"', () => {
   // 2026-10-11 16:00 UTC is 2026-10-12 00:00 in Guangzhou — the paid day.
   const o = { ...base, delivery_slot_kind: 'schedule', scheduled_for: '2026-10-11T16:00:00.000Z' };
   assert.strictEqual(bookedLaterDay(o, PAID), null);
+});
+
+it('"later" is judged on the shop\'s calendar, for Guangzhou and for New York', () => {
+  // Paid 00:43 UTC on the 12th: the 12th in Guangzhou, 20:43 on the 11th in New
+  // York. The pick, 02:00 UTC on the 12th, is 10:00 on the 12th in Guangzhou and
+  // 22:00 on the 11th in New York.
+  const o = { ...base, delivery_slot_kind: 'schedule', scheduled_for: '2026-10-12T02:00:00.000Z' };
+  assert.strictEqual(bookedLaterDay(o, PAID), null, 'Guangzhou: same day');
+  try {
+    ZONE = 'America/New_York';
+    assert.strictEqual(bookedLaterDay({ ...o, scheduled_for: '2026-10-13T02:00:00.000Z' }, PAID), '2026-10-12',
+      'New York: the 12th, a day after it was paid');
+    assert.strictEqual(bookedLaterDay(o, PAID), null, 'New York: the paid day');
+    ZONE = null;
+    assert.strictEqual(bookedLaterDay({ ...o, scheduled_for: '2026-10-20' }, PAID), null,
+      'no zone: no booked line, never a guessed zone');
+  } finally { ZONE = 'Asia/Shanghai'; }
 });
 
 it('pickup and counter are left alone', () => {
