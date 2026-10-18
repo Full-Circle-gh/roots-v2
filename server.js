@@ -405,6 +405,7 @@ app.use('/api/internal/eleme', require('./routes/eleme-internal')); // daemon-on
 app.use(require('./routes/eleme-admin')); // retail-admin Eleme sync config + OAuth callback
 const channelSignin = require('./routes/channel-signin'); // §252 — sign a channel back in
 app.use(channelSignin);
+app.use(require('./routes/qingyun-signin')); // §484 — sign Qingyun back in from a picture
 app.use(require('./routes/channel-sync')); // §103 one verdict per item per channel, read-only
 app.use(require('./routes/integrations-admin')); // retail-admin Channels & Delivery hub
 

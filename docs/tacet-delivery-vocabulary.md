@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.341 · 2026-10-18 · SIGNING QINGYUN BACK IN FROM A PICTURE (§484) — 6 STRINGS COMPOSED BY CLAUDE (`请用青云 App 扫码登录`, `青云聚信未显示二维码，需要有人在服务器上处理。`, `青云聚信要求人工验证，需要有人在服务器上处理。`, `无法连接该门店的青云同步服务。`, `刷新二维码`, and the sign-in title's `青云聚信`), EACH BUILT FROM LIVE FRAGMENTS; `重新登录成功，配送跟踪继续` LIFTED FROM THE QINGYUN DAEMON'S OWN ALERT; THE REST COPIED FROM `public/channel-signin.html`.** See *Signing Qingyun back in from a picture*.
+
 **v1.340 · 2026-10-18 · A QINGYUN STORE THAT IS SIGNED OUT SAYS SO — 1 STRING COMPOSED BY CLAUDE (`同步服务离线`), CUT FROM THE LIVE `美团同步服务离线`; `Signed out · 已退出登录` AND `青云 已退出登录` COPIED FROM THE LIVE SIGNED-OUT PAIR AND HOME'S `${name} 已退出登录`.** See *A Qingyun store that is signed out*.
 
 **v1.339 · 2026-10-18 · REFRESH PRICES ON A QUEUED ORDER SAYS IT IS QUEUED — 1 STRING COMPOSED BY CLAUDE (`进入青云后即可查看运力比价。`), BUILT ONLY FROM LIVE FRAGMENTS; THE QUEUE LINE `Queued for push… · 排队发单中…` AND `courierAgo`'s AGE ARE COPIED WHOLE FROM THE DRAWER ONE BLOCK ABOVE.** See *Refresh prices on a queued order*.
@@ -14300,3 +14302,37 @@ said *Connected*, and a store that was not connected was always *Not set up*.
 - `未登录` — live, but only inside the daemon's WeCom alert; the screens' word is `已退出登录`, and one screen saying it two ways is how they come to disagree.
 - `需要扫码重新登录` on the pill — true, but nothing on this screen can do the scan yet; a pill that names an action the screen cannot take reads as a broken button.
 - `离线` alone — live only as part of the Meituan sentence; on its own it does not say *what* is offline, and the store is not.
+
+## Signing Qingyun back in from a picture
+
+**Composed by Claude, 2026-10-18, under the 2026-09-06 amendment.** Operator
+register. The page `public/qingyun-signin.html` (§484) and the *Sign in again*
+button beside a signed-out store in Settings → Qingyun (`02-settings-ops.js`
+`loadQingyunStores`, `m.html` `screenQingyun`). Asked by Ash, who chose a live
+picture of the store's Qingyun browser over a remote screen.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Scan the code below with the 青云 App. This page closes by itself when you’re done.` / `请用青云 App 扫码登录，完成后本页会自动关闭。` | The page, while the code is up | The live `微信扫码登录` with the app's name in place of 微信, then the live second half of `channel-signin.html`'s `loginNow` word for word. The English keeps "青云 App" untranslated because that is the name on the staff's phone. |
+| `Qingyun did not show a code. This needs someone at the box.` / `青云聚信未显示二维码，需要有人在服务器上处理。` | The page, when the browser is not on the QR page | `青云聚信` is Qingyun's own name, as the daemon's alert writes it; `二维码` is live; `服务器上` is the live `服务器上的登录服务未运行` (`channel-signin.html`). `处理` is the plain verb. |
+| `Qingyun is asking for a security check. That needs someone at the box.` / `青云聚信要求人工验证，需要有人在服务器上处理。` | The page, when Qingyun shows its 验证中心 | `人工验证` is the live `通过人工验证` (`channel-signin.html` `holderNow`); the second clause is the row above's. |
+| `Can’t reach this store’s Qingyun sync service.` / `无法连接该门店的青云同步服务。` | The page, when Tacet cannot reach the store's Qingyun browser | `同步服务` is v1.340's `同步服务离线`; `青云` and `门店` are live. The English says "sync service", not "browser", because that is what staff know it as. |
+| `Show a new code` / `刷新二维码` | The page's button, for an expired code | `刷新` is the live word for refresh; `二维码` is live. |
+| `Sign in again · Qingyun · {store}` / `重新登录 · 青云聚信 · {store}` | The page's title | `channel-signin.html`'s live title with `青云聚信` as the channel name. |
+
+### Lifted
+
+- `Signed in again. Delivery tracking resumes.` / `重新登录成功，配送跟踪继续。` — the Qingyun daemon's own all-clear (`scripts/qingyun-daemon.js`, `重新登录成功，配送跟踪继续`), so the page and the group chat say the same thing.
+
+### Copied whole
+
+- `Sign in again` / `重新登录`, `Opening…` / `正在打开…`, `You don’t have permission for this` / `你没有此操作的权限`, `Time ran out. Try again.` / `已超时，请重试。`, `Try again` / `重试`, `Close` / `关闭` — `public/channel-signin.html` and `01-core.js`, unchanged.
+
+### Rejected
+
+- `扫描二维码` — correct, but `扫码` is what every live string says.
+- `浏览器` for the thing Tacet cannot reach — accurate, and nowhere else on a screen; staff know it as the sync service.
+- `重新获取二维码` for *Show a new code* — also live-built, but twice the length of `刷新二维码` on a button that sits beside *Close*.
+

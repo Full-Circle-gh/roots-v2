@@ -1072,6 +1072,7 @@ async function loadQingyunStores() {
     if (apBox) apBox.checked = j.autoPush === true;
     // Stash for the Delivery hub's Qingyun card status line.
     window._qyConnected = stores.filter(s => s.connected).length;
+    window._qyStores = stores; // names for the Sign in again page's title
     if (typeof dlvHubRender === 'function') dlvHubRender();
     if (!stores.length) { box.innerHTML = '<div class="muted">No active stores yet. · 暂无门店。</div>'; return; }
     box.innerHTML = stores.map(s => {
@@ -1088,8 +1089,13 @@ async function loadQingyunStores() {
           : state === 'offline'
             ? `<span style="background:#fef3c7;color:#92400e;${pillCss}">⚠ Sync service offline · 同步服务离线</span>`
             : `<span style="background:#fee2e2;color:#991b1b;${pillCss}">✗ Not set up · 未开通</span>`;
-      const btn = state !== 'not_set_up' ? ''
-        : `<button class="btn" onclick="_requestQingyun('${s.code}', this)">Request setup · 申请开通</button>`;
+      // §484 — a signed-out store is signed back in from a picture of its
+      // Qingyun browser; the server checks the permission again either way.
+      const btn = state === 'not_set_up'
+        ? `<button class="btn" onclick="_requestQingyun('${s.code}', this)">Request setup · 申请开通</button>`
+        : state === 'signed_out' && (typeof can !== 'function' || can('integrations:signin'))
+          ? `<button type="button" class="btn btn-sm td-secondary" onclick="_qingyunSignIn('${s.code}')">Sign in again · 重新登录</button>`
+          : '';
       return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)">
         <div style="font-weight:600">${nm}</div>
         <div style="display:flex;align-items:center;gap:10px">${pill}${btn}</div>
@@ -1099,6 +1105,15 @@ async function loadQingyunStores() {
 }
 
 // Ask ops to connect same-city tracking for one store.
+function _qingyunSignIn(storeCode) {
+  const s = (window._qyStores || []).find(x => x.code === storeCode) || {};
+  const lang = document.documentElement.dataset.uiLang === 'cn' ? 'cn' : 'en';
+  const name = (lang === 'cn' ? (s.name_cn || s.name_en) : (s.name_en || s.name_cn)) || storeCode;
+  window.open('/qingyun-signin?store=' + encodeURIComponent(storeCode) + '&name=' + encodeURIComponent(name) +
+    '&lang=' + lang, 'tacet-signin');
+}
+window._qingyunSignIn = _qingyunSignIn;
+
 async function _requestQingyun(storeCode, btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Sending… · 提交中…'; }
   try {
