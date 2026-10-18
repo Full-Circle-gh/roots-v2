@@ -362,6 +362,28 @@ function call(method, url, body) {
       + 'is how a queue renders before the options it offers exist');
   });
 
+  await it('the decided half is newest by the claim\'s own date, not by when it was approved', async () => {
+    // The order the bug report showed: Oct 18 approved last, Oct 14 and Oct 15
+    // approved earlier, and the list read 18, 14, 15. Approve the NEWER claim
+    // first so ordering by the tap would put the older one on top.
+    const dated = async (date) => {
+      const r = await call('POST', '/api/retail-admin/staff-expenses', {
+        date, amount: 30, category: 'Transport', note: 'tx timing test order', paid_by: 'company',
+      });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+      claimIds.push(r.body.id);
+      return r.body.id;
+    };
+    const newer = await dated('2026-09-12');
+    const older = await dated('2026-09-05');
+    await call('POST', `/api/retail-admin/staff-expenses/${newer}/decide`, { decision: 'approve' });
+    await call('POST', `/api/retail-admin/staff-expenses/${older}/decide`, { decision: 'approve' });
+    const ids = (await call('GET', '/api/retail-admin/staff-expenses/pending')).body.data.rows.map(r => r.id);
+    assert.ok(ids.includes(newer) && ids.includes(older), 'both decided claims are on the list');
+    assert.ok(ids.indexOf(newer) < ids.indexOf(older),
+      'the Sep 12 claim sits above the Sep 5 one, though Sep 5 was approved later');
+  });
+
   console.log('\n6 · correcting who paid, on a claim already in the books (§207)');
 
   /* THE CLAIM THIS SECTION IS ABOUT. Submitted as own-money, which is what a
