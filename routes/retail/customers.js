@@ -34,7 +34,7 @@ const { ADDRESS_PUBLIC_COLS, normalizeChinaAddress, geocodeAddressAsync } = requ
 const { notifyCustomer } = require('../../lib/customer-notify');
 const { reconcileSignupVouchers, claimMigrationCredit } = require('../../lib/signup-rewards');
 const { affiliateSettings, ensureReferralCode } = require('../../lib/referrals');
-const { shopSqlShift } = require('../../lib/shop-clock');
+const { shopSqlShift, shopUtcLabel, shopToday } = require('../../lib/shop-clock');
 const { BC_PAID_STATUSES } = require('../../lib/broadcast-audience');
 const {
   normEmail, publicCustomer, grantedById, grantedByName, createOrReuseManualCustomer, historyTenantId,
@@ -404,7 +404,7 @@ router.get('/api/retail-admin/customers/export.csv', requireRetailAdmin, (req, r
     const head = [
       'ID', 'Name', 'Phone', 'Email', 'Tier', 'Signed up via', 'Tags',
       'Orders', 'Lifetime spend', 'Points', 'Wallet balance',
-      'Blocked', 'Joined (UTC+8)', 'Last order (UTC+8)', 'Last seen (UTC+8)', 'Note',
+      'Blocked', `Joined (${shopUtcLabel()})`, `Last order (${shopUtcLabel()})`, `Last seen (${shopUtcLabel()})`, 'Note',
     ];
     const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const lines = [head.join(',')];
@@ -415,7 +415,7 @@ router.get('/api/retail-admin/customers/export.csv', requireRetailAdmin, (req, r
         yn(r.is_blocked), r.joined_local, r.last_order_at, r.last_seen_local, r.note,
       ].map(cell).join(','));
     }
-    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const day = shopToday();
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="customers_${day}.csv"`);
     res.send('﻿' + lines.join('\r\n'));

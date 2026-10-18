@@ -11,6 +11,15 @@ const router  = express.Router();
 // covered side of the boundary. Proven by scripts/diagnose_seam_statements.js.
 const { seam } = require('../lib/db-seam');
 const db      = seam(require('../database'));
+const businessDate = require('../lib/business-date');
+// The date in an order number is the day at the store that took the order (§82),
+// not the UTC day it was: Guangzhou's morning orders read as yesterday's. The
+// number is a label, so a store whose zone cannot be read keeps the UTC date
+// rather than losing a real order over it.
+function orderNoDate(storeId, now) {
+  try { return businessDate.businessDateForLocation(db, storeId, now).replace(/-/g, ''); }
+  catch (e) { return now.toISOString().slice(0, 10).replace(/-/g, ''); }
+}
 const inventory = require('../lib/inventory');
 const { packUnits, packDeduct } = require('../lib/pack-units');
 const { productUnitCostYuan } = require('../lib/product-cost');
@@ -401,7 +410,7 @@ router.post('/ingest-order', (req, res) => {
 
   try {
     const now      = new Date();
-    const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
+    const datePart = orderNoDate(storeId, now);
     const rand     = Math.floor(Math.random() * 900000) + 100000;
     const orderNo  = `MT${datePart}${rand}`;
     const ref      = order.meituanOrderNo || orderNo;

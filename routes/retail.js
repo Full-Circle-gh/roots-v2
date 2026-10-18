@@ -181,7 +181,7 @@ const { REFERRAL_CODE_PREFIX, affiliateSettings, normShareTitle, ensureReferralC
 // The shop's day boundary, broadcast audiences, and the customer basics
 // (email clean-up, how a customer is shown, voucher granter, manual-customer
 // creator, history account), moved to lib/ (decisions §477).
-const { shopSqlShift } = require('../lib/shop-clock');
+const { shopSqlShift, shopOffsetMinutes, shopUtcLabel, shopToday } = require('../lib/shop-clock');
 const { normalizeAudience, audienceWhere } = require('../lib/broadcast-audience');
 const {
   normEmail, publicCustomer, grantedById, grantedByName, createOrReuseManualCustomer, historyTenantId,
@@ -2909,7 +2909,6 @@ function readFallbackRange(cfg) {
 // as time passes, and a returning customer never catches a number jumping
 // around mid-glance. All fakes remain opt-in (ranges default to 0); leaving a
 // widget's range alone preserves the original "real data only" behaviour.
-const HK_OFFSET_MS = 8 * 3600 * 1000;   // storefront local time = UTC+8 (matches the +8h day boundary used elsewhere)
 
 // 24 hourly weights for a grocery storefront's order rhythm, indexed by LOCAL
 // hour. Quiet overnight, a late-morning rise, a lunch bump, and the strongest
@@ -2923,13 +2922,19 @@ const DAY_CURVE = [
 ];
 const PEAK_INTENSITY = 1.4;             // ceiling used to normalise fire-rolls (>= max in DAY_CURVE)
 
+// The hour on the shop's own clock (§82), read off the same shift as its SQL
+// day. A shop with no readable zone is closed to orders (decisions §82), so it
+// shows no synthetic activity at all: null here, intensity 0 below.
 function localHourFloat(nowMs) {
-  return ((((nowMs + HK_OFFSET_MS) / 3600000) % 24) + 24) % 24;
+  let off;
+  try { off = shopOffsetMinutes(); } catch (e) { return null; }
+  return ((((nowMs + off * 60000) / 3600000) % 24) + 24) % 24;
 }
 // Smooth time-of-day multiplier (~0.10 .. 1.35) by linearly interpolating the
 // hourly curve at the current fractional local hour.
 function dayIntensity(nowMs) {
   const h = localHourFloat(nowMs);
+  if (h == null) return 0;
   const i = Math.floor(h);
   const f = h - i;
   const a = DAY_CURVE[i % 24];
@@ -2942,6 +2947,7 @@ function dayIntensity(nowMs) {
 // cleanly at the day boundary.
 function dayElapsedFraction(nowMs) {
   const h = localHourFloat(nowMs);
+  if (h == null) return 0;
   let total = 0, soFar = 0;
   for (let k = 0; k < 24; k++) {
     total += DAY_CURVE[k];
@@ -8351,7 +8357,7 @@ router.post('/api/retail/articles/:blockId/view', express.json(), (req, res) => 
       viewerKey = sid ? ('s' + sid) : ('ip' + String(req.ip || 'unknown').slice(0, 60));
     }
 
-    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const day = shopToday();
     tdb().prepare(
       `INSERT OR IGNORE INTO retail_article_views (block_id, kind, viewer_key, day)
        VALUES (?, ?, ?, ?)`
@@ -15229,14 +15235,14 @@ router.get('/api/retail-admin/activity-log/export.csv', requireRetailAdmin, (req
   try {
     const { whereSql, params } = buildChangeLogFilter(req);
     const rows = db.prepare(`${CHANGE_LOG_SELECT} ${whereSql} ORDER BY a.id DESC`).all(...params);
-    const head = ['When (UTC+8)', 'Who', 'Did what', 'To what', 'Record', 'Details', 'IP address'];
+    const head = [`When (${shopUtcLabel()})`, 'Who', 'Did what', 'To what', 'Record', 'Details', 'IP address'];
     const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const lines = [head.join(',')];
     for (const r of rows) {
       lines.push([r.at_local, r.username, r.action, r.entity_type, r.entity_id, r.details, r.ip_address]
         .map(cell).join(','));
     }
-    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const day = shopToday();
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="change_history_${day}.csv"`);
     res.send('﻿' + lines.join('\r\n'));
@@ -15428,7 +15434,7 @@ router.get('/api/retail-admin/activity/export.csv', requireRetailAdmin, (req, re
   try {
     const built = buildActivityQuery(req.query);
     const rows  = activityRows(built, null, 0);
-    const head  = ['Time (UTC+8)', 'Source', 'Reason', 'Store', 'SKU', 'Product', 'Delta', 'Balance after', 'Actor', 'Note'];
+    const head  = [`Time (${shopUtcLabel()})`, 'Source', 'Reason', 'Store', 'SKU', 'Product', 'Delta', 'Balance after', 'Actor', 'Note'];
     const cell  = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const lines = [head.join(',')];
     for (const r of rows) lines.push([
@@ -19901,7 +19907,7 @@ router.post('/api/retail-admin/reports/ask', requireRetailAdmin, express.json({ 
   const q = String((req.body && req.body.q) || '').trim().slice(0, 300);
   if (!key || !digestStr || q.length < 2) return res.status(400).json({ success: false, error: 'bad_question' });
 
-  const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);   // GZ-local day
+  const day = shopToday();   // the shop's day (§82)
   const used = tdb().prepare('SELECT COUNT(*) AS n FROM ai_report_asks WHERE day = ?').get(day).n;
   if (used >= AI_ASK_DAILY_CAP) return res.status(429).json({ success: false, error: 'ask_limit' });
 
@@ -21004,7 +21010,7 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
       'Free of', 'Nutrition', 'Product facts', 'Badge', 'Notes',
       'Ship modes', 'Ships from supplier', 'Supplier paused', 'Batch made', 'Out-of-stock policy',
       'At markets', 'Restock only', 'Sort order', 'Image URL',
-      'Created (UTC+8)', 'Updated (UTC+8)',
+      `Created (${shopUtcLabel()})`, `Updated (${shopUtcLabel()})`,
     ];
     const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const lines = [head.join(',')];
@@ -21034,7 +21040,7 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
         r.created_local, r.updated_local,
       ].map(cell).join(','));
     }
-    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const day = shopToday();
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="products_${day}.csv"`);
     res.send('﻿' + lines.join('\r\n'));
@@ -24176,7 +24182,7 @@ router.get('/api/retail-admin/orders/export.csv', requireRetailAdmin, (req, res)
     const yn = v => (Number(v) ? 'Yes' : 'No');
     const head = [
       'Order no', 'Status', 'Channel', 'Fulfilment',
-      'Placed (UTC+8)', 'Paid (UTC+8)', 'Dispatched (UTC+8)', 'Delivered (UTC+8)',
+      `Placed (${shopUtcLabel()})`, `Paid (${shopUtcLabel()})`, `Dispatched (${shopUtcLabel()})`, `Delivered (${shopUtcLabel()})`,
       'Payment method', 'Subtotal', 'Delivery fee', 'Same-day surcharge', 'Total',
       'Refund status', 'Refund approved', 'Refund paid',
       'Customer', 'Customer phone', 'Recipient', 'Recipient phone', 'Address',
@@ -24203,7 +24209,7 @@ router.get('/api/retail-admin/orders/export.csv', requireRetailAdmin, (req, res)
         r.staff_note,
       ].map(cell).join(','));
     }
-    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const day = shopToday();
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="orders_${day}.csv"`);
     res.send('﻿' + lines.join('\r\n'));

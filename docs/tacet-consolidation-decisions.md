@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.557
+# Tacet shared-core consolidation — decisions record, v4.558
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-18 · v4.558 — **§82 · LABELS, FILE NAMES AND MESSAGE STAMPS READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix all"*, the second batch. Five CSV exports headed their times "(UTC+8)" over values already in the shop's zone and named the file by Guangzhou's date; the article-view and AI-question counters, the storefront's activity curve, staff alerts, GZ Grocery order cards and the funnel report all read Guangzhou's clock. They read the shop's now. Eleme and Meituan order numbers carried the UTC date, so Guangzhou's morning orders read as yesterday's; they carry the store's day — the one change Roots will see. A stamp whose zone cannot be read says UTC, never a guessed zone, and an order is never refused over its number. See the amendment at the end of §82.
 
 2026-10-18 · v4.557 — **§82 · "TODAY" IS THE SHOP'S DAY, AND NOTHING READS THE HOST'S CLOCK — DECIDED BY ASH:** *"fix all"*. Four places took "today" as the UTC day, so between midnight and 08:00 in Guangzhou a restock request and a batch "made today" were dated the day before; two read the host's local clock (restock numbers, SKU date parts). All read the shop's clock now, and a guard fails on any new host-clock read. The first of the batches Ash asked for; the shop-time `+8` sites follow. See the amendment at the end of §82.
 
@@ -9090,6 +9092,38 @@ having been told that the shop-time `+8` sites change nothing for Roots.
    not); back-office record dates; printed and customer-facing display;
    Qingyun jobs and the day-only midnight test. The 17 platform sites and the
    operator stamps stay as they are.
+
+**Amended 2026-10-18 — batch 2: labels, file names, stamps and day counters.
+Decided by Ash:** *"fix all"*.
+
+1. **CSV exports** (activity log, stock activity, products, orders, customers):
+   the time columns are headed by the shop's offset — `lib/shop-clock.js`
+   `shopUtcLabel()`, read off the same shift as the values beneath it, so the
+   two cannot disagree — and the file is named by the shop's date
+   (`shopToday()`). Roots' exports read exactly as before: "(UTC+8)".
+2. **Day counters:** article views and the daily AI-question cap count the
+   shop's day.
+3. **The storefront's activity curve** (`localHourFloat`) reads the shop's
+   hour. A shop with no readable zone is closed to orders (step 3), so it shows
+   no synthetic activity at all, rather than Guangzhou's.
+4. **Message stamps:** staff alerts (`lib/ops-alert.js`, the account's zone
+   read through the module's own read-only handle, which is now shared as
+   `roHandle`) and GZ Grocery order cards. `businessDate.messageStamp()` is the
+   one lenient helper in `lib/business-date.js`, on purpose: a zone it cannot
+   read stamps "HH:mm UTC", which says what it is, because a stamp must never
+   stop an alert or an order card going out. The platform group's own stamps
+   (`lib/platform-alert.js`, `lib/proxy-manager.js`) stay as they are, per the
+   survey.
+5. **Eleme and Meituan order numbers** carry the day at the store that took
+   the order, not the UTC day. This is the one change Roots will see: an
+   Eleme order at 07:30 on the 19th is `EL20261019…`, where it was `…1018`.
+   Nothing reads the date back out of the number. A store whose zone cannot be
+   read keeps the UTC date — the number is a label, and refusing to ingest a
+   real order over it would lose the order.
+6. **`scripts/funnel_report.js`** buckets by the shop's own shift and names
+   its zone, where it was `'+8 hours'` and "Asia/Shanghai".
+7. Held by `scripts/test_shop_labels.js` (12 checks). Breaking the order-number
+   date or the alert's zone read turns it red.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 
