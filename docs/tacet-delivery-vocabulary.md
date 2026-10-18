@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.340 · 2026-10-18 · A QINGYUN STORE THAT IS SIGNED OUT SAYS SO — 1 STRING COMPOSED BY CLAUDE (`同步服务离线`), CUT FROM THE LIVE `美团同步服务离线`; `Signed out · 已退出登录` AND `青云 已退出登录` COPIED FROM THE LIVE SIGNED-OUT PAIR AND HOME'S `${name} 已退出登录`.** See *A Qingyun store that is signed out*.
+
 **v1.339 · 2026-10-18 · REFRESH PRICES ON A QUEUED ORDER SAYS IT IS QUEUED — 1 STRING COMPOSED BY CLAUDE (`进入青云后即可查看运力比价。`), BUILT ONLY FROM LIVE FRAGMENTS; THE QUEUE LINE `Queued for push… · 排队发单中…` AND `courierAgo`'s AGE ARE COPIED WHOLE FROM THE DRAWER ONE BLOCK ABOVE.** See *Refresh prices on a queued order*.
 
 **v1.338 · 2026-10-17 · §483 WHAT A SUPPLIER ACTUALLY REFUNDED ON A PURCHASE RETURN — 2 STRINGS COMPOSED BY CLAUDE (`退款金额无效。`, `只有退货的项才需要填写退款。`), EACH A LIVE RETURNS REFUSAL WITH ONE LIVE NOUN SWAPPED; THE BOX'S LABEL `Refunded · 已退款` AND THE CATEGORY `运费及杂费 Freight & fees` COPIED WHOLE; THE OVER-REFUND REFUSAL REUSES §269's `退货金额不能超过支出金额`.** See *What came back on a purchase return (§483)*.
@@ -14270,3 +14272,31 @@ above it say the same thing.
 - `请稍后刷新` (*refresh later*): not live, and tells the operator to keep
   clicking without saying what they are waiting for.
 - Keeping `请开启自动发送` for a queued order: false — auto-send is what queued it.
+
+
+## A Qingyun store that is signed out
+
+**Composed by Claude, 2026-10-18, under the 2026-09-06 amendment.** Operator
+register. Settings → Qingyun riders (`public/retail-admin/02-settings-ops.js`
+`loadQingyunStores`, `public/m.html` `X7_PILL`) and the order drawer's queue line
+(`04-orders.js` `renderQyShipFrom`, `m.html` `shipFromCard`). Asked by Ash
+off TC001334: yuexiu had been signed out of Qingyun for 22 hours while Settings
+said *Connected*, and a store that was not connected was always *Not set up*.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Sync service offline` / `同步服务离线` | Settings pill, a store that was set up and has stopped reporting | The live `The Meituan sync service is offline · 美团同步服务离线` (`m.html`, the Meituan screen) with the channel name dropped: the pill sits on the Qingyun screen, beside the store's name. No new character. |
+
+### Copied whole
+
+- `Signed out` / `已退出登录` — the live signed-out pair (`01-core.js`, every channel's word for it, §250).
+- `Qingyun is signed out` / `青云 已退出登录` — Home's live `${name} is signed out` / `${name} 已退出登录` (`03-dashboard.js`), with the live `青云` as the name.
+- `Connected · 已连接`, `Not set up · 未开通` — unchanged.
+
+### Rejected
+
+- `未登录` — live, but only inside the daemon's WeCom alert; the screens' word is `已退出登录`, and one screen saying it two ways is how they come to disagree.
+- `需要扫码重新登录` on the pill — true, but nothing on this screen can do the scan yet; a pill that names an action the screen cannot take reads as a broken button.
+- `离线` alone — live only as part of the Meituan sentence; on its own it does not say *what* is offline, and the store is not.

@@ -5839,6 +5839,11 @@ function renderQyShipFrom(o) {
     const queuedFor = (!refused && !held && !booked && sf.push_since)
       ? ` · ${courierAgo(sf.push_since)}`
       : '';
+    // The store's Qingyun session is gone, so nothing leaves the queue until
+    // someone signs it in again. TC001334 (2026-10-18) read "Queued for push…"
+    // for half an hour with no hint that the wait had a cause.
+    const signedOut = !refused && !held && !!sf.store_signed_out;
+    const outNote = signedOut ? ` · ${cuT('Qingyun is signed out', '青云 已退出登录')}` : '';
     // "since 14:20" — the hold's age is the outage's age, and an operator
     // deciding whether to chase it needs that more than the fact of the hold.
     // Absent or unparseable timestamp just omits the clause.
@@ -5854,14 +5859,14 @@ function renderQyShipFrom(o) {
         <div class="ord-drawer-label">${cuT('Same-city courier', '同城配送')}</div>
         <div style="flex:1;">
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <span style="font-size:12px; font-weight:600; color:${refused || held ? 'var(--warn)' : 'var(--text-2)'};">
+            <span style="font-size:12px; font-weight:600; color:${refused || held || signedOut ? 'var(--warn)' : 'var(--text-2)'};">
               ${refused
                 ? `⚠ ${cuT('Push refused — nobody is collecting this', '发单被拒 — 无人接单')}`
                 : held
                   ? `⏸ ${cuT('Held — map service unavailable, retrying', '已挂起 — 地图服务不可用,正在重试')}${escapeHtml(heldSince)}`
                   : booked
-                    ? `✓ ${cuT('No courier called yet', '尚未呼叫运力')}`
-                    : `${cuT('Queued for push…', '排队发单中…')}${escapeHtml(queuedFor)}`}
+                    ? `✓ ${cuT('No courier called yet', '尚未呼叫运力')}${outNote}`
+                    : `${cuT('Queued for push…', '排队发单中…')}${escapeHtml(queuedFor)}${outNote}`}
             </span>
             ${refused
               ? `<button class="btn btn-sm" onclick="qyRetryPush(${o.id}, this)">${cuT('Retry push', '重新发单')}</button>`

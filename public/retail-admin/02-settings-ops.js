@@ -1076,10 +1076,19 @@ async function loadQingyunStores() {
     if (!stores.length) { box.innerHTML = '<div class="muted">No active stores yet. · 暂无门店。</div>'; return; }
     box.innerHTML = stores.map(s => {
       const nm = [s.name_en || s.code, s.name_cn].filter(Boolean).join(' · ');
-      const pill = s.connected
-        ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ Connected · 已连接</span>'
-        : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ Not set up · 未开通</span>';
-      const btn = s.connected ? ''
+      // Three ways not to be connected, three remedies (routes/retail.js
+      // _qingyunStoreStatus). A store Qingyun had signed out read "Not set up"
+      // here and offered Request setup, which is the wrong fix for a login.
+      const state = s.state || (s.connected ? 'connected' : 'not_set_up');
+      const pillCss = 'padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700';
+      const pill = state === 'connected'
+        ? `<span style="background:#d1fae5;color:#065f46;${pillCss}">✓ Connected · 已连接</span>`
+        : state === 'signed_out'
+          ? `<span style="background:#fef3c7;color:#92400e;${pillCss}">⚠ Signed out · 已退出登录</span>`
+          : state === 'offline'
+            ? `<span style="background:#fef3c7;color:#92400e;${pillCss}">⚠ Sync service offline · 同步服务离线</span>`
+            : `<span style="background:#fee2e2;color:#991b1b;${pillCss}">✗ Not set up · 未开通</span>`;
+      const btn = state !== 'not_set_up' ? ''
         : `<button class="btn" onclick="_requestQingyun('${s.code}', this)">Request setup · 申请开通</button>`;
       return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)">
         <div style="font-weight:600">${nm}</div>

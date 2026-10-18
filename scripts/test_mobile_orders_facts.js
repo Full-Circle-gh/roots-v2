@@ -355,6 +355,13 @@ async function main() {
     has(held, 'Nothing is wrong with this address', 'and that the address is fine');
     has(ctx.shipFromCard(sf({ awaiting_dispatch: true })), 'No courier called yet', 'booked and waiting on staff');
     has(ctx.shipFromCard(sf({ push_since: '2026-10-01 06:00:00' })), 'Queued for push… · ago(2026-10-01 06:00:00)', 'queued, with how long');
+    // TC001334, 2026-10-18: the store was signed out of Qingyun and the wait gave no reason.
+    const out = ctx.shipFromCard(sf({ push_since: '2026-10-01 06:00:00', store_signed_out: true }));
+    has(out, 'Queued for push… · ago(2026-10-01 06:00:00) · Qingyun is signed out', 'queued at a signed-out store says so');
+    has(out, 'amber-ink', '…in the warning colour');
+    has(ctx.shipFromCard(sf({ awaiting_dispatch: true, store_signed_out: true })), 'No courier called yet · Qingyun is signed out', 'booked, the same');
+    hasnt(ctx.shipFromCard(sf({ push_since: '2026-10-01 06:00:00' })), 'signed out', 'no flag, no note');
+    hasnt(ctx.shipFromCard(sf({ needs_attention: true, store_signed_out: true })), 'signed out', 'a refusal keeps its own line');
     const pt = ctx.shipFromCard(sf({ awaiting_point: true, guess_grade: { en: 'District only', cn: '仅到区' }, date_posture: 'tomorrow', promised_date: '2026-10-02' }));
     has(pt, 'Confirm delivery point', 'parked for a point');
     has(pt, 'We could not place this address precisely.', 'says why');
