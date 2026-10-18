@@ -181,7 +181,7 @@ const { REFERRAL_CODE_PREFIX, affiliateSettings, normShareTitle, ensureReferralC
 // The shop's day boundary, broadcast audiences, and the customer basics
 // (email clean-up, how a customer is shown, voucher granter, manual-customer
 // creator, history account), moved to lib/ (decisions §477).
-const { shopSqlShift, shopOffsetMinutes, shopUtcLabel, shopToday } = require('../lib/shop-clock');
+const { shopSqlShift, shopOffsetMinutes, shopUtcLabel, shopToday, shopDaysAgo, shopMidnightMs } = require('../lib/shop-clock');
 const { normalizeAudience, audienceWhere } = require('../lib/broadcast-audience');
 const {
   normEmail, publicCustomer, grantedById, grantedByName, createOrReuseManualCustomer, historyTenantId,
@@ -13613,11 +13613,11 @@ function storeCreditRedeemed(db, from, to, storeIn) {
 // orders / AOV plus a folded all-channel summary. Meituan orders are mirrored
 // into retail_orders (channel='meituan'); gzgrocery is the wholesale pickup
 // channel read from its mirror rows (§186); Eleme isn't connected yet → zeros.
-// "Today" is GZ-local (UTC+8), same convention as the dashboard.
+// "Today" is the shop's day, the same day its SQL buckets by (§82).
 router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => {
   try {
     const TZ    = shopSqlShift();
-    const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const today = shopToday();
     const PAID  = financeWindow.PAID;
     const PDATE = `date(COALESCE(paid_at, placed_at), '${TZ}')`;
 
@@ -13906,10 +13906,9 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
   const PHOUR  = `strftime('%H', COALESCE(paid_at, placed_at), '${TZ}')`;
 
-  // ── Resolve window (defaults to trailing 30 days, GZ local) ──
-  const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
-  const toDefault   = nowGz.toISOString().slice(0, 10);
-  const fromDefault = new Date(nowGz.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+  // ── Resolve window (defaults to the trailing 30 days, on the shop's clock) ──
+  const toDefault   = shopToday();
+  const fromDefault = shopDaysAgo(29);
   const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : fromDefault;
   const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to   || '') ? req.query.to   : toDefault;
   const spanDays = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
@@ -14063,7 +14062,8 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     // before anyone reads the arrow as precise to the minute.
     const isToday = to === toDefault;
     const clip    = isToday;
-    const nowHms  = nowGz.toISOString().slice(11, 19);   // GZ wall clock, HH:MM:SS
+    // The shop's wall clock, HH:MM:SS, by the same shift as `time(…, TZ)` below.
+    const nowHms  = new Date(Date.now() + shopOffsetMinutes() * 60000).toISOString().slice(11, 19);
     const nowHour = nowHms.slice(0, 2);
     const kpiSqlClip     = `${kpiSql} AND time(COALESCE(paid_at, placed_at), '${TZ}') <= ?`;
     const newCustSqlClip = `${newCustSql} AND time(created_at, '${TZ}') <= ?`;
@@ -14875,11 +14875,10 @@ router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, re
   const hit = _catHiCache.get(memoKey);
   if (hit && Date.now() - hit.at < CAT_HI_TTL) return res.json(hit.body);
 
-  // Day windows in GZ-local time. This-week = trailing 7 days incl. today;
-  // prior-week = the 7 days before that; dead-window = trailing 30 days.
-  const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
-  const today    = nowGz.toISOString().slice(0, 10);
-  const d = (n) => new Date(nowGz.getTime() - n * 86400000).toISOString().slice(0, 10);
+  // Day windows on the shop's clock (§82). This-week = trailing 7 days incl.
+  // today; prior-week = the 7 days before that; dead-window = trailing 30 days.
+  const today    = shopToday();
+  const d = shopDaysAgo;
   const win7From = d(6);
   const prev7From = d(13), prev7To = d(7);
   const win30From = d(29);
@@ -15085,9 +15084,8 @@ const ACT_SOURCE_FILTER = {
 };
 // Build WHERE + params from the query string, shared by JSON + CSV routes.
 function buildActivityQuery(q) {
-  const gzToday = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   const isDate  = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
-  const from = isDate(q.from) ? q.from : gzToday;
+  const from = isDate(q.from) ? q.from : shopToday();
   const to   = isDate(q.to)   ? q.to   : from;
   // `base` = date + store + search, WITHOUT the channel filter. The channel
   // tab counts are computed over `whereNoSource` so the switcher always shows
@@ -15461,14 +15459,10 @@ router.get('/api/retail-admin/activity/export.csv', requireRetailAdmin, (req, re
 // (cheap query, freshness matters).
 router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res) => {
   const limit   = Math.min(Math.max(parseInt(req.query.limit || '50', 10) || 50, 1), 500);
-  // Default window = since the start of TODAY in Guangzhou (UTC+8), not a
-  // rolling 24h — so the feed shows the whole day's activity, not just the
-  // last N events (which a burst of sign-ups can otherwise fill in minutes).
-  const gzMidnightMs = () => {
-    const gzDate = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
-    return Date.parse(gzDate + 'T00:00:00Z') - 8 * 3600 * 1000;
-  };
-  const sinceMs = parseInt(req.query.since || '0', 10) || gzMidnightMs();
+  // Default window = since the start of the shop's TODAY (§82), not a rolling
+  // 24h — so the feed shows the whole day's activity, not just the last N
+  // events (which a burst of sign-ups can otherwise fill in minutes).
+  const sinceMs = parseInt(req.query.since || '0', 10) || shopMidnightMs();
   // SQLite stores DEFAULT CURRENT_TIMESTAMP as "YYYY-MM-DD HH:MM:SS" UTC.
   const sinceIso = new Date(sinceMs).toISOString().slice(0, 19).replace('T', ' ');
   const parseTs  = s => Date.parse(String(s || '').replace(' ', 'T') + 'Z') || null;
@@ -21545,8 +21539,7 @@ router.get('/api/retail-admin/products/:id/sales', requireRetailAdmin, (req, res
   const PAIDO  = financeWindow.PAID_O;
   const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
 
-  const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
-  const toDefault = nowGz.toISOString().slice(0, 10);
+  const toDefault = shopToday();
   // `days=all` runs from this product's FIRST paid sale to today. A product
   // that has never sold has no such date, so it falls back to the 30-day
   // window rather than returning an empty range.
@@ -21561,10 +21554,10 @@ router.get('/api/retail-admin/products/:id/sales', requireRetailAdmin, (req, res
     `).get(id);
     fromDefault = (first && first.d)
       ? first.d
-      : new Date(nowGz.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+      : shopDaysAgo(29);
   } else {
     const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 30));
-    fromDefault = new Date(nowGz.getTime() - (days - 1) * 86400000).toISOString().slice(0, 10);
+    fromDefault = shopDaysAgo(days - 1);
   }
   const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : fromDefault;
   const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to   || '') ? req.query.to   : toDefault;
@@ -22364,9 +22357,8 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   if (req.query.sales30 === '1' && rows.length) {
     const ids = rows.map(r => r.id);
     const ph = ids.map(() => '?').join(',');
-    const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
-    const to = nowGz.toISOString().slice(0, 10);
-    const from = new Date(nowGz.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+    const to = shopToday();
+    const from = shopDaysAgo(29);
     const salesRows = tdb().prepare(`
       SELECT i.product_id, COALESCE(SUM(i.qty), 0) AS units
         FROM retail_order_items i

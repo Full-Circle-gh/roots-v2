@@ -100,8 +100,10 @@ section('2 · who may give one');
 /* ── fixtures ──────────────────────────────────────────────────────────── */
 const YUEXIU = 2, TIANHE = 1;
 for (const [id, en, cn] of [[TIANHE, 'Tianhe', '天河'], [YUEXIU, 'Yuexiu', '越秀']]) {
-  db.prepare(`INSERT OR REPLACE INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order)
-              VALUES (?,?,?,?,1,?)`).run(id, en.toLowerCase(), en, cn, id);
+  // Zoned as Roots' real stores are: the dashboard's default window is the
+  // shop's day, and a shop with no zone has none (§82).
+  db.prepare(`INSERT OR REPLACE INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order, timezone)
+              VALUES (?,?,?,?,1,?,'Asia/Shanghai')`).run(id, en.toLowerCase(), en, cn, id);
 }
 const PROD = 7741;
 db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_active, is_published)

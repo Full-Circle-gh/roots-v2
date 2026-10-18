@@ -64,6 +64,7 @@
 const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const { LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
+const { shopTimezone } = require('../lib/business-date');
 const money = require('../lib/money');
 // A ledger row says WHO PUT IT IN THE BOOKS (§92). `created_by` is a
 // `tenant_users` id and `tenant_users` is control-plane, so resolving it is a
@@ -336,7 +337,7 @@ router.post('/api/retail-admin/finance/transactions/out/:id/return', requireReta
 // the screen answered the same window differently, whichever one was wrong
 // would not be found until the books did not balance.
 function readTransactions(query, opts = {}) {
-  const win = resolveWindow(query);
+  const win = resolveWindow(query, shopTimezone(tdb()));
   const { from, to } = win;
   const db = tdb();
 
@@ -659,7 +660,7 @@ function readTransactions(query, opts = {}) {
 }
 
 router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, res) => {
-  if (resolveWindow(req.query).inverted) {
+  if (resolveWindow(req.query, shopTimezone(tdb())).inverted) {
     return res.status(400).json({ error: 'from is after to · 起始日期晚于结束日期' });
   }
   try {
@@ -681,7 +682,7 @@ router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, r
 // human reading the file does not have to infer it from a minus sign.
 // BOM-prefixed UTF-8 so Excel renders the Chinese categories correctly.
 router.get('/api/retail-admin/finance/transactions/export.csv', requireRetailAdmin, (req, res) => {
-  if (resolveWindow(req.query).inverted) {
+  if (resolveWindow(req.query, shopTimezone(tdb())).inverted) {
     return res.status(400).json({ error: 'from is after to · 起始日期晚于结束日期' });
   }
   try {

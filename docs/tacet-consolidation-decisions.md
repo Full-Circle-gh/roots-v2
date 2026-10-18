@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.558
+# Tacet shared-core consolidation — decisions record, v4.559
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-18 · v4.559 — **§82 · A REPORT'S "TODAY" IS THE DAY ITS SQL BUCKETS BY — DECIDED BY ASH:** *"fix all"*, the third batch. The report queries already bucket rows by the shop's own shift; their default window was computed in JavaScript as Guangzhou's day, so for a shop anywhere else the two disagreed. The dashboard, its live same-weekday clip and activity feed, Sales, Finance (`resolveWindow` now takes the shop's zone), the product highlights, a product's sales card, the 30-day sales column and stock activity all default to the shop's day. Nothing changes for Roots. See the amendment at the end of §82.
 
 2026-10-18 · v4.558 — **§82 · LABELS, FILE NAMES AND MESSAGE STAMPS READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix all"*, the second batch. Five CSV exports headed their times "(UTC+8)" over values already in the shop's zone and named the file by Guangzhou's date; the article-view and AI-question counters, the storefront's activity curve, staff alerts, GZ Grocery order cards and the funnel report all read Guangzhou's clock. They read the shop's now. Eleme and Meituan order numbers carried the UTC date, so Guangzhou's morning orders read as yesterday's; they carry the store's day — the one change Roots will see. A stamp whose zone cannot be read says UTC, never a guessed zone, and an order is never refused over its number. See the amendment at the end of §82.
 
@@ -9124,6 +9126,31 @@ Decided by Ash:** *"fix all"*.
    its zone, where it was `'+8 hours'` and "Asia/Shanghai".
 7. Held by `scripts/test_shop_labels.js` (12 checks). Breaking the order-number
    date or the alert's zone read turns it red.
+
+**Amended 2026-10-18 — batch 3: reports. Decided by Ash:** *"fix all"*.
+
+1. **The mismatch.** Every report below buckets its rows by `shopSqlShift()`,
+   the shop's own day. Its DEFAULT window — what "today" or "the last 30 days"
+   means when no dates are given — was computed in JavaScript as Guangzhou's.
+   For Roots the two agree. For a shop in New York at 20:00 on the 18th,
+   "today" asked the SQL for the 19th, which had not started there.
+2. **Now the shop's day:** the dashboard's default window, its live
+   "today vs the same weekday" clip (the cut-off time is read by the same
+   shift as the SQL's `time(…, TZ)`), its activity feed's "since midnight",
+   the Sales overview's today, the product highlights' 7- and 30-day windows,
+   a product's sales card, the 30-day sales column, and stock activity's
+   default day. `lib/shop-clock.js` gains `shopDaysAgo(n)` (calendar
+   arithmetic on the date, so it cannot slip a day) and `shopMidnightMs()`.
+3. **Finance:** `lib/finance-window.js` `resolveWindow(query, tz)` takes the
+   shop's zone from its three callers. It reads the zone only when a bound is
+   missing, so a window given in full needs none; a missing bound with no zone
+   is `NoShopTimezoneError`.
+4. **Two suites only passed by accident.** `test_dashboard_store_scope` and
+   `test_till_manual_discount` replace Roots' stores with zoneless copies, and
+   the dashboard still answered because `shopSqlShift()` served a zone cached
+   from before the copies were written. They now zone their copies, as the
+   real stores are.
+5. Held by `scripts/test_shop_reports.js` (10 checks).
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 
