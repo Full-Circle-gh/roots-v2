@@ -15,7 +15,12 @@
    table disagree, ONE of them is wrong and the answer is not to adjust
    the test — the same rule scripts/check-td-datetime.js runs on. */
 const { execFileSync } = require('child_process');
-const { deliverySlotDisplay } = require('../lib/slot-label.js');
+const slotLabel = require('../lib/slot-label.js');
+/* Every row below is a Guangzhou shop's, so the zone is passed as Roots' is
+   (deliveryTz()). There is no house zone to fall back on (§82): with none the
+   module returns the stored label, which the last rows check. */
+const deliverySlotDisplay = (label, sched, now, lang) =>
+  slotLabel.deliverySlotDisplay(label, sched, now, lang, 'Asia/Shanghai');
 
 let pass = 0, fail = 0;
 function is(got, want, label) {
@@ -188,6 +193,19 @@ is(deliverySlotDisplay('Pickuptoday 14:30', PU_1430, NOW, 'en'),
   'Pickuptoday 14:30', 'no word boundary after the lead word');
 is(deliverySlotDisplay('Ships when restocked', PU_1430, NOW, 'cn'),
   'Ships when restocked', 'a label merely containing no lead word');
+
+console.log('\nThe shop\'s own clock, not Guangzhou\'s (§82)');
+/* 05:00Z on 9 Aug is 13:00 on the 9th in Guangzhou and 01:00 on the 9th in New
+   York; the slot, 02:00Z, is the 9th in Guangzhou and 22:00 on the 8th in New
+   York. The same row is "Today" for one shop and already past for the other. */
+is(slotLabel.deliverySlotDisplay('Today 10AM–12PM', AUG09, new Date('2026-08-09T05:00:00Z'), 'en', 'Asia/Shanghai'),
+  'Today 10AM–12PM', 'a Guangzhou shop: today');
+is(slotLabel.deliverySlotDisplay('Today 10AM–12PM', AUG09, new Date('2026-08-09T05:00:00Z'), 'en', 'America/New_York'),
+  'Aug 8 10AM–12PM', 'a New York shop: yesterday, named by date');
+is(slotLabel.deliverySlotDisplay('Tomorrow 10AM–12PM', AUG09, NOW, 'en', null),
+  'Tomorrow 10AM–12PM', 'no zone: the stored label, never a guessed zone');
+is(slotLabel.deliverySlotDisplay('Tomorrow 10AM–12PM', AUG09, NOW, 'en', 'Mars/Olympus'),
+  'Tomorrow 10AM–12PM', 'an unreadable zone: the same');
 
 /* ── The host clock must not be able to reach any of this ──────────────
    Re-runs this file under four host zones spanning UTC-5 to UTC+14. The

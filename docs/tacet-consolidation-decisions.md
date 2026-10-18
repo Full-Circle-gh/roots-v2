@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.560
+# Tacet shared-core consolidation — decisions record, v4.561
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-18 · v4.561 — **§82 · SLIPS, SLOT LINES AND SERVED ORDER TIMES READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix all"*, the fifth batch. The Feieyun slip (its time, slot date, "Tomorrow" → date swap and date-only test), the customer's Today/Tomorrow slot line, and order timestamps served to the screens all shifted by a fixed +8h. They read the shop's zone now — the one checkout uses. With none readable nothing guesses: a slip prints UTC and says so, the slot line shows the stored label, a timestamp is served as stored. Nothing changes for Roots. See the amendment at the end of §82.
 
 2026-10-18 · v4.560 — **§82 · PURCHASING DATES A RECORD BY THE SHOP'S DAY — DECIDED BY ASH:** *"fix all"*, the fourth batch. A supplier-account entry typed without a date, and a back-order purchase order, were dated by Guangzhou's day. The entry takes the shop's day and the back-order its store's. Nothing changes for Roots. See the amendment at the end of §82.
 
@@ -9167,6 +9169,34 @@ Decided by Ash:** *"fix all"*.
 3. `scripts/test_supplier_account.js` builds an in-memory database with no
    stores table, so its shop had no zone; it now has one store, zoned as
    Roots' are. Held by `scripts/test_shop_today.js` section 4.
+
+**Amended 2026-10-18 — batch 5: printed and customer-facing display. Decided
+by Ash:** *"fix all"*.
+
+1. **The slip** (`lib/feie.js`): the time printed, the slot date, the
+   "Tomorrow" → date swap and the date-only test read the shop's clock through
+   `slipWall()`, on `deliveryTz()` — the zone checkout and the day-pick writer
+   use, so a pick stored as the shop's midnight is read back as date-only. A
+   slip must print: with no readable zone a time prints on UTC and says "UTC".
+   The module stays pure; the zone is required lazily.
+2. **The customer's slot line** (`lib/slot-label.js`): `deliverySlotDisplay`
+   and `attachSlotDisplay` take the shop's zone; all five callers pass
+   `deliveryTz()`. With none readable the stored label is shown, which is what
+   the module already does whenever it cannot do better. Its harness
+   (`scripts/slot-label-check.js`, not in the fast shard) passes Guangzhou
+   explicitly and gains a New York row and two no-zone rows. Its stale
+   comment about markOrderPaid's host-local writer is corrected: the writer
+   has stored the shop's midnight since step 3.
+3. **Served order times** (`routes/retail.js` `toShopLocalTs`, was
+   `toGzLocalTs`): a stored UTC stamp is shifted by the zone's offset AT THAT
+   INSTANT, so daylight saving is right; with no zone it is served as stored.
+   `lib/business-date.js` keeps one formatter per zone for the offset, because
+   an order list asks for one per timestamp.
+4. **Moved here from batch 6:** the slip's own date-only test
+   (`isGzMidnight`), because the slot-date formatter beside it makes the same
+   test and the two must agree. `routes/retail.js` `_gzIsMidnight`, which
+   decides the ship-by line, stays in batch 6.
+5. Held by `scripts/test_shop_display.js` (6 checks).
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 

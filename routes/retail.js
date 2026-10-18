@@ -5620,7 +5620,7 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
   }
   delete order.address_json;
   localizeOrderTimes(order);
-  attachSlotDisplay(order, undefined, viewerLang(req));
+  attachSlotDisplay(order, undefined, viewerLang(req), deliveryTz());
   res.json({ success: true, data: order });
 });
 
@@ -11687,18 +11687,21 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
 });
 
 // SQLite's CURRENT_TIMESTAMP / datetime('now') return UTC as a bare
-// "YYYY-MM-DD HH:MM:SS" string. Customers and stores are all GZ local
-// (UTC+8), so those bare timestamps read 8 hours behind on the client.
-// Shift them to GZ local at the serving boundary. ISO strings (scheduled_for
-// carries a 'T'/'Z' and is already tz-aware) and date-only values
-// (promised_*_date) don't match the regex and pass through untouched, so
-// this can't double-shift them.
+// "YYYY-MM-DD HH:MM:SS" string, which the client reads as the shop's local
+// time — so served raw it reads hours out. Shift it onto the shop's clock
+// (deliveryTz, at that instant) at the serving boundary; it was a fixed +8h,
+// right only for a shop in China (§82). With no readable zone the stored UTC
+// is served unchanged rather than shifted by a guessed zone. ISO strings
+// (scheduled_for carries a 'T'/'Z' and is already tz-aware) and date-only
+// values (promised_*_date) don't match the regex and pass through untouched,
+// so this can't double-shift them.
 const BARE_UTC_TS_RE = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
-function toGzLocalTs(s) {
+function toShopLocalTs(s, tz = deliveryTz()) {
   if (typeof s !== 'string') return s;
   const m = BARE_UTC_TS_RE.exec(s);
-  if (!m) return s;
-  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) + 8 * 3600 * 1000);
+  if (!m || businessDate.zoneProblem(tz)) return s;
+  const at = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+  const d = new Date(at.getTime() + businessDate.zoneOffsetMinutes(tz, at) * 60000);
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ` +
          `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
@@ -11711,8 +11714,9 @@ const GZ_LOCAL_TS_FIELDS = [
 ];
 function localizeTimes(row, fields) {
   if (!row) return row;
+  const tz = deliveryTz();
   for (const f of fields) {
-    if (row[f] != null) row[f] = toGzLocalTs(row[f]);
+    if (row[f] != null) row[f] = toShopLocalTs(row[f], tz);
   }
   return row;
 }
@@ -11914,7 +11918,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
   ).get(orderId, customerId);
   if (!o) return null;
   localizeOrderTimes(o);
-  attachSlotDisplay(o, undefined, lang);
+  attachSlotDisplay(o, undefined, lang, deliveryTz());
   if (o.address_json) { try { o.address = JSON.parse(o.address_json); } catch {} }
   delete o.address_json;
   if (o.refund_lines_json) {
@@ -12765,7 +12769,7 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
   // One `now` for the whole page, so two orders on the same screen can never
   // straddle midnight and disagree about which day "today" is.
   const slotNow = new Date();
-  rows.forEach(r => attachSlotDisplay(r, slotNow, viewerLang(req)));
+  rows.forEach(r => attachSlotDisplay(r, slotNow, viewerLang(req), deliveryTz()));
 
   // Attach a tiny preview of items + item_count so the list can render
   // thumbs without N+1 follow-ups. Batched into two queries regardless of
@@ -13104,7 +13108,7 @@ function buildDeliveryTrackData(job, slotLabel, scheduledFor, lang) {
     // Same slot with its leading relative day word re-derived from
     // scheduled_for. Kept beside slot_label rather than replacing it so the
     // admin twin of this endpoint keeps reading exactly what it read before.
-    slot_display: deliverySlotDisplay(slotLabel, scheduledFor, undefined, lang) || null,
+    slot_display: deliverySlotDisplay(slotLabel, scheduledFor, undefined, lang, deliveryTz()) || null,
     updated_at: job.updated_at,
   };
 }
@@ -18997,7 +19001,7 @@ router.get('/api/retail/orders/:id/reschedule-options', requireRetailAuth, (req,
       // customer is being asked to compare their existing slot against a list of
       // new ones — a stale "Tomorrow" beside a live picker is the worst place
       // for it.
-      slot_display:  deliverySlotDisplay(o.delivery_slot_label, o.scheduled_for, undefined, viewerLang(req)),
+      slot_display:  deliverySlotDisplay(o.delivery_slot_label, o.scheduled_for, undefined, viewerLang(req), deliveryTz()),
       slot_kind:     o.delivery_slot_kind,
     },
   };
