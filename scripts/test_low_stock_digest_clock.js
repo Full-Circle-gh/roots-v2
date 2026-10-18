@@ -69,7 +69,8 @@ const sentKey = () => {
   const r = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'inventory.lowStockDigestLastSent'").get();
   return r ? JSON.parse(r.value_json) : null;
 };
-function fresh(cfg = null, storeTz = null) {
+// The store's zone defaults to Roots' own (§82); null is a shop with none.
+function fresh(cfg = null, storeTz = 'Asia/Shanghai') {
   db.exec("DELETE FROM storefront_config");
   if (cfg) db.prepare("INSERT INTO storefront_config (key, value_json) VALUES ('inventory.lowStockDigest', ?)").run(JSON.stringify(cfg));
   db.prepare('UPDATE retail_stores SET timezone = ? WHERE id = 1').run(storeTz);
@@ -123,6 +124,13 @@ it('a shop in London: 09:00 Guangzhou is 02:00 there — too early; 09:00 London
   assert.strictEqual(digest.sweepDbOnce(db, at('2026-10-17', 9, 0), 1), 0);
   assert.strictEqual(digest.sweepDbOnce(db, at('2026-10-17', 9, 0, 'Europe/London'), 1), 1);
   assert.strictEqual(sentKey(), '2026-10-17');
+});
+
+it('a shop with NO zone gets no digest on Guangzhou\'s clock, and claims no day (§82 step 3)', () => {
+  fresh(null, null);
+  assert.strictEqual(digest.sweepDbOnce(db, at('2026-10-17', 9, 0), 1), 0);
+  assert.strictEqual(SENT.length, 0);
+  assert.strictEqual(sentKey(), null, 'nothing claimed, so it goes out the morning the zone is set');
 });
 
 console.log('\n4. switched off, or nothing low');

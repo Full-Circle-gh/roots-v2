@@ -524,6 +524,25 @@ const MEDIA_INLINE_MIME = new Set([
 const { omitPublicConfigKeys } = require('../lib/public-config-omit');
 
 const businessDate = require('../lib/business-date');
+// §82 STEP 3 — A SHOP WITH NO READABLE TIMEZONE TAKES NO ORDER THAT NEEDS A TIME.
+// Delivery slots, cutoffs, pickup windows and reschedules are all judged on the
+// shop's clock; with no zone they were judged on Guangzhou's and looked right.
+// The customer is told the shop is closed — the live wording of the store_closed
+// refusal, because to them it is — and the operator has the startup line and
+// the alert (lib/tenant-zone-check.js) naming the setting to fix. Answers true
+// when it has refused.
+const zoneCheck = require('../lib/tenant-zone-check');
+function refuseWithoutShopZone(res) {
+  let tid = null;
+  try { tid = currentTenantId(); } catch (_) { tid = null; }
+  if (!zoneCheck.zoneRefused(deliveryTz(), tid, 'checkout')) return false;
+  res.status(503).json({
+    success: false, error: 'shop_timezone_missing',
+    message: 'This store is currently closed and not accepting new orders.',
+    message_cn: '本店当前已打烊,暂停接单,敬请谅解。',
+  });
+  return true;
+}
 // Money, exact to the cent (audit I-02). `lifetime_spend = lifetime_spend + ?`
 // is addition performed by SQLite over a floating-point column: 0.01 added a
 // thousand times is 9.999999999999831, not 10. The running totals below are
@@ -7527,6 +7546,11 @@ const AUTO_DELIVER_FROM_SQL = AUTO_DELIVER_FROM_STATUSES.map(s => `'${s}'`).join
 function autoDeliverLocalEtaForTenant(now = new Date()) {
   const graceMin = Number(cfgValue('delivery.autoDeliverEtaMinutes', AUTO_DELIVER_DEFAULT_GRACE_MIN));
   if (!Number.isFinite(graceMin) || graceMin < 0) return 0;   // disabled
+  // §82 step 3: an ETA is a time on the shop's clock. With no zone, nothing is
+  // closed off it rather than closed on Guangzhou's.
+  let tid = null;
+  try { tid = currentTenantId(); } catch (_) { tid = null; }
+  if (zoneCheck.zoneRefused(deliveryTz(), tid, 'auto.deliver')) return 0;
   let rows;
   try {
     rows = tdb().prepare(
@@ -9885,6 +9909,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       message_cn: _m.message_cn || '本店当前已打烊,暂停接单,敬请谅解。',
     });
   }
+  // §82 step 3 — before anything is reserved or written.
+  if (refuseWithoutShopZone(res)) return;
   const items       = Array.isArray(body.items) ? body.items : [];
   const addressId   = body.address_id;
   const paymentMethod = body.payment_method;
@@ -18951,6 +18977,7 @@ router.post('/api/retail/orders/:id/cancel', requireRetailAuth, express.json(), 
 // the customer already paid is refused (no charge/refund plumbing yet).
 
 router.get('/api/retail/orders/:id/reschedule-options', requireRetailAuth, (req, res) => {
+  if (refuseWithoutShopZone(res)) return;   // §82 step 3
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
     `SELECT id, status, fulfillment_type, scheduled_for, delivery_slot_kind,
@@ -19007,6 +19034,7 @@ router.get('/api/retail/orders/:id/reschedule-options', requireRetailAuth, (req,
 });
 
 router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json(), (req, res) => {
+  if (refuseWithoutShopZone(res)) return;   // §82 step 3
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
     `SELECT id, status, fulfillment_type, scheduled_for, delivery_slot_kind,
@@ -34240,6 +34268,7 @@ function reverseOrderVoucher(orderId) {
 // Returns the same numbers the actual order-create will use — so the
 // mini-app can show a faithful breakdown before the customer commits.
 router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), async (req, res) => {
+  if (refuseWithoutShopZone(res)) return;   // §82 step 3 — no slots off Guangzhou's clock
   const body = req.body || {};
   const addressId    = body.address_id;
   const items        = body.items;
