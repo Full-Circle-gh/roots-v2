@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.555
+# Tacet shared-core consolidation — decisions record, v4.556
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-18 · v4.556 — **§484 · QINGYUN IS SIGNED BACK IN FROM A LIVE PICTURE OF ITS OWN BROWSER, NOT A REMOTE SCREEN — DECIDED BY ASH:** *"Live picture"*, chosen over adding Qingyun to the §260 holder screen, after a read-only survey found that path needs two new displays, two VNC servers and a hand-copied trigger on the box, and a restart of both Qingyun browsers. Settings shows a signed-out Qingyun store a *Sign in again* button; it opens a page that shows a picture of that store's Qingyun browser on its QR code, refreshed every two seconds, for someone to scan with the 青云 App. Tacet confirms the sign-in itself and stops showing pictures the moment it has. §260's sentence that Qingyun is "next" on the shared screen is overtaken by this. See §484.
 
 2026-10-18 · v4.555 — **§82 STEP 3 FULL · THERE IS NO HOUSE TIME ZONE — DECIDED BY ASH:** *"yes do it all"*, having been told twice that Claude advised against it. The date helpers, the pickup clock, the channel daemons' opening-hours gate, the stale-sync count, the finance day boundary and the delay-case SQL no longer answer a missing or unreadable zone with Guangzhou's. A zone is the location's own when readable, else the shop's; neither is `NoShopTimezoneError`, which a screen answers with 503 by name. Nine places that would have broken Roots itself are fixed with it. The fifty hand-written `+8` sites outside the helpers are a separate item, not this change. See the amendment at the end of §82.
 
@@ -32293,4 +32295,56 @@ for the goods we kept, and a supplier's credit note for the refund is still
 outside this model (*What this does not do* #1). The kitchen poster
 (`postPOExpenses`) is unchanged; no screen or route can record a return on a
 kitchen order since §81, so it has no refund to read.
+
+## §484 — QINGYUN IS SIGNED BACK IN FROM A LIVE PICTURE OF ITS OWN BROWSER, NOT A REMOTE SCREEN
+
+**Decided 2026-10-18 by Ash ("Live picture").** Overtakes §260's line that
+Qingyun is the next channel on the private sign-in screen.
+
+**Why not the screen.** Qingyun signs in by a QR code scanned with the 青云
+App; nobody types anything. §260's screen exists so a person can type into a
+login, and giving Qingyun one needs work that no deploy can do: a display and a
+loopback VNC per store, the trigger in `ops/ops-screen/` copied to the box by
+hand, and both Qingyun browsers restarted onto the new displays. A scan needs
+only to *see* the code. Tacet already connects to each store's Qingyun browser
+over CDP (`lib/qingyun-browser.js`, `QINGYUN_CDP_URL_<STORE>`), so it can take
+the picture itself and nothing on the box changes.
+
+**What it is.**
+1. **Who.** The same gate as every channel sign-in (§250): signed in, the Roots
+   account, the `integrations:signin` capability, and the store in the
+   caller's scope (`refusal()` in `lib/channel-signin.js`). The page holds no
+   credential and takes no input but two buttons.
+2. **Where.** Settings → Qingyun, on desktop and phone, puts *Sign in again ·
+   重新登录* beside a store that reads *Signed out*. It opens
+   `/qingyun-signin?store=…`.
+3. **Start.** The page asks Tacet to get the code up. If Qingyun answers that
+   the store is signed in, the page says so and stops. Otherwise Tacet sends that
+   store's browser to Qingyun's QR page, unless it is already on it.
+4. **The picture.** The page fetches a fresh picture every two seconds. A
+   picture is taken only after Tacet has asked Qingyun and Qingyun has said
+   signed out. The moment it says signed in, Tacet answers "signed in" instead
+   of a picture. **Tacet never shows the signed-in dashboard**, which holds
+   customers' addresses and phone numbers. Pictures are kept for a second per
+   store, so two people watching cannot overload the browser.
+5. **New code.** QR codes expire. *Show a new code* sends the browser to the QR
+   page again.
+6. **Done.** Signed in means both reads the daemon trusts say so: Tacet asks
+   for the shop list and for one order-list page (`isLoggedIn`,
+   `orderListSignedIn`), as #1222 made the daemon do. The daemon finds the
+   session on its next poll and resumes on its own; nothing is restarted.
+
+**What it does not do.**
+- **It cannot click.** Qingyun's 验证中心 (a slider or a puzzle) still needs
+  someone at the box. The page shows the picture and says so.
+- **Not the same phone.** The code is scanned with the 青云 App on a phone, so
+  someone viewing the page on that same phone needs a second device.
+- **If Qingyun keeps the dead session.** The browser can be sent to the QR page
+  and come back on the dashboard, with no code shown and Qingyun still refusing
+  the order list (the 901 state from #1222). The page says the code did not
+  appear and that this needs someone at the box. Clearing the browser's
+  Qingyun cookies would fix it, but that is a destructive step and is not
+  taken without Ash deciding it.
+- **Untried against the real page.** It was built and tested without a view of
+  the real page, so its first real use is the test.
 

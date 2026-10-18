@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sign in</title>
+<!--
+  §484 — sign a Qingyun store back in. Opened by Settings' Sign in again with
+  ?store=&name=&lang=. It asks Tacet to put the store's Qingyun browser on its
+  QR page and shows a picture of it every two seconds, for someone to scan with
+  the 青云 App. It stops once Tacet says the store is signed in. Every check is
+  on the server (routes/qingyun-signin.js); this page only draws states.
+-->
+<link rel="stylesheet" href="/assets/fonts/tacet-fonts.css">
+<style>
+  /* The same tokens as public/channel-signin.html (docs/tacet-design-system.md). */
+  :root { --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --line:#E4E0D5; --raised:#F6F3EC;
+          --sage-ink:#5E7359; --brick:#B4533E; }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper:#111A2B; --ink:#FBF9F4; --graphite:#A9AFBA; --line:#2A3550; --raised:#1E2A44;
+            --sage-ink:#A3B49F; --brick:#D98A77; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; min-height:100%; background:var(--paper); color:var(--ink);
+               font:400 15px/1.6 'Inter', 'IBM Plex Sans SC', 'PingFang SC', system-ui, sans-serif; }
+  header { padding:16px; border-bottom:1px solid var(--line); }
+  h1 { font-size:18px; font-weight:500; line-height:1.3; margin:0; }
+  #msg { margin:4px 0 0; font-size:13px; color:var(--graphite); min-height:1.6em; }
+  #msg.ok { color:var(--sage-ink); } #msg.bad { color:var(--brick); }
+  main { padding:16px; }
+  /* A picture of the browser's whole page: the code is wherever Qingyun put it,
+     so it is shown at full width, never cropped. */
+  #shot { display:none; width:100%; max-width:900px; height:auto; border:1px solid var(--line);
+          border-radius:8px; background:#fff; }
+  #shot.on { display:block; }
+  .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  button { font-family:inherit; font-size:15px; font-weight:500; padding:8px 16px; border-radius:8px;
+           border:1px solid var(--line); background:transparent; color:var(--ink); cursor:pointer;
+           transition:background 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+  button:hover { background:var(--raised); }
+  button.ghost { border-color:transparent; color:var(--graphite); }
+  button[hidden] { display:none; }
+  @media (prefers-reduced-motion: reduce) { button { transition:none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <p id="msg"></p>
+</header>
+<main>
+  <img id="shot" alt="">
+  <div class="actions">
+    <button id="fresh" hidden></button>
+    <button id="retry" hidden></button>
+    <button class="ghost" id="close"></button>
+  </div>
+</main>
+
+<script>
+const q = new URLSearchParams(location.search);
+const store = q.get('store') || '';
+const storeName = q.get('name') || store;
+const cn = q.get('lang') === 'cn';
+const T = (en, zh) => (cn ? zh : en);
+document.documentElement.lang = cn ? 'zh' : 'en';
+
+// Every sentence on this page, both languages. The Chinese is declared in
+// docs/tacet-delivery-vocabulary.md (§484), each one marked lifted or composed.
+const S = {
+  title:    T(`Sign in again · Qingyun · ${storeName}`, `重新登录 · 青云聚信 · ${storeName}`),
+  opening:  T('Opening…', '正在打开…'),
+  scanNow:  T('Scan the code below with the 青云 App. This page closes by itself when you’re done.',
+              '请用青云 App 扫码登录，完成后本页会自动关闭。'),
+  signedIn: T('Signed in again. Delivery tracking resumes.', '重新登录成功，配送跟踪继续。'),
+  noCode:   T('Qingyun did not show a code. This needs someone at the box.',
+              '青云聚信未显示二维码，需要有人在服务器上处理。'),
+  verify:   T('Qingyun is asking for a security check. That needs someone at the box.',
+              '青云聚信要求人工验证，需要有人在服务器上处理。'),
+  down:     T('Can’t reach this store’s Qingyun sync service.', '无法连接该门店的青云同步服务。'),
+  denied:   T('You don’t have permission for this', '你没有此操作的权限'),
+  timeout:  T('Time ran out. Try again.', '已超时，请重试。'),
+  fresh:    T('Show a new code', '刷新二维码'),
+  retry:    T('Try again', '重试'),
+  close:    T('Close', '关闭'),
+};
+
+const $ = (id) => document.getElementById(id);
+$('title').textContent = S.title;
+document.title = S.title;
+$('fresh').textContent = S.fresh;
+$('retry').textContent = S.retry;
+$('close').textContent = S.close;
+$('shot').alt = S.scanNow;
+function leave() {
+  if (window.opener) return window.close();
+  if (history.length > 1) return history.back();
+  location.href = '/';
+}
+$('close').onclick = leave;
+$('retry').onclick = () => location.reload();
+$('fresh').onclick = () => open(true);
+
+// Two seconds between pictures; ten minutes in all, then the page stops asking.
+const EVERY_MS = 2000;
+const GIVE_UP_MS = 10 * 60 * 1000;
+const began = Date.now();
+let timer = null;
+let stopped = false;
+// One loop at a time: a new code pressed while a picture is on its way must
+// not leave that answer scheduling a second loop.
+let gen = 0;
+
+function say(text, cls) { $('msg').textContent = text; $('msg').className = cls || ''; }
+function stop(text, cls, canRetry) {
+  stopped = true;
+  clearTimeout(timer);
+  say(text, cls);
+  $('shot').classList.remove('on');
+  $('fresh').hidden = true;
+  $('retry').hidden = !canRetry;
+}
+
+// One answer from the server, drawn. Returns false once there is nothing more
+// to ask for.
+function draw(r) {
+  if (r.signedIn) {
+    stop(S.signedIn, 'ok', false);
+    setTimeout(() => { if (window.opener) window.close(); }, 4000);
+    return false;
+  }
+  $('fresh').hidden = false;
+  if (r.picture) {
+    $('shot').src = r.picture;
+    $('shot').classList.add('on');
+    say(r.verify ? S.verify : S.scanNow, r.verify ? 'bad' : '');
+  } else {
+    $('shot').classList.remove('on');
+    say(r.verify ? S.verify : S.noCode, 'bad');
+  }
+  return true;
+}
+
+async function call(method, url, body) {
+  const res = await fetch(url, {
+    method, credentials: 'same-origin',
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let json = null;
+  try { json = await res.json(); } catch (_) { /* not JSON */ }
+  return { status: res.status, json };
+}
+
+function refused(r) {
+  if (r.status === 401 || r.status === 403) { stop(S.denied, 'bad', false); return true; }
+  if (r.status !== 200 || !r.json || !r.json.success) { stop(S.down, 'bad', true); return true; }
+  return false;
+}
+
+async function poll(mine) {
+  if (stopped || mine !== gen) return;
+  if (Date.now() - began > GIVE_UP_MS) return stop(S.timeout, 'bad', true);
+  let r;
+  try { r = await call('GET', '/api/retail-admin/qingyun-signin/picture?store=' + encodeURIComponent(store)); }
+  catch (_) { r = { status: 0 }; }
+  if (stopped || mine !== gen || refused(r)) return;
+  if (draw(r.json)) timer = setTimeout(() => poll(mine), EVERY_MS);
+}
+
+async function open(fresh) {
+  clearTimeout(timer);
+  const mine = ++gen;
+  say(S.opening);
+  $('fresh').hidden = true;
+  let r;
+  try { r = await call('POST', '/api/retail-admin/qingyun-signin/open', { store, fresh: !!fresh }); }
+  catch (_) { r = { status: 0 }; }
+  if (stopped || mine !== gen || refused(r)) return;
+  if (draw(r.json)) timer = setTimeout(() => poll(mine), EVERY_MS);
+}
+
+open(false);
+</script>
+</body>
+</html>

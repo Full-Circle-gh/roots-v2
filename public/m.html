@@ -34888,6 +34888,11 @@ reg('x7QyAuto', ()=>{
     s.busy=null; s.qy.autoPush=on; showToast(on?T('Auto-send on','已开启自动发单'):T('Auto-send off','已关闭')); render();
   }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.qy=x7Fail(e); render(); });
 });
+reg('x7QySignIn',code=>{
+  const st=(x7().qy&&x7().qy.stores||[]).find(x=>x.code===code)||{};
+  const name=T(st.name_en||st.name_cn||code,st.name_cn||st.name_en||code);
+  location.href='/qingyun-signin?store='+encodeURIComponent(code)+'&name='+encodeURIComponent(name)+'&lang='+(LANG==='en'?'en':'cn');
+});
 function screenQingyun(){
   const s=x7(); x7LoadQy();
   if(s.qyErr&&!s.qy) return x1Err(escAttr(String(s.qyErr)),'x7Retry');
@@ -34896,8 +34901,12 @@ function screenQingyun(){
   /* Three ways not to be connected (the server's _qingyunStoreStatus); only a store
      never set up is offered Request setup — a signed-out one needs a QR scan. */
   const qyState=st=>st.state||(st.connected?'connected':'not_set_up');
+  /* §484 — a signed-out store is signed back in from a picture of its Qingyun
+     browser. The server checks the permission again either way. */
+  const qySignIn=st=>qyState(st)!=='signed_out'||!mCan('integrations:signin')?''
+    :`<button class="btn2" style="width:auto;min-height:34px;padding:0 10px;font-size:13px" onclick="APP.cmd('x7QySignIn','${escAttr(st.code)}')">${T('Sign in again','重新登录')}</button>`;
   const rows=q.stores.map(st=>tmRow({label:escAttr([st.name_en||st.code,st.name_cn].filter(Boolean).join(' · ')),
-    right:`${x7Pill({connected:'conn',signed_out:'signedout',offline:'qyoffline'}[qyState(st)]||'noconn')}${qyState(st)!=='not_set_up'?'':s.qyAsked[st.code]
+    right:`${x7Pill({connected:'conn',signed_out:'signedout',offline:'qyoffline'}[qyState(st)]||'noconn')}${qySignIn(st)}${qyState(st)!=='not_set_up'?'':s.qyAsked[st.code]
       ?`<span style="font-size:13px;color:var(--text-secondary)">${T('Requested','已申请')}</span>`
       :`<button class="btn2" style="width:auto;min-height:34px;padding:0 10px;font-size:13px" ${s.busy?'disabled':''} onclick="APP.cmd('x7QyAsk','${escAttr(st.code)}')">${s.busy==='qy:'+st.code?T('Sending…','提交中…'):T('Request setup','申请开通')}</button>`}`}));
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
