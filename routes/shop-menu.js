@@ -4718,6 +4718,17 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     if (e && e.code === 'voucher_exhausted') {
       return res.status(409).json({ success: false, error: 'voucher_exhausted' });
     }
+    // §82 — the shop has no readable time zone, so the order's shop day (its
+    // number) cannot be known. The transaction has rolled back, nothing was
+    // written; the customer is told the shop is closed, in checkout's own words.
+    if (e && e.code === 'shop_timezone_missing') {
+      console.warn('[shop-menu/order]', code, e.message);
+      return res.status(503).json({
+        success: false, error: 'shop_timezone_missing',
+        message: 'This store is currently closed and not accepting new orders.',
+        message_cn: '本店当前已打烊,暂停接单,敬请谅解。',
+      });
+    }
     console.error('[shop-menu/order]', code, e.message);
     return res.status(500).json({ success: false, error: 'order_failed' });
   }

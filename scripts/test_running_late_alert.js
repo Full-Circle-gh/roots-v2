@@ -24,7 +24,22 @@ const path = require('path');
 const Database = require('better-sqlite3');
 
 const ROOT = path.join(__dirname, '..');
-const dc = require('../lib/delay-case');
+// Every shop in this suite is a Guangzhou shop, and says so (§82): the rules
+// take the shop's zone and day shift, and there is no default to lean on. The
+// real module, with Guangzhou passed wherever a call here leaves it out.
+const GZ_TZ = 'Asia/Shanghai';
+const GZ_SHIFT = require('../lib/business-date').sqlDayShift(GZ_TZ);
+const dc = Object.assign(Object.create(require('../lib/delay-case')), {
+  lateDays: (s, tz = GZ_TZ) => require('../lib/delay-case').lateDays(s, tz),
+  runningLateDays: (s, now = new Date(), tz = GZ_TZ) => require('../lib/delay-case').runningLateDays(s, now, tz),
+  lateAfterSql: (a, sh = GZ_SHIFT) => require('../lib/delay-case').lateAfterSql(a, sh),
+  attemptedOnTimeSql: (a, sh = GZ_SHIFT) => require('../lib/delay-case').attemptedOnTimeSql(a, sh),
+  lateShipmentSql: (a, sh = GZ_SHIFT) => require('../lib/delay-case').lateShipmentSql(a, sh),
+  runningLateSql: (a, today = null, sh = GZ_SHIFT) => require('../lib/delay-case').runningLateSql(a, today, sh),
+  runningLateSinceSql: (a, sh = GZ_SHIFT) => require('../lib/delay-case').runningLateSinceSql(a, sh),
+  runningLateNeedsCallSql: (a, today = null, now = "datetime('now')", sh = GZ_SHIFT) =>
+    require('../lib/delay-case').runningLateNeedsCallSql(a, today, now, sh),
+});
 const alerts = require('../lib/delivery-alerts');
 const RETAIL = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
 const ORDERS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '04-orders.js'), 'utf8');
@@ -119,7 +134,7 @@ it('the card counts the order while it is dispatched, and drops it once it lands
   db.prepare("INSERT INTO retail_orders (id, status) VALUES (1, 'dispatched'), (2, 'delivered')").run();
   db.prepare("INSERT INTO retail_shipments (order_id, mode, dispatched_at) VALUES (1, 'air', '2026-09-26 02:00:00'), (2, 'air', '2026-09-26 02:00:00')").run();
   // The route's SQL reads DATE('now'); swap in the pinned day to judge it.
-  const sql = alerts.runningLateAlertSql('o').replace("DATE('now')", TODAY_SQL);
+  const sql = alerts.runningLateAlertSql('o', GZ_SHIFT).replace("DATE('now')", TODAY_SQL);
   assert.deepStrictEqual(db.prepare(`SELECT id FROM retail_orders o WHERE ${sql}`).all().map((r) => r.id), [1]);
 });
 
@@ -140,7 +155,7 @@ it('a contacted order leaves the card, and comes back 48 hours later if still on
     (1, 'air', '2026-09-26 02:00:00', NULL, NULL),
     (2, 'air', '2026-09-26 02:00:00', '2026-09-27 03:00:01', 'lily'),
     (3, 'air', '2026-09-26 02:00:00', '2026-09-26 03:00:00', 'lily')`).run();
-  const sql = pinned(alerts.runningLateAlertSql('o'));
+  const sql = pinned(alerts.runningLateAlertSql('o', GZ_SHIFT));
   // 1: nobody rang. 2: rung 47h59m ago, still answers. 3: rung 48h ago, asks again.
   assert.deepStrictEqual(db.prepare(`SELECT id FROM retail_orders o WHERE ${sql}`).all().map((r) => r.id), [1, 3]);
 });

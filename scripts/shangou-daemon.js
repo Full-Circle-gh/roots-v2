@@ -109,8 +109,9 @@ const PREOPEN_LEAD_MIN = envLeadMin(process.env.SHANGOU_PREOPEN_LEAD_MIN);
 // reads opening hours), and they do not gate the 置休 open/close command — see
 // syncBusinessStatus, which stays outside this check so an operator can close or
 // reopen the shop at any hour.
+// A Guangzhou shop, and the zone is said rather than assumed (§82).
 const LEGACY_STORE_HOURS = {
-  yuexiu: { open: 11 * 60 + 0, close: 20 * 60 + 15 },
+  yuexiu: { open: 11 * 60 + 0, close: 20 * 60 + 15, tz: 'Asia/Shanghai' },
 };
 
 const FORCE_OPEN_UNTIL = Number(process.env.SHANGOU_FORCE_OPEN_MINUTES) > 0

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.554
+# Tacet shared-core consolidation — decisions record, v4.555
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-18 · v4.555 — **§82 STEP 3 FULL · THERE IS NO HOUSE TIME ZONE — DECIDED BY ASH:** *"yes do it all"*, having been told twice that Claude advised against it. The date helpers, the pickup clock, the channel daemons' opening-hours gate, the stale-sync count, the finance day boundary and the delay-case SQL no longer answer a missing or unreadable zone with Guangzhou's. A zone is the location's own when readable, else the shop's; neither is `NoShopTimezoneError`, which a screen answers with 503 by name. Nine places that would have broken Roots itself are fixed with it. The fifty hand-written `+8` sites outside the helpers are a separate item, not this change. See the amendment at the end of §82.
 
 2026-10-18 · v4.554 — **§82 STEP 3 (SMALL) · A SHOP WITH NO TIMEZONE TAKES NO TIME-BOUND ORDER AND GETS NO SHOP-LOCAL REMINDER — DECIDED BY ASH:** *"merge deploy then step 3 small then step 3 full"*. Customer checkout (quote, place order, reschedule) refuses a shop whose zone is missing or unreadable, with the live store-closed wording; seven shop-local jobs skip it and say so once. The date helpers keep their Guangzhou default only as a net this check stops anyone reaching; removing it is step 3 full. See the amendment at the end of §82.
 
@@ -9009,6 +9011,53 @@ call sites, checkout among them, to change nothing for any shop live today).
    customer order and no shop-local job reaches it for a shop without a zone.
 6. **On production today nothing changes**: Roots' stores carry
    `Asia/Shanghai` (read 2026-10-18), and it is the only active tenant.
+
+**Amended 2026-10-18 — step 3 full: there is no house time zone. Decided by
+Ash:** *"yes do it all"*, after Claude had twice advised against it.
+
+1. **The rule.** A zone is a location's own when the runtime can read it, else
+   the shop's (`shopTimezone`). Neither is `NoShopTimezoneError`
+   (`lib/business-date.js`, code `shop_timezone_missing`). Nothing substitutes
+   Guangzhou's. `SYSTEM_DEFAULT_TZ` stays exported only as Roots' zone and the
+   wizard's first choice.
+2. **The fallbacks removed.** `businessDate`, `zoneParts`, `zoneOffsetMinutes`
+   (and so `dateInZone`, `sqlDayShift`, `wallClockOnDay`) refuse instead of
+   falling back, including the hand-applied +8 for a runtime with no zone data.
+   `businessDateForLocation` falls from the store's zone to the shop's (new
+   `zoneForLocation`). `routes/retail.js` `localPartsInTz` lost its own copy of
+   the fallback. `lib/store-hours.js` — the opening-hours gate of the Meituan,
+   Eleme and Shangou daemons — read hours on a fixed +8 and now reads them on
+   the store's zone, else the shop's; hours with no zone are CLOSED to the
+   daemons. `lib/channel-sync-stale.js` walked fixed +8 days and now walks the
+   store's. `lib/finance-window.js` `odateFor` defaulted to `'+8 hours'` and now
+   requires the shop's shift (every live caller already passed one).
+3. **Nine places that would have broken Roots, fixed with it** (survey of all
+   58 call sites, 2026-10-18): `lib/delay-case.js` computed Guangzhou's shift
+   AT MODULE LOAD — removing the fallback without this stops the server
+   booting; it now requires the shift from its caller, as every caller already
+   gives. `lib/inventory.js` `requiresStockGate` was called at checkout and
+   quote with no zone — every dated Guangzhou order would have failed; it now
+   reads the shop's. Store-column reads (`businessDateForLocation` and its
+   callers in waste, production and QR order codes; the store-stock "added
+   today"; pickup) fall to the shop's zone, and a misspelt store zone no longer
+   slips past checkout's tenant-only gate.
+4. **What a shop with no zone sees.** Checkout refuses (step 3 small). A
+   QR-menu order (`routes/shop-menu.js`) — a second order path the step-3 gate
+   did not cover — is refused in checkout's words, nothing written. The
+   product card carries no batch line and the order page no reschedule button,
+   rather than failing. Any other screen that reaches a helper answers 503
+   `shop_timezone_missing` with the reason (`lib/route-error.js`), and does not
+   page ops per load: the startup check has paged once.
+5. **Before merging, production was read again**
+   (`diagnose_tenant_zones.js`, now printing each zone and whether it is
+   readable): Tianhe and Yuexiu hold `"Asia/Shanghai"`, readable. Orders kept
+   arriving after step 3 small deployed.
+6. **Not in this change, and said so:** about fifty hand-written `+8` sites
+   outside these helpers (20 files — `routes/retail.js` holds 24). Some are
+   right as they stand: Meituan, Eleme, JD, WeChat Pay and Feieyun speak
+   Beijing time whatever the shop's zone. Others are a shop's day written as
+   Guangzhou's. Telling them apart is a survey of its own; it is the next item
+   before the host can move to UTC.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 

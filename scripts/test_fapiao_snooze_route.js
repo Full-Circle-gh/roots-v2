@@ -59,6 +59,8 @@ CREATE TABLE retail_orders (
   invoice_reminder_snoozed_until DATETIME
 );
 CREATE TABLE retail_customers (id INTEGER PRIMARY KEY, nickname TEXT);
+CREATE TABLE storefront_config (key TEXT PRIMARY KEY, value_json TEXT);
+INSERT INTO storefront_config (key, value_json) VALUES ('shop.timezone', '"Asia/Shanghai"');
 CREATE TABLE tenants (id INTEGER PRIMARY KEY, status TEXT, rbac_enforce INTEGER, roles_version INTEGER);
 CREATE TABLE tenant_users (id INTEGER PRIMARY KEY, tenant_id INTEGER, username TEXT, role TEXT, is_active INTEGER, display_name TEXT);
 INSERT INTO tenants (id, status, rbac_enforce, roles_version) VALUES (1, 'active', 1, 1);
@@ -147,15 +149,15 @@ const businessDate = require('../lib/business-date');
   const on = await send('POST', '/api/retail-admin/invoices/1/snooze', { snoozed: true });
   ok(on.status === 200, 'the press answers', on.status);
   ok(!!snoozeOf(1), 'and a date is written', snoozeOf(1));
-  ok(snoozeOf(1) === fr.snoozeTarget(new Date()).toISOString(),
+  ok(snoozeOf(1) === fr.snoozeTarget(new Date(), 'Asia/Shanghai').toISOString(),
      'THE DATE IS THE SWEEPER\'S OWN snoozeTarget — two copies of "tomorrow" would '
      + 'eventually disagree by an hour on one day of the year',
-     { wrote: snoozeOf(1), sweeper: fr.snoozeTarget(new Date()).toISOString() });
-  // Read on the SHOP's clock, not the host's: this tenant has no zone, so it is
-  // the system default, as it is for snoozeTarget above.
-  ok(businessDate.zoneParts(null, new Date(snoozeOf(1))).hour === fr.REMIND_HOUR,
+     { wrote: snoozeOf(1), sweeper: fr.snoozeTarget(new Date(), 'Asia/Shanghai').toISOString() });
+  // Read on the SHOP's clock, not the host's: Guangzhou, the zone the tenant
+  // carries (shop.timezone in the fixture — §82 has no default).
+  ok(businessDate.zoneParts('Asia/Shanghai', new Date(snoozeOf(1))).hour === fr.REMIND_HOUR,
      'landing on the reminder hour, not on now+24h', snoozeOf(1));
-  ok(!fr.isSnoozed(snoozeOf(1), fr.snoozeTarget(new Date())),
+  ok(!fr.isSnoozed(snoozeOf(1), fr.snoozeTarget(new Date(), 'Asia/Shanghai')),
      'and spent exactly when it arrives, so nothing has to clear the column');
 
   console.log('\n2 · lifting it again');

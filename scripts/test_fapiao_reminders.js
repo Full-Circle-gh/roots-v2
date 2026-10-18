@@ -66,7 +66,16 @@ catch (e) { console.error('[test_fapiao_reminders] no usable SQLite driver:', e.
 // forget through it — so the sweep's DB behaviour is testable here with no
 // server, exactly like the delivery sweeper's own shape. Sends are captured by
 // swapping the module's push handle for a recorder.
-const fr = require('../lib/fapiao-reminders');
+// Every shop here is a Guangzhou shop, and says so (§82): the cadence's pure
+// functions take the shop's zone and there is no default. The real module, with
+// Guangzhou passed wherever a call here leaves it out.
+const inGZ = (m) => Object.assign(Object.create(m), {
+  dueAfter: (anchor, gap, tz = 'Asia/Shanghai') => m.dueAfter(anchor, gap, tz),
+  nextDueAt: (last, placed, monthEnd, tz = 'Asia/Shanghai') => m.nextDueAt(last, placed, monthEnd, tz),
+  isMonthEnd: (now, tz = 'Asia/Shanghai') => m.isMonthEnd(now, tz),
+  snoozeTarget: (now, tz = 'Asia/Shanghai') => m.snoozeTarget(now, tz),
+});
+const fr = inGZ(require('../lib/fapiao-reminders'));
 
 console.log(`\ntest_fapiao_reminders — driver: ${driver}\n`);
 
@@ -157,7 +166,7 @@ const pushPath = require.resolve('../routes/push');
 const realPush = require.cache[pushPath];
 require.cache[pushPath] = { id: pushPath, filename: pushPath, loaded: true, exports: pushStub };
 delete require.cache[require.resolve('../lib/fapiao-reminders')];
-const frLive = require('../lib/fapiao-reminders');
+const frLive = inGZ(require('../lib/fapiao-reminders'));
 
 const rowOf = (id) => db.prepare('SELECT * FROM retail_orders WHERE id = ?').get(id);
 

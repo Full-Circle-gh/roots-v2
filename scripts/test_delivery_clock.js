@@ -171,8 +171,8 @@ it('a window pick reminds 30 minutes before the window', () => {
   assert.strictEqual(d.kind, 'window');
   assert.strictEqual(d.at.toISOString(), at('2026-10-20', 13, 30).toISOString());
 });
-it('no zone means the system default, and an unreadable time means no reminder', () => {
-  assert.strictEqual(dueAtFor(at('2026-10-20', 0, 0), null).kind, 'dayof');
+it('NO ZONE IS REFUSED, not read as Guangzhou\'s (§82 step 3 full); an unreadable time means no reminder', () => {
+  assert.throws(() => dueAtFor(at('2026-10-20', 0, 0), null), (e) => e.code === 'shop_timezone_missing');
   assert.strictEqual(dueAtFor(new Date('soon'), GZ), null);
   assert.strictEqual(dueAtFor(null, GZ), null);
 });
@@ -198,8 +198,8 @@ it('it stores the shop\'s midnight of the Express day', () => {
   assert.ok(/businessDate\.dateInZone\(deliveryTz\(\), iso, 0, 0\)\.toISOString\(\)/.test(reanchor), reanchor.slice(0, 400));
 });
 it('…which the ship reminder reads as a day pick: 10:00 on that day', () => {
-  const stored = businessDate.dateInZone(null, '2026-10-21', 0, 0).toISOString();
-  const d = dueAtFor(new Date(stored), null);
+  const stored = businessDate.dateInZone(GZ, '2026-10-21', 0, 0).toISOString();
+  const d = dueAtFor(new Date(stored), GZ);
   assert.strictEqual(d.kind, 'dayof');
   assert.strictEqual(d.at.toISOString(), at('2026-10-21', 10, 0).toISOString());
 });

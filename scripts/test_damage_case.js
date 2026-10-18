@@ -36,7 +36,22 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
-const dc = require('../lib/delay-case');
+// Every shop in this suite is a Guangzhou shop, and says so (§82): the rules
+// take the shop's zone and day shift, and there is no default to lean on. The
+// real module, with Guangzhou passed wherever a call here leaves it out.
+const GZ_TZ = 'Asia/Shanghai';
+const GZ_SHIFT = require('../lib/business-date').sqlDayShift(GZ_TZ);
+const dc = Object.assign(Object.create(require('../lib/delay-case')), {
+  lateDays: (s, tz = GZ_TZ) => require('../lib/delay-case').lateDays(s, tz),
+  runningLateDays: (s, now = new Date(), tz = GZ_TZ) => require('../lib/delay-case').runningLateDays(s, now, tz),
+  lateAfterSql: (a, sh = GZ_SHIFT) => require('../lib/delay-case').lateAfterSql(a, sh),
+  attemptedOnTimeSql: (a, sh = GZ_SHIFT) => require('../lib/delay-case').attemptedOnTimeSql(a, sh),
+  lateShipmentSql: (a, sh = GZ_SHIFT) => require('../lib/delay-case').lateShipmentSql(a, sh),
+  runningLateSql: (a, today = null, sh = GZ_SHIFT) => require('../lib/delay-case').runningLateSql(a, today, sh),
+  runningLateSinceSql: (a, sh = GZ_SHIFT) => require('../lib/delay-case').runningLateSinceSql(a, sh),
+  runningLateNeedsCallSql: (a, today = null, now = "datetime('now')", sh = GZ_SHIFT) =>
+    require('../lib/delay-case').runningLateNeedsCallSql(a, today, now, sh),
+});
 
 const ROOT = path.join(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -63,6 +78,9 @@ function fresh() {
   db.exec(`
     CREATE TABLE retail_orders    (id INTEGER PRIMARY KEY);
     CREATE TABLE retail_shipments (id INTEGER PRIMARY KEY);
+    -- The shop's zone, as Roots carries it (§82): "late" is judged on its days.
+    CREATE TABLE storefront_config (key TEXT PRIMARY KEY, value_json TEXT);
+    INSERT INTO storefront_config (key, value_json) VALUES ('shop.timezone', '"Asia/Shanghai"');
   `);
   db.exec(CASES[1]);
   db.exec(FILES[1]);
