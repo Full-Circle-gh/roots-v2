@@ -89,8 +89,8 @@ function seed() {
   // No retail_delivery_zones row for 天河区 — isOptInSameDayDistrict then reads
   // it as an inner district, i.e. ON the local run, which is this test's subject.
   db.prepare(
-    `INSERT INTO retail_stores (id, code, name_en, name_cn, city, district, is_active, sort_order)
-     VALUES (?,?,?,?,?,?,1,?)`
+    `INSERT INTO retail_stores (id, code, name_en, name_cn, city, district, is_active, sort_order, timezone)
+     VALUES (?,?,?,?,?,?,1,?,'Asia/Shanghai')`   // a Guangzhou shop says so (§82)
   ).run(STORE_GZ, STORE_CODE, 'GZ Shop', '广州店', '广州市', '天河区', 1);
 
   const prod = db.prepare(

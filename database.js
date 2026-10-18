@@ -5123,9 +5123,12 @@ try {
     const existing = db.prepare("SELECT id FROM retail_stores LIMIT 1").get();
     if (!existing) {
       const info = db.prepare(`
-        INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, sort_order, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+        INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, sort_order, is_active, timezone)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'Asia/Shanghai')
       `).run('tianhe', 'Roots Kitchen — Tianhe', 'Roots 厨房 · 天河店', '广州市天河区 (Roots Kitchen)', '广州', '天河区', 0);
+      // A Guangzhou store says so (decisions §82): with no zone it takes no
+      // time-bound orders. Production's rows predate this and were set on
+      // 2026-10-17; this is what a FRESH database starts with.
       console.log(`[migration] seed_default_store_v1: created default store id=${info.lastInsertRowid}`);
 
       // Migrate existing products.stock_qty → default store stock so the
@@ -5166,8 +5169,8 @@ try {
     const existing = db.prepare("SELECT id FROM retail_stores WHERE code = ?").get('yuexiu');
     if (!existing) {
       const info = db.prepare(`
-        INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, sort_order, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+        INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, sort_order, is_active, timezone)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'Asia/Shanghai')
       `).run('yuexiu', 'Roots Kitchen — Yuexiu', 'Roots 厨房 · 越秀店', '广州市越秀区', '广州', '越秀区', 1);
       console.log(`[migration] seed_yuexiu_store_v1: created Yuexiu store id=${info.lastInsertRowid}`);
     }

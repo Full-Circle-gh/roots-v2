@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.553
+# Tacet shared-core consolidation — decisions record, v4.554
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-18 · v4.554 — **§82 STEP 3 (SMALL) · A SHOP WITH NO TIMEZONE TAKES NO TIME-BOUND ORDER AND GETS NO SHOP-LOCAL REMINDER — DECIDED BY ASH:** *"merge deploy then step 3 small then step 3 full"*. Customer checkout (quote, place order, reschedule) refuses a shop whose zone is missing or unreadable, with the live store-closed wording; seven shop-local jobs skip it and say so once. The date helpers keep their Guangzhou default only as a net this check stops anyone reaching; removing it is step 3 full. See the amendment at the end of §82.
 
 2026-10-18 · v4.553 — **§82 · A STORE'S TIME ZONE CAN BE SEEN AND SET ON SCREEN — DECIDED BY ASH:** *"add tz field then step 3"*. There was no screen for it: Settings → Stores had no box, the store list did not return the zone so every screen read it blank, and the setup wizard read "Time zone: China" while saving blank. Roots' two stores were zoned from a browser console on 2026-10-17. Settings → Stores, on the computer and the phone, now has a Time zone box, the list returns the zone, the wizard saves what it shows, and the server refuses a zone it cannot read. See the amendment at the end of §82.
 
@@ -8976,6 +8978,37 @@ then step 3"*.
    phone's store editor (`public/m.html`) to the desktop's body key for key,
    so it gains the same box; its zone list is the wizard's, held equal by
    `scripts/test_store_timezone.js`.
+
+**Amended 2026-10-18 — step 3, small: a shop with no zone does no time-bound
+work. Decided by Ash:** *"merge deploy then step 3 small then step 3 full"*,
+having been told Claude advised against "full" (it touches about a hundred
+call sites, checkout among them, to change nothing for any shop live today).
+
+1. **The rule.** A store with no zone of its own uses the shop's (already so:
+   `shopTimezone`, `deliveryTz`, pickup's store-else-tenant). A shop with **no
+   readable zone at all** — missing, or one the runtime cannot read — does no
+   work on a shop-local clock, instead of doing it on Guangzhou's.
+2. **Customer checkout refuses**, before anything is reserved or written:
+   `POST /api/retail/checkout/quote`, `POST /api/retail/orders`, and both
+   `/orders/:id/reschedule-options` and `/orders/:id/reschedule`. 503,
+   `shop_timezone_missing`, with the store_closed refusal's own live wording
+   (本店当前已打烊,暂停接单,敬请谅解。) — to the customer, a shop that cannot
+   schedule is a closed shop. No Chinese composed.
+3. **Seven shop-local jobs skip the shop** and log it once per shop and job:
+   the ship-day reminder, the 发票 reminder, the low-stock digest, the
+   booked-day reminder, the kitchen prep preview, the kitchen morning request,
+   and auto-deliver off an ETA. None claims anything while skipped, so each
+   resumes the first time it is due after the zone is set. The pickup reminder
+   compares instants only and needs no zone.
+4. **A fresh database's two Roots stores are seeded `Asia/Shanghai`**
+   (`database.js` `seed_default_store_v1`, `seed_yuexiu_store_v1`). Production
+   ran those seeds long ago; its rows were set on 2026-10-17. Without this, a
+   new dev or CI database is a shop with no zone, and checkout refuses it.
+5. **Kept, deliberately, until step 3 full**: `lib/business-date.js` still
+   answers a null zone with `SYSTEM_DEFAULT_TZ`. With the checks above, no
+   customer order and no shop-local job reaches it for a shop without a zone.
+6. **On production today nothing changes**: Roots' stores carry
+   `Asia/Shanghai` (read 2026-10-18), and it is the only active tenant.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 

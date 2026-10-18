@@ -132,6 +132,10 @@ CREATE TABLE retail_orders (
   invoice_reminder_snoozed_until DATETIME
 );
 CREATE TABLE retail_customers (id INTEGER PRIMARY KEY, nickname TEXT);
+-- The shop's zone, as Roots carries it (§82). A shop with none is asked
+-- nothing at all; see "A shop with no zone" below.
+CREATE TABLE storefront_config (key TEXT PRIMARY KEY, value_json TEXT);
+INSERT INTO storefront_config (key, value_json) VALUES ('shop.timezone', '"Asia/Shanghai"');
 INSERT INTO retail_customers (id, nickname) VALUES (1, 'Anders Sloth Nielsen');
 INSERT INTO retail_orders (id, order_no, status, total, needs_invoice, invoice_status, invoice_title, placed_at, customer_id) VALUES
   (1, 'TC000342', 'delivered', 1061, 1, 'requested', NULL, '${STORED('2026-08-21T09:00:00')}', 1),
@@ -343,6 +347,21 @@ ok(/4/.test(sent[0].body || '') && /最久/.test(sent[0].body || ''),
 ok(db.prepare('SELECT COUNT(*) AS n FROM retail_orders WHERE invoice_reminder_count > 0 AND id BETWEEN 10 AND 13').get().n === 4,
    'AND EVERY ROW IT COVERED IS CLAIMED. A digest that claimed only the row it named '
    + 'would re-send the other three on the next tick');
+
+// ── 5b. A shop with no zone (§82 step 3) ────────────────────────────────────
+console.log('\nA shop with no zone');
+db.exec(`INSERT INTO retail_orders (id, order_no, status, total, needs_invoice, invoice_status, placed_at)
+         VALUES (40, 'TC000940', 'paid', 40, 1, 'requested', '${STORED('2026-09-20T09:00:00')}');`);
+db.prepare("DELETE FROM storefront_config WHERE key = 'shop.timezone'").run();
+sent.length = 0;
+fired = frLive.sweepDbOnce(db, D('2026-09-22T10:00:00'), 1);
+ok(fired === 0 && sent.length === 0 && rowOf(40).invoice_reminder_count === 0,
+   'NOTHING IS ASKED, rather than asked at Guangzhou\'s ten as if it were the shop\'s — and nothing is claimed, '
+   + 'so the ask comes the first morning after the zone is set', { fired, sent: sent.length });
+db.prepare("INSERT INTO storefront_config (key, value_json) VALUES ('shop.timezone', '\"Asia/Shanghai\"')").run();
+fired = frLive.sweepDbOnce(db, D('2026-09-22T10:00:00'), 1);
+ok(fired > 0 && rowOf(40).invoice_reminder_count === 1,
+   'with the zone back, it is asked (inside the digest, as rows 10–13 are still waiting)', { fired, row: rowOf(40) });
 
 if (realPush) require.cache[pushPath] = realPush; else delete require.cache[pushPath];
 

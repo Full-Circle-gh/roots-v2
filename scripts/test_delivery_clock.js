@@ -92,7 +92,9 @@ console.log('\n1. the auto-deliver sweep marks a local rider\'s order delivered 
 // The sweep's SELECT is answered by a stand-in so this section tests the DATE
 // decisions alone. (On main that SELECT does not run at all — an unbalanced
 // bracket since #1076 — which is reported separately and fixed on its own.)
-let TENANT_TZ = null;
+// Roots' zone, as its stores carry it since 2026-10-17 (§82). A shop with none
+// does no time-bound work at all — the last case below.
+let TENANT_TZ = 'Asia/Shanghai';
 let ROWS = [];
 let DELIVERED = [];
 const fakeDb = {
@@ -103,16 +105,17 @@ const fakeDb = {
   },
 };
 const sweep = new Function('cfgValue', 'tdb', 'deliveryTz', 'businessDate',
-  'prepareCommitUnreservedOrder', 'logActivity', 'notifyOrderStatusChange',
+  'prepareCommitUnreservedOrder', 'logActivity', 'notifyOrderStatusChange', 'zoneCheck', 'currentTenantId',
   ['AUTO_DELIVER_DEFAULT_GRACE_MIN', 'AUTO_DELIVER_FROM_STATUSES', 'AUTO_DELIVER_FROM_SQL', 'autoDeliverLocalEtaForTenant']
     .map((n) => declSrc(SRC, n)).join('\n') + '\nreturn autoDeliverLocalEtaForTenant;')(
-  (k, d) => d, () => fakeDb, () => TENANT_TZ, businessDate, () => {}, () => {}, () => {});
+  (k, d) => d, () => fakeDb, () => TENANT_TZ, businessDate, () => {}, () => {}, () => {},
+  require(path.join(ROOT, 'lib', 'tenant-zone-check')), () => 1);
 const run = (rows, now) => { ROWS = rows; DELIVERED = []; sweep(now); return DELIVERED; };
 const row = (id, eta, scheduledFor = null) => ({ id, order_no: 'T' + id, status: 'dispatched', local_eta: eta, scheduled_for: scheduledFor });
 const NOW = at('2026-10-16', 14, 0);            // 14:00 in Guangzhou
 
 it('ETA 13:30 + 20 minutes grace has passed at 14:00: delivered', () => {
-  TENANT_TZ = null;
+  TENANT_TZ = 'Asia/Shanghai';
   assert.deepStrictEqual(run([row(1, '13:30')], NOW), [1]);
 });
 it('ETA 13:50 + 20 minutes is 14:10: not yet', () => {
@@ -131,7 +134,15 @@ it('a shop in London reads its own clock: 14:00 Guangzhou is 07:00 there, ETA 13
   TENANT_TZ = 'Europe/London';
   assert.deepStrictEqual(run([row(8, '13:30')], NOW), []);
   assert.deepStrictEqual(run([row(8, '13:30')], at('2026-10-16', 13, 50, 'Europe/London')), [8]);
+  TENANT_TZ = 'Asia/Shanghai';
+});
+it('A SHOP WITH NO ZONE HAS NOTHING DELIVERED OFF AN ETA — not on Guangzhou\'s clock as if it were its own (§82 step 3)', () => {
   TENANT_TZ = null;
+  assert.deepStrictEqual(run([row(9, '08:00')], NOW), []);
+  TENANT_TZ = 'Asia/Shangai';
+  assert.deepStrictEqual(run([row(9, '08:00')], NOW), [], 'nor one whose zone is misspelt');
+  TENANT_TZ = 'Asia/Shanghai';
+  assert.deepStrictEqual(run([row(9, '08:00')], NOW), [9], 'and with its zone back, it is');
 });
 it('a malformed ETA is never delivered off', () => {
   assert.deepStrictEqual(run([row(9, '1:30'), row(10, ''), row(11, '25:00')], NOW), []);

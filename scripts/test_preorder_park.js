@@ -120,8 +120,8 @@ function seed() {
   cleanup();
 
   db.prepare(
-    `INSERT INTO retail_stores (id, code, name_en, name_cn, city, district, is_active, sort_order)
-     VALUES (?,?,?,?,?,?,1,?)`
+    `INSERT INTO retail_stores (id, code, name_en, name_cn, city, district, is_active, sort_order, timezone)
+     VALUES (?,?,?,?,?,?,1,?,'Asia/Shanghai')`   // a Guangzhou shop says so (§82)
   ).run(STORE_WH, 'pp-wh', 'Warehouse', '仓库', '广州市', '天河区', 90);
 
   // A plain out-of-city zone, shaped like the real ones: day_only, so the

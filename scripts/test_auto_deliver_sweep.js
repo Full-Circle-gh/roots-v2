@@ -42,15 +42,18 @@ function declSrc(name) {
 
 const db = openTablesDb(DB_SRC, ['retail_orders', 'retail_shipments', 'delivery_jobs']);
 let CFG = {};
+// The shop's zone, as Roots' stores carry it (§82). null = a shop with none.
+let SHOP_TZ = 'Asia/Shanghai';
 const SENT = { commits: [], activity: [], notified: [] };
 const sweep = new Function('cfgValue', 'tdb', 'deliveryTz', 'businessDate',
-  'prepareCommitUnreservedOrder', 'logActivity', 'notifyOrderStatusChange',
+  'prepareCommitUnreservedOrder', 'logActivity', 'notifyOrderStatusChange', 'zoneCheck', 'currentTenantId',
   ['AUTO_DELIVER_DEFAULT_GRACE_MIN', 'AUTO_DELIVER_FROM_STATUSES', 'AUTO_DELIVER_FROM_SQL', 'autoDeliverLocalEtaForTenant']
     .map(declSrc).join('\n') + '\nreturn autoDeliverLocalEtaForTenant;')(
-  (k, d) => (k in CFG ? CFG[k] : d), () => db, () => null, businessDate,
+  (k, d) => (k in CFG ? CFG[k] : d), () => db, () => SHOP_TZ, businessDate,
   (id) => SENT.commits.push(id),
   (...a) => SENT.activity.push({ id: a[4], details: a[5] }),
-  (id, to) => SENT.notified.push([id, to]));
+  (id, to) => SENT.notified.push([id, to]),
+  require(path.join(ROOT, 'lib', 'tenant-zone-check')), () => 1);
 
 // Late in the shop's day, so every ETA below has passed with its grace. The
 // courier-job freshness test inside the SQL reads SQLite's own clock, so job
@@ -73,7 +76,7 @@ function order({ status = 'dispatched', type = 'delivery', eta = '08:00', mode =
 const statusOf = (id) => db.prepare('SELECT status FROM retail_orders WHERE id = ?').get(id).status;
 function reset() {
   db.exec('DELETE FROM retail_orders; DELETE FROM retail_shipments; DELETE FROM delivery_jobs');
-  CFG = {}; SENT.commits = []; SENT.activity = []; SENT.notified = [];
+  CFG = {}; SHOP_TZ = 'Asia/Shanghai'; SENT.commits = []; SENT.activity = []; SENT.notified = [];
 }
 
 let pass = 0, fail = 0;
@@ -158,6 +161,14 @@ it('a negative grace switches the sweep off', () => {
   CFG['delivery.autoDeliverEtaMinutes'] = -1;
   order();
   assert.strictEqual(sweep(NOW), 0);
+});
+
+it('a shop with NO zone has nothing closed off an ETA, rather than closed on Guangzhou\'s clock (§82 step 3)', () => {
+  SHOP_TZ = null;
+  const id = order();
+  assert.strictEqual(sweep(NOW), 0);
+  assert.strictEqual(statusOf(id), 'dispatched');
+  assert.deepStrictEqual(SENT.notified, [], 'and the customer is told nothing');
 });
 
 console.log('\n4. once, not twice');
