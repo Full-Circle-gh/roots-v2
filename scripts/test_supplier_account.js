@@ -76,6 +76,11 @@ const handle = ensureTransactionMethod(addTables(
 //                                  retail copy RPO-5 — counted once, not twice
 //   RPO-5  2026-09-12  Delivered   the copy: 3 × 10 = 30
 //   RPO-6  2026-09-15  Cancelled   never counted
+// A store in the shop's zone, as Roots' are: an entry typed without a date is
+// dated by the shop's day, and a shop with no zone has none (§82).
+// Only the columns the zone is read from (lib/business-date.js shopTimezone).
+handle.exec(`CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, code TEXT, is_active INTEGER, sort_order INTEGER, timezone TEXT);
+             INSERT INTO retail_stores VALUES (1, 'tianhe', 1, 1, 'Asia/Shanghai');`);
 handle.exec(`
 INSERT INTO suppliers (id, name, name_cn, tenant_id) VALUES (1, 'Tofu Co', '豆腐坊', 1), (2, 'Pay First', NULL, 1);
 INSERT INTO purchase_orders (id, po_number, date, status, supplier, scope, tenant_id, copied_from_po_id) VALUES

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.559
+# Tacet shared-core consolidation — decisions record, v4.560
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-18 · v4.560 — **§82 · PURCHASING DATES A RECORD BY THE SHOP'S DAY — DECIDED BY ASH:** *"fix all"*, the fourth batch. A supplier-account entry typed without a date, and a back-order purchase order, were dated by Guangzhou's day. The entry takes the shop's day and the back-order its store's. Nothing changes for Roots. See the amendment at the end of §82.
 
 2026-10-18 · v4.559 — **§82 · A REPORT'S "TODAY" IS THE DAY ITS SQL BUCKETS BY — DECIDED BY ASH:** *"fix all"*, the third batch. The report queries already bucket rows by the shop's own shift; their default window was computed in JavaScript as Guangzhou's day, so for a shop anywhere else the two disagreed. The dashboard, its live same-weekday clip and activity feed, Sales, Finance (`resolveWindow` now takes the shop's zone), the product highlights, a product's sales card, the 30-day sales column and stock activity all default to the shop's day. Nothing changes for Roots. See the amendment at the end of §82.
 
@@ -9151,6 +9153,20 @@ Decided by Ash:** *"fix all"*.
    from before the copies were written. They now zone their copies, as the
    real stores are.
 5. Held by `scripts/test_shop_reports.js` (10 checks).
+
+**Amended 2026-10-18 — batch 4: back-office record dates. Decided by Ash:**
+*"fix all"*.
+
+1. `routes/retail-purchasing.js` dated a supplier-account entry typed without a
+   date, and a back-order purchase order, by Guangzhou's day (`gzToday`). The
+   entry now takes the shop's day; the back-order takes its store's own day,
+   or the shop's when it has no store — the same rule production uses
+   (batch 1).
+2. The survey's other back-office sites (the restock default date and
+   suggestions, production's "made today") were fixed in batch 1.
+3. `scripts/test_supplier_account.js` builds an in-memory database with no
+   stores table, so its shop had no zone; it now has one store, zoned as
+   Roots' are. Held by `scripts/test_shop_today.js` section 4.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 

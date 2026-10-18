@@ -31,6 +31,7 @@
 
 const express = require('express');
 const { tdb, currentTenantId } = require('../lib/tenant-db');
+const businessDate = require('../lib/business-date');
 const capRoutes = require('../lib/cap-routes');
 const editHistory = require('../lib/edit-history');
 // The shared control-plane handle. Used for EXACTLY ONE statement in this file
@@ -1653,7 +1654,11 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
 // back marked 不开发票 hours after the buyer restored it.
 // invoice_pos is dead with 0 rows and is left alone.
 const INV_PO_STATUSES = "('Ordered','Delivered','Confirmed')";
-const gzToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+// "Today" for a record a person dates by the calendar: the shop's day, or the
+// store's own when the record belongs to one (§82). It was Guangzhou's for
+// every shop.
+const shopToday = () => businessDate.businessDate(businessDate.shopTimezone(tdb()));
+const storeToday = (storeId) => (storeId ? businessDate.businessDateForLocation(tdb(), storeId) : shopToday());
 const INV_UNSPECIFIED = '未指定 Unspecified';
 
 // Supplier resolution chain, most-specific first: the line's own supplier, the
@@ -1871,7 +1876,7 @@ router.post('/api/retail-admin/suppliers/:id/account/entries', requireRetailAdmi
   const b = req.body || {};
   const kind = String(b.kind || '');
   if (!ACCT_KINDS.has(kind)) return res.status(400).json({ success: false, error: 'invalid_kind' });
-  const date = String(b.date || gzToday()).slice(0, 10);
+  const date = String(b.date || shopToday()).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'invalid_date' });
   const raw = typeof b.amount === 'string' ? b.amount.trim() : b.amount;
   const amount = round2(raw);
@@ -2565,7 +2570,7 @@ router.post('/api/retail-admin/purchases/:id/backorder', requireRetailAdmin, (re
       const r = tdb().prepare(`INSERT INTO purchase_orders
         (po_number, date, delivery_date, status, supplier, notes, source, scope, store_id, created_by, backorder_of, tenant_id)
         VALUES (?,?,?,'Requested',?,?,'backorder','retail',?,NULL,?,?)`).run(
-        po_number, gzToday(), null, src.supplier || null,
+        po_number, storeToday(src.store_id), null, src.supplier || null,
         `Back-order from ${src.po_number}`, src.store_id, src.id, currentTenantId());
       const newId = r.lastInsertRowid;
       const ins = tdb().prepare(`INSERT INTO po_line_items

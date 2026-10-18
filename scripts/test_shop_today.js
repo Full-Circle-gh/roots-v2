@@ -13,6 +13,9 @@
  * host, restock numbers (RS-YYMMDD) and the date parts of new SKUs read
  * yesterday too. Now all of them read the shop's clock.
  *
+ * Purchasing (section 4) dated a supplier-account entry and a back-order PO by
+ * Guangzhou's day, which is right for Roots only.
+ *
  * The last section is the guard: no runtime file under lib/, routes/, server.js
  * or the daemons reads a host-local date part. A new one fails here.
  */
@@ -85,7 +88,27 @@ it('both callers pass the shop\'s zone', () => {
   assert.ok(/tz: require\('\.\.\/lib\/business-date'\)\.shopTimezone\(tdb\(\)\)/.test(read('routes/sku.js')), 'the pattern preview');
 });
 
-console.log('\n4. no runtime code reads the host\'s clock');
+console.log('\n4. purchasing');
+it('a supplier-account entry with no date is the shop\'s day; a back-order PO is its store\'s day', () => {
+  const src = read('routes/retail-purchasing.js');
+  const Database = require('better-sqlite3');
+  const businessDate = require(path.join(ROOT, 'lib', 'business-date'));
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, is_active INTEGER, sort_order INTEGER, timezone TEXT);
+           CREATE TABLE storefront_config (key TEXT PRIMARY KEY, value_json TEXT);`);
+  db.prepare('INSERT INTO retail_stores VALUES (1, 1, 0, ?), (2, 1, 1, ?)').run('Asia/Shanghai', 'America/New_York');
+  const lines = src.match(/^const shopToday = .*$\n^const storeToday = .*$/m);
+  assert.ok(lines, 'shopToday / storeToday not found');
+  const f = new Function('businessDate', 'tdb', `${lines[0]}\nreturn { shopToday, storeToday };`)(businessDate, () => db);
+  assert.strictEqual(f.shopToday(), businessDate.businessDate('Asia/Shanghai'));
+  assert.strictEqual(f.storeToday(2), businessDate.businessDate('America/New_York'), 'the store\'s own zone');
+  assert.strictEqual(f.storeToday(null), f.shopToday(), 'a PO with no store is the shop\'s');
+  assert.ok(/const date = String\(b\.date \|\| shopToday\(\)\)\.slice\(0, 10\);/.test(src), 'supplier-account entry');
+  assert.ok(/po_number, storeToday\(src\.store_id\), null,/.test(src), 'back-order PO');
+  assert.ok(!/8 \* 3600/.test(strip(src)), 'no Guangzhou day left');
+});
+
+console.log('\n5. no runtime code reads the host\'s clock');
 it('no host-local date part in lib/, routes/, server.js or the daemons', () => {
   const HOST = /\.(getHours|getMinutes|getSeconds|getDate|getDay|getMonth|getFullYear)\(\)|\.toDateString\(\)|\.toLocale(Date|Time)String\(\s*\)/;   // a NUMBER's toLocaleString() is thousands separators, not a clock
   const files = [];
