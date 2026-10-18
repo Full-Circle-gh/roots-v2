@@ -462,6 +462,11 @@ router.get('/api/retail-admin/staff-expenses/:id/receipt', requireRetailAdmin, (
 // and the claim that has waited longest is the one somebody is waiting on. The
 // decided ones follow, newest first, because that half is a record rather than a
 // queue.
+//
+// NEWEST BY THE CLAIM'S OWN DATE, not by when it was decided. The date is the
+// first column on both screens, so a list ordered by the approval tap read as
+// Oct 18, Oct 14, Oct 15 — unsorted to anyone scrolling it. decided_at only
+// breaks ties between claims on the same day.
 router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requireApprover, (req, res) => {
   try {
     const db = tdb();
@@ -476,7 +481,7 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
        ORDER BY CASE WHEN e.status = 'submitted' THEN 0 ELSE 1 END,
                 CASE WHEN e.status = 'submitted' THEN e.date END ASC,
                 CASE WHEN e.status = 'submitted' THEN e.id END ASC,
-                e.decided_at DESC, e.id DESC
+                e.date DESC, e.decided_at DESC, e.id DESC
        LIMIT 200`).all();
 
     // The names, resolved in one read rather than per row, through the same
