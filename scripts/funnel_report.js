@@ -18,7 +18,7 @@
  * funnel; the bottom (checkout → paid) is exact.
  *
  * Run ON THE SERVER, read-only against data/roots.db:
- *     node scripts/funnel_report.js                 # today (Asia/Shanghai)
+ *     node scripts/funnel_report.js                 # today (the shop's zone)
  *     node scripts/funnel_report.js 2026-06-14      # one day
  *     node scripts/funnel_report.js 2026-06-01 2026-06-14   # a range
  *     node scripts/funnel_report.js all             # all history
@@ -28,23 +28,27 @@ const Database = require('better-sqlite3');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'roots.db');
 const db = new Database(DB_PATH, { readonly: true });
+const businessDate = require('../lib/business-date');
 
 // ── Dashboard constants (kept identical to routes/retail.js) ──
-const TZ    = '+8 hours';
+// The shop's own day boundary, as the dashboard buckets it (lib/shop-clock.js).
+// It was the literal '+8 hours' (§82).
+const SHOP_TZ = businessDate.shopTimezone(db);
+const TZ    = businessDate.sqlDayShift(SHOP_TZ);
 const PAID  = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
 const PAIDO = "o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
 const PDATE = `date(COALESCE(paid_at, placed_at), '${TZ}')`;
 
 // ── Resolve the window from argv ──
-function shanghaiToday() {
-  return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+function shopToday() {
+  return businessDate.businessDate(SHOP_TZ);
 }
 let from, to, label;
 const a = process.argv.slice(2);
 if (a[0] === 'all') {
   from = '2000-01-01'; to = '2999-12-31'; label = 'ALL HISTORY';
 } else if (a.length === 0) {
-  from = to = shanghaiToday(); label = `TODAY (${from}, Asia/Shanghai)`;
+  from = to = shopToday(); label = `TODAY (${from}, ${SHOP_TZ})`;
 } else {
   from = a[0]; to = a[1] || a[0]; label = `${from} → ${to}`;
 }
