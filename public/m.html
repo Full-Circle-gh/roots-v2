@@ -4107,6 +4107,7 @@ function qyCarrierPanel(o){
   if(q.loading) return qyNote(T('Loading…','加载中…'));
   if(q.err) return qyNote(q.err,'brick-ink');
   const d=q.carriers||{};
+  if(!d.available&&d.reason==='queued') return qyNote(T('Queued for push…','排队发单中…')+(d.queued_since&&courierAgo(d.queued_since)?' · '+courierAgo(d.queued_since):'')+' '+T("Prices show once it's in Qingyun.",'进入青云后即可查看运力比价。'));
   if(!d.available) return qyNote(T("Not in Qingyun yet. Turn on auto-send, or this isn't a same-city order.",'订单尚未进入青云。请开启自动发送,或此单非同城配送。'));
   const list=(d.carriers||[]).filter(x=>x&&x.enabled);
   if(!list.length) return qyNote(T('No couriers available right now.','当前暂无可用运力。'));

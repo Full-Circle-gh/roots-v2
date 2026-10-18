@@ -6066,6 +6066,13 @@ async function qyLoadCarriers(orderId, btn) {
     const j = await r.json();
     if (btn) { btn.disabled = false; btn.textContent = cuT('Refresh prices', '刷新比价'); }
     if (!j.success) { box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--td-brick-ink)">${cuT('Could not load couriers — is the store connected to Qingyun?', '无法获取运力 — 门店是否已连接青云?')}</div>`; return; }
+    // Queued, not missing: the drawer's own queue line with a fresh age, so each
+    // click shows something current instead of the auto-send sentence again.
+    if (!j.data.available && j.data.reason === 'queued') {
+      const age = j.data.queued_since && courierAgo(j.data.queued_since);
+      box.innerHTML = `<div class="muted" style="font-size:12px">${cuT('Queued for push…', '排队发单中…')}${age ? ' · ' + escapeHtml(age) : ''} ${cuT("Prices show once it's in Qingyun.", '进入青云后即可查看运力比价。')}</div>`;
+      return;
+    }
     if (!j.data.available) { box.innerHTML = `<div class="muted" style="font-size:12px">${cuT("Not in Qingyun yet. Turn on auto-send, or this isn't a same-city order.", '订单尚未进入青云。请开启自动发送,或此单非同城配送。')}</div>`; return; }
     const carriers = (j.data.carriers || []).filter(c => c.enabled);
     if (!carriers.length) { box.innerHTML = `<div class="muted" style="font-size:12px">${cuT('No couriers available right now.', '当前暂无可用运力。')}</div>`; return; }

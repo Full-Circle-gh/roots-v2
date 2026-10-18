@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.339 · 2026-10-18 · REFRESH PRICES ON A QUEUED ORDER SAYS IT IS QUEUED — 1 STRING COMPOSED BY CLAUDE (`进入青云后即可查看运力比价。`), BUILT ONLY FROM LIVE FRAGMENTS; THE QUEUE LINE `Queued for push… · 排队发单中…` AND `courierAgo`'s AGE ARE COPIED WHOLE FROM THE DRAWER ONE BLOCK ABOVE.** See *Refresh prices on a queued order*.
+
 **v1.338 · 2026-10-17 · §483 WHAT A SUPPLIER ACTUALLY REFUNDED ON A PURCHASE RETURN — 2 STRINGS COMPOSED BY CLAUDE (`退款金额无效。`, `只有退货的项才需要填写退款。`), EACH A LIVE RETURNS REFUSAL WITH ONE LIVE NOUN SWAPPED; THE BOX'S LABEL `Refunded · 已退款` AND THE CATEGORY `运费及杂费 Freight & fees` COPIED WHOLE; THE OVER-REFUND REFUSAL REUSES §269's `退货金额不能超过支出金额`.** See *What came back on a purchase return (§483)*.
 
 **v1.337 · 2026-10-15 · §479 TELLS THE SHOP WHEN A WECHAT PAYMENT LANDS ON A CANCELLED ORDER — NOTHING COMPOSED; EVERY CHINESE FRAGMENT IS LIVE (`微信支付`, `已取消`, `已退款`, `退款失败`, `订单号`, `金额`) AND `请手动退款给顾客` IS LIFTED FROM A LIVE SENTENCE.** See *A payment that arrives after the order was cancelled*.
@@ -14237,3 +14239,34 @@ item: *"as you recommend build it"*.
 - `退款金额不能超过退货金额` for the over-refund refusal: two new nouns joined; §269's live pair says the same thing to the same operator.
 - A label naming the kept part (`未退运费`, *freight not refunded*): not live. The note uses the category's own name instead, which is what Finance shows for the same money.
 
+
+## Refresh prices on a queued order
+
+**Composed by Claude, 2026-10-18, under the 2026-09-06 amendment.** Operator
+register. The price list under the order drawer's *Same-city courier* block
+(`public/retail-admin/04-orders.js`, `qyLoadCarriers`) and the phone's
+(`public/m.html`, `qyCarrierPanel`), when the server answers
+`reason: 'queued'`. Asked by Ash off TC001334: the drawer said
+*Queued for push… · 1m ago*, and Refresh prices answered with *"Not in Qingyun
+yet. Turn on auto-send, or this isn't a same-city order."* — false on both
+counts for a queued order, and the same sentence it had already printed, so the
+click looked like it did nothing.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Prices show once it's in Qingyun.` / `进入青云后即可查看运力比价。` | after the queue line, desktop and phone | `进入青云` from the live `订单尚未进入青云` this replaces for a queued order; `即可` from the live `确认后即可标记为已付款` on the same screen; `查看运力比价` verbatim from the button the operator reaches for (Rule 4's reason for naming a control by its own label, as §203's booked note does). No new character. |
+
+### Copied whole
+
+`Queued for push… · 排队发单中…` and `courierAgo`'s age, joined by ` · ` — the
+drawer's own queue line, character for character, so the answer and the line
+above it say the same thing.
+
+### Rejected
+
+- `正在发往青云`: not live; `排队发单中…` already says it on the same screen.
+- `请稍后刷新` (*refresh later*): not live, and tells the operator to keep
+  clicking without saying what they are waiting for.
+- Keeping `请开启自动发送` for a queued order: false — auto-send is what queued it.
