@@ -83,14 +83,14 @@ function it(name, fn) {
  * only that one is resolved against a bare HH:MM.
  *
  * MIDDAY ON THE SHOP'S CLOCK, not the host's (§82). lib/delivery-alerts reads
- * the bare HH:MM on the shop's zone; this fixture has no store, so that is the
- * system default, Guangzhou. A host-clock midday is 20:00 Guangzhou on a New
+ * the bare HH:MM on the shop's zone; this fixture's shop is in Guangzhou
+ * (shop.timezone below — §82 has no default zone). A host-clock midday is 20:00 Guangzhou on a New
  * York host, and the 11:00 ETA is then in the past by the wrong nine hours.
  */
 const businessDate = require('../lib/business-date');
-const NOON = businessDate.wallClockOnDay(null, new Date(), 12, 0);
+const NOON = businessDate.wallClockOnDay('Asia/Shanghai', new Date(), 12, 0);
 const hhmmOf = (d) => {
-  const p = businessDate.zoneParts(null, d);
+  const p = businessDate.zoneParts('Asia/Shanghai', d);
   return String(p.hour).padStart(2, '0') + ':' + String(p.minute).padStart(2, '0');
 };
 /** A local ETA an hour before NOON — 11:00, whatever hour this suite runs at. */
@@ -116,7 +116,9 @@ function fixture() {
       running_late_contacted_at TEXT, tracking_no_contact_first_event TEXT);
     CREATE TABLE retail_delay_cases (id INTEGER PRIMARY KEY, shipment_id INTEGER, order_id INTEGER);
     CREATE TABLE delivery_jobs (id INTEGER PRIMARY KEY, retail_order_id INTEGER,
-      order_status INTEGER, updated_at TEXT);`);
+      order_status INTEGER, updated_at TEXT);
+    CREATE TABLE storefront_config (key TEXT PRIMARY KEY, value_json TEXT);
+    INSERT INTO storefront_config (key, value_json) VALUES ('shop.timezone', '"Asia/Shanghai"');`);
   const ord = (id, cols) => {
     const k = Object.keys(cols);
     db.prepare(`INSERT INTO retail_orders (id,order_no,${k.join(',')}) VALUES (?,?,${k.map(() => '?').join(',')})`)
@@ -159,8 +161,8 @@ console.log('\nthe fixture answers the same at every hour of the day');
 it('the pinned clock is a fixed midday, not a reading of the wall', () => {
   // If this ever goes back to `new Date()`, the suite goes back to failing for
   // one hour a night and passing every time anybody looks at it.
-  assert.strictEqual(businessDate.zoneParts(null, NOON).hour, 12, 'NOON must be midday, whatever hour this runs at');
-  assert.strictEqual(businessDate.zoneParts(null, NOON).minute, 0);
+  assert.strictEqual(businessDate.zoneParts('Asia/Shanghai', NOON).hour, 12, 'NOON must be midday, whatever hour this runs at');
+  assert.strictEqual(businessDate.zoneParts('Asia/Shanghai', NOON).minute, 0);
 });
 
 it('the promised arrival is earlier the SAME day, so it can never read as tonight', () => {
@@ -188,7 +190,7 @@ it('each sub-type is exactly one order, so none of them is doing another\'s work
   const one = (sql) => db.prepare(`SELECT o.id FROM retail_orders o WHERE ${sql}`).all().map((r) => r.id);
   assert.deepStrictEqual(one(alerts.carrierAlertSql('o')), [1]);
   assert.deepStrictEqual(one(alerts.meituanAlertSql('o')), [2]);
-  assert.deepStrictEqual(one(alerts.airAlertSql('o')), [3]);
+  assert.deepStrictEqual(one(alerts.airAlertSql('o', businessDate.sqlDayShift('Asia/Shanghai'))), [3]);
   assert.deepStrictEqual(alerts.localStuckRows(db, NOON).map((r) => r.id), [4]);
 });
 
@@ -316,7 +318,7 @@ it('an order that is two kinds of trouble at once is ONE call, not two', () => {
 
   const oldWay =
       db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.carrierAlertSql('o')}`).get().n
-    + db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.airAlertSql('o')}`).get().n
+    + db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.airAlertSql('o', businessDate.sqlDayShift('Asia/Shanghai'))}`).get().n
     + db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.meituanAlertSql('o')}`).get().n
     + alerts.localStuckRows(db, NOON).length;
 

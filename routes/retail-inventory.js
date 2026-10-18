@@ -28,7 +28,7 @@ const { logActivity } = require('../middleware/auth');
 // The store's own day boundary. A kitchen shift that runs past midnight is
 // still the same working day to the people in it, and `businessDate` is the
 // one place this system decides where that line falls.
-const { businessDate } = require('../lib/business-date');
+const { zoneForLocation } = require('../lib/business-date');
 // The fold of those rows into "what went on today, and who put it there",
 // in lib/ so its rules can be exercised without a database.
 const { summariseKitchenAdds } = require('../lib/kitchen-adds');
@@ -450,7 +450,8 @@ router.get('/api/retail-admin/stores/:id/stock/added-today', requireInventoryRea
     return res.status(403).json({ success: false, error: 'store_not_assigned' });
   }
 
-  const tz = tdb().prepare('SELECT timezone FROM retail_stores WHERE id = ?').get(id)?.timezone || null;
+  // The store's own zone, else the shop's — a store with none is in the shop's (§82).
+  const tz = zoneForLocation(tdb(), id);
   /* A TWO-DAY WINDOW NARROWED IN JS, rather than a date comparison in SQL.
      `created_at` is stored UTC and the business date is the STORE's, so no
      SQL predicate can select "today" without reimplementing the timezone rule

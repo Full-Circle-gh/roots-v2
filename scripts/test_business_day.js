@@ -60,17 +60,21 @@ it('daylight saving is honoured at the instant asked about', () => {
   assert.strictEqual(B.zoneOffsetMinutes('America/New_York', JUL), -240);  // EDT
 });
 
-it('a missing, blank or nonsense zone falls back to +8 — what it did before', () => {
+// §82 STEP 3 FULL (2026-10-18): THERE IS NO HOUSE ZONE. These two cases said the
+// opposite until then — a missing or nonsense zone "fell back to +8, what it did
+// before" — and that is how a shop with no zone ran on Guangzhou's clock looking
+// right. They now pin the refusal, by name.
+it('a missing, blank or nonsense zone is REFUSED, not read as +8', () => {
   for (const bad of [null, undefined, '', '   ', 'Not/AZone', 'Mars/Olympus']) {
-    assert.strictEqual(B.sqlDayShift(bad, JUL), '+480 minutes', String(bad));
+    assert.throws(() => B.sqlDayShift(bad, JUL), (e) => e.code === 'shop_timezone_missing', String(bad));
+    assert.throws(() => B.businessDate(bad, JUL), (e) => e.code === 'shop_timezone_missing', String(bad));
+    assert.throws(() => B.zoneParts(bad, JUL), (e) => e.code === 'shop_timezone_missing', String(bad));
   }
 });
 
-it('the fallback never recurses away — a broken Intl still yields a shift', () => {
-  // zoneOffsetMinutes falls back to the default zone, and the default falls back
-  // to the literal 480. A fallback that called itself forever would take the
-  // whole API down rather than mis-date one row.
-  assert.strictEqual(B.zoneOffsetMinutes('Not/AZone', JUL), 480);
+it('an unreadable zone is refused at once — there is no fallback zone to recurse into', () => {
+  assert.throws(() => B.zoneOffsetMinutes('Not/AZone', JUL),
+    (e) => e.name === 'NoShopTimezoneError' && /Not\/AZone/.test(e.message) && /Settings → Stores/.test(e.message));
 });
 
 it('an absurd offset is refused rather than shifting every date on screen', () => {
@@ -114,16 +118,16 @@ if (!Database) {
     assert.strictEqual(B.shopTimezone(db), 'Europe/Berlin');
   });
 
-  it('no zone anywhere means the +8 fallback, unchanged from before', () => {
+  it('no zone anywhere: the shop has none, and its day shift is REFUSED rather than +8 (§82)', () => {
     const db = mk([[1, 1, 1, null]]);
     assert.strictEqual(B.shopTimezone(db), null);
-    assert.strictEqual(B.sqlDayShiftForShop(db, JUL), '+480 minutes');
+    assert.throws(() => B.sqlDayShiftForShop(db, JUL), (e) => e.code === 'shop_timezone_missing');
   });
 
-  it('a database with no such table does not throw — an un-migrated account still works', () => {
+  it('a database with no such table: asking for the zone does not throw; using one that is not there does', () => {
     const db = new Database(':memory:');
     assert.strictEqual(B.shopTimezone(db), null);
-    assert.strictEqual(B.sqlDayShiftForShop(db, JUL), '+480 minutes');
+    assert.throws(() => B.sqlDayShiftForShop(db, JUL), (e) => e.code === 'shop_timezone_missing');
   });
 
   it('the shift is a modifier SQLite actually understands', () => {

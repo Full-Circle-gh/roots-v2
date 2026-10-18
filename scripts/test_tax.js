@@ -188,7 +188,8 @@ function fixture(taxCfg) {
                                    'retail_product_options', 'retail_product_option_choices']);
   addForkedStoreProducts(db, SCHEMA_SRC, DB_SRC);
   db.prepare("INSERT INTO store_products (id, name_en, name_cn, sku, weight, sell_price, is_active) VALUES (1,'Tofu','豆腐','SKU1','500g',50,1)").run();
-  db.prepare("INSERT INTO retail_stores (id, code, name_en) VALUES (1, 'MAIN', 'Main')").run();
+  // Zoned, as every shop must be (§82): the finance window's day is the shop's.
+  db.prepare("INSERT INTO retail_stores (id, code, name_en, is_active, timezone) VALUES (1, 'MAIN', 'Main', 1, 'Asia/Shanghai')").run();
   for (const [k, v] of Object.entries(taxCfg || {})) {
     db.prepare('INSERT INTO storefront_config (key, value_json) VALUES (?, ?)').run(k, JSON.stringify(v));
   }
@@ -721,6 +722,9 @@ async function place(taxCfg, body) {
     // table is — a hand-typed shape here would drift from the one the report
     // reads, and the first thing that would break is not tax.
     addTables(db, SCHEMA_SRC, DB_SRC, ['expense_entries', 'categories']);
+    // A zoned shop (§82): the report's days are the shop's, and a shop with no
+    // zone has no days to report on.
+    db.prepare("INSERT INTO retail_stores (id, code, name_en, is_active, timezone) VALUES (1, 'MAIN', 'Main', 1, 'Asia/Shanghai')").run();
     const ins = db.prepare(
       `INSERT INTO retail_orders (order_no, status, total, tax_amount, tax_rate_micro, tax_mode,
                                   points_amount, balance_used, refund_amount_paid, placed_at, paid_at)

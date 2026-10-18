@@ -80,8 +80,11 @@ const SH = require('../lib/store-hours');
 
 // store-hours caches for 10 minutes; the tests below edit the table between
 // assertions, so each one re-primes it through a fresh module instance.
+// Each store carries its zone, as Roots' do (§82): within() reads hours on the
+// store's own clock, and hours with no zone are closed. A row that names its
+// own `timezone` (even null) keeps it.
 function loadHours(rows, { syncColumn = true } = {}) {
-  STORE_ROWS = rows;
+  STORE_ROWS = rows.map((r) => ('timezone' in r ? r : { ...r, timezone: 'Asia/Shanghai' }));
   allowSyncColumn = syncColumn;
   delete require.cache[require.resolve('../lib/store-hours')];
   return require('../lib/store-hours');
@@ -144,6 +147,18 @@ console.log('\n2. lib/store-hours — a database that has not migrated yet');
   is(h && [h.open, h.close, h.syncStart], [600, 1200, null],
      'hours still read, sync start simply absent');
   is(sh.syncWindow(h, { graceMin: 15 }).open, 480, 'and the default lead still applies');
+}
+
+console.log('\n2b. A store with no time zone is closed (§82)');
+{
+  const sh = loadHours([{ code: 'nozone', open_time: '10:00', close_time: '20:00', sync_start_time: null, timezone: null }]);
+  const h = sh.storeHours('nozone');
+  is(h && h.tz, null, 'its hours carry no zone');
+  is(sh.within(sh.syncWindow(h, { graceMin: 15 }), { now: shanghai(12, 0) }), false,
+     'and the daemons do not work it, even at noon, rather than on Guangzhou\'s clock');
+  const z = loadHours([{ code: 'zoned', open_time: '10:00', close_time: '20:00', sync_start_time: null }]);
+  is(z.within(z.syncWindow(z.storeHours('zoned'), { graceMin: 15 }), { now: shanghai(12, 0) }), true,
+     'the same hours with the zone set are open at noon');
 }
 
 console.log('\n3. The daemons\' own gate, lifted out of each daemon');

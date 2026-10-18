@@ -72,7 +72,8 @@ it('production today: Roots, two stores, no zone anywhere — named, logged and 
   assert.deepStrictEqual(found.map((f) => [f.tenantId, f.problem]), [[1, 'missing']]);
   assert.strictEqual(logged.error.length, 1);
   assert.ok(/\[tz\] ⛔ tenant 1 "Roots" HAS NO TIMEZONE/.test(logged.error[0]), logged.error[0]);
-  assert.ok(/Asia\/Shanghai by default/.test(logged.error[0]), 'it says what the tenant is running on meanwhile');
+  assert.ok(/takes no orders that need a time/.test(logged.error[0]) && /Settings → Stores/.test(logged.error[0]),
+    'it says what that costs the shop, and where to fix it');
   assert.deepStrictEqual(alerts.map((a) => a[0]), [1], 'one alert, to that tenant');
 });
 it('a zone on a store is enough', () => {

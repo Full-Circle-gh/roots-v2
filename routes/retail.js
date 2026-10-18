@@ -1321,6 +1321,10 @@ router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) 
 function decorateFreshBatch(rows) {
   const list = Array.isArray(rows) ? rows : [rows];
   const tz = deliveryTz();
+  // §82 — a shop with no readable zone cannot say when a batch is made, so the
+  // card carries no batch line at all rather than the catalogue failing. It
+  // takes no orders meanwhile (refuseWithoutShopZone), so nothing is promised.
+  if (businessDate.zoneProblem(tz)) return rows;
   const d = nextFreshBatchDate();
   const todayIso = toYmdLocal(new Date(), tz);
   const isToday = !!d && d === todayIso;
@@ -8971,42 +8975,27 @@ function lowStockDefault() {
   return Number.isFinite(n) && n >= 0 ? n : 5;
 }
 
-// Local-time parts of a Date in an IANA timezone. NEVER THE HOST'S CLOCK (§82):
-// a falsy tz is read as the system default zone, as lib/business-date.js reads
-// it for delivery, and a tz string this runtime cannot read falls back to that
-// default rather than to the host. It used to fall back to the host's local
-// clock, which was right only while the production host happened to run UTC+8;
-// on the UTC host §82 requires, a store with no timezone was judged eight hours
-// out. Never throws.
+// Local-time parts of a Date in an IANA timezone. NEVER THE HOST'S CLOCK, AND
+// NO HOUSE ZONE (§82): a missing or unreadable zone is NoShopTimezoneError, the
+// same answer lib/business-date.js gives. It used to fall back to the host's
+// clock, then to Guangzhou's; either way a store with no zone was judged on a
+// clock that was not its own. Checkout refuses a shop with no zone before here.
 function localPartsInTz(date, tz) {
-  const zone = tz && String(tz).trim() ? String(tz).trim() : businessDate.SYSTEM_DEFAULT_TZ;
-  try {
-    const p = new Intl.DateTimeFormat('en-US', {
-      timeZone: zone, hour12: false, weekday: 'short',
-      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-    }).formatToParts(date).reduce((a, x) => (a[x.type] = x.value, a), {});
-    let hour = parseInt(p.hour, 10); if (hour === 24) hour = 0;   // some engines emit 24:00
-    const min = parseInt(p.minute, 10);
-    const wmap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-    return {
-      mins: hour * 60 + min,
-      hh: String(hour).padStart(2, '0'), mm: String(min).padStart(2, '0'),
-      weekday: wmap[p.weekday] != null ? wmap[p.weekday] : 0,
-      day: parseInt(p.day, 10), month: parseInt(p.month, 10),
-      dateKey: `${p.year}-${p.month}-${p.day}`,
-    };
-  } catch (_) {
-    if (zone !== businessDate.SYSTEM_DEFAULT_TZ) return localPartsInTz(date, businessDate.SYSTEM_DEFAULT_TZ);
-    // The system zone itself unreadable (a runtime without timezone data):
-    // its fixed UTC+8 offset, read off UTC fields so the host never enters.
-    const s = new Date(date.getTime() + 8 * 3600000);
-    return {
-      mins: s.getUTCHours() * 60 + s.getUTCMinutes(),
-      hh: String(s.getUTCHours()).padStart(2, '0'), mm: String(s.getUTCMinutes()).padStart(2, '0'),
-      weekday: s.getUTCDay(), day: s.getUTCDate(), month: s.getUTCMonth() + 1,
-      dateKey: s.toISOString().slice(0, 10),
-    };
-  }
+  const zone = businessDate.requireZone(tz);
+  const p = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone, hour12: false, weekday: 'short',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).formatToParts(date).reduce((a, x) => (a[x.type] = x.value, a), {});
+  let hour = parseInt(p.hour, 10); if (hour === 24) hour = 0;   // some engines emit 24:00
+  const min = parseInt(p.minute, 10);
+  const wmap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return {
+    mins: hour * 60 + min,
+    hh: String(hour).padStart(2, '0'), mm: String(min).padStart(2, '0'),
+    weekday: wmap[p.weekday] != null ? wmap[p.weekday] : 0,
+    day: parseInt(p.day, 10), month: parseInt(p.month, 10),
+    dateKey: `${p.year}-${p.month}-${p.day}`,
+  };
 }
 
 // The store a collection order was placed at, shaped the way resolvePickupTime
@@ -9071,10 +9060,13 @@ function resolvePickupTime(raw, now = new Date(), storeHours = null) {
   const leadMin = Math.max(0, parseInt(cfgValue('pickup.leadMinutes', 0), 10) || 0);
   if (leadMin > 0 && when.getTime() < now.getTime() + leadMin * 60_000) return { error: 'pickup_too_soon' };
 
-  // The store's own zone when it has one, else the tenant's — the zone delivery
-  // already reads (deliveryTz, §82) — never the host's. Null from both is the
-  // system default, which localPartsInTz applies.
-  const tz = (storeHours && storeHours.timezone) || deliveryTz() || null;
+  // The store's own zone when it is READABLE, else the tenant's — the zone
+  // delivery already reads (deliveryTz, §82) — never the host's, and never a
+  // house default: neither readable throws in localPartsInTz. A misspelt store
+  // zone falls to the tenant's rather than slipping past the checkout gate,
+  // which only asks about the tenant's.
+  const own = storeHours && storeHours.timezone;
+  const tz = businessDate.zoneProblem(own) ? deliveryTz() : String(own).trim();
   const win = pickupWindowFor(storeHours);
   const open  = hhmmToMinutes(win.open);
   const close = hhmmToMinutes(win.close);
@@ -12093,6 +12085,9 @@ function rescheduleEligibility(o, productIds, now = new Date(), tz = deliveryTz(
   const kind = isCounter(o) ? 'counter' : ((o && o.fulfillment_type === 'pickup') ? 'pickup' : 'delivery');
   const block = (reason, fresh) => ({ allowed: false, reason, fresh: !!fresh, kind });
   if (!o) return block('not_found', false);
+  // §82 — no readable shop zone, no cutoff to judge a move against: the order
+  // page shows no reschedule button rather than failing to load.
+  if (businessDate.zoneProblem(tz)) return block('shop_timezone_missing', false);
   // Complete on payment — nothing to reschedule, and no slot UI to offer.
   if (isCounter(o)) return block('counter', false);
   if (!['paid', 'preparing'].includes(o.status)) return block('status', false);
