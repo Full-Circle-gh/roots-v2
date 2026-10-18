@@ -95,6 +95,15 @@ function tenantReport(label, file) {
   const st = one(db, `SELECT COUNT(*) AS n, SUM(is_active = 1) AS active,
                              SUM(timezone IS NOT NULL AND TRIM(timezone) <> '') AS zoned FROM retail_stores`);
   console.log('  stores: ' + J(st));
+  // Each store's zone AS STORED, and whether this runtime can read it — §82 step
+  // 3 full refuses an unreadable one, so a misspelling here would stop orders.
+  let zr = [];
+  try { zr = db.prepare('SELECT id, code, is_active, timezone FROM retail_stores ORDER BY id').all(); } catch (e) { zr = []; }
+  for (const z of zr) {
+    let ok = false;
+    try { if (z.timezone && String(z.timezone).trim()) { new Intl.DateTimeFormat('en-US', { timeZone: String(z.timezone).trim() }); ok = true; } } catch (e) { ok = false; }
+    console.log('    store #' + z.id + ' ' + z.code + ' active=' + z.is_active + ' timezone=' + J(z.timezone) + ' readable=' + ok);
+  }
   const p = one(db, 'SELECT COUNT(*) AS n FROM store_products');
   console.log('  products: ' + J(p));
   const c = one(db, 'SELECT COUNT(*) AS n, MIN(created_at) AS first, MAX(created_at) AS last FROM retail_customers');
