@@ -101,5 +101,18 @@ it('a stored UTC stamp is served on the shop\'s clock, daylight saving included'
     'a row reads the zone once');
 });
 
+console.log('\n4. the ship-by line\'s date-only test');
+it('_gzIsMidnight is the shop\'s midnight, as the slip\'s is; no zone is false', () => {
+  let zone = 'Asia/Shanghai';
+  const isMidnight = new Function('businessDate', 'deliveryTz', `${fnSrc(RETAIL, '_gzIsMidnight')}\nreturn _gzIsMidnight;`)(businessDate, () => zone);
+  assert.strictEqual(isMidnight('2026-06-22T16:00:00.000Z'), true, 'Guangzhou midnight, Roots unchanged');
+  assert.strictEqual(isMidnight('2026-06-23T04:00:00.000Z'), false);
+  zone = 'America/New_York';
+  assert.strictEqual(isMidnight('2026-06-23T04:00:00.000Z'), true, 'New York midnight');
+  assert.strictEqual(isMidnight('2026-06-22T16:00:00.000Z'), false);
+  zone = null;
+  assert.strictEqual(isMidnight('2026-06-22T16:00:00.000Z'), false);
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

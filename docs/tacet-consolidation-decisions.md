@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.561
+# Tacet shared-core consolidation — decisions record, v4.562
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-18 · v4.562 — **§82 · THE BOOKED-DAY LINE AND THE SHIP-BY DATE-ONLY TEST READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix all"*, the sixth batch, smaller than planned. The order alert's "booked for a later day" line and the ship-by line's date-only test read Guangzhou's day; they read the shop's now. The survey's Qingyun sites (the push-or-wait day, its reschedule, expiry and needs-a-point counts, the daemon's queue day and rider ETA, and the add-on shelf check) are RECLASSIFIED as platform time and left as they are: every one runs only for a Guangzhou address and a Guangzhou courier whose clock is Beijing's. Claude's recommendation, put to Ash. Nothing changes for Roots. See the amendment at the end of §82.
 
 2026-10-18 · v4.561 — **§82 · SLIPS, SLOT LINES AND SERVED ORDER TIMES READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix all"*, the fifth batch. The Feieyun slip (its time, slot date, "Tomorrow" → date swap and date-only test), the customer's Today/Tomorrow slot line, and order timestamps served to the screens all shifted by a fixed +8h. They read the shop's zone now — the one checkout uses. With none readable nothing guesses: a slip prints UTC and says so, the slot line shows the stored label, a timestamp is served as stored. Nothing changes for Roots. See the amendment at the end of §82.
 
@@ -9197,6 +9199,37 @@ by Ash:** *"fix all"*.
    test and the two must agree. `routes/retail.js` `_gzIsMidnight`, which
    decides the ship-by line, stays in batch 6.
 5. Held by `scripts/test_shop_display.js` (6 checks).
+
+**Amended 2026-10-18 — batch 6: jobs, and a correction to the survey.
+Decided by Ash:** *"fix all"* for the first two items; the third is Claude's
+recommendation and is Ash's to overrule.
+
+1. **The booked-day line** (`routes/retail.js` `bookedLaterDay`, on the new-
+   order alert): whether a delivery is booked for a later day is judged on the
+   shop's calendar (`deliveryTz()`, `dayOfStored`), and the paid time is read
+   as the stored UTC it is (`parseStoredUtc`). With no readable zone the alert
+   goes out without the line.
+2. **The ship-by line's date-only test** (`_gzIsMidnight`) is the shop's
+   midnight, the same test the slip makes (batch 5) and the instant the
+   day-pick writer stores. No readable zone: false.
+3. **Reclassified as platform time, and left as written.** The survey filed
+   `lib/inventory.js` `_gzDateStr` and its callers, and the Qingyun daemon's
+   ETA, as shop time. Read closely they are not: `qingyunPushDisposition`
+   returns 'skip' for anything but a Guangzhou address; the needs-a-point
+   counts, the Qingyun expiry, the Qingyun reschedule and the daemon's queue
+   day all act on that queue; `addonServedFromShelfNow` gates on
+   `isGuangzhouAddress` first; and the daemon's ETA parses Qingyun's own
+   Beijing wall clock. Qingyun is a Guangzhou same-city courier, so its day IS
+   Guangzhou's whatever a shop's setting says. Changing them would move the
+   riskiest code in the survey — dispatch — for no shop that exists or could
+   use it. The survey's count is corrected: those are two of its rows
+   (`_gzDateStr` with its callers, and the daemon ETA), so 32 shop-time sites
+   become 30 and the 17 platform sites become 19.
+4. `parseBeijingTime` (the payment-proof reader) stays as it is, per the
+   survey: a receipt's times are the payment platform's.
+5. `scripts/test_wecom_booked_card.js` passes the shop's zone and gains a New
+   York and a no-zone case; `scripts/test_shop_display.js` gains the ship-by
+   test (7 checks).
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 

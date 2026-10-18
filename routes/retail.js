@@ -4867,9 +4867,14 @@ function bookedLaterDay(o, asOf) {
   if (!o || o.fulfillment_type === 'pickup' || isCounter(o)) return null;
   const kind = o.delivery_slot_kind || null;
   if (kind && kind !== 'schedule') return null;
-  const day = inventory.gzDateStr(o.scheduled_for);
+  // The day on the SHOP's clock (§82), the clock a day pick is stored on; it was
+  // Guangzhou's for every shop. No readable zone, no booked-day line — the
+  // alert still goes out without it.
+  const tz = deliveryTz();
+  if (businessDate.zoneProblem(tz)) return null;
+  const day = businessDate.dayOfStored(tz, o.scheduled_for);
   if (!day) return null;
-  const from = inventory.gzDateStr(asOf || new Date().toISOString());
+  const from = businessDate.businessDate(tz, (asOf && businessDate.parseStoredUtc(asOf)) || new Date());
   if (!(day > from)) return null;
   const win = /\d{1,2}:\d{2}\s*[–—-]\s*\d{1,2}:\d{2}/.exec(String(o.delivery_slot_label || ''));
   return win ? `${day} ${win[0]}` : day;
@@ -11862,14 +11867,19 @@ function annotateShipTo(r) {
   if (distCn) { r.ship_district = distCn; r.ship_district_en = reg.district_en || ''; }
   return r;
 }
-// True when an ISO/SQLite timestamp lands on 00:00 Guangzhou (UTC+8) wall-clock.
+// True when an ISO/SQLite timestamp lands on 00:00 on the SHOP's wall clock —
+// how a day-only pick is stored (resolveDeliverySlot, markOrderPaid's
+// re-anchor), and the same test the printed slip makes (lib/feie.js). It was
+// Guangzhou's midnight for every shop (§82). No readable zone: false.
 function _gzIsMidnight(ts) {
   if (!ts) return false;
   const s = String(ts);
   const d = new Date(/[TZ]/.test(s) ? s : s.replace(' ', 'T') + 'Z');
   if (isNaN(d.getTime())) return false;
-  const gz = new Date(d.getTime() + 8 * 3600 * 1000);
-  return gz.getUTCHours() === 0 && gz.getUTCMinutes() === 0;
+  const tz = deliveryTz();
+  if (businessDate.zoneProblem(tz)) return false;
+  const w = businessDate.zoneParts(tz, d);
+  return w.hour === 0 && w.minute === 0;
 }
 
 // Format a stored local-delivery ETA ("HH:MM", 24h) into display labels for the
