@@ -32,6 +32,16 @@ const { businessDate } = require('../lib/business-date');
 // The fold of those rows into "what went on today, and who put it there",
 // in lib/ so its rules can be exercised without a database.
 const { summariseKitchenAdds } = require('../lib/kitchen-adds');
+// A store's zone is what its dates, cutoffs and pickup window are judged in
+// (decisions §82). One the runtime cannot read was stored as typed and then
+// quietly answered with Guangzhou's, so it is refused here instead — the same
+// test the startup check applies.
+const { zoneProblem } = require('../lib/tenant-zone-check');
+// Blank clears it (null); anything else must be a zone the runtime can read.
+function coerceTimezone(v) {
+  if (v == null || !String(v).trim()) return { ok: true, value: null };
+  return zoneProblem(v) ? { ok: false } : { ok: true, value: String(v).trim() };
+}
 
 // Background geocode for a store row. Called after create + update when
 // an address-y field changed and the admin didn't supply explicit lat/lng.
@@ -127,6 +137,8 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
   if (!b.code || typeof b.code !== 'string') return res.status(400).json({ success: false, error: 'code_required' });
   const existing = tdb().prepare('SELECT id FROM retail_stores WHERE code = ?').get(b.code);
   if (existing) return res.status(409).json({ success: false, error: 'code_taken' });
+  const tz = coerceTimezone(b.timezone);
+  if (!tz.ok) return res.status(400).json({ success: false, error: 'invalid_timezone' });
 
   const info = tdb().prepare(`
     INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, lat, lng, phone,
@@ -145,7 +157,7 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
     b.pickup_enabled ? 1 : 0,
     Number.isFinite(b.sort_order) ? b.sort_order : 0,
     b.open_time || null, b.close_time || null,
-    b.timezone || null,
+    tz.value,
     coerceSyncStartTime(b.sync_start_time),
     coerceLowStockThreshold(b.low_stock_threshold),
   );
@@ -169,6 +181,9 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
   const existing = inventory.getStore(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','pickup_enabled','sort_order','open_time','close_time','timezone','sync_start_time','low_stock_threshold'];
+  if ('timezone' in req.body && !coerceTimezone(req.body.timezone).ok) {
+    return res.status(400).json({ success: false, error: 'invalid_timezone' });
+  }
   const sets = [];
   const vals = [];
   for (const k of allowed) {
@@ -179,6 +194,7 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
       if (k === 'sort_order') v = Number.isFinite(v) ? v : 0;
       if (k === 'low_stock_threshold') v = coerceLowStockThreshold(v);
       if (k === 'sync_start_time') v = coerceSyncStartTime(v);
+      if (k === 'timezone') v = coerceTimezone(v).value;
       vals.push(v);
     }
   }
@@ -210,7 +226,8 @@ function storeSnapshot(s) {
   return {
     name_en: s.name_en || '', name_cn: s.name_cn || '', phone: s.phone || '',
     city: s.city || '', district: s.district || '', address: s.address || '',
-    open_time: s.open_time || '', close_time: s.close_time || '', sync_start_time: s.sync_start_time || '',
+    open_time: s.open_time || '', close_time: s.close_time || '', timezone: s.timezone || '',
+    sync_start_time: s.sync_start_time || '',
     sort_order: s.sort_order ?? 0, low_stock_threshold: s.low_stock_threshold ?? null,
     pickup_enabled: !!s.pickup_enabled,
   };

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.552
+# Tacet shared-core consolidation — decisions record, v4.553
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-18 · v4.553 — **§82 · A STORE'S TIME ZONE CAN BE SEEN AND SET ON SCREEN — DECIDED BY ASH:** *"add tz field then step 3"*. There was no screen for it: Settings → Stores had no box, the store list did not return the zone so every screen read it blank, and the setup wizard read "Time zone: China" while saving blank. Roots' two stores were zoned from a browser console on 2026-10-17. Settings → Stores, on the computer and the phone, now has a Time zone box, the list returns the zone, the wizard saves what it shows, and the server refuses a zone it cannot read. See the amendment at the end of §82.
 
 2026-10-17 · v4.552 — **§82 · A TENANT WITH NO TIMEZONE IS NAMED LOUDLY AT EVERY START, AND THE SERVER STAYS UP — DECIDED BY ASH:** *"tz check then build step 2 then deploy live"*, to Claude's proposal that "fail loudly at startup" means loud about the one tenant, never the whole shared server going down. Every start checks each active tenant's zone and names one that is missing or misspelled in the log and to its alert group. **Refusing that tenant's time-based work is held back** — Roots itself has no zone today, so refusal would stop Roots' own delivery and pickup — and goes with step 3, once Roots has one. See the amendment at the end of §82.
 
@@ -8946,6 +8948,34 @@ Decided by Ash:** *"tz check then build step 2 then deploy live"*.
    fallback stands and this check is what makes it visible.
 5. **Next**: give Roots its zone (the store wizard, for Tianhe and Yuexiu), then
    step 3.
+
+**Amended 2026-10-18 — a place to set the zone. Decided by Ash:** *"add tz field
+then step 3"*.
+
+1. **Why it was needed.** The wizard could not be reached for Roots (its store
+   step reads Done, so the guide hides it), Settings → Stores had no field, and
+   `lib/inventory.js` `listStores` did not select `timezone` — so every screen
+   showed it blank whatever was stored, and the wizard, filled from that list,
+   read "China" and saved null unless "Change" was pressed. Roots' Tianhe and
+   Yuexiu were set to `Asia/Shanghai` from the browser console on 2026-10-17
+   (`PATCH /api/retail-admin/stores/:id`); `diagnose_tenant_zones.js` then read
+   both stores zoned. Step 3 makes a missing zone stop a shop's orders, so the
+   zone must be settable on a screen before it ships.
+2. **Built.** `listStores` returns `timezone`. Settings → Stores carries a
+   **Time zone · 时区** box with the wizard's own list; "Not set · 未设置" is a
+   real choice and shows as one; a saved zone outside the list is kept as its
+   own choice. The zone is in the store's edit history. The wizard saves the
+   zone its line shows — the store's, else the account's (`TD_TZ`), else
+   China. `POST`/`PATCH /api/retail-admin/stores` refuse a zone the runtime
+   cannot read with `invalid_timezone` and write nothing from that save; blank
+   still clears it.
+3. **Chinese.** None composed: 时区 and 未设置 are live pairs ("Time zone" in
+   the wizard, "Not set" elsewhere in the admin), and the zone names are the
+   wizard's.
+4. **The phone too.** `scripts/test_mobile_settings_stores.js` holds the
+   phone's store editor (`public/m.html`) to the desktop's body key for key,
+   so it gains the same box; its zone list is the wizard's, held equal by
+   `scripts/test_store_timezone.js`.
 
 ## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
 
