@@ -43,8 +43,10 @@ const near = (a, e, m) => ok(Math.abs(Number(a) - Number(e)) < 0.005, m, `expect
 const TENANT = db.prepare('SELECT id FROM tenants ORDER BY id LIMIT 1').get().id;
 const TIANHE = 1, YUEXIU = 2;
 for (const [id, en] of [[TIANHE, 'Tianhe'], [YUEXIU, 'Yuexiu']]) {
-  db.prepare(`INSERT OR REPLACE INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order)
-              VALUES (?,?,?,?,1,?)`).run(id, en.toLowerCase(), en, en, id);
+  // Zoned as Roots' real stores are: the dashboard's default window is the
+  // shop's day, and a shop with no zone has none (§82).
+  db.prepare(`INSERT OR REPLACE INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order, timezone)
+              VALUES (?,?,?,?,1,?,'Asia/Shanghai')`).run(id, en.toLowerCase(), en, en, id);
 }
 db.prepare(`INSERT INTO retail_customers (id, openid, nickname) VALUES (501, 'o-501', 'A'), (502, 'o-502', 'B')`).run();
 let oid = 8100;

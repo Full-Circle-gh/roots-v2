@@ -111,7 +111,7 @@ const router = express.Router();
 //   odateFor()  date(COALESCE(paid_at, placed_at), '<the shop's own shift>')
 //   LEDGER_DATE the ledger's own DATE column, which takes no shift
 const { PAID, PAID_O, odateFor, LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
-const { sqlDayShiftForShop } = require('../lib/business-date');
+const { sqlDayShiftForShop, shopTimezone } = require('../lib/business-date');
 // Sales tax / VAT (audit I-03). The refunded half is proportional arithmetic
 // this file must not invent a second copy of.
 const tax = require('../lib/tax');
@@ -132,7 +132,7 @@ const { billableQtySql } = require('../lib/po-returns');
 // ── GET /api/retail-admin/finance/summary?from=&to= ────────────────────────
 router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) => {
   // The window, resolved the one way Finance resolves windows.
-  const win = resolveWindow(req.query);
+  const win = resolveWindow(req.query, shopTimezone(tdb()));
   const { from, to } = win;
   if (win.inverted) {
     return res.status(400).json({ error: 'from is after to · 起始日期晚于结束日期' });
@@ -656,7 +656,7 @@ const PO_CATEGORY_CASE = (line, po) =>
 // contract for a ceiling nothing is near. If that ever stops being true the fix
 // is paging with the total stated, never a silent slice.
 router.get('/api/retail-admin/finance/summary/category', requireRetailAdmin, (req, res) => {
-  const win = resolveWindow(req.query);
+  const win = resolveWindow(req.query, shopTimezone(tdb()));
   const { from, to } = win;
   if (win.inverted) {
     return res.status(400).json({ error: 'from is after to · 起始日期晚于结束日期' });
