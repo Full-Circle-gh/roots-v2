@@ -208,5 +208,72 @@ it('awaiting_dispatch is the queue module\'s predicate, not a second copy of the
   assert.strictEqual(qq.awaitingDispatch({ status: 'ready', qingyun_order_id: '21016' }), false);
 });
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+// ── The price list, asked about a queued order ──────────────────────────────
+// TC001334, 2026-10-18: the drawer said "Queued for push… · 1m ago", and
+// Refresh prices answered with the same "Turn on auto-send, or this isn't a
+// same-city order" it had already printed — false for a queued order, and
+// identical to the last answer, so the click looked dead.
+const LOAD = slice(ORDERS_JS, 'async function qyLoadCarriers(orderId, btn)');
+
+async function loadCarriers(data, { lang = 'en' } = {}) {
+  const box = { innerHTML: '' };
+  const ctx = {
+    cuT: (en, cn) => (lang === 'cn' ? cn : en),
+    escapeHtml: (s) => String(s == null ? '' : s),
+    escapeAttr: (s) => String(s == null ? '' : s),
+    acWrap: (v) => String(v),
+    courierAgo: () => '4m ago',
+    document: { getElementById: () => box },
+    fetch: async () => ({ json: async () => ({ success: true, data }) }),
+  };
+  vm.createContext(ctx);
+  new vm.Script(`${LOAD}\n_p = qyLoadCarriers(7, null);`).runInContext(ctx);
+  await ctx._p;
+  return box.innerHTML;
+}
+
+async function itAsync(name, fn) {
+  try { await fn(); console.log(`  ✓ ${name}`); pass++; }
+  catch (e) { console.log(`  ✗ ${name}\n      ${e.message}`); fail++; }
+}
+
+(async () => {
+  console.log('\nRefresh prices on a queued order\n');
+
+  await itAsync('a queued order says it is queued, with its age — not "turn on auto-send"', async () => {
+    const html = await loadCarriers({ available: false, reason: 'queued', queued_since: '2026-10-18 02:35:00' });
+    assert.ok(html.includes('Queued for push…'), 'the queue wording is missing');
+    assert.ok(html.includes('4m ago'), 'the wait has no age, so a second click reads the same as the first');
+    assert.ok(html.includes("Prices show once it's in Qingyun."), 'it does not say when prices will come');
+    assert.ok(!html.includes('auto-send'), 'a queued order was told to turn on auto-send');
+  });
+
+  await itAsync('…and that is not vacuous: an order with no queue row keeps the old answer', async () => {
+    const html = await loadCarriers({ available: false, reason: 'not_in_qingyun' });
+    assert.ok(html.includes('Turn on auto-send'), 'the not-in-Qingyun wording is missing');
+    assert.ok(!html.includes('Queued for push'), 'an unqueued order read as queued');
+  });
+
+  await itAsync('a queued answer with no timestamp omits the age rather than printing junk', async () => {
+    const html = await loadCarriers({ available: false, reason: 'queued', queued_since: null });
+    assert.ok(html.includes('Queued for push…'), 'the queue wording is missing');
+    assert.ok(!/undefined|null|NaN/.test(html), 'a missing timestamp leaked into the page');
+  });
+
+  await itAsync('the queued answer carries its Chinese', async () => {
+    const html = await loadCarriers({ available: false, reason: 'queued', queued_since: '2026-10-18 02:35:00' }, { lang: 'cn' });
+    assert.ok(html.includes('排队发单中…'), 'the queue line has no Chinese half');
+    assert.ok(html.includes('进入青云后即可查看运力比价。'), 'the prices note has no Chinese half');
+  });
+
+  await itAsync('the server reports queued only for a row still waiting on the daemon', async () => {
+    const route = slice(RETAIL_JS, "router.get('/api/retail-admin/orders/:id/qingyun/carriers'");
+    assert.ok(/\['pending', 'processing'\]\.includes\(row\.status\)/.test(route), 'queued is no longer limited to pending/processing rows');
+    assert.ok(/!row\.geo_held_at/.test(route), 'a geocoder hold would read as a plain queue wait');
+    assert.ok(/reason: 'queued', queued_since: row\.created_at/.test(route), 'the route no longer sends the two fields the price list reads');
+    assert.ok(LOAD.includes("j.data.reason === 'queued'") && LOAD.includes('j.data.queued_since'), 'the price list no longer reads them');
+  });
+
+  console.log(`\n${pass} passed, ${fail} failed\n`);
+  process.exit(fail ? 1 : 0);
+})();

@@ -27084,7 +27084,18 @@ router.get('/api/retail-admin/orders/:id/qingyun/carriers', requireRetailAdmin, 
   // drain held back gets its Qingyun copy here. No-op for everything else.
   await _qingyunMaterialize(id);
   const ref = _qingyunOrderRef(id);
-  if (!ref) return res.json({ success: true, data: { available: false, reason: 'not_in_qingyun' } });
+  if (!ref) {
+    // Still in the queue, waiting for the daemon to send it. The price list used
+    // to answer this with "turn on auto-send, or this isn't a same-city order" —
+    // false on both counts for a queued order — and a click on Refresh prices
+    // reprinted that same sentence, so the button looked dead. Say it is queued,
+    // and since when. A geocoder hold is left out: the drawer gives it its own line.
+    const row = _qingyunPushRow(id);
+    if (row && !row.qingyun_order_id && ['pending', 'processing'].includes(row.status) && !row.geo_held_at) {
+      return res.json({ success: true, data: { available: false, reason: 'queued', queued_since: row.created_at || null } });
+    }
+    return res.json({ success: true, data: { available: false, reason: 'not_in_qingyun' } });
+  }
   try {
     const { getQingyunBrowser } = require('../lib/qingyun-browser');
     const br = await getQingyunBrowser(ref.storeCode);

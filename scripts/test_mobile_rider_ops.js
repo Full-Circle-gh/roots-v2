@@ -324,6 +324,8 @@ async function main() {
     }
     for (const [read, want] of [[{ success: false, error: 'quote failed' }, 'Could not load couriers — is the store connected to Qingyun?'],
       [{ available: false }, "Not in Qingyun yet. Turn on auto-send, or this isn't a same-city order."],
+      [{ available: false, reason: 'queued', queued_since: '2026-10-01 06:00:00' }, "Prices show once it's in Qingyun."],
+      [{ available: false, reason: 'queued', queued_since: '2026-10-01 06:00:00' }, 'Queued for push…'],
       [{ available: true, carriers: [CARRIERS.carriers[2]] }, 'No couriers available right now.'], [new Error('HTTP 500'), 'Load failed']]) {
       const x = mk({ order: booked, read: () => read }); x.CMD.qyCarriers(); await tick();
       has(x.ctx.shipFromCard(x.order), want, 'the read: ' + want);
@@ -370,6 +372,7 @@ async function main() {
       ['A courier is already on this one — cancel it in the Qingyun app first', '已呼叫运力。请先在青云 App 取消该单。'], ['Could not move it', '改期失败'],
       ['Compare couriers', '查看运力比价'], ['Refresh prices', '刷新比价'], ['Could not load couriers — is the store connected to Qingyun?', '无法获取运力 — 门店是否已连接青云?'],
       ["Not in Qingyun yet. Turn on auto-send, or this isn't a same-city order.", '订单尚未进入青云。请开启自动发送,或此单非同城配送。'], ['No couriers available right now.', '当前暂无可用运力。'],
+      ["Prices show once it's in Qingyun.", '进入青云后即可查看运力比价。'],
       ['cheapest', '最便宜'], ['Dispatch courier', '发起配送'], ['Pick at least one courier', '请至少选择一个运力'], ['Dispatch', '发起配送'], ['Dispatching…', '发单中…'],
       ['Courier dispatched', '已发起配送'], ['first to accept wins', '谁先接单谁配送'], ['Dispatched', '已发单'], ['Qingyun balance too low — top up first', '青云余额不足,请先充值'],
       ['A courier is already on this order', '该订单已呼叫运力'], ['Dispatch failed', '发起配送失败'],
