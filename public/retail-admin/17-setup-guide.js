@@ -192,7 +192,13 @@ function suStoreWizData(t) {
     city: t?.city || '', district: t?.district || '', address: t?.address || '',
     phone: t?.phone || '',
     open: t?.open_time || '', close: t?.close_time || '',
-    timezone: t?.timezone || '', onlineOnly: false,
+    // WHAT IS SHOWN IS WHAT IS SAVED. The hours step reads "Time zone: China"
+    // when the store has none, and used to save blank unless "Change" was
+    // pressed — so a store could be set up looking zoned and be stored empty
+    // (decisions §82). The shown zone is the account's own (TD_TZ, set at
+    // config load) where there is one, else China, as the line has always said.
+    timezone: t?.timezone || (typeof window !== 'undefined' && typeof window.TD_TZ === 'string' && window.TD_TZ.trim()) || 'Asia/Shanghai',
+    onlineOnly: false,
     lat: (t && t.lat != null) ? t.lat : null, lng: (t && t.lng != null) ? t.lng : null,
     tzShown: !!(t && t.timezone),
   };

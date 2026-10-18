@@ -83,7 +83,7 @@ const REFUSED = () => { const e = new Error('refused'); e.refused = true; e.word
 const STORE = {
   id: 7, code: 'tianhe', name_en: 'Roots — Tianhe', name_cn: 'Roots · 天河店', city: '广州', district: '天河区',
   address: '体育西路1号', phone: '020-1234', sort_order: 2, pickup_enabled: 1, open_time: '09:00', close_time: '21:00',
-  sync_start_time: null, low_stock_threshold: null, lat: 23.1, lng: 113.3, is_active: 1,
+  timezone: 'Asia/Shanghai', sync_start_time: null, low_stock_threshold: null, lat: 23.1, lng: 113.3, is_active: 1,
 };
 
 function mk(opts = {}) {
@@ -211,7 +211,7 @@ section('3 · editing a store saves itself');
   const open = () => { const h = mk(); h.CMD.stoOpen(7); return h; };
   it('the body is the desktop\'s _opsStoreBody, key for key and in its order', () => {
     const h = open();
-    assert.ok(DESK_BODY_KEYS.length === 12, 'read the desktop body: ' + DESK_BODY_KEYS.join(','));
+    assert.ok(DESK_BODY_KEYS.length === 13, 'read the desktop body: ' + DESK_BODY_KEYS.join(','));
     assert.deepStrictEqual(plain(Object.keys(fn(h, 'stoBody')())), DESK_BODY_KEYS);
   });
   it('opens on the store\'s own values and sends nothing for opening it', async () => {
@@ -219,11 +219,11 @@ section('3 · editing a store saves itself');
     assert.strictEqual(h.ctx.state.stack[1].route, 'storeone');
     assert.deepStrictEqual(plain(fn(h, 'stoBody')()), {
       name_en: 'Roots — Tianhe', name_cn: 'Roots · 天河店', city: '广州', district: '天河区', address: '体育西路1号', phone: '020-1234',
-      sort_order: 2, pickup_enabled: true, open_time: '09:00', close_time: '21:00', sync_start_time: null, low_stock_threshold: null });
+      sort_order: 2, pickup_enabled: true, open_time: '09:00', close_time: '21:00', timezone: 'Asia/Shanghai', sync_start_time: null, low_stock_threshold: null });
     h.ctx.eng().flush(); await tick();
     assert.strictEqual(h.calls.writes.length, 0);
     const t = h.text(h.ctx.SUBS.storeone.render());
-    for (const w of ['Code', 'tianhe', 'Name (English)', 'Name (中文)', 'Street address', 'Opens', 'Closes', 'Channel sync starts',
+    for (const w of ['Code', 'tianhe', 'Name (English)', 'Name (中文)', 'Street address', 'Opens', 'Closes', 'Time zone', 'China · 中国 (UTC+8)', 'Channel sync starts',
       'Sort priority', 'Low-stock alert at', 'Offer store pickup', 'GPS coordinates', 'GPS located', 'Stock staff', 'All changes saved', 'Version history']) {
       assert.ok(t.includes(w), w);
     }
@@ -242,7 +242,7 @@ section('3 · editing a store saves itself');
     assert.deepStrictEqual(w.keys, DESK_BODY_KEYS);
     assert.deepStrictEqual(w.body, {
       name_en: 'Roots — Tianhe Park', name_cn: 'Roots · 天河店', city: '广州', district: '天河区', address: '体育西路1号', phone: '020-1234',
-      sort_order: 2, pickup_enabled: true, open_time: '09:00', close_time: '21:00', sync_start_time: '07:30', low_stock_threshold: 5 });
+      sort_order: 2, pickup_enabled: true, open_time: '09:00', close_time: '21:00', timezone: 'Asia/Shanghai', sync_start_time: '07:30', low_stock_threshold: 5 });
     w.res({ success: true, data: Object.assign({}, STORE, { name_en: 'Roots — Tianhe Park' }) }); await tick();
     assert.strictEqual(h.ctx.state.stores[0].name_en, 'Roots — Tianhe Park', 'the list follows the saved record');
     assert.ok(h.calls.timers.some((x) => x.ms === 2500), 'looks again for the located line');
@@ -366,7 +366,7 @@ section('5 · adding a store');
     const w = h.calls.writes[0];
     assert.strictEqual(w.p, '/stores'); assert.strictEqual(w.method, 'POST');
     assert.deepStrictEqual(w.body, { name_en: 'Roots — Pudong', name_cn: '', city: '上海', district: '', address: '', phone: '',
-      sort_order: 0, pickup_enabled: false, open_time: null, close_time: null, sync_start_time: null, low_stock_threshold: null, code: 'pudong' });
+      sort_order: 0, pickup_enabled: false, open_time: null, close_time: null, timezone: null, sync_start_time: null, low_stock_threshold: null, code: 'pudong' });
     assert.ok(!('lat' in w.body), 'never lat:null — that stops the address locating it');
     w.res({ success: true, data: { id: 9, code: 'pudong', is_active: 1 } }); await tick();
     assert.deepStrictEqual(h.calls.toasts, ['Saved']);

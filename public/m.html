@@ -34154,7 +34154,25 @@ function stoSection(){
 }
 
 /* ── One store ───────────────────────────────────────────────────────────── */
-const STO_FIELDS=['name_en','name_cn','city','district','address','phone','sort_order','open_time','close_time','sync_start_time','low_stock_threshold'];
+const STO_FIELDS=['name_en','name_cn','city','district','address','phone','sort_order','open_time','close_time','timezone','sync_start_time','low_stock_threshold'];
+/* The zones the store's Time zone box offers: the desktop setup wizard's list
+   (SU_TZ, public/retail-admin/17-setup-guide.js), entry for entry — this page
+   cannot load that file, and scripts/test_store_timezone.js holds the two
+   equal. "Not set" is a choice of its own and shows as one (decisions §82). */
+const STO_TZ=[
+  ['Asia/Shanghai','China · 中国 (UTC+8)'],
+  ['Asia/Hong_Kong','Hong Kong · 香港 (UTC+8)'],
+  ['Asia/Singapore','Singapore · 新加坡 (UTC+8)'],
+  ['Asia/Tokyo','Japan · 日本 (UTC+9)'],
+  ['Asia/Bangkok','Thailand · 泰国 (UTC+7)'],
+  ['Asia/Kolkata','India · 印度 (UTC+5:30)'],
+  ['Asia/Dubai','UAE · 阿联酋 (UTC+4)'],
+  ['Europe/London','UK · 英国 (UTC+0/1)'],
+  ['Europe/Paris','Central Europe · 欧洲中部 (UTC+1/2)'],
+  ['America/New_York','US Eastern · 美东 (UTC-5/4)'],
+  ['America/Los_Angeles','US Pacific · 美西 (UTC-8/7)'],
+  ['Australia/Sydney','Sydney · 悉尼 (UTC+10/11)'],
+];
 function stoSeed(r){
   r=r||{}; const v=x=>x==null?'':String(x);
   const d={code:v(r.code), pickup_enabled:!!r.pickup_enabled};
@@ -34173,6 +34191,7 @@ function stoBody(){
     sort_order:(+t('sort_order'))||0,
     pickup_enabled:!!d.pickup_enabled,
     open_time:t('open_time')||null, close_time:t('close_time')||null,
+    timezone:t('timezone')||null,
     sync_start_time:t('sync_start_time')||null,
     low_stock_threshold:t('low_stock_threshold')===''?null:(parseInt(t('low_stock_threshold'),10)||0),
   };
@@ -34211,7 +34230,7 @@ function stoBegin(id){
 }
 reg('stoOpen', id=>{ id=Number(id); if(!canRoute('storeone')||!stoRec(id)) return; stoBegin(id); push('storeone'); });
 reg('stoNew', ()=>{ if(!canRoute('storeone')) return; stoBegin(null); push('storeone'); });
-const STO_COMMIT=['city','district','address','open_time','close_time','sync_start_time'];
+const STO_COMMIT=['city','district','address','open_time','close_time','timezone','sync_start_time'];
 /* A typed field nudges the engine and repaints nothing — somebody is typing. */
 reg('stoText', (k,v)=>{
   const s=state.sto, d=s.d; if(!d) return;
@@ -34225,7 +34244,7 @@ reg('stoPinIn', (k,v)=>{ const s=state.sto; if(k==='lat') s.pinLat=String(v==nul
 reg('stoUndo', ()=>{ if(stoAuto) stoAuto.undo(b=>{ stoApply(b); render(); }); });
 const STO_KEY_WORDS={name_en:['Name (English)','名称(英文)'], name_cn:['Name (中文)','名称(中文)'], phone:['Phone','电话'],
   city:['City','城市'], district:['District','区'], address:['Street address','详细地址'], open_time:['Opens','开门'],
-  close_time:['Closes','关门'], sync_start_time:['Channel sync starts','渠道同步开始'], sort_order:['Sort priority','排序'],
+  close_time:['Closes','关门'], timezone:['Time zone','时区'], sync_start_time:['Channel sync starts','渠道同步开始'], sort_order:['Sort priority','排序'],
   low_stock_threshold:['Low-stock alert at','低库存提醒'], pickup_enabled:['Offer store pickup','到店自提']};
 reg('stoHistory', ()=>{
   const a=stoAuto, id=state.sto.id; if(!a||id==null) return;
@@ -34286,6 +34305,16 @@ function stoInput(k,label,ph,o){
   return `<label style="display:block">${stoLbl(label,o.hint)}
     <input type="${o.type||'text'}" value="${escAttr(d[k])}" placeholder="${escAttr(ph||'')}" ${o.attrs||''} style="width:100%" ${ev}="APP.cmd('stoText','${k}',this.value)"></label>`;
 }
+/* The store's time zone. A saved zone outside STO_TZ is kept as its own choice,
+   never shown as another. */
+function stoTzSelect(){
+  const cur=String(state.sto.d.timezone||'').trim();
+  const rows=[['',T('Not set','未设置')],...STO_TZ];
+  if(cur&&!STO_TZ.some(r=>r[0]===cur)) rows.push([cur,cur]);
+  return `<label style="display:block">${stoLbl(T('Time zone','时区'))}
+    <select style="width:100%" onchange="APP.cmd('stoText','timezone',this.value)">${rows.map(([v,l])=>
+      `<option value="${escAttr(v)}"${cur===v?' selected':''}>${escAttr(l)}</option>`).join('')}</select></label>`;
+}
 function screenStoreOne(){
   const s=state.sto, isNew=s.id==null, d=s.d;
   if(!d) return x1Loading();
@@ -34306,6 +34335,7 @@ function screenStoreOne(){
     ${card(
       `<div style="display:flex;gap:10px"><div style="flex:1;min-width:0">${stoInput('open_time',T('Opens','开门'),'',{type:'time'})}</div>
         <div style="flex:1;min-width:0">${stoInput('close_time',T('Closes','关门'),'',{type:'time'})}</div></div>`+
+      stoTzSelect()+
       stoInput('sync_start_time',T('Channel sync starts','渠道同步开始'),'',{type:'time',
         hint:T('When Meituan / Eleme stock starts syncing each day. Customers pre-order before you open, so set this earlier than opening. Blank = 2 h before.',
                '美团/饿了么每天从此时开始同步库存;顾客会提前下单,建议早于开门时间。留空 = 开门前 2 小时。')})+

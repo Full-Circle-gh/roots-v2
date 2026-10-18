@@ -688,6 +688,9 @@ function _opsStoreBody() {
     sort_order: +((document.getElementById('osf_sort') || {}).value) || 0,
     pickup_enabled: !!(document.getElementById('osf_pickup') || {}).checked,
     open_time: v('osf_open') || null, close_time: v('osf_close') || null,
+    // The zone the hours above are in, and every date and cutoff for this
+    // store (decisions §82). Blank = not set, and the server says so loudly.
+    timezone: v('osf_tz') || null,
     // Blank clears it → the daemons fall back to their default pre-open lead.
     sync_start_time: v('osf_sync_start') || null,
     // Blank clears the override → store falls back to the tenant-wide default.
@@ -699,6 +702,7 @@ function _opsStoreApply(b) {
   set('osf_name_en', b.name_en); set('osf_name_cn', b.name_cn); set('osf_city', b.city); set('osf_district', b.district);
   set('osf_address', b.address); set('osf_phone', b.phone); set('osf_sort', b.sort_order ?? 0);
   set('osf_open', b.open_time); set('osf_close', b.close_time); set('osf_sync_start', b.sync_start_time);
+  set('osf_tz', b.timezone);
   set('osf_low_stock', b.low_stock_threshold);
   const pk = document.getElementById('osf_pickup'); if (pk) pk.checked = !!b.pickup_enabled;
 }
@@ -710,6 +714,21 @@ function _opsStoreClose() {
   if (box) box.innerHTML = '';
 }
 window._opsStoreClose = _opsStoreClose;
+
+// The store's time zone. The choices are the setup wizard's own list (SU_TZ,
+// 17-setup-guide.js), so the two screens offer the same zones. "Not set" is a
+// real choice and shows as one — it is what a store with no zone IS, and a
+// select that silently showed the first zone instead is how both Roots stores
+// sat empty while looking set. A saved zone outside the list is kept as an
+// option of its own rather than shown as something else.
+function _opsTzSelect(cur) {
+  const list = (typeof SU_TZ !== 'undefined' && Array.isArray(SU_TZ)) ? SU_TZ : [['Asia/Shanghai', 'China · 中国 (UTC+8)']];
+  const have = cur && String(cur).trim();
+  const rows = [['', 'Not set · 未设置'], ...list];
+  if (have && !list.some(r => r[0] === have)) rows.push([have, have]);
+  return `<select id="osf_tz">${rows.map(r =>
+    `<option value="${escapeAttr(r[0])}"${(have || '') === r[0] ? ' selected' : ''}>${escapeHtml(r[1])}</option>`).join('')}</select>`;
+}
 
 function _opsStoreForm(s) {
   const isEdit = !!s;
@@ -742,6 +761,7 @@ function _opsStoreForm(s) {
           <div style="flex:1"><label class="field-label">Opens · 开门</label><input type="time" id="osf_open" value="${val(s?.open_time)}"></div>
           <div style="flex:1"><label class="field-label">Closes · 关门</label><input type="time" id="osf_close" value="${val(s?.close_time)}"></div>
         </div>
+        <div><label class="field-label">Time zone · 时区</label>${_opsTzSelect(s?.timezone)}</div>
         <div><label class="field-label">Channel sync starts · 渠道同步开始 <span style="color:var(--text-3);font-weight:400">— when Meituan / Eleme stock starts syncing each day. Customers pre-order before you open, so set this earlier than opening. Blank = 2 h before. · 美团/饿了么每天从此时开始同步库存;顾客会提前下单,建议早于开门时间。留空 = 开门前 2 小时。</span></label><input type="time" id="osf_sync_start" value="${val(s?.sync_start_time)}"></div>
         <div><label class="field-label">Sort priority · 排序 <span style="color:var(--text-3);font-weight:400">(lower = preferred)</span></label><input type="number" id="osf_sort" value="${s?.sort_order ?? 0}"></div>
         <div><label class="field-label">Low-stock alert at · 低库存提醒 <span style="color:var(--text-3);font-weight:400">— flag this store's items low at this many units. Blank = store-wide default. · 门店商品降到此数量时提醒;留空用全店默认。</span></label><input type="number" min="0" id="osf_low_stock" value="${s?.low_stock_threshold ?? ''}" placeholder="Store default · 全店默认"></div>
