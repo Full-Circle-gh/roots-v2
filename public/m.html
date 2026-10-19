@@ -29286,7 +29286,13 @@ function sheetFinCat(){
   const body = c.err ? finBanner(c.err)
     : c.rows===null ? finNoteLine(T('Loading…','加载中…'))
     : !c.rows.length ? finNoteLine(T('Nothing recorded yet','暂无记录'))
-    : `<div class="list">${c.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${finCatEntry(r)}`).join('')}</div>`;
+    : `<div class="list">${c.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${finCatEntry(r)}`).join('')}</div>`
+      /* The rows added up, in fen, so the list can be held against the figure in
+         the header. Summed here rather than echoed from the server: a claim
+         re-filed out of this list drops its row, and the total has to follow. */
+      +`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:4px 14px 8px">
+         <span style="font-size:14px;font-weight:500">${T('Total','合计')}</span>
+         <span class="num" style="font-size:14.5px;font-weight:500">${finExact(c.rows.reduce((s,r)=>s+Math.round(Number(r.amount||0)*100),0)/100)}</span></div>`;
   return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('closeFinCat')"></div>
    <div class="sheet" style="top:76px;z-index:46;overflow:hidden">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
