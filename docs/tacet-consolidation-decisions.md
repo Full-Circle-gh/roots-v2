@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.562
+# Tacet shared-core consolidation — decisions record, v4.568
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,18 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-19 · v4.568 — **§490 · A TRANSFER COUNTS WHOLE UNITS, AN UNLINKED LINE STOPS THE SEND, A DELTA THE ROUTE CANNOT READ IS REFUSED — DECIDED BY ASH:** *"fix all"*, audit findings 6, 7 and 8. A picked or counted 2.5 reached the shelf as 2.5; one unlinked line in three let the other two go in silence; a quick-stock "+1O" answered success and moved nothing. All three are refused by name. `scripts/test_stock_two_step.js` carries the cases. New §490.
+
+2026-10-19 · v4.567 — **§489 · A PLATFORM ORDER IS MIRRORED ONCE, AND ITS DEDUCTION LANDS WITH IT — DECIDED BY ASH:** *"fix all"*, audit finding 5. The only key against a double ingest lived in the daemons' import tables, written after the server had deducted; a daemon that died in between mirrored the order twice. `retail_orders.channel_order_id` now carries the platform's id (backfilled from the import ledgers), the server answers a second ingest with the first order, the deduction runs inside the order's transaction, and a failed ingest is retried on the next poll. `scripts/test_platform_ingest_once.js`. New §489.
+
+2026-10-19 · v4.566 — **§488 · AN ADD-ON ON AN ORDER WHOSE STOCK WENT STRAIGHT TO THE LEDGER TAKES ITS UNITS — DECIDED BY ASH:** *"fix all"*, audit finding 4. The add-on deducted only when the order held reservations, the pre-2026-08-31 reading of "tracks stock"; an out-of-city order's add-on was skipped, and one more of a product the order already carried never came off the shelf. Taken now under `order_addon`; a fresh line the order is still holding back waits with it (§58). `scripts/test_addon_ledger_take.js`. New §488.
+
+2026-10-19 · v4.565 — **§487 · A GZGROCERY ORDER LINE IS A FACT: NO CLAMP, A PENDING REFUND IS NOT A VOID, AN UNKNOWN SKU IS LOGGED — DECIDED BY ASH:** *"fix all"*, audit finding 3. §84 left gzgrocery clamped on the premise that no order lines reach us; `scripts/gzgrocery-order-daemon.js` reads them. The order daemon now writes a delta like Meituan and Eleme; 退款中 no longer reverses; an order revived after a void is taken again once; an SKU-shaped line the catalogue does not know goes to the order log. The Guanyi pickup inference stays clamped. §84 and §39 amended in place. `scripts/test_gzgrocery_order_stock.js`. New §487.
+
+2026-10-19 · v4.564 — **§486 · A PRODUCTION BATCH RELEASES PARKED ORDERS AGAINST WHAT REACHED THE SHELF, ONE BATCH PER REQUEST, WHOLE UNITS — DECIDED BY ASH:** *"fix all"*, audit finding 2. The log added what was made, the release took it at once, and the loss then found the shelf short and rolled the whole batch back behind a 500. The release now waits for the loss; a request already logged is refused; a fraction is refused. `scripts/test_production_log.js` carries the cases. New §486.
+
+2026-10-19 · v4.563 — **§485 · A REFUND OR CANCEL GIVES BACK BOTH HALVES OF AN ORDER'S STOCK — DECIDED BY ASH:** *"fix all"*, from the stock-deduction audit (docs/surveys/stock-deduction-audit-2026-10-19.md, finding 1). An out-of-city basket reserves its bought-in lines at checkout and sends its fresh lines straight to the ledger at 备货; the refund door stopped after the hold reverser and the fresh half never came back. Both reversers now run, the ledger one on what the hold one did not return. Proven by scripts/test_mixed_order_reversal.js. New §485.
 
 2026-10-18 · v4.562 — **§82 · THE BOOKED-DAY LINE AND THE SHIP-BY DATE-ONLY TEST READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix all"*, the sixth batch, smaller than planned. The order alert's "booked for a later day" line and the ship-by line's date-only test read Guangzhou's day; they read the shop's now. The survey's Qingyun sites (the push-or-wait day, its reschedule, expiry and needs-a-point counts, the daemon's queue day and rider ETA, and the add-on shelf check) are RECLASSIFIED as platform time and left as they are: every one runs only for a Guangzhou address and a Guangzhou courier whose clock is Beijing's. Claude's recommendation, put to Ash. Nothing changes for Roots. See the amendment at the end of §82.
 
@@ -2039,6 +2051,8 @@ That matters most at tier 3, which is data-dependent: the warehouse is whichever
 Not fixed here. Settling it is a decision about whether the override should exist at all: either create the `settings` table and honour it, or delete tier 1 and make tier 2 the documented mechanism. `routes/ingredients.js` and `routes/restock.js` are held out of the seam batches until it is settled.
 
 ### The restock warehouse override has never worked — OPEN 2026-08-05
+
+> **CLOSED IN CODE, noted 2026-10-19 by the stock-deduction audit.** `_resolveWarehouseStoreId()` now reads `cfgValue('stock.warehouseStoreId')` on the tenant handle (§39 ruling 3); the `settings` tier and the two fallback tiers below are gone, and the id is seeded by `pin_warehouse_store_id_v1`. The text below is the record of what was found on 2026-08-05 and stands as history.
 
 `routes/restock.js:167` reads a `settings` table that exists nowhere: not in the live census, not in the as-built Postgres schema, and not in `database.js`. It fails silently inside its own `catch { /* no settings table / row — fall through */ }` and has done since it was written.
 
@@ -6161,6 +6175,8 @@ The order of preference per line is therefore **counted → sent (marked unverif
 
 **Untouched, and recorded as debt: the four channel self-clamps.** Meituan, Eleme, Guanyi and gzgrocery compute `Math.max(0, …)` in JavaScript and pass an absolute figure, so they never reached this clamp and are unaffected by its removal. They keep doing the very thing this ruling rejects — per-channel work, deliberately out of scope.
 
+> **Standing as of 2026-10-19:** Meituan and Eleme were unclamped by §84 (2026-09-09); the gzgrocery ORDER daemon by §487. The Guanyi pickup inference (`lib/guanyi-sync`, `routes/guanyi-admin.js`) is the one self-clamp left, and it stays by §84's own reasoning.
+
 
 **Rationale.** Every decision above is about a moment when goods and the record could disagree — the two hours the van is moving, the gap between what was asked for and what was found, the count that contradicts the dispatch note. Each is settled the same way: the record follows the person who can see the goods, and the system never guesses on their behalf. The screens are drawn in `design-handoff/warehouse-picking/` and `design-handoff/store-receiving/`, and their annotations carry the per-screen reasoning this section summarises.
 
@@ -9363,6 +9379,12 @@ debt lost on the second path is lost exactly as completely as one lost on the fi
 shelf carries the debt, the kitchen reads it, and the oversell alarm stops being the only record of
 it. Eleme's own comment already said so — *"the shortfall vanishes into a Δ0 row unless it is
 recorded here"* — and this is that shortfall being recorded where it belongs instead.
+
+> **AMENDED 2026-10-19 by §487.** The premise of the paragraph below is false for one of the two
+> gzgrocery paths: `scripts/gzgrocery-order-daemon.js` DOES read gzgrocery's order lines and deducts
+> them under `gzgrocery_order`. That daemon is now unclamped, for exactly the reason this section
+> gives — a real order line is a fact. The Guanyi PICKUP inference stays clamped, for exactly the
+> reason the paragraph gives — an inference that overshot is a phantom.
 
 **GZGROCERY IS DELIBERATELY LEFT CLAMPED, AND IT IS NOT AN OMISSION.** It has no order-ingest path
 to unclamp: gzgrocery sells through the Guanyi ERP and we never receive its order lines, so a sale
@@ -32517,4 +32539,238 @@ the picture itself and nothing on the box changes.
   taken without Ash deciding it.
 - **Untried against the real page.** It was built and tested without a view of
   the real page, so its first real use is the test.
+
+
+## §485 — A REFUND OR CANCEL GIVES BACK BOTH HALVES OF AN ORDER'S STOCK
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, finding 1).**
+
+### What was wrong
+
+An order takes stock through one of two doors: a hold committed at payment
+(`order_commit`), or straight to the ledger (`order_prepare`, `order_restock`).
+Since the per-product guard in `commitUnreservedOrder` an order routinely uses
+BOTH: an out-of-city basket reserves its bought-in lines at checkout (a drink
+or a jar is `strict` by default) and its batch-made lines wait for 备货 under
+§58. `reverseOrderStock` tried the hold reverser first and returned the moment
+it returned anything, on a comment that said an order could only be one kind.
+So on a cancel or full refund the jar came back and the salad never did, and a
+partial refund naming both kinds of line did the same. The §136 operator park
+and the §187 parcel recovery reach the same shape. §478 rule 4 had already
+named this early return as the reason it avoided writing a hold.
+
+### The ruling
+
+1. **Both reversers always run.** The hold reverser first, then the ledger
+   reverser on what is left.
+2. **What the hold gave back is subtracted per product before the ledger is
+   asked.** The ledger reverser caps at "still out" per the ledger, and a hold's
+   return is on the ledger as `order_reverse%`, so a full reverse would be exact
+   by itself; a partial would not — asked for 1 of a product the hold just
+   returned 1 of, it would hand back a second. Both hold reversers therefore
+   report what they returned, per product (`byProduct`), and the ledger
+   reverser is handed the remainder only.
+3. **The hold reversers are capped at the ledger too.** `reverseCommittedLines`
+   answered every partial refund with "up to the hold's quantity", so a third
+   refund of 1 on a line of 2 returned a unit that was never taken. The refund
+   screen caps its lines at `qty − refunded_qty`, so nothing shipped reached
+   this; it is now a backstop, and it is what lets the refund door call both
+   reversers freely.
+4. **Ledger reasons are unchanged.** A hold-only order still reverses under
+   `order_reverse` / `order_reverse_partial` alone; a ledger-only order under
+   `order_reverse_ledger` alone. The Stock activity labels need no change.
+
+### What is NOT changed
+
+No new strings, no schema change. `reverseOrderStockStillHere` (§191) and every
+refund and cancel site call the same door as before.
+
+
+## §486 — A PRODUCTION BATCH RELEASES PARKED ORDERS AGAINST WHAT REACHED THE SHELF
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, finding 2).**
+
+### What was wrong
+
+The production log adds what was MADE and then writes the loss off (the §32
+arithmetic: twenty arrived, two were destroyed). `adjustStock` ran the §80
+release and the §478 ship-day take the moment the add landed, so they saw the
+gross figure: made 20, shelved 18, an order parked on 19 was released and took
+19, the loss then found 1 on the shelf, threw `insufficient_stock`, and the
+route's one transaction rolled everything back — the batch row, the add, the
+release and the customer's promotion — behind a generic 500 that a retry met
+again. Beside it: `production_batches.request_id` was stored and never checked,
+so a double tap logged a batch twice; and the route accepted 20.5, which SQLite
+stores as a REAL in the INTEGER shelf column.
+
+### The ruling
+
+1. **A caller with more to write defers the follow-ups.** `adjustStock` takes
+   `deferFollowUps`; the release, the ship-day take and the promotion hooks are
+   one function, `restockFollowUps`, which the production route runs once the
+   loss is off the shelf. Every other caller is unchanged: the default runs
+   them exactly where they ran.
+2. **One batch per request.** A `request_id` that already has a batch at that
+   store is refused as `request_already_logged`, naming the batch. A batch
+   logged without a request has no key and is not guarded.
+3. **Whole units.** `qty_made` and `qty_shelved` must be integers, the rule
+   the waste route has always kept.
+4. **A shortfall at the loss is a 409 that says so**, not a 500. It cannot
+   arise by construction any more; a concurrent writer could still cause it.
+
+No new strings, no schema change.
+
+
+## §487 — A GZGROCERY ORDER LINE IS A FACT
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, finding 3).**
+
+### What was wrong
+
+§84 unclamped Meituan and Eleme and left gzgrocery clamped on the stated
+premise that "we never receive its order lines". The tree says otherwise:
+`scripts/gzgrocery-order-daemon.js` reads gzgrocery's orders directly and
+deducts matched lines under `gzgrocery_order`. Inside it three things were
+wrong. The deduction wrote `Math.max(0, shelf − qty)` as an absolute: shelf 2,
+order of 5, the record dropped 2 and three units vanished with no row saying
+so; the cancel then added back 5 and the shelf said 5 for a product it had held
+2 of. `退款中` (refund pending) was in the void list, so a refund merely
+requested put the stock back and set `reversed`; when the refund was refused
+and the order went back to active the flags said "already counted" and the
+units were never taken again. And a line carrying an SKU-shaped code the
+catalogue did not know was dropped in silence.
+
+### The ruling
+
+1. **A delta, not a clamped absolute**, on the deduction and the reversal. A
+   gzgrocery order past the shelf drives it negative, exactly as a Meituan one
+   does since §84, and the cancel returns exactly what was taken. The oversell
+   is written to `gzgrocery_order_log` (`oversold`). It is not paged: the
+   merchant alert has no Chinese label for gzgrocery, and composing one is not
+   this fix.
+2. **`退款中` is not a void.** The default void list carries `已退款` in its
+   place. A pending refund moves nothing; a final label reverses once.
+3. **An order active again after a void is taken again, once** — the branch
+   Meituan and Eleme already have for an un-cancel.
+4. **An SKU-shaped line the catalogue does not know is logged** to the order's
+   log (`unmatched`), once per order. A line with no SKU shape is somebody
+   else's product and stays quiet.
+5. **The Guanyi pickup inference stays clamped**, by §84's own reasoning. The
+   daemon's header already requires the pickup detector to run in shadow once
+   the order daemon is live, so the two never both deduct one sale.
+6. The daemon starts its poll only when run as a script, so a test can drive
+   `processOrder` against the real `adjustStock`.
+
+§84 and §39 carry a dated note pointing here; their original text stands.
+
+
+## §488 — AN ADD-ON ON AN ORDER WHOSE STOCK WENT STRAIGHT TO THE LEDGER TAKES ITS UNITS
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, finding 4).**
+
+### What was wrong
+
+`finalizeOrderAddon` deducted the add-on's lines only when the order held
+committed reservations — "does this order track stock?", in the pre-2026-08-31
+sense, when an out-of-city order's stock really was left alone until somebody
+clicked Start preparing. Every paid order deducts since then; the out-of-city
+ones do it straight to the ledger with no hold, so the test said "not tracked"
+and the add-on was skipped. The per-product guard at the next forward
+transition then took a NEW product the add-on introduced, late, and skipped a
+product the order already carried, for good. One more jar on a Beijing order
+never came off the shelf.
+
+### The ruling
+
+1. **An order with reservations is unchanged**: the add-on reserves and
+   commits as before, partial where the shelf is short, with the short alert.
+2. **An order without reservations takes the add-on's lines to the ledger
+   now**, under `order_addon` — an `order%` reason, so the kitchen list, the
+   refund cap, the §458 move and the stock-pending note all count it. No
+   per-product guard: that guard is what made "one more of the same jar"
+   invisible, and an add-on's only idempotency need is the one it has
+   (`finalizeOrderAddon` claims its row once).
+3. **§58 holds.** On an order that holds its fresh lines back (anything but a
+   counter sale), a fresh product the order has NOT yet taken is left for 备货,
+   where the whole-order commit reads every line, add-on included, and takes
+   the product in full. A fresh product the order HAS taken (the order is
+   already preparing) is owed now and is taken now.
+
+No new strings, no schema change. The add-on gate at `addon/create` is
+untouched: it asks whether the items exist, which is a different question.
+
+
+## §489 — A PLATFORM ORDER IS MIRRORED ONCE, AND ITS DEDUCTION LANDS WITH IT
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, finding 5).**
+
+### What was wrong
+
+`POST /api/internal/meituan/ingest-order` (and Eleme's twin) had no key of its
+own: the mirrored order's number is random, and the platform's id went only
+into a ledger note. The one thing stopping a double was the daemon's import
+table, checked before the HTTP call and written after it. A daemon that died
+or timed out between the server's deduction and that write ingested the same
+platform order again on its next poll — second order, second deduction,
+nothing cross-checking. Beside it: the order insert was one transaction but
+the deduction loop ran outside it, so a throw on line N (SQLITE_BUSY from a
+daemon holding the file) left lines 1..N−1 off the shelf, the import row in
+`error` with no order link, and every later cancel answering `not_mirrored` —
+stock that could never come back by itself.
+
+### The ruling
+
+1. **The platform's own id lives on the order row**: `retail_orders.channel_order_id`,
+   indexed with `channel`, written by both ingests, and backfilled once from
+   `meituan_order_import` / `eleme_order_import` so the guard covers every
+   order already mirrored. A second ingest of the same platform order answers
+   with the first order (`duplicate: true`, `deducted: 0`).
+2. **The deduction runs inside the order's transaction.** Order and stock land
+   together or not at all.
+3. **A failed ingest is retried.** The daemons (Meituan, Shangou, Eleme) treat
+   an import row with no `retail_order_id` as a failure to try again on the
+   next poll, and record the retry's outcome on the same row. Safe now, where
+   it used to be a double, because of 1 and 2.
+4. The oversell and unmatched-line alerts, the §85 window read and the born-void
+   rule are unchanged.
+
+Schema: one nullable column and one index on `retail_orders`, through
+`addColumn`. No new strings.
+
+
+## §490 — A TRANSFER COUNTS WHOLE UNITS, AN UNLINKED LINE STOPS THE SEND, AND A DELTA THE ROUTE CANNOT READ IS REFUSED
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, findings 6, 7 and 8).**
+
+Three small refusals, each where a silence used to be.
+
+1. **Whole units on a transfer.** `qty_requested` at create, `qty_sent` at the
+   pick and `qty_received` at the count must be integers; a fraction is
+   refused as `quantity_not_whole`, naming the line. Purchase receiving rounds
+   (§39 ruling 4) and keeps doing so; a transfer is counted by hand, and a
+   count of 2.5 units is not a count. Before this the fraction reached
+   `retail_store_stock.physical_qty` as a REAL and every integer reader
+   downstream carried it.
+2. **One unlinked line among many stops the send.** §200's refusal fired only
+   when NO line carried a product. One line with a quantity and no
+   `product_id` in a basket of three let the other two go: the order went in
+   transit, the receipt never asked about the third (its query carries the
+   same `product_id IS NOT NULL`), and the asker's screen marked all three
+   arrived. Any such line now refuses the dispatch and is named in the
+   refusal, exactly as §200 names the all-unlinked case.
+3. **A quick-stock delta the route cannot read is refused, not zeroed.**
+   `parseInt(delta) || 0` turned an empty box, "1O" and a pasted value into 0,
+   and 0 fell through to a `success: true` that moved nothing. The add path now
+   refuses the unreadable, the fractional and the zero as `delta_invalid`, the
+   way the recount path has refused the unreadable since §46. A negative is
+   still `delta_must_be_positive`, as §39 ruling 7 left it.
+
+No new strings in the product's vocabulary: the three messages are server
+errors in the register the restock and stock routes already use.
 

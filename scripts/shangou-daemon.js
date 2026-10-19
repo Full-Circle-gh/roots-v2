@@ -590,19 +590,25 @@ async function pollOrders(storeCode) {
           'order could not be parsed — see order_raw; not imported');
         continue;
       }
-      const existing = db.prepare('SELECT id FROM meituan_order_import WHERE meituan_order_no = ?').get(order.meituanOrderNo);
-      if (existing) {
+      const existing = db.prepare('SELECT id, retail_order_id FROM meituan_order_import WHERE meituan_order_no = ?').get(order.meituanOrderNo);
+      if (existing && existing.retail_order_id) {
         // Already mirrored — just keep its platform status label current
         // (拣货中 → 配送中 → 已完成) so the Orders list tracks the real state.
         await refreshOrderStatus(storeCode, order);
         continue;
       }
+      // §489 — a row with no order behind it is a failed ingest, retried each
+      // poll; the server refuses a double and writes order + deduction together.
+      if (existing) log(storeCode, `retrying failed ingest of ${order.meituanOrderNo}`);
 
       log(storeCode, `new order ${order.meituanOrderNo}`);
       const rootsOrderId = await ingestOrder(storeId, storeCode, order);
-      db.prepare(`INSERT OR IGNORE INTO meituan_order_import
+      db.prepare(`INSERT INTO meituan_order_import
                     (meituan_order_no, retail_order_id, store_code, accepted_at, status)
-                  VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)`)
+                  VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
+                  ON CONFLICT(meituan_order_no) DO UPDATE SET
+                    retail_order_id = COALESCE(excluded.retail_order_id, retail_order_id),
+                    status = excluded.status`)
         .run(order.meituanOrderNo, rootsOrderId || null, storeCode, rootsOrderId ? 'imported' : 'error');
       logSync(storeCode, 'order_import', rootsOrderId ? 'ok' : 'error',
         { meituanOrderNo: order.meituanOrderNo, rootsOrderId });

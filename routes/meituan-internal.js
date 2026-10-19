@@ -415,6 +415,21 @@ router.post('/ingest-order', (req, res) => {
     const orderNo  = `MT${datePart}${rand}`;
     const ref      = order.meituanOrderNo || orderNo;
 
+    // §489 — ONCE PER PLATFORM ORDER, DECIDED HERE. The daemon's import ledger
+    // is written after this route returns, so a daemon that died in between
+    // sent the same order again and the shelf paid twice. The platform's own
+    // id now lives on the order row and a second ingest answers with the
+    // first order, deducting nothing.
+    const channelOrderId = order.meituanOrderNo ? String(order.meituanOrderNo) : null;
+    if (channelOrderId) {
+      const dup = db.prepare(
+        "SELECT id, order_no FROM retail_orders WHERE channel = 'meituan' AND channel_order_id = ? ORDER BY id LIMIT 1"
+      ).get(channelOrderId);
+      if (dup) {
+        return res.json({ ok: true, orderId: dup.id, orderNo: dup.order_no, items: 0, deducted: 0, unresolved: [], duplicate: true });
+      }
+    }
+
     const items = (order.items || []).map(it => resolveProduct(it, storeId, storeCode)).filter(i => i.qty > 0);
     const total = parseFloat(order.total) || 0;
     // Real platform status label (拣货中 / 配送中 / 已完成 / 已取消 …). The internal
@@ -473,6 +488,10 @@ router.post('/ingest-order', (req, res) => {
     const deliveredAt = ftext(rider.deliveredAt);
 
     // 1. Create the order + its line items in one transaction.
+    const unresolved = [];
+    const oversold = [];
+    let deducted = 0;
+    const preorderWindow = cadence.preorderWindow(db, { channel: 'meituan' });
     const orderId = db.transaction(() => {
       const r = db.prepare(`
         INSERT INTO retail_orders (
@@ -487,7 +506,7 @@ router.post('/ingest-order', (req, res) => {
           channel_customer_id, channel_customer_orders,
           channel_distance_m, channel_dest_lat, channel_dest_lng,
           recipient_name, needs_invoice, invoice_title, invoice_tax_id,
-          dispatched_at, delivered_at
+          dispatched_at, delivered_at, channel_order_id
         ) VALUES (?, ?, 'meituan', ?, ?, ?, 'meituan', 'delivery',
                   COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP),
                   ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, ?, ?,
@@ -499,7 +518,7 @@ router.post('/ingest-order', (req, res) => {
                   ?, ?,
                   ?, ?, ?,
                   ?, ?, ?, ?,
-                  ?, ?)
+                  ?, ?, ?)
       `).run(orderNo, internalStatus, subtotal, totalPaid, storeId, placedAt, placedAt,
              channelStatus, channelStatus, channelEta, preOrderAt, customerNote, needsCutlery,
              shippingFee, packingFee,
@@ -509,7 +528,7 @@ router.post('/ingest-order', (req, res) => {
              ftext(cust.userId), fnum(cust.orderCount),
              fnum(cust.distanceM), fnum(cust.lat), fnum(cust.lng),
              ftext(cust.name), inv.wanted ? 1 : 0, ftext(inv.title), ftext(inv.taxId),
-             fetchedAt, deliveredAt);
+             fetchedAt, deliveredAt, channelOrderId);
       const oid = r.lastInsertRowid;
       // channel_stock_restored means "this order's stock is NOT currently deducted
       // from our count". A born-void order never had its stock taken, so it starts
@@ -540,62 +559,64 @@ router.post('/ingest-order', (req, res) => {
                // claim the goods were free. Unknown stays NULL.
                it.unitCostAtSale ?? null);
       }
+        // 2. Deduct stock via the ledgered adjuster (also re-pushes to Meituan +
+      //    Guanyi). §489 — INSIDE THE SAME TRANSACTION AS THE ORDER. Outside it,
+      //    a throw on line N (SQLITE_BUSY from a daemon holding the file) left
+      //    lines 1..N−1 off the shelf, the order with no import link, and every
+      //    later cancel answering not_mirrored: stock that could never come
+      //    back. Now the order and its deduction land together or not at all,
+      //    and the daemon retries a failed ingest on its next poll.
+      // §85 — read ONCE for the order, not per line: every line of one order is
+      // taken at the same instant, and a window that flipped mid-loop would
+      // explain one line of a basket and page about the next.
+      for (const it of bornVoid ? [] : items) {
+        if (!it.productId) { unresolved.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
+        const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
+        const oldQ = cur ? cur.physical_qty : 0;
+        // On-hand can't cover the line (oversell, or an already-negative row).
+        // §84: WE NO LONGER CLAMP. This used to pass Math.max(0, oldQ − took) and
+        // so never reached adjustStock's own no-floor rule (§39), which is exactly
+        // the "recorded debt, per-channel work" that function's comment names. The
+        // clamp did not merely permit a wrong number, it DESTROYED a right one: a
+        // Meituan order taken against an empty shelf is stock sold that was never
+        // held, and the only record that those units are owed was a JSON line in a
+        // log table with no index and no screen. Unclamped, the shelf itself says
+        // −18, which is what the kitchen reads in the morning and cooks against.
+        //
+        // A DELTA, NOT AN ABSOLUTE, and that is part of the fix: adjustStock
+        // re-reads on-hand inside its own transaction, so the figure written can
+        // no longer be computed from a read that happened before it.
+        //
+        // The oversell flag below is UNCHANGED and still fires. It answers a
+        // different question — "did this order exceed the shelf" — and the shelf
+        // carrying the debt is not a reason to stop saying so.
+        // One six-pack is one line of one, and six off the shelf.
+        const took = packDeduct(it.qty, it.units);
+        /* §85 — A PRE-ORDER IS NOT AN OVERSELL, and the alarm has to know the
+           difference or it drowns. This alert exists because 54 undeducted lines
+           accumulated unseen from June to September; one that fires on every
+           pre-order taken during the window buries exactly the case it was built
+           for. Suppressed only where the window explains it — this channel is in
+           the window and the resulting debt is inside the allowance — so a
+           shortfall LARGER than the allowance still pages, being a real oversell
+           wearing a pre-order's clothes. */
+        if (oldQ < took && !channelPublish.oversellExpected({ have: oldQ, want: took, window: preorderWindow })) {
+          oversold.push({ name: it.nameEn, sku: it.sku, have: oldQ, want: took });
+        }
+        inventory.adjustStock({
+          storeId, productId: it.productId,
+          deltaQty: -took,
+          actorLabel: 'Meituan order',
+          reason: 'meituan_order',
+          note: `Meituan ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}` +
+                (took !== it.qty ? ` (${took} units)` : ''),
+        });
+        deducted++;
+      }
       return oid;
     })();
 
-    // 2. Deduct stock via the ledgered adjuster (also re-pushes to Meituan +
-    //    Guanyi). Clamp at 0 — a Meituan oversell shouldn't drive us negative.
-    const unresolved = [];
-    const oversold = [];
-    let deducted = 0;
-    // §85 — read ONCE for the order, not per line: every line of one order is
-    // taken at the same instant, and a window that flipped mid-loop would
-    // explain one line of a basket and page about the next.
-    const preorderWindow = cadence.preorderWindow(db, { channel: 'meituan' });
-    for (const it of bornVoid ? [] : items) {
-      if (!it.productId) { unresolved.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
-      const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
-      const oldQ = cur ? cur.physical_qty : 0;
-      // On-hand can't cover the line (oversell, or an already-negative row).
-      // §84: WE NO LONGER CLAMP. This used to pass Math.max(0, oldQ − took) and
-      // so never reached adjustStock's own no-floor rule (§39), which is exactly
-      // the "recorded debt, per-channel work" that function's comment names. The
-      // clamp did not merely permit a wrong number, it DESTROYED a right one: a
-      // Meituan order taken against an empty shelf is stock sold that was never
-      // held, and the only record that those units are owed was a JSON line in a
-      // log table with no index and no screen. Unclamped, the shelf itself says
-      // −18, which is what the kitchen reads in the morning and cooks against.
-      //
-      // A DELTA, NOT AN ABSOLUTE, and that is part of the fix: adjustStock
-      // re-reads on-hand inside its own transaction, so the figure written can
-      // no longer be computed from a read that happened before it.
-      //
-      // The oversell flag below is UNCHANGED and still fires. It answers a
-      // different question — "did this order exceed the shelf" — and the shelf
-      // carrying the debt is not a reason to stop saying so.
-      // One six-pack is one line of one, and six off the shelf.
-      const took = packDeduct(it.qty, it.units);
-      /* §85 — A PRE-ORDER IS NOT AN OVERSELL, and the alarm has to know the
-         difference or it drowns. This alert exists because 54 undeducted lines
-         accumulated unseen from June to September; one that fires on every
-         pre-order taken during the window buries exactly the case it was built
-         for. Suppressed only where the window explains it — this channel is in
-         the window and the resulting debt is inside the allowance — so a
-         shortfall LARGER than the allowance still pages, being a real oversell
-         wearing a pre-order's clothes. */
-      if (oldQ < took && !channelPublish.oversellExpected({ have: oldQ, want: took, window: preorderWindow })) {
-        oversold.push({ name: it.nameEn, sku: it.sku, have: oldQ, want: took });
-      }
-      inventory.adjustStock({
-        storeId, productId: it.productId,
-        deltaQty: -took,
-        actorLabel: 'Meituan order',
-        reason: 'meituan_order',
-        note: `Meituan ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}` +
-              (took !== it.qty ? ` (${took} units)` : ''),
-      });
-      deducted++;
-    }
+
 
     // Visible in the sync log rather than only in the response body — "stock
     // deliberately not deducted" is exactly the kind of silent decision that looks
@@ -636,10 +657,9 @@ router.post('/ingest-order', (req, res) => {
       }
     }
 
-    // 4. Surface oversold lines. The deduction clamped at 0, so an order whose
-    //    on-hand was already short (or negative) leaves no visible drop — exactly
-    //    the "why didn't this one move?" confusion. Flag it so the count can be
-    //    reconciled rather than silently swallowed by the clamp.
+    // 4. Surface oversold lines. The shelf carries the shortfall as a negative
+    //    since §84; this row is the per-order record of WHICH order exceeded it,
+    //    so the count can be reconciled against something a person can read.
     if (oversold.length) {
       try {
         db.prepare(`
@@ -648,7 +668,7 @@ router.post('/ingest-order', (req, res) => {
         `).run(
           storeCode || null,
           JSON.stringify({ ref, oversold }),
-          `${oversold.length} line(s) exceeded on-hand (clamped at 0): ` +
+          `${oversold.length} line(s) exceeded on-hand (shelf now negative): ` +
             oversold.map(o => `${o.name}${o.sku ? ` (${o.sku})` : ''} have ${o.have} want ${o.want}`).join('; ')
         );
       } catch (logErr) {

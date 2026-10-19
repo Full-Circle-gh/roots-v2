@@ -2319,7 +2319,7 @@ not products at all. An alert that fired on those would bury the seven real ones
 | key | EN | CN |
 |---|---|---|
 | `chStockUnmatched` | N item(s) matched no product, so their stock was NOT deducted | N 项商品未匹配,库存未扣减 |
-| `chStockOversold` | N line(s) exceeded on-hand and were clamped at 0 | N 项库存不足,已按 0 计 |
+| `chStockOversold` | sold with nothing left on the shelf | N 项库存不足 |
 | `chStockWant` | wanted W, had H | 需要 W,剩余 H |
 
 **Composed by Claude Opus 5 under Rule 4's standing delegation. Every Chinese word
@@ -2337,7 +2337,16 @@ in all three is already live in this product — none is new.**
   sentence should start where they will.
 - **`chStockOversold`.** `库存不足` is lifted verbatim from the live low-stock pair
   (`Low stock · 库存不足`), which is the phrase this shop's screens already use for
-  exactly this shortage. `已按 0 计` states the clamp plainly. **Rejected: `超卖`
+  exactly this shortage. `已按 0 计` stated the clamp plainly. **AMENDED 2026-10-19
+  (Claude Fable 5.1, under Rule 4's delegation, for the stock-deduction audit):
+  the clause `已按 0 计` is REMOVED, not replaced.** The platform ingests stopped
+  clamping in §84 and the gzgrocery daemon in §487, so "counted as 0" became a
+  false statement in the one alert the merchant reads; the English half had
+  already been reworded on 2026-09-17 and the Chinese half had not. Nothing is
+  composed: the row now carries only the live `库存不足` and the count. **Rejected:
+  a new clause saying the shelf is negative** (`库存已为负` or similar) — no live
+  pair carries it and the English half does not say it either; the tail `请检查`
+  carries the instruction. **Rejected: `超卖`
   (oversold)** — it is the natural term and appears nowhere in this product, so it
   would be a new word for a reader who already has one.
 - **`chStockWant`.** `需要` and `剩余` are both live (`剩余` on the stock surfaces).
@@ -5253,7 +5262,8 @@ surfaces now split the problem exactly: the owed block covers what this kitchen
 cooks, this alert covers what it does not.
 
 **THIS IS NOT THE PLATFORM SENTENCE AND MUST NOT BORROW IT.** `chStockOversold`
-says `已按 0 计` / *clamped at 0* because the platform ingest REFUSES the shelf:
+said `已按 0 计` / *clamped at 0* (until 2026-10-19; see its amendment above —
+the clause is gone now that no ingest clamps) because the platform ingest REFUSED the shelf:
 the line exceeded on-hand and nothing moved. Our own commit does not clamp and
 must not — §84's negative is the honest record that units were sold that were
 never held, and it is the only record the kitchen has. The shelf DID move, the

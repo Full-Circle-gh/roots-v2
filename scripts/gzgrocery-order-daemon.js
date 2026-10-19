@@ -59,8 +59,14 @@ const ONCE         = process.argv.includes('--once');
 // beyond. Pending/unpaid → wait. Void statuses → reverse if we already counted.
 const ACTIVE = new Set((process.env.GZGROCERY_ACTIVE_STATUSES ||
   'Paid,Processing,Shipped,Complete,Completed,Partially Shipped,已支付,待处理,已审核,部分发货,全部发货,已完成').split(',').map(s => s.trim()).filter(Boolean));
+// §487 — 退款中 (refund PENDING) is NOT a void. It used to be, so a refund
+// that was merely requested put the stock back, and when the refund was then
+// refused and the order went back to active the flags said "already counted"
+// and the units were never taken again. A pending refund now does nothing;
+// the order is reversed when it reaches a FINAL label, exactly as Meituan and
+// Eleme's isConfirmedVoid refuses 退款中.
 const VOID = new Set((process.env.GZGROCERY_VOID_STATUSES ||
-  'Canceled,Cancelled,Denied,Refunded,Reversed,Chargeback,Expired,Voided,Failed,已取消,退款中,支付失败').split(',').map(s => s.trim()).filter(Boolean));
+  'Canceled,Cancelled,Denied,Refunded,Reversed,Chargeback,Expired,Voided,Failed,已取消,已退款,支付失败').split(',').map(s => s.trim()).filter(Boolean));
 
 function log(msg) { console.log(`[gzgrocery-orders] ${new Date().toISOString()} ${msg}`); }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -435,15 +441,23 @@ async function backfillShipTo(client, storeId) {
 }
 
 // Match an order's line items against our catalogue → the OUR-product units.
+// §487 — A LINE THAT LOOKS LIKE OURS AND MATCHES NOTHING IS SAID OUT LOUD.
+// A model carrying an SKU-shaped code that the catalogue does not know is most
+// likely a product of ours that nobody mapped, and until now it was dropped in
+// silence: a three-line order with one unmapped SKU deducted two and said
+// nothing about the third. Returned beside the matches so processOrder can log
+// it; a line with no SKU shape at all is somebody else's product and stays quiet.
 function matchOurItems(items, skuMap) {
   const ours = [];
+  const unmatched = [];
   for (const it of items) {
     const sku = extractSku(it.model);   // Model field only — see extractSku notes
     if (!sku) continue;
     const hit = skuMap.get(sku);
-    if (!hit) continue;
+    if (!hit) { unmatched.push({ sku, qty: it.qty, name: it.name || it.model || null }); continue; }
     ours.push({ ...it, sku, product_id: hit.productId, name_en: hit.name_en, name_cn: hit.name_cn, matched: true });
   }
+  ours.unmatched = unmatched;
   return ours;
 }
 
@@ -482,24 +496,61 @@ function processOrder(o, items, skuMap, storeId, shipTo) {
   // No products of ours in this order — record & move on.
   if (!ours.length) { upsert({ note: 'no Roots products' }); return { result: 'skip-foreign' }; }
 
+  // §487 — the lines that carried an SKU shape and matched nothing, written to
+  // the order's log once (keyed on the stored state so a later poll of the same
+  // order does not repeat it). Not a stock movement: nothing came off, and the
+  // log line is what says so.
+  const unmatched = ours.unmatched || [];
+  if (unmatched.length && !prev) {
+    const detail = unmatched.map((u) => `${u.sku} ×${u.qty}`).join(', ');
+    auditLog(o, 'unmatched', detail);
+    log(`order ${o.orderNo || o.orderId}: ${unmatched.length} line(s) with an SKU we do not know, not deducted: ${detail}`);
+  }
+
   const alreadyDecremented = prev?.decremented;
   const alreadyReversed    = prev?.reversed;
 
-  // (1) Active + not yet counted → decrement.
-  if (isActive && !alreadyDecremented) {
+  // The deduction, shared by (1) a new active order and (2b) an order that came
+  // back to life after a void. §487 — A DELTA, NOT A CLAMPED ABSOLUTE. This used
+  // to write Math.max(0, cur − qty): shelf 2, order of 5, the record dropped 2
+  // and three units vanished from it with no row anywhere saying so; the cancel
+  // then added back 5, and the shelf said 5 for a product it had held 2 of.
+  // §39 rulings 1 and 7 and §84's own reasoning: a real order line taken
+  // against an empty shelf is stock sold that was never held, and the negative
+  // IS the record. adjustStock re-reads the shelf inside its own transaction,
+  // so the figure written is not computed from a read that happened before it.
+  // The Guanyi PICKUP inference (lib/guanyi) stays clamped per §84: that one is
+  // an inference, this one is an order.
+  const deduct = () => {
     const applied = [];
+    const oversold = [];
     for (const it of ours) {
       const cur = curQty(storeId, it.product_id);
-      const next = Math.max(0, cur - it.qty);
+      const next = cur - it.qty;
+      if (cur < it.qty) oversold.push(`${it.sku}: ordered ${it.qty}, shelf ${cur}`);
       if (MODE === 'live') {
         adjustStock({
-          storeId, productId: it.product_id, newPhysicalQty: next,
+          storeId, productId: it.product_id, deltaQty: -it.qty,
           actorLabel: 'gzgrocery-order', reason: 'gzgrocery_order',
           note: `gzgrocery order ${o.orderNo || o.orderId}: ${it.sku} ×${it.qty} (${cur}→${next})`,
         });
       }
       applied.push(`${it.sku}×${it.qty}(${cur}→${next})`);
     }
+    // Said out loud, in the order's own log, so a shelf that went below zero
+    // on a gzgrocery order is a row a person can find rather than a Δ you have
+    // to notice. Meituan and Eleme page on this; gzgrocery has no Chinese label
+    // in the merchant alert yet, so the log is where it lives for now.
+    if (oversold.length) {
+      auditLog(o, MODE === 'live' ? 'oversold' : 'would_oversell', oversold.join('; '));
+      log(`order ${o.orderNo || o.orderId}: sold past the shelf — ${oversold.join('; ')}`);
+    }
+    return applied;
+  };
+
+  // (1) Active + not yet counted → decrement.
+  if (isActive && !alreadyDecremented) {
+    const applied = deduct();
     upsert({ decremented: 1, note: `${MODE}: decremented ${applied.join(', ')}` });
     auditLog(o, MODE === 'live' ? 'decremented' : 'would_decrement', applied.join(', '));
     log(`order ${o.orderNo || o.orderId} [${o.status}] ${MODE === 'live' ? 'DECREMENTED' : 'would decrement'}: ${applied.join(', ')}`);
@@ -512,7 +563,23 @@ function processOrder(o, items, skuMap, storeId, shipTo) {
     return { result: 'decremented', units: ourUnits };
   }
 
-  // (2) Void after we counted → reverse (add back).
+  // (2b) §487 — Active again after a void we reversed → take it again, once.
+  // The un-cancel Meituan and Eleme already handle; here a Refunded order that
+  // the platform re-opened (or a label that bounced through a void) stayed
+  // "counted" by the flags while its units had been given back.
+  if (isActive && alreadyDecremented && alreadyReversed) {
+    const applied = deduct();
+    upsert({ decremented: 1, reversed: 0, note: `${MODE}: re-decremented (${o.status}) ${applied.join(', ')}` });
+    auditLog(o, MODE === 'live' ? 're_decremented' : 'would_re_decrement', applied.join(', '));
+    log(`order ${o.orderNo || o.orderId} [${o.status}] ${MODE === 'live' ? 'RE-DECREMENTED' : 'would re-decrement'}: ${applied.join(', ')}`);
+    try { ensureGzMirror({ orderId: o.orderId, status: o.status, customer: o.customer, dateAdded: o.dateAdded, ours, storeId, voided: false, shipTo }); }
+    catch (e) { log(`mirror-revive ${o.orderNo || o.orderId} failed: ${e.message}`); }
+    return { result: 're-decremented', units: ourUnits };
+  }
+
+  // (2) Void after we counted → reverse (add back). §487 — a delta here too,
+  // for the same reason as the deduction: the units that came off go back on,
+  // whatever the shelf reads now.
   if (isVoid && alreadyDecremented && !alreadyReversed) {
     const applied = [];
     for (const it of ours) {
@@ -520,7 +587,7 @@ function processOrder(o, items, skuMap, storeId, shipTo) {
       const next = cur + it.qty;
       if (MODE === 'live') {
         adjustStock({
-          storeId, productId: it.product_id, newPhysicalQty: next,
+          storeId, productId: it.product_id, deltaQty: it.qty,
           actorLabel: 'gzgrocery-order', reason: 'gzgrocery_order_reverse',
           note: `gzgrocery order ${o.orderNo || o.orderId} ${o.status}: +${it.sku} ×${it.qty} (${cur}→${next})`,
         });
@@ -630,4 +697,7 @@ async function main() {
   }
 }
 
-main();
+// Started only when run as a script. Required by a test, it hands out the
+// pieces that move stock and starts nothing (§487).
+if (require.main === module) main();
+module.exports = { processOrder, matchOurItems, ensureTables, ACTIVE, VOID };

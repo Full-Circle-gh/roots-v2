@@ -641,6 +641,27 @@ function _applyDispatch(orderId, actorUser) {
    *
    * ZERO LINES AND ZERO MOVABLE LINES ARE DIFFERENT THINGS, and only the second
    * is a fault. An order with nothing asked for is a no-op and stays one. */
+  /* §490 — AND ONE SUCH LINE AMONG MANY IS REFUSED TOO. The §200 refusal fired
+     only when NO line could move. One unlinked line in three let the other two
+     go: the order went in transit, the receipt never asked about the third
+     (its query carries the same product_id IS NOT NULL), and the asker's screen
+     marked all three arrived. The units of that line were neither taken off
+     nor put on, and nobody was told. Now any line with a quantity and no
+     product stops the send and is named. */
+  const unlinked = conn.prepare(`
+    SELECT product_name, sku, COALESCE(qty_sent, qty_requested, 0) AS qty FROM restock_items
+     WHERE restock_id = ? AND product_id IS NULL AND COALESCE(qty_sent, qty_requested, 0) > 0
+  `).all(o.id);
+  if (unlinked.length) {
+    const named = unlinked.map(u => `${u.product_name || u.sku || '?'} ×${u.qty}`).join(', ');
+    console.warn(`[restock-dispatch] ${label}: refused — ${unlinked.length} line(s) carry no product: ${named}`);
+    return {
+      ok: false,
+      error: `No stock was moved. Not every line is linked to a product — ${named} ${unlinked.length === 1 ? 'has' : 'have'} none, `
+           + 'so there is no shelf to take it off. Raise the request again '
+           + 'from the product list, and tell whoever looks after the system.',
+    };
+  }
   if (!lines.length) {
     const asked = conn.prepare(`
       SELECT COUNT(*) AS c FROM restock_items
@@ -1724,6 +1745,18 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
       error: 'A transfer cannot leave from and arrive at the same location · 调拨的发出与接收地点不能相同',
     });
   }
+  // §490 — WHOLE UNITS ONLY. The shelf and the ledger are integer columns, and
+  // a 2.5 typed here went all the way to the shelf as 2.5 (SQLite stores a
+  // fraction in an INTEGER column as a REAL). Purchase receiving rounds; a
+  // transfer is counted by hand and is refused instead, naming the line.
+  const fractional = items.find(it => it && it.qty_requested != null && it.qty_requested !== ''
+    && !Number.isInteger(Number(it.qty_requested)));
+  if (fractional) {
+    return res.status(400).json({
+      error: 'quantity_not_whole',
+      message: `A quantity must be a whole number of units (${fractional.product_name || fractional.sku || 'a line'}: ${fractional.qty_requested}).`,
+    });
+  }
 
   // One handle for both statements and the transaction they run in.
   const conn = tdb();
@@ -2152,6 +2185,13 @@ router.put('/api/restock/:id/item/:item_id', requireRestockAccess, kitchenScoped
      never existed on this table, and this keeps it that way. */
   const { is_checked, qty_sent } = req.body;
   const clearSent = req.body && req.body.clear_qty_sent === true;
+  // §490 — a picked quantity is a whole number of units, or it is refused.
+  if (!clearSent && qty_sent != null && qty_sent !== '' && (!Number.isInteger(Number(qty_sent)) || Number(qty_sent) < 0)) {
+    return res.status(400).json({
+      error: 'quantity_not_whole',
+      message: `A picked quantity must be a whole number of units, 0 or more (got ${qty_sent}).`,
+    });
+  }
   tdb().prepare(`UPDATE restock_items SET
     is_checked = COALESCE(?, is_checked),
     qty_sent   = ${clearSent ? 'NULL' : 'COALESCE(?, qty_sent)'}
@@ -2203,6 +2243,18 @@ router.put('/api/restock/:id/receive', requireRestockAccess, tacetOnly, (req, re
   }
 
   const counts = Array.isArray(req.body && req.body.counts) ? req.body.counts : [];
+  // §490 — a count of 2.5 is not a count of units. Refused by name rather than
+  // skipped: a skipped line reads as "not counted yet" and the counter, who
+  // typed a number, would not know why the receipt never settles.
+  const fractional = counts.find(c => c && c.qty_received != null && c.qty_received !== ''
+    && Number.isFinite(Number(c.qty_received)) && !Number.isInteger(Number(c.qty_received)));
+  if (fractional) {
+    return res.status(400).json({
+      error: 'quantity_not_whole',
+      message: `A counted quantity must be a whole number of units (got ${fractional.qty_received}).`,
+      counts_written: 0,
+    });
+  }
   // Written on the tenant handle, in one transaction, before anything is
   // settled: a rejected settlement must still keep the numbers the counter
   // typed, or they retype them.
