@@ -657,8 +657,8 @@ function _applyDispatch(orderId, actorUser) {
     console.warn(`[restock-dispatch] ${label}: refused — ${unlinked.length} line(s) carry no product: ${named}`);
     return {
       ok: false,
-      error: `No stock was moved. ${unlinked.length === 1 ? 'One line is' : unlinked.length + ' lines are'} not linked to a product `
-           + `(${named}), so there is no shelf to take ${unlinked.length === 1 ? 'it' : 'them'} off. Raise the request again `
+      error: `No stock was moved. Not every line is linked to a product — ${named} ${unlinked.length === 1 ? 'has' : 'have'} none, `
+           + 'so there is no shelf to take it off. Raise the request again '
            + 'from the product list, and tell whoever looks after the system.',
     };
   }
