@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.566
+# Tacet shared-core consolidation — decisions record, v4.567
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-19 · v4.567 — **§489 · A PLATFORM ORDER IS MIRRORED ONCE, AND ITS DEDUCTION LANDS WITH IT — DECIDED BY ASH:** *"fix all"*, audit finding 5. The only key against a double ingest lived in the daemons' import tables, written after the server had deducted; a daemon that died in between mirrored the order twice. `retail_orders.channel_order_id` now carries the platform's id (backfilled from the import ledgers), the server answers a second ingest with the first order, the deduction runs inside the order's transaction, and a failed ingest is retried on the next poll. `scripts/test_platform_ingest_once.js`. New §489.
 
 2026-10-19 · v4.566 — **§488 · AN ADD-ON ON AN ORDER WHOSE STOCK WENT STRAIGHT TO THE LEDGER TAKES ITS UNITS — DECIDED BY ASH:** *"fix all"*, audit finding 4. The add-on deducted only when the order held reservations, the pre-2026-08-31 reading of "tracks stock"; an out-of-city order's add-on was skipped, and one more of a product the order already carried never came off the shelf. Taken now under `order_addon`; a fresh line the order is still holding back waits with it (§58). `scripts/test_addon_ledger_take.js`. New §488.
 
@@ -32696,4 +32698,43 @@ never came off the shelf.
 
 No new strings, no schema change. The add-on gate at `addon/create` is
 untouched: it asks whether the items exist, which is a different question.
+
+
+## §489 — A PLATFORM ORDER IS MIRRORED ONCE, AND ITS DEDUCTION LANDS WITH IT
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, finding 5).**
+
+### What was wrong
+
+`POST /api/internal/meituan/ingest-order` (and Eleme's twin) had no key of its
+own: the mirrored order's number is random, and the platform's id went only
+into a ledger note. The one thing stopping a double was the daemon's import
+table, checked before the HTTP call and written after it. A daemon that died
+or timed out between the server's deduction and that write ingested the same
+platform order again on its next poll — second order, second deduction,
+nothing cross-checking. Beside it: the order insert was one transaction but
+the deduction loop ran outside it, so a throw on line N (SQLITE_BUSY from a
+daemon holding the file) left lines 1..N−1 off the shelf, the import row in
+`error` with no order link, and every later cancel answering `not_mirrored` —
+stock that could never come back by itself.
+
+### The ruling
+
+1. **The platform's own id lives on the order row**: `retail_orders.channel_order_id`,
+   indexed with `channel`, written by both ingests, and backfilled once from
+   `meituan_order_import` / `eleme_order_import` so the guard covers every
+   order already mirrored. A second ingest of the same platform order answers
+   with the first order (`duplicate: true`, `deducted: 0`).
+2. **The deduction runs inside the order's transaction.** Order and stock land
+   together or not at all.
+3. **A failed ingest is retried.** The daemons (Meituan, Shangou, Eleme) treat
+   an import row with no `retail_order_id` as a failure to try again on the
+   next poll, and record the retry's outcome on the same row. Safe now, where
+   it used to be a double, because of 1 and 2.
+4. The oversell and unmatched-line alerts, the §85 window read and the born-void
+   rule are unchanged.
+
+Schema: one nullable column and one index on `retail_orders`, through
+`addColumn`. No new strings.
 

@@ -7131,6 +7131,24 @@ db.exec(`
   );
 `);
 
+// §489 — THE PLATFORM'S OWN ORDER ID, ON THE ORDER ROW. The only key that
+// stopped a Meituan or Eleme order being mirrored twice lived in the daemons'
+// import tables above, written AFTER the server had deducted the stock; a
+// daemon that died between the two ingested the same order again on its next
+// poll. The server now refuses a second ingest of the same platform order by
+// this column. Backfilled once from the import ledgers so the guard covers
+// every order already mirrored; idempotent on every boot.
+addColumn('retail_orders', 'channel_order_id', 'TEXT');
+db.exec('CREATE INDEX IF NOT EXISTS idx_retail_orders_channel_order ON retail_orders(channel, channel_order_id)');
+db.prepare(`UPDATE retail_orders
+               SET channel_order_id = (SELECT i.meituan_order_no FROM meituan_order_import i WHERE i.retail_order_id = retail_orders.id)
+             WHERE channel_order_id IS NULL AND channel = 'meituan'
+               AND EXISTS (SELECT 1 FROM meituan_order_import i WHERE i.retail_order_id = retail_orders.id)`).run();
+db.prepare(`UPDATE retail_orders
+               SET channel_order_id = (SELECT i.eleme_order_id FROM eleme_order_import i WHERE i.retail_order_id = retail_orders.id)
+             WHERE channel_order_id IS NULL AND channel = 'eleme'
+               AND EXISTS (SELECT 1 FROM eleme_order_import i WHERE i.retail_order_id = retail_orders.id)`).run();
+
 // Append-only sync event log for the admin Eleme tab + debugging.
 db.exec(`
   CREATE TABLE IF NOT EXISTS eleme_sync_log (

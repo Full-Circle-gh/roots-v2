@@ -682,12 +682,17 @@ async function pollOrders(storeConfig) {
       // Already-imported orders: keep the platform status label current
       // (配送中 → 已完成 …) so the Orders list tracks the real state, then skip.
       const existing = db.prepare(
-        'SELECT id FROM meituan_order_import WHERE meituan_order_no = ?'
+        'SELECT id, retail_order_id FROM meituan_order_import WHERE meituan_order_no = ?'
       ).get(order.meituanOrderNo);
-      if (existing) {
+      if (existing && existing.retail_order_id) {
         await refreshOrderStatus(storeCode, order);
         continue;
       }
+      // §489 — an import row with no order behind it is a FAILED ingest, and
+      // it is retried on every poll until it lands: the server now refuses a
+      // second mirror of the same platform order and writes the order and its
+      // deduction together, so a retry is safe where it used to be a double.
+      if (existing) log(storeCode, `retrying failed ingest of ${order.meituanOrderNo}`);
 
       log(storeCode, `new order ${order.meituanOrderNo}`);
 
@@ -701,11 +706,14 @@ async function pollOrders(storeConfig) {
       // 2. Create in roots-v2 via internal API (this deducts stock → re-syncs)
       const rootsOrderId = await ingestOrder(storeId, storeCode, order);
 
-      // 3. Record import
+      // 3. Record import (or, on a retry, the outcome of the retry).
       db.prepare(`
-        INSERT OR IGNORE INTO meituan_order_import
+        INSERT INTO meituan_order_import
           (meituan_order_no, retail_order_id, store_code, accepted_at, status)
         VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
+        ON CONFLICT(meituan_order_no) DO UPDATE SET
+          retail_order_id = COALESCE(excluded.retail_order_id, retail_order_id),
+          status = excluded.status
       `).run(
         order.meituanOrderNo,
         rootsOrderId || null,

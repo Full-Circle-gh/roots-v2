@@ -400,14 +400,17 @@ async function pollOrders(cfg) {
       if (!order.elemeOrderId) continue;
 
       const existing = db.prepare(
-        'SELECT id FROM eleme_order_import WHERE eleme_order_id = ?'
+        'SELECT id, retail_order_id FROM eleme_order_import WHERE eleme_order_id = ?'
       ).get(order.elemeOrderId);
-      if (existing) {
+      if (existing && existing.retail_order_id) {
         // Already mirrored — keep Eleme's status label current and move on. No
         // detail read: Tier 1 is once per order, not once per poll.
         await refreshOrderStatus(storeCode, order);
         continue;
       }
+      // §489 — a row with no order behind it is a failed ingest, retried each
+      // poll; the server refuses a double and writes order + deduction together.
+      if (existing) log(storeCode, `retrying failed ingest of ${order.elemeOrderId}`);
 
       log(storeCode, `new order ${order.elemeOrderId}`);
 
@@ -424,9 +427,12 @@ async function pollOrders(cfg) {
       const rootsOrderId = await ingestOrder(storeId, storeCode, order);
 
       db.prepare(`
-        INSERT OR IGNORE INTO eleme_order_import
+        INSERT INTO eleme_order_import
           (eleme_order_id, retail_order_id, store_code, status, raw_payload, detail_json)
         VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(eleme_order_id) DO UPDATE SET
+          retail_order_id = COALESCE(excluded.retail_order_id, retail_order_id),
+          status = excluded.status
       `).run(order.elemeOrderId, rootsOrderId || null, storeCode,
              rootsOrderId ? 'imported' : 'error',
              safeJson(order.raw), safeJson(archiveFields(order)));

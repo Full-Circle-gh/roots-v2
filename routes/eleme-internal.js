@@ -467,6 +467,17 @@ router.post('/ingest-order', (req, res) => {
     const orderNo  = `EL${datePart}${rand}`;
     const ref      = order.elemeOrderId || orderNo;
 
+    // §489 — once per platform order, decided here. See the Meituan ingest.
+    const channelOrderId = order.elemeOrderId ? String(order.elemeOrderId) : null;
+    if (channelOrderId) {
+      const dup = db.prepare(
+        "SELECT id, order_no FROM retail_orders WHERE channel = 'eleme' AND channel_order_id = ? ORDER BY id LIMIT 1"
+      ).get(channelOrderId);
+      if (dup) {
+        return res.json({ ok: true, orderId: dup.id, orderNo: dup.order_no, items: 0, deducted: 0, unresolved: [], bornVoid: false, duplicate: true });
+      }
+    }
+
     const items = (order.items || []).map(it => resolveProduct(it, storeId)).filter(i => i.qty > 0);
     // TWO readings of this order's money, and they are not interchangeable.
     //
@@ -586,6 +597,10 @@ router.post('/ingest-order', (req, res) => {
     // settle and discount as plain `?`). Readers treat NULL as absent, not zero.
     const shopDiscount = fmoney(order.shopDiscount);
 
+    const unresolved = [];
+    let deducted = 0;
+    const oversold = [];
+    const preorderWindow = cadence.preorderWindow(db, { channel: 'eleme' });
     const orderId = db.transaction(() => {
       const r = db.prepare(`
         INSERT INTO retail_orders (
@@ -594,17 +609,17 @@ router.post('/ingest-order', (req, res) => {
           channel_status, channel_status_at, channel_eta, channel_preorder_at,
           customer_note, needs_cutlery,
           shipping_fee, packing_fee,
-          channel_commission, channel_settle_amount, channel_discount
+          channel_commission, channel_settle_amount, channel_discount, channel_order_id
         ) VALUES (?, ?, 'eleme', ?, ?, ?, 'eleme', 'delivery',
                   COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP),
                   ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, ?, ?,
                   ?, ?,
                   COALESCE(?, 0), COALESCE(?, 0),
-                  ?, ?, ?)
+                  ?, ?, ?, ?)
       `).run(orderNo, internalStatus, subtotal, total, storeId, placedAt, placedAt,
              channelStatus, channelStatus, channelEta, preOrderAt, customerNote, needsCutlery,
              shippingFee, packingFee,
-             commission, settleAmount, shopDiscount);
+             commission, settleAmount, shopDiscount, channelOrderId);
       const oid = r.lastInsertRowid;
       // channel_stock_restored means exactly "this order's stock is NOT currently
       // deducted from our count". A born-void order never had its stock taken, so
@@ -629,8 +644,47 @@ router.post('/ingest-order', (req, res) => {
                // there would claim the goods were free.
                it.unitCostAtSale ?? null);
       }
+      // §489 — the deduction runs INSIDE the order's transaction; see the
+      // Meituan ingest for why. Lines the shelf could not cover. Meituan has flagged these since it was
+      // written; this copy never did, so an Eleme oversell was recorded as a Δ0
+      // ledger row and nothing else — six of them on the live database by
+      // 2026-09-08, indistinguishable from a no-op.
+      // §85 — one window read for the whole order. See the note in the Meituan
+      // ingest, which this mirrors deliberately rather than deriving its own.
+      for (const it of bornVoid ? [] : items) {
+        if (!it.productId) { unresolved.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
+        const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
+        const oldQ = cur ? cur.physical_qty : 0;
+        // One six-pack is one line of one, and six off the shelf.
+        const took = packDeduct(it.qty, it.units);
+        // §84: THE CLAMP IS GONE, and the sentence that stood here is why. It read
+        // "the shortfall vanishes into a Δ0 row unless it is recorded here" — the
+        // debt was real, known, and written only to a log column nothing watches.
+        // §39's per-channel debt is paid on this line: the shelf now carries the
+        // shortfall as a negative, which is the number the kitchen cooks against.
+        // A delta rather than an absolute, so the figure written is computed from
+        // a read inside adjustStock's own transaction and not from `oldQ` above.
+        //
+        // The oversell flag stays. "Did this order exceed the shelf" is still worth
+        // saying out loud even now that the shelf says it too.
+        // §85 — a pre-order inside the window's allowance is expected and does not
+        // page; a shortfall beyond it still does. See lib/channel-publish.js.
+        if (oldQ < took && !channelPublish.oversellExpected({ have: oldQ, want: took, window: preorderWindow })) {
+          oversold.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, have: oldQ, want: took });
+        }
+        inventory.adjustStock({
+          storeId, productId: it.productId,
+          deltaQty: -took,
+          actorLabel: 'Eleme order',
+          reason: 'eleme_order',
+          note: `Eleme ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}` +
+                (took !== it.qty ? ` (${took} units)` : ''),
+        });
+        deducted++;
+      }
       return oid;
     })();
+
 
     // An order can arrive already under way — the poll runs every ~5 minutes, so
     // its first sighting is often 配送中 rather than a fresh 待接单. Stamp the
@@ -638,47 +692,6 @@ router.post('/ingest-order', (req, res) => {
     // with no dispatch time on it.
     stampLifecycle(orderId, internalStatus);
 
-    const unresolved = [];
-    let deducted = 0;
-    // Lines the shelf could not cover. Meituan has flagged these since it was
-    // written; this copy never did, so an Eleme oversell was recorded as a Δ0
-    // ledger row and nothing else — six of them on the live database by
-    // 2026-09-08, indistinguishable from a no-op.
-    const oversold = [];
-    // §85 — one window read for the whole order. See the note in the Meituan
-    // ingest, which this mirrors deliberately rather than deriving its own.
-    const preorderWindow = cadence.preorderWindow(db, { channel: 'eleme' });
-    for (const it of bornVoid ? [] : items) {
-      if (!it.productId) { unresolved.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
-      const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
-      const oldQ = cur ? cur.physical_qty : 0;
-      // One six-pack is one line of one, and six off the shelf.
-      const took = packDeduct(it.qty, it.units);
-      // §84: THE CLAMP IS GONE, and the sentence that stood here is why. It read
-      // "the shortfall vanishes into a Δ0 row unless it is recorded here" — the
-      // debt was real, known, and written only to a log column nothing watches.
-      // §39's per-channel debt is paid on this line: the shelf now carries the
-      // shortfall as a negative, which is the number the kitchen cooks against.
-      // A delta rather than an absolute, so the figure written is computed from
-      // a read inside adjustStock's own transaction and not from `oldQ` above.
-      //
-      // The oversell flag stays. "Did this order exceed the shelf" is still worth
-      // saying out loud even now that the shelf says it too.
-      // §85 — a pre-order inside the window's allowance is expected and does not
-      // page; a shortfall beyond it still does. See lib/channel-publish.js.
-      if (oldQ < took && !channelPublish.oversellExpected({ have: oldQ, want: took, window: preorderWindow })) {
-        oversold.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, have: oldQ, want: took });
-      }
-      inventory.adjustStock({
-        storeId, productId: it.productId,
-        deltaQty: -took,
-        actorLabel: 'Eleme order',
-        reason: 'eleme_order',
-        note: `Eleme ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}` +
-              (took !== it.qty ? ` (${took} units)` : ''),
-      });
-      deducted++;
-    }
 
     if (unresolved.length) {
       try {
