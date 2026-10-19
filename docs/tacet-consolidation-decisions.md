@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.567
+# Tacet shared-core consolidation — decisions record, v4.568
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-19 · v4.568 — **§490 · A TRANSFER COUNTS WHOLE UNITS, AN UNLINKED LINE STOPS THE SEND, A DELTA THE ROUTE CANNOT READ IS REFUSED — DECIDED BY ASH:** *"fix all"*, audit findings 6, 7 and 8. A picked or counted 2.5 reached the shelf as 2.5; one unlinked line in three let the other two go in silence; a quick-stock "+1O" answered success and moved nothing. All three are refused by name. `scripts/test_stock_two_step.js` carries the cases. New §490.
 
 2026-10-19 · v4.567 — **§489 · A PLATFORM ORDER IS MIRRORED ONCE, AND ITS DEDUCTION LANDS WITH IT — DECIDED BY ASH:** *"fix all"*, audit finding 5. The only key against a double ingest lived in the daemons' import tables, written after the server had deducted; a daemon that died in between mirrored the order twice. `retail_orders.channel_order_id` now carries the platform's id (backfilled from the import ledgers), the server answers a second ingest with the first order, the deduction runs inside the order's transaction, and a failed ingest is retried on the next poll. `scripts/test_platform_ingest_once.js`. New §489.
 
@@ -32737,4 +32739,36 @@ stock that could never come back by itself.
 
 Schema: one nullable column and one index on `retail_orders`, through
 `addColumn`. No new strings.
+
+
+## §490 — A TRANSFER COUNTS WHOLE UNITS, AN UNLINKED LINE STOPS THE SEND, AND A DELTA THE ROUTE CANNOT READ IS REFUSED
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, findings 6, 7 and 8).**
+
+Three small refusals, each where a silence used to be.
+
+1. **Whole units on a transfer.** `qty_requested` at create, `qty_sent` at the
+   pick and `qty_received` at the count must be integers; a fraction is
+   refused as `quantity_not_whole`, naming the line. Purchase receiving rounds
+   (§39 ruling 4) and keeps doing so; a transfer is counted by hand, and a
+   count of 2.5 units is not a count. Before this the fraction reached
+   `retail_store_stock.physical_qty` as a REAL and every integer reader
+   downstream carried it.
+2. **One unlinked line among many stops the send.** §200's refusal fired only
+   when NO line carried a product. One line with a quantity and no
+   `product_id` in a basket of three let the other two go: the order went in
+   transit, the receipt never asked about the third (its query carries the
+   same `product_id IS NOT NULL`), and the asker's screen marked all three
+   arrived. Any such line now refuses the dispatch and is named in the
+   refusal, exactly as §200 names the all-unlinked case.
+3. **A quick-stock delta the route cannot read is refused, not zeroed.**
+   `parseInt(delta) || 0` turned an empty box, "1O" and a pasted value into 0,
+   and 0 fell through to a `success: true` that moved nothing. The add path now
+   refuses the unreadable, the fractional and the zero as `delta_invalid`, the
+   way the recount path has refused the unreadable since §46. A negative is
+   still `delta_must_be_positive`, as §39 ruling 7 left it.
+
+No new strings in the product's vocabulary: the three messages are server
+errors in the register the restock and stock routes already use.
 

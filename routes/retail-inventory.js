@@ -534,7 +534,21 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
   // The delta path resolves the target inside adjustStock's transaction, so the
   // kitchen client never reads the current count — it only ever sends "+N".
   if ('delta' in b) {
-    const d = parseInt(b.delta, 10) || 0;
+    // §490 — A DELTA THE ROUTE CANNOT READ IS REFUSED, NOT ZEROED. `parseInt(…)
+    // || 0` turned an empty box, a stray letter ("1O") and a pasted value into
+    // 0, and 0 fell through to a `success: true` that moved nothing — the
+    // kitchen believed the batch was recorded. The recount path below has
+    // refused the unreadable since §46; the add path now does the same, and a
+    // delta of exactly 0 is refused with it: this door is "I made N more", and
+    // N is never nothing.
+    const rawDelta = typeof b.delta === 'string' ? b.delta.trim() : b.delta;
+    const d = (rawDelta === '' || rawDelta === null || rawDelta === undefined) ? NaN : Number(rawDelta);
+    if (!Number.isFinite(d) || !Number.isInteger(d) || d === 0) {
+      return res.status(400).json({
+        success: false, error: 'delta_invalid',
+        message: 'Enter how many were made — a whole number, more than zero.',
+      });
+    }
     // THE DELTA PATH IS ADDITIVE ONLY, and it is now enforced rather than
     // assumed. Until §39 ruling 7 removed the floor inside adjustStock, a
     // negative delta arriving here was absorbed silently: the shelf stopped at

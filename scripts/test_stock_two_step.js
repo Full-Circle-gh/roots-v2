@@ -363,6 +363,60 @@ function makeOrder({ lines, shelves = {} }) {
   ok(posRes.status !== 400, 'a positive delta still works');
   eq(shelf(SHOP, 900), 17, 'and adds as it always did');
 
+  // ══ §490 — whole units, a named refusal for an unlinked line, and a delta
+  //    the route cannot read ══════════════════════════════════════════════════
+  section('§490. A delta the route cannot read is refused, not zeroed');
+  // `parseInt("1O") || 0` answered success and moved nothing; the kitchen
+  // believed the batch was recorded.
+  for (const bad of ['1O', '', 0, 2.5]) {
+    const r = stockCall({ delta: bad });
+    eq(r.status, 400, `delta ${JSON.stringify(bad)} is refused`);
+    eq((r.body || {}).error, 'delta_invalid', 'and refused by name');
+  }
+  eq(shelf(SHOP, 900), 17, 'the shelf is untouched by the four refusals');
+
+  section('§490. A transfer counts whole units, at both ends');
+  const frac = makeOrder({
+    lines: [{ product_id: 900, name: 'Hummus', sku: 'P-900', qty_requested: 4, qty_sent: null }],
+    shelves: { '1:900': 40, '2:900': 0 },
+  });
+  const fracItem = itemsOf(frac)[0];
+  const editFrac = call('put', '/api/restock/:id/item/:item_id', { id: String(frac), item_id: String(fracItem.id) }, { qty_sent: 2.5 });
+  eq(editFrac.status, 400, 'a picked 2.5 is refused');
+  eq((editFrac.body || {}).error, 'quantity_not_whole', 'by name');
+  ok(itemsOf(frac)[0].qty_sent == null, 'and not written');
+  const editWhole = call('put', '/api/restock/:id/item/:item_id', { id: String(frac), item_id: String(fracItem.id) }, { qty_sent: 3 });
+  ok(editWhole.status !== 400, 'a picked 3 is accepted');
+  const fracPrep = setStatus(frac, 'prepared');
+  ok(fracPrep.body && fracPrep.body.success && !fracPrep.body.stock_transfer, 'dispatched');
+  eq(shelf(WH, 900), 37, 'the warehouse gave 3');
+  const recvFrac = receive(frac, [{ item_id: fracItem.id, qty_received: 2.5 }]);
+  eq(recvFrac.status, 400, 'a counted 2.5 is refused');
+  eq((recvFrac.body || {}).error, 'quantity_not_whole', 'by name');
+  ok(itemsOf(frac)[0].qty_received == null, 'and not written as a count');
+  eq(shelf(SHOP, 900), 0, 'the shop shelf did not move');
+  const recvWhole = receive(frac, [{ item_id: fracItem.id, qty_received: 3 }]);
+  ok(recvWhole.body && recvWhole.body.success, 'a counted 3 settles the line');
+  eq(shelf(SHOP, 900), 3, 'and lands on the shop shelf');
+
+  section('§490. One unlinked line among many stops the send, by name');
+  // The §200 refusal fired only when NO line carried a product. One bad line in
+  // three let the other two go, the order went in transit, the receipt never
+  // asked about the third, and nobody was told.
+  const mixedId = makeOrder({
+    lines: [
+      { product_id: 900, name: 'Hummus', sku: 'P-900', qty_requested: 2, qty_sent: 2 },
+      { product_id: null, name: 'Mystery jar', sku: null, qty_requested: 1, qty_sent: 1 },
+    ],
+    shelves: { '1:900': 20, '2:900': 0 },
+  });
+  const mixedPrep = setStatus(mixedId, 'prepared');
+  ok(!!(mixedPrep.body && mixedPrep.body.stock_transfer && mixedPrep.body.stock_transfer.ok === false),
+    'the dispatch is refused');
+  ok(/Mystery jar/.test(String((mixedPrep.body.stock_transfer || {}).error || '')), 'and the refusal names the line');
+  eq(shelf(WH, 900), 20, 'the linked line did NOT leave the warehouse');
+  eq(orderRow(mixedId).goods_state, 'none', 'the goods never left');
+
   section('A negative shelf appears on the dashboard "Needs you" panel');
   // FOUR CLAUSES, not one: count and preview are separate queries per card, so
   // a partial fix gives a card whose number and list disagree. Under the old
