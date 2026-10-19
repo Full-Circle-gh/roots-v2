@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.564
+# Tacet shared-core consolidation — decisions record, v4.565
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-19 · v4.565 — **§487 · A GZGROCERY ORDER LINE IS A FACT: NO CLAMP, A PENDING REFUND IS NOT A VOID, AN UNKNOWN SKU IS LOGGED — DECIDED BY ASH:** *"fix all"*, audit finding 3. §84 left gzgrocery clamped on the premise that no order lines reach us; `scripts/gzgrocery-order-daemon.js` reads them. The order daemon now writes a delta like Meituan and Eleme; 退款中 no longer reverses; an order revived after a void is taken again once; an SKU-shaped line the catalogue does not know goes to the order log. The Guanyi pickup inference stays clamped. §84 and §39 amended in place. `scripts/test_gzgrocery_order_stock.js`. New §487.
 
 2026-10-19 · v4.564 — **§486 · A PRODUCTION BATCH RELEASES PARKED ORDERS AGAINST WHAT REACHED THE SHELF, ONE BATCH PER REQUEST, WHOLE UNITS — DECIDED BY ASH:** *"fix all"*, audit finding 2. The log added what was made, the release took it at once, and the loss then found the shelf short and rolled the whole batch back behind a 500. The release now waits for the loss; a request already logged is refused; a fraction is refused. `scripts/test_production_log.js` carries the cases. New §486.
 
@@ -6165,6 +6167,8 @@ The order of preference per line is therefore **counted → sent (marked unverif
 
 **Untouched, and recorded as debt: the four channel self-clamps.** Meituan, Eleme, Guanyi and gzgrocery compute `Math.max(0, …)` in JavaScript and pass an absolute figure, so they never reached this clamp and are unaffected by its removal. They keep doing the very thing this ruling rejects — per-channel work, deliberately out of scope.
 
+> **Standing as of 2026-10-19:** Meituan and Eleme were unclamped by §84 (2026-09-09); the gzgrocery ORDER daemon by §487. The Guanyi pickup inference (`lib/guanyi-sync`, `routes/guanyi-admin.js`) is the one self-clamp left, and it stays by §84's own reasoning.
+
 
 **Rationale.** Every decision above is about a moment when goods and the record could disagree — the two hours the van is moving, the gap between what was asked for and what was found, the count that contradicts the dispatch note. Each is settled the same way: the record follows the person who can see the goods, and the system never guesses on their behalf. The screens are drawn in `design-handoff/warehouse-picking/` and `design-handoff/store-receiving/`, and their annotations carry the per-screen reasoning this section summarises.
 
@@ -9367,6 +9371,12 @@ debt lost on the second path is lost exactly as completely as one lost on the fi
 shelf carries the debt, the kitchen reads it, and the oversell alarm stops being the only record of
 it. Eleme's own comment already said so — *"the shortfall vanishes into a Δ0 row unless it is
 recorded here"* — and this is that shortfall being recorded where it belongs instead.
+
+> **AMENDED 2026-10-19 by §487.** The premise of the paragraph below is false for one of the two
+> gzgrocery paths: `scripts/gzgrocery-order-daemon.js` DOES read gzgrocery's order lines and deducts
+> them under `gzgrocery_order`. That daemon is now unclamped, for exactly the reason this section
+> gives — a real order line is a fact. The Guanyi PICKUP inference stays clamped, for exactly the
+> reason the paragraph gives — an inference that overshot is a phantom.
 
 **GZGROCERY IS DELIBERATELY LEFT CLAMPED, AND IT IS NOT AN OMISSION.** It has no order-ingest path
 to unclamp: gzgrocery sells through the Guanyi ERP and we never receive its order lines, so a sale
@@ -32603,4 +32613,48 @@ stores as a REAL in the INTEGER shelf column.
    arise by construction any more; a concurrent writer could still cause it.
 
 No new strings, no schema change.
+
+
+## §487 — A GZGROCERY ORDER LINE IS A FACT
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, finding 3).**
+
+### What was wrong
+
+§84 unclamped Meituan and Eleme and left gzgrocery clamped on the stated
+premise that "we never receive its order lines". The tree says otherwise:
+`scripts/gzgrocery-order-daemon.js` reads gzgrocery's orders directly and
+deducts matched lines under `gzgrocery_order`. Inside it three things were
+wrong. The deduction wrote `Math.max(0, shelf − qty)` as an absolute: shelf 2,
+order of 5, the record dropped 2 and three units vanished with no row saying
+so; the cancel then added back 5 and the shelf said 5 for a product it had held
+2 of. `退款中` (refund pending) was in the void list, so a refund merely
+requested put the stock back and set `reversed`; when the refund was refused
+and the order went back to active the flags said "already counted" and the
+units were never taken again. And a line carrying an SKU-shaped code the
+catalogue did not know was dropped in silence.
+
+### The ruling
+
+1. **A delta, not a clamped absolute**, on the deduction and the reversal. A
+   gzgrocery order past the shelf drives it negative, exactly as a Meituan one
+   does since §84, and the cancel returns exactly what was taken. The oversell
+   is written to `gzgrocery_order_log` (`oversold`). It is not paged: the
+   merchant alert has no Chinese label for gzgrocery, and composing one is not
+   this fix.
+2. **`退款中` is not a void.** The default void list carries `已退款` in its
+   place. A pending refund moves nothing; a final label reverses once.
+3. **An order active again after a void is taken again, once** — the branch
+   Meituan and Eleme already have for an un-cancel.
+4. **An SKU-shaped line the catalogue does not know is logged** to the order's
+   log (`unmatched`), once per order. A line with no SKU shape is somebody
+   else's product and stays quiet.
+5. **The Guanyi pickup inference stays clamped**, by §84's own reasoning. The
+   daemon's header already requires the pickup detector to run in shadow once
+   the order daemon is live, so the two never both deduct one sale.
+6. The daemon starts its poll only when run as a script, so a test can drive
+   `processOrder` against the real `adjustStock`.
+
+§84 and §39 carry a dated note pointing here; their original text stands.
 
