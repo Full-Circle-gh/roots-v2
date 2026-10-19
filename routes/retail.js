@@ -2231,20 +2231,43 @@ function orderStockLinesForReversal(orderId, only) {
 // special-cased: reverseCommittedLedger nets the already-written 'order_reverse'
 // rows off its own cap, so a second pass computes nothing left to return.
 //
-// A partial reserve (the add-on path's allowPartial) cannot strand a line here.
-// A product that was short is never reserved AND never committed, and
-// commitUnreservedOrder refuses any order carrying a reservation row at all — so
-// an unreserved line on a partly-reserved order was never decremented, and there
-// is nothing to give back.
+// §485 — BOTH HALVES, ALWAYS. This used to stop the moment the hold reverser
+// returned anything, on the premise (written below it at the time) that
+// "commitUnreservedOrder refuses any order carrying a reservation row at all",
+// so an order was one kind or the other. That stopped being true when the
+// per-product guard went in: an out-of-city basket reserves its bought-in
+// lines at checkout (a drink, a jar — 'strict' by default) and sends its fresh
+// lines straight to the ledger at 备货 (§58). On a cancel the drink came back
+// and the wrap never did, and the audit of 2026-10-19 proved it against the
+// real functions. The §136 operator park and the §187 parcel recovery reach
+// the same shape.
+//
+// WHAT THE HOLD REVERSER GAVE BACK IS SUBTRACTED PER PRODUCT before the ledger
+// reverser is asked, and that subtraction is the whole of the care here. The
+// ledger reverser caps at "still out" per the ledger, and a hold's return is
+// already on the ledger as 'order_reverse%' — so for a FULL reverse it would
+// find nothing left of the held products by itself. For a PARTIAL it would not:
+// asked for 1 of a product the hold just returned 1 of, it reads still_out as
+// (taken − returned) and hands back a second unit. Handing it only the
+// remainder makes both cases exact, and a second call nets to nothing.
 function reverseOrderStock(orderId, { lines = null, actorUserId = null, actorLabel = null, note = null } = {}) {
   const opts = { actorUserId, actorLabel, note };
   const first = lines
     ? inventory.reverseCommittedLines(orderId, lines, opts)
     : inventory.reverseCommittedOrder(orderId, opts);
-  if (first && first.reversed > 0) return first;
   const expanded = orderStockLinesForReversal(orderId, lines);
   if (!expanded.length) return first;
-  return inventory.reverseCommittedLedger(orderId, expanded, opts);
+  const done = (first && first.byProduct) || {};
+  const rest = expanded
+    .map((l) => ({ product_id: l.product_id, qty: l.qty - (Number(done[l.product_id]) || 0) }))
+    .filter((l) => l.qty > 0);
+  if (!rest.length) return first;
+  const second = inventory.reverseCommittedLedger(orderId, rest, opts);
+  return {
+    reversed: ((first && first.reversed) || 0) + ((second && second.reversed) || 0),
+    hold: first,
+    ledger: second,
+  };
 }
 
 // Who may read what a product COSTS — `products:costs`. The rules, and why

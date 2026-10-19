@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.562
+# Tacet shared-core consolidation — decisions record, v4.563
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-19 · v4.563 — **§485 · A REFUND OR CANCEL GIVES BACK BOTH HALVES OF AN ORDER'S STOCK — DECIDED BY ASH:** *"fix all"*, from the stock-deduction audit (docs/surveys/stock-deduction-audit-2026-10-19.md, finding 1). An out-of-city basket reserves its bought-in lines at checkout and sends its fresh lines straight to the ledger at 备货; the refund door stopped after the hold reverser and the fresh half never came back. Both reversers now run, the ledger one on what the hold one did not return. Proven by scripts/test_mixed_order_reversal.js. New §485.
 
 2026-10-18 · v4.562 — **§82 · THE BOOKED-DAY LINE AND THE SHIP-BY DATE-ONLY TEST READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix all"*, the sixth batch, smaller than planned. The order alert's "booked for a later day" line and the ship-by line's date-only test read Guangzhou's day; they read the shop's now. The survey's Qingyun sites (the push-or-wait day, its reschedule, expiry and needs-a-point counts, the daemon's queue day and rider ETA, and the add-on shelf check) are RECLASSIFIED as platform time and left as they are: every one runs only for a Guangzhou address and a Guangzhou courier whose clock is Beijing's. Claude's recommendation, put to Ash. Nothing changes for Roots. See the amendment at the end of §82.
 
@@ -32517,4 +32519,50 @@ the picture itself and nothing on the box changes.
   taken without Ash deciding it.
 - **Untried against the real page.** It was built and tested without a view of
   the real page, so its first real use is the test.
+
+
+## §485 — A REFUND OR CANCEL GIVES BACK BOTH HALVES OF AN ORDER'S STOCK
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, finding 1).**
+
+### What was wrong
+
+An order takes stock through one of two doors: a hold committed at payment
+(`order_commit`), or straight to the ledger (`order_prepare`, `order_restock`).
+Since the per-product guard in `commitUnreservedOrder` an order routinely uses
+BOTH: an out-of-city basket reserves its bought-in lines at checkout (a drink
+or a jar is `strict` by default) and its batch-made lines wait for 备货 under
+§58. `reverseOrderStock` tried the hold reverser first and returned the moment
+it returned anything, on a comment that said an order could only be one kind.
+So on a cancel or full refund the jar came back and the salad never did, and a
+partial refund naming both kinds of line did the same. The §136 operator park
+and the §187 parcel recovery reach the same shape. §478 rule 4 had already
+named this early return as the reason it avoided writing a hold.
+
+### The ruling
+
+1. **Both reversers always run.** The hold reverser first, then the ledger
+   reverser on what is left.
+2. **What the hold gave back is subtracted per product before the ledger is
+   asked.** The ledger reverser caps at "still out" per the ledger, and a hold's
+   return is on the ledger as `order_reverse%`, so a full reverse would be exact
+   by itself; a partial would not — asked for 1 of a product the hold just
+   returned 1 of, it would hand back a second. Both hold reversers therefore
+   report what they returned, per product (`byProduct`), and the ledger
+   reverser is handed the remainder only.
+3. **The hold reversers are capped at the ledger too.** `reverseCommittedLines`
+   answered every partial refund with "up to the hold's quantity", so a third
+   refund of 1 on a line of 2 returned a unit that was never taken. The refund
+   screen caps its lines at `qty − refunded_qty`, so nothing shipped reached
+   this; it is now a backstop, and it is what lets the refund door call both
+   reversers freely.
+4. **Ledger reasons are unchanged.** A hold-only order still reverses under
+   `order_reverse` / `order_reverse_partial` alone; a ledger-only order under
+   `order_reverse_ledger` alone. The Stock activity labels need no change.
+
+### What is NOT changed
+
+No new strings, no schema change. `reverseOrderStockStillHere` (§191) and every
+refund and cancel site call the same door as before.
 
