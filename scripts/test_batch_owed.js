@@ -553,12 +553,14 @@ section('9c · the debt is said out loud, not only written down');
   const rep = fs.readFileSync(path.join(ROOT, 'lib/channel-line-report.js'), 'utf8');
 
   it('both commits collect the lines that crossed zero', () => {
-    assert.strictEqual((inv.match(/if \(bal < 0\) belowZero\.push\(/g) || []).length, 2,
-      'commitOrderReservations and commitUnreservedOrder both watch the balance');
-    // §458 adds a third caller: moving an order to a short shop can take that
-    // shop below zero, and it is said out loud the same way.
-    assert.strictEqual((inv.match(/_reportBelowZero\(/g) || []).length, 4,
-      'defined once, called from both commits and from moveOrderStock');
+    // §488 adds a third commit: an add-on's lines on a ledger-committed order
+    // (commitAddonLines) watch the balance the same way.
+    assert.strictEqual((inv.match(/if \(bal < 0\) belowZero\.push\(/g) || []).length, 3,
+      'commitOrderReservations, commitUnreservedOrder and commitAddonLines all watch the balance');
+    // §458 adds a caller: moving an order to a short shop can take that shop
+    // below zero, and it is said out loud the same way. §488 adds another.
+    assert.strictEqual((inv.match(/_reportBelowZero\(/g) || []).length, 5,
+      'defined once, called from the three commits and from moveOrderStock');
   });
   it('…and neither gained a floor doing it', () => {
     assert.ok(!/physical_qty = MAX\(0/i.test(inv), 'no clamp crept into the decrement');
