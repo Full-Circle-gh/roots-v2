@@ -2052,6 +2052,8 @@ Not fixed here. Settling it is a decision about whether the override should exis
 
 ### The restock warehouse override has never worked — OPEN 2026-08-05
 
+> **CLOSED IN CODE, noted 2026-10-19 by the stock-deduction audit.** `_resolveWarehouseStoreId()` now reads `cfgValue('stock.warehouseStoreId')` on the tenant handle (§39 ruling 3); the `settings` tier and the two fallback tiers below are gone, and the id is seeded by `pin_warehouse_store_id_v1`. The text below is the record of what was found on 2026-08-05 and stands as history.
+
 `routes/restock.js:167` reads a `settings` table that exists nowhere: not in the live census, not in the as-built Postgres schema, and not in `database.js`. It fails silently inside its own `catch { /* no settings table / row — fall through */ }` and has done since it was written.
 
 That statement is tier 1 of `_resolveWarehouseStoreId()` — the explicit override naming which store is the warehouse, the location restock goods ship OUT of. Because it has never returned anything, resolution always falls through to tier 2 (a `warehouse`-role user's bound store) or tier 3 (whichever active store currently holds the most on-hand stock).

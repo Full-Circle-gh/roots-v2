@@ -9,6 +9,12 @@ The short version: the core is sound. One real bug in refunds, one in the
 production log, and a family of gaps on the gzgrocery and platform ingests.
 Pre-orders and waste themselves are correct.
 
+**Status, same day.** Ash: "fix all". Findings 1–8 are fixed on this branch,
+each as its own commit with its own test and decision entry: §485 (1), §486
+(2), §487 (3), §488 (4), §489 (5), §490 (6, 7, 8). Finding 9 and the small
+things below are recorded, with the stale comments corrected; nothing else in
+that list changes behaviour without a decision.
+
 ## How stock moves today (so the findings have a frame)
 
 There is one shelf table (`retail_store_stock.physical_qty`) and one ledger

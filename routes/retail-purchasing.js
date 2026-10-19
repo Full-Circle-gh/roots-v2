@@ -230,8 +230,9 @@ function postRetailPOExpensesWithSource(poId) {
 // back out lower `good`, which makes the delta negative, which is a mechanism
 // this function has always had and which /undo-receive already proved. What a
 // return does NOT get to do is drive the shelf below zero unnoticed —
-// adjustStock clamps at zero, so the receive route refuses a return the shelf
-// cannot honour BEFORE any of this runs (planReturnRemoval below).
+// adjustStock has no floor (§39 ruling 7), so the receive route refuses a
+// return the shelf cannot honour BEFORE any of this runs (planReturnRemoval
+// below): returns refuse, corrections go negative.
 //
 // A PRODUCT line also writes its price back to store_products.unit_cost — the
 // mirror of what firePriceAlertsForPO does for a MATERIAL line, and the reason
@@ -507,10 +508,10 @@ function blockedResponse(res, blocking) {
 
 // ── Can this return actually come off the shelf? ───────────────────────────
 // The same test planPOReversal makes, asked of a return instead of an undo,
-// and asked for the same reason: inventory.adjustStock CLAMPS at zero, so a
-// return of three units against one on the shelf would remove one, write
-// stock_applied_qty as though it had removed three, and leave the line and the
-// shelf disagreeing with nothing on any screen saying so. REFUSES RATHER THAN
+// and asked for the same reason: inventory.adjustStock has no floor (§39 ruling
+// 7), so a return of three units against one on the shelf would write −2 — a
+// shelf owing units that were never there, which is what §39 says a RETURN may
+// not assert (a correction may; a return says goods left a shelf). REFUSES RATHER THAN
 // CLAMPS, exactly as the undo path does, and refuses the WHOLE save — a return
 // half-applied is worse than one not applied at all.
 //

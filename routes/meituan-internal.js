@@ -657,10 +657,9 @@ router.post('/ingest-order', (req, res) => {
       }
     }
 
-    // 4. Surface oversold lines. The deduction clamped at 0, so an order whose
-    //    on-hand was already short (or negative) leaves no visible drop — exactly
-    //    the "why didn't this one move?" confusion. Flag it so the count can be
-    //    reconciled rather than silently swallowed by the clamp.
+    // 4. Surface oversold lines. The shelf carries the shortfall as a negative
+    //    since §84; this row is the per-order record of WHICH order exceeded it,
+    //    so the count can be reconciled against something a person can read.
     if (oversold.length) {
       try {
         db.prepare(`
@@ -669,7 +668,7 @@ router.post('/ingest-order', (req, res) => {
         `).run(
           storeCode || null,
           JSON.stringify({ ref, oversold }),
-          `${oversold.length} line(s) exceeded on-hand (clamped at 0): ` +
+          `${oversold.length} line(s) exceeded on-hand (shelf now negative): ` +
             oversold.map(o => `${o.name}${o.sku ? ` (${o.sku})` : ''} have ${o.have} want ${o.want}`).join('; ')
         );
       } catch (logErr) {

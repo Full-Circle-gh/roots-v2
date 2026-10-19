@@ -717,7 +717,7 @@ router.post('/ingest-order', (req, res) => {
         `).run(
           storeCode || null,
           JSON.stringify({ ref, oversold }),
-          `${oversold.length} line(s) exceeded on-hand (clamped at 0): ` +
+          `${oversold.length} line(s) exceeded on-hand (shelf now negative): ` +
             oversold.map(o => `${o.nameEn || o.name}${o.sku ? ` (${o.sku})` : ''} have ${o.have} want ${o.want}`).join('; ')
         );
       } catch (logErr) { console.error('[eleme-internal] order_oversold log failed:', logErr.message); }
