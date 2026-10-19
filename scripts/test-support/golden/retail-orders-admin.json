@@ -480,6 +480,7 @@
         "manual_discount_reason": null,
         "manual_discount_note": null,
         "manual_discount_by": null,
+        "channel_order_id": null,
         "nickname": "Golden Two",
         "avatar_url": null,
         "customer_phone": null,
@@ -2375,6 +2376,7 @@
         "manual_discount_reason": null,
         "manual_discount_note": null,
         "manual_discount_by": null,
+        "channel_order_id": null,
         "nickname": "Golden Two",
         "avatar_url": null,
         "customer_phone": null,
@@ -2716,7 +2718,8 @@
         "manual_discount_amount": 0,
         "manual_discount_reason": null,
         "manual_discount_note": null,
-        "manual_discount_by": null
+        "manual_discount_by": null,
+        "channel_order_id": null
       }
     }
   },
@@ -2881,7 +2884,8 @@
         "manual_discount_amount": 0,
         "manual_discount_reason": null,
         "manual_discount_note": null,
-        "manual_discount_by": null
+        "manual_discount_by": null,
+        "channel_order_id": null
       }
     }
   },
@@ -3046,7 +3050,8 @@
         "manual_discount_amount": 0,
         "manual_discount_reason": null,
         "manual_discount_note": null,
-        "manual_discount_by": null
+        "manual_discount_by": null,
+        "channel_order_id": null
       }
     }
   },
@@ -3211,7 +3216,8 @@
         "manual_discount_amount": 0,
         "manual_discount_reason": null,
         "manual_discount_note": null,
-        "manual_discount_by": null
+        "manual_discount_by": null,
+        "channel_order_id": null
       }
     }
   },
@@ -3376,7 +3382,8 @@
         "manual_discount_amount": 0,
         "manual_discount_reason": null,
         "manual_discount_note": null,
-        "manual_discount_by": null
+        "manual_discount_by": null,
+        "channel_order_id": null
       }
     }
   },
@@ -3541,7 +3548,8 @@
         "manual_discount_amount": 0,
         "manual_discount_reason": null,
         "manual_discount_note": null,
-        "manual_discount_by": null
+        "manual_discount_by": null,
+        "channel_order_id": null
       }
     }
   },
@@ -3775,7 +3783,8 @@
         "manual_discount_amount": 0,
         "manual_discount_reason": null,
         "manual_discount_note": null,
-        "manual_discount_by": null
+        "manual_discount_by": null,
+        "channel_order_id": null
       }
     }
   },
@@ -4043,6 +4052,7 @@
         "manual_discount_reason": null,
         "manual_discount_note": null,
         "manual_discount_by": null,
+        "channel_order_id": null,
         "nickname": "Golden Two",
         "avatar_url": null,
         "customer_phone": null,
@@ -4474,6 +4484,7 @@
         "manual_discount_reason": null,
         "manual_discount_note": null,
         "manual_discount_by": null,
+        "channel_order_id": null,
         "nickname": "Golden Two",
         "avatar_url": null,
         "customer_phone": null,
@@ -4790,7 +4801,8 @@
         "manual_discount_amount": 0,
         "manual_discount_reason": null,
         "manual_discount_note": null,
-        "manual_discount_by": null
+        "manual_discount_by": null,
+        "channel_order_id": null
       }
     }
   },
@@ -4955,7 +4967,8 @@
         "manual_discount_amount": 0,
         "manual_discount_reason": null,
         "manual_discount_note": null,
-        "manual_discount_by": null
+        "manual_discount_by": null,
+        "channel_order_id": null
       }
     }
   },
@@ -5130,6 +5143,7 @@
         "manual_discount_reason": null,
         "manual_discount_note": null,
         "manual_discount_by": null,
+        "channel_order_id": null,
         "nickname": "Golden Two",
         "avatar_url": null,
         "customer_phone": null,
