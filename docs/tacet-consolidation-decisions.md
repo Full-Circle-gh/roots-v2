@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.563
+# Tacet shared-core consolidation — decisions record, v4.564
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-19 · v4.564 — **§486 · A PRODUCTION BATCH RELEASES PARKED ORDERS AGAINST WHAT REACHED THE SHELF, ONE BATCH PER REQUEST, WHOLE UNITS — DECIDED BY ASH:** *"fix all"*, audit finding 2. The log added what was made, the release took it at once, and the loss then found the shelf short and rolled the whole batch back behind a 500. The release now waits for the loss; a request already logged is refused; a fraction is refused. `scripts/test_production_log.js` carries the cases. New §486.
 
 2026-10-19 · v4.563 — **§485 · A REFUND OR CANCEL GIVES BACK BOTH HALVES OF AN ORDER'S STOCK — DECIDED BY ASH:** *"fix all"*, from the stock-deduction audit (docs/surveys/stock-deduction-audit-2026-10-19.md, finding 1). An out-of-city basket reserves its bought-in lines at checkout and sends its fresh lines straight to the ledger at 备货; the refund door stopped after the hold reverser and the fresh half never came back. Both reversers now run, the ledger one on what the hold one did not return. Proven by scripts/test_mixed_order_reversal.js. New §485.
 
@@ -32565,4 +32567,40 @@ named this early return as the reason it avoided writing a hold.
 
 No new strings, no schema change. `reverseOrderStockStillHere` (§191) and every
 refund and cancel site call the same door as before.
+
+
+## §486 — A PRODUCTION BATCH RELEASES PARKED ORDERS AGAINST WHAT REACHED THE SHELF
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, finding 2).**
+
+### What was wrong
+
+The production log adds what was MADE and then writes the loss off (the §32
+arithmetic: twenty arrived, two were destroyed). `adjustStock` ran the §80
+release and the §478 ship-day take the moment the add landed, so they saw the
+gross figure: made 20, shelved 18, an order parked on 19 was released and took
+19, the loss then found 1 on the shelf, threw `insufficient_stock`, and the
+route's one transaction rolled everything back — the batch row, the add, the
+release and the customer's promotion — behind a generic 500 that a retry met
+again. Beside it: `production_batches.request_id` was stored and never checked,
+so a double tap logged a batch twice; and the route accepted 20.5, which SQLite
+stores as a REAL in the INTEGER shelf column.
+
+### The ruling
+
+1. **A caller with more to write defers the follow-ups.** `adjustStock` takes
+   `deferFollowUps`; the release, the ship-day take and the promotion hooks are
+   one function, `restockFollowUps`, which the production route runs once the
+   loss is off the shelf. Every other caller is unchanged: the default runs
+   them exactly where they ran.
+2. **One batch per request.** A `request_id` that already has a batch at that
+   store is refused as `request_already_logged`, naming the batch. A batch
+   logged without a request has no key and is not guarded.
+3. **Whole units.** `qty_made` and `qty_shelved` must be integers, the rule
+   the waste route has always kept.
+4. **A shortfall at the loss is a 409 that says so**, not a 500. It cannot
+   arise by construction any more; a concurrent writer could still cause it.
+
+No new strings, no schema change.
 

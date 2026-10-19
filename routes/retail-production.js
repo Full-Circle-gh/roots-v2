@@ -83,13 +83,18 @@ const GAP_CODES = new Set(GAP_REASONS);
 // shape: it only ever adds. There is no negative path here at all — a
 // correction to a shelf is a recount, which is a different job and a different
 // capability.
+//
+// WHOLE UNITS ONLY (§486). The shelf and the ledger are integer columns, and
+// the waste route refuses a fraction (routes/retail-waste.js refuseLine); this
+// was the one writer that let 20.5 through, which SQLite stores as a REAL in an
+// INTEGER column and every count downstream then carries.
 function positiveNumber(v) {
   const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? n : null;
+  return Number.isInteger(n) && n > 0 ? n : null;
 }
 function zeroOrMore(v) {
   const n = Number(v);
-  return Number.isFinite(n) && n >= 0 ? n : null;
+  return Number.isInteger(n) && n >= 0 ? n : null;
 }
 
 // GET the reason list, so the screen reads it from the server rather than
@@ -182,6 +187,21 @@ router.post('/api/retail-admin/production', requireRetailAdmin, express.json(), 
   // snapshot is the product's own name — it is what was made.
   const madeName = product.name_en || product.name_cn || ('#' + product.id);
   const requestId = parseInt(b.request_id, 10) || null;
+  // §486 — ONE BATCH PER REQUEST. request_id was stored and never checked, so a
+  // double tap or a retried POST logged the batch twice and put it on the shelf
+  // twice. A request that has already been answered is refused by name; a
+  // batch logged without a request has no key and is not guarded here.
+  if (requestId) {
+    const prior = tdb().prepare(
+      'SELECT id FROM production_batches WHERE request_id = ? AND store_id = ? ORDER BY id LIMIT 1'
+    ).get(requestId, storeId);
+    if (prior) {
+      return res.status(409).json({
+        success: false, error: 'request_already_logged', batch_id: prior.id,
+        message: 'This request has already been logged as a batch.',
+      });
+    }
+  }
   // The day the store made it, on its own clock (§82) — not the UTC day, which
   // dated a batch made at 07:00 in Guangzhou to the day before.
   const today = businessDateForLocation(conn, storeId);
@@ -232,6 +252,12 @@ router.post('/api/retail-admin/production', requireRetailAdmin, express.json(), 
           // Names the batch, so a ledger row can be traced back to the morning
           // it came from rather than matched by eye on a timestamp.
           note: `production #${batchId}`,
+          // §486 — the release of parked orders and the ship-day take wait
+          // until the loss below is off the shelf. Run here they saw the
+          // GROSS figure: made 20, shelved 18, an order waiting on 19 was
+          // released and took 19, and the loss then found 1 on the shelf,
+          // threw insufficient_stock, and rolled the whole batch back.
+          deferFollowUps: true,
         });
       }
 
@@ -249,6 +275,9 @@ router.post('/api/retail-admin/production', requireRetailAdmin, express.json(), 
           businessDate: businessDateForLocation(conn, storeId),
         });
       }
+      // …and only now, with the shelf holding what it will hold, do the parked
+      // orders get their release and the ship-day line its take (§486).
+      if (madeQty > 0) inventory.restockFollowUps({ storeId, productId: product.id });
       return { batchId, wasteId };
     })();
 
@@ -271,6 +300,15 @@ router.post('/api/retail-admin/production', requireRetailAdmin, express.json(), 
       product: { id: product.id, name_en: product.name_en, name_cn: product.name_cn, sku: product.sku },
     } });
   } catch (e) {
+    // Cannot happen by construction — the units go on before the loss comes
+    // off — but a concurrent writer could still empty the shelf in between, and
+    // a 409 that names the shortfall beats a 500 that hides it (§486).
+    if (e && e.message === 'insufficient_stock') {
+      return res.status(409).json({
+        success: false, error: 'insufficient_stock', detail: e.detail || null,
+        message: 'The shelf no longer holds enough to write this loss off. Nothing was recorded.',
+      });
+    }
     res.status(500).json({ success: false, error: 'production_log_failed', message: e.message });
   }
 });

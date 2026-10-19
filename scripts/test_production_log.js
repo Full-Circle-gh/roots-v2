@@ -73,6 +73,8 @@ const PROD  = 9253;
 // '4-670' — a REAL SKU in a developer's database — and store_products.sku is
 // UNIQUE, so the seed collided with the shop's own peanut butter.
 const SKU   = 'PRODTEST-' + PROD;
+const ORDER_A = 9253001;    // §486 — parked on PROD, needs 19
+const ORDER_B = 9253002;    // §486 — parked on PROD, needs 18
 
 // ── The capability, before the route ──────────────────────────────────────
 section('The kitchen role can reach it at all');
@@ -98,6 +100,10 @@ check('and the route is gated on that one key alone', () => {
 function cleanup() {
   // waste_records first: a short batch now writes one, and it points at both the
   // store and the product this file is about to delete.
+  // §486 — the parked orders the release cases below make.
+  db.prepare('DELETE FROM retail_stock_reservations WHERE order_id IN (?,?)').run(ORDER_A, ORDER_B);
+  db.prepare('DELETE FROM retail_order_items  WHERE order_id IN (?,?)').run(ORDER_A, ORDER_B);
+  db.prepare('DELETE FROM retail_orders       WHERE id IN (?,?)').run(ORDER_A, ORDER_B);
   db.prepare('DELETE FROM waste_records      WHERE location_id IN (?,?)').run(STORE, OTHER);
   db.prepare('DELETE FROM production_batches  WHERE store_id IN (?,?)').run(STORE, OTHER);
   db.prepare('DELETE FROM retail_stock_ledger WHERE store_id IN (?,?)').run(STORE, OTHER);
@@ -344,6 +350,72 @@ async function main() {
   check('every refusal above left the shelf and the log exactly as they were', () => {
     assert.strictEqual(shelf(), held, 'a refused call moved stock');
     assert.strictEqual(rows().length, heldRows, 'a refused call wrote a production row');
+  });
+
+  section('§486 — a parked order is released against what reached the shelf, not what was made');
+
+  /* THE BUG THIS PINS. The route adds what was MADE and then writes the loss
+     off, and adjustStock used to run the §80 release the moment the add landed:
+     made 20, shelved 18, an order parked on 19 was released and took 19, the
+     loss then found 1 on the shelf, threw insufficient_stock, and the whole
+     batch — row, add, release, promotion — rolled back behind a generic 500.
+     The release now waits until the loss is off the shelf. */
+  function parkOrder(id, need) {
+    db.prepare(`INSERT INTO retail_orders (id, order_no, status, store_id, channel, awaiting_restock_pids, subtotal, total, paid_at)
+                VALUES (?, ?, 'awaiting_restock', ?, 'wechat', ?, 0, 0, CURRENT_TIMESTAMP)`)
+      .run(id, 'PRODTEST-' + id, STORE, JSON.stringify([PROD]));
+    db.prepare('INSERT INTO retail_order_items (order_id, product_id, qty, name_en, unit_price, line_total) VALUES (?, ?, ?, ?, 0, 0)')
+      .run(id, PROD, need, 'Peanut Butter');
+  }
+  const orderStatus = (id) => db.prepare('SELECT status FROM retail_orders WHERE id = ?').get(id).status;
+  inventory.adjustStock({ storeId: STORE, productId: PROD, newPhysicalQty: 0, reason: 'seed' });
+  parkOrder(ORDER_A, 19);
+  r = await post({ store_id: STORE, product_id: PROD, qty_made: 20, qty_shelved: 18, gap_reason: 'damaged' });
+  check('20 made, 18 shelved, an order waiting on 19 → the batch is accepted', () => {
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+  });
+  check('the shelf holds 18 and the order is still waiting — 18 cannot cover 19', () => {
+    assert.strictEqual(shelf(), 18);
+    assert.strictEqual(orderStatus(ORDER_A), 'awaiting_restock');
+  });
+  check('both movements are on the ledger', () => {
+    const moves = db.prepare(
+      `SELECT reason, delta FROM retail_stock_ledger WHERE store_id = ? AND product_id = ? ORDER BY id DESC LIMIT 2`
+    ).all(STORE, PROD).map((m) => `${m.reason}:${m.delta}`).sort();
+    assert.deepStrictEqual(moves, ['kitchen_add:20', 'waste:-2']);
+  });
+  // The release still runs — after the loss, not before it.
+  parkOrder(ORDER_B, 18);
+  r = await post({ store_id: STORE, product_id: PROD, qty_made: 1 });
+  check('one more jar → the order waiting on 19 is released and takes its 19', () => {
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.strictEqual(orderStatus(ORDER_A), 'paid');
+    assert.strictEqual(shelf(), 0);
+  });
+  check('and the order waiting on 18 keeps waiting on an empty shelf', () => {
+    assert.strictEqual(orderStatus(ORDER_B), 'awaiting_restock');
+  });
+
+  section('§486 — one batch per request, and whole units only');
+
+  r = await post({ store_id: STORE, product_id: PROD, qty_made: 3, request_id: 777001 });
+  check('a batch against a request is accepted the first time', () => assert.strictEqual(r.status, 200));
+  const afterFirst = shelf();
+  r = await post({ store_id: STORE, product_id: PROD, qty_made: 3, request_id: 777001 });
+  check('the same request again is refused, not logged twice', () => {
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.body.error, 'request_already_logged');
+    assert.strictEqual(shelf(), afterFirst, 'the retry put a second batch on the shelf');
+  });
+  r = await post({ store_id: STORE, product_id: PROD, qty_made: 20.5, qty_shelved: 18, gap_reason: 'damaged' });
+  check('20.5 made is refused — the shelf counts whole units', () => {
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.body.error, 'qty_made_required');
+  });
+  r = await post({ store_id: STORE, product_id: PROD, qty_made: 20, qty_shelved: 17.5, gap_reason: 'damaged' });
+  check('17.5 shelved is refused too', () => {
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.body.error, 'qty_shelved_invalid');
   });
 
   section('The gap vocabulary comes from the waste module, not a second copy');
