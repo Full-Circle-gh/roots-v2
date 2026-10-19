@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.565
+# Tacet shared-core consolidation — decisions record, v4.566
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-19 · v4.566 — **§488 · AN ADD-ON ON AN ORDER WHOSE STOCK WENT STRAIGHT TO THE LEDGER TAKES ITS UNITS — DECIDED BY ASH:** *"fix all"*, audit finding 4. The add-on deducted only when the order held reservations, the pre-2026-08-31 reading of "tracks stock"; an out-of-city order's add-on was skipped, and one more of a product the order already carried never came off the shelf. Taken now under `order_addon`; a fresh line the order is still holding back waits with it (§58). `scripts/test_addon_ledger_take.js`. New §488.
 
 2026-10-19 · v4.565 — **§487 · A GZGROCERY ORDER LINE IS A FACT: NO CLAMP, A PENDING REFUND IS NOT A VOID, AN UNKNOWN SKU IS LOGGED — DECIDED BY ASH:** *"fix all"*, audit finding 3. §84 left gzgrocery clamped on the premise that no order lines reach us; `scripts/gzgrocery-order-daemon.js` reads them. The order daemon now writes a delta like Meituan and Eleme; 退款中 no longer reverses; an order revived after a void is taken again once; an SKU-shaped line the catalogue does not know goes to the order log. The Guanyi pickup inference stays clamped. §84 and §39 amended in place. `scripts/test_gzgrocery_order_stock.js`. New §487.
 
@@ -32657,4 +32659,41 @@ catalogue did not know was dropped in silence.
    `processOrder` against the real `adjustStock`.
 
 §84 and §39 carry a dated note pointing here; their original text stands.
+
+
+## §488 — AN ADD-ON ON AN ORDER WHOSE STOCK WENT STRAIGHT TO THE LEDGER TAKES ITS UNITS
+
+**Decided 2026-10-19 by Ash ("fix all"), from the stock-deduction audit
+(`docs/surveys/stock-deduction-audit-2026-10-19.md`, finding 4).**
+
+### What was wrong
+
+`finalizeOrderAddon` deducted the add-on's lines only when the order held
+committed reservations — "does this order track stock?", in the pre-2026-08-31
+sense, when an out-of-city order's stock really was left alone until somebody
+clicked Start preparing. Every paid order deducts since then; the out-of-city
+ones do it straight to the ledger with no hold, so the test said "not tracked"
+and the add-on was skipped. The per-product guard at the next forward
+transition then took a NEW product the add-on introduced, late, and skipped a
+product the order already carried, for good. One more jar on a Beijing order
+never came off the shelf.
+
+### The ruling
+
+1. **An order with reservations is unchanged**: the add-on reserves and
+   commits as before, partial where the shelf is short, with the short alert.
+2. **An order without reservations takes the add-on's lines to the ledger
+   now**, under `order_addon` — an `order%` reason, so the kitchen list, the
+   refund cap, the §458 move and the stock-pending note all count it. No
+   per-product guard: that guard is what made "one more of the same jar"
+   invisible, and an add-on's only idempotency need is the one it has
+   (`finalizeOrderAddon` claims its row once).
+3. **§58 holds.** On an order that holds its fresh lines back (anything but a
+   counter sale), a fresh product the order has NOT yet taken is left for 备货,
+   where the whole-order commit reads every line, add-on included, and takes
+   the product in full. A fresh product the order HAS taken (the order is
+   already preparing) is owed now and is taken now.
+
+No new strings, no schema change. The add-on gate at `addon/create` is
+untouched: it asks whether the items exist, which is a different question.
 

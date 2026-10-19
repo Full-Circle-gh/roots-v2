@@ -108,6 +108,9 @@ function cleanup() {
     try { db.prepare(`DELETE FROM ${t} WHERE order_id IN (${ph})`).run(...oids); } catch {}
   }
   db.prepare(`DELETE FROM retail_orders WHERE id IN (${ph})`).run(...oids);
+  // §488 — an add-on on the out-of-city order now writes its own ledger row,
+  // and the ledger holds a foreign key to the store this suite deletes below.
+  db.prepare('DELETE FROM retail_stock_ledger WHERE store_id IN (?,?)').run(STORE_LOCAL, STORE_WH);
   db.prepare('DELETE FROM retail_auth_tokens WHERE customer_id = ?').run(CUSTOMER);
   db.prepare('DELETE FROM retail_customers   WHERE id = ?').run(CUSTOMER);
   db.prepare('DELETE FROM retail_store_stock WHERE product_id IN (?,?,?)').run(P_BATCH, P_STRICT, P_STOCKED);

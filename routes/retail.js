@@ -35271,10 +35271,17 @@ function finalizeOrderAddon(addonId) {
   try { tx(); } catch (e) { console.error('[finalizeOrderAddon]', e); return false; }
 
   // ── Stock deduction (outside the items tx; best-effort) ──────────────────
-  // Deduct physical stock for the new lines, but ONLY if the order itself
-  // tracks stock (has committed reservations). Far-future / non-GZ orders that
-  // skipped reservation at checkout keep that policy for the add-on too — so
-  // we never strand a half-tracked order.
+  // Deduct physical stock for the new lines, through whichever door the order
+  // itself used. An order with committed reservations (same-day Guangzhou,
+  // collection) holds and commits the add-on's lines the same way.
+  //
+  // §488 — AND AN ORDER WHOSE STOCK WENT STRAIGHT TO THE LEDGER TAKES THEM TOO.
+  // This block used to run only when the order held reservations, on the
+  // pre-2026-08-31 premise that an out-of-city order's stock was "not
+  // tracked". Every paid order has deducted since then — those just do it
+  // without a hold — so an add-on on one was never deducted here, and the
+  // per-product guard at the next transition then skipped any product the
+  // order already carried. One more of the same jar never came off the shelf.
   //
   // allowPartial: the charge has already settled, so a shortfall can't refuse
   // the sale — but it must not swallow the deduction either. Reserving
@@ -35285,24 +35292,28 @@ function finalizeOrderAddon(addonId) {
   // reported short. addon/create gates this upfront, so reaching here means
   // stock moved between the gate and the WeChat callback — real, but rare.
   try {
-    if (orderTracksStock(order.id) && order.store_id) {
+    if (order.store_id) {
       const stockLines = expandStockLines(items.map(it => ({
         product: { id: it.product_id, bundle_items: it.bundle_items || null },
         qty: it.qty,
         options: it.options || [],
       })));
-      const { shortages } = inventory.reserveForOrder({
-        storeId: order.store_id, orderId: order.id, items: stockLines,
-        channel: 'wechat', allowPartial: true,
-      });
-      inventory.commitOrderReservations(order.id, { actorLabel: 'order add-on' });
-      if (shortages && shortages.length) {
-        // Loud on purpose: these units are on the kitchen ticket but were never
-        // on the shelf, so someone has to reconcile them.
-        console.warn('[finalizeOrderAddon stock] short at store', order.store_id,
-                     'order', order.id, JSON.stringify(shortages));
-        try { sendWecomOrderAddonShortAlert(order.id, order.store_id, shortages); }
-        catch (e) { console.warn('[finalizeOrderAddon short alert]', e.message); }
+      if (orderTracksStock(order.id)) {
+        const { shortages } = inventory.reserveForOrder({
+          storeId: order.store_id, orderId: order.id, items: stockLines,
+          channel: 'wechat', allowPartial: true,
+        });
+        inventory.commitOrderReservations(order.id, { actorLabel: 'order add-on' });
+        if (shortages && shortages.length) {
+          // Loud on purpose: these units are on the kitchen ticket but were never
+          // on the shelf, so someone has to reconcile them.
+          console.warn('[finalizeOrderAddon stock] short at store', order.store_id,
+                       'order', order.id, JSON.stringify(shortages));
+          try { sendWecomOrderAddonShortAlert(order.id, order.store_id, shortages); }
+          catch (e) { console.warn('[finalizeOrderAddon short alert]', e.message); }
+        }
+      } else {
+        addonTakeToLedger(order.id, stockLines, { actorLabel: 'order add-on' });
       }
     }
   } catch (e) {
@@ -35340,6 +35351,32 @@ function orderTracksStock(orderId) {
     "SELECT COUNT(*) AS n FROM retail_stock_reservations WHERE order_id = ? AND status = 'committed'"
   ).get(orderId);
   return !!(r && r.n > 0);
+}
+
+// §488 — an add-on's lines on an order whose stock went straight to the
+// ledger: taken now, except the kitchen's own lines the order is still holding
+// back. Mirrors the paid transition line for line: freshLinesDeferred decides
+// whether this order holds its fresh lines at all (a counter sale does not),
+// and a fresh product that has NO `order%` row yet is one the order itself is
+// still waiting to take — at 备货 the whole-order commit reads every line,
+// add-on included, and takes the product in full. A fresh product that already
+// HAS a row was taken when the order moved, so its add-on is owed now, and the
+// per-product guard would never take it: it goes straight to the ledger here.
+function addonTakeToLedger(orderId, stockLines, { actorUserId = null, actorLabel = null } = {}) {
+  const o = tdb().prepare(
+    'SELECT id, order_no, fulfillment_type, status FROM retail_orders WHERE id = ?'
+  ).get(orderId);
+  if (!o || !stockLines || !stockLines.length) return { committed: 0, skipped: 'no_lines' };
+  let lines = stockLines;
+  if (freshLinesDeferred(o)) {
+    const fresh = batchMadeProductIds(lines.map((l) => l.product_id));
+    if (fresh.size) {
+      const taken = inventory.orderCommittedPids(orderId);
+      lines = lines.filter((l) => !fresh.has(l.product_id) || taken.has(l.product_id));
+      if (!lines.length) return { committed: 0, skipped: 'fresh_deferred' };
+    }
+  }
+  return inventory.commitAddonLines(orderId, lines, { actorUserId, actorLabel, note: o.order_no });
 }
 
 // Availability gate for an add-on, run at the FULFILLING store BEFORE the
