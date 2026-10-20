@@ -153,8 +153,17 @@ CASES.push(['confirming sends the cell write', STUB + GRID
   ['and open:false, not undefined', body('"open":false')],
 ]]);
 
-CASES.push(['opening one back up', STUB + GRID
+// OPENING IS ASYNCHRONOUS, CLOSING IS NOT. Since #1181 (2026-10-14) an open
+// first reads /channel-status/reopen-preview — the desktop's stock-publish
+// check — and only sends the cell write once that answers (chanReopenCheck).
+// These two cases asserted in the same task as the tap, so they ran before
+// the write existed and had failed ever since, unseen: this is a browser
+// suite and the fast shard does not run it. They now run in their own pass
+// with a settle, and say that the preview is read first.
+const OPEN_CASES = [];
+OPEN_CASES.push(['opening one back up', STUB + GRID
   + `APP.cmd('openChannel','pos'); APP.cmd('chanCell','pos','tianhe',1); APP.cmd('askRun');`, [
+  ['it reads the stock preview first', sent('/channel-status/reopen-preview')],
   ['asks in the other direction', `${sent('/channel-status/cell')}`],
   ['with open:true',              body('"open":true')],
 ]]);
@@ -180,8 +189,9 @@ CASES.push(['a channel at a shut shop can be opened on its own', STUB + SHUT
   ['and nothing was sent yet', `!${sent('/channel-status')}`],
 ]]);
 
-CASES.push(['confirming it sends the one cell write', STUB + SHUT
+OPEN_CASES.push(['confirming it sends the one cell write', STUB + SHUT
   + `APP.cmd('openChannel','web');` + tapRow('Panyu') + `APP.cmd('askRun');`, [
+  ['it reads the stock preview first', sent('/channel-status/reopen-preview')],
   ['to the per-store endpoint', sent('/channel-status/cell')],
   ['not the shop switch',       `!${sent('/channel-status/location')}`],
   ['for web at Panyu',          body('"channel":"web"') + ' && ' + body('"storeCode":"panyu"')],
@@ -216,3 +226,5 @@ CASES.push(['confirming sends the whole-channel write', STUB + GRID + `state.cap
 ]]);
 
 run('sales', CASES);
+// The stub answers the preview at once, so 300ms is far more than the write needs.
+run('sales · opening', OPEN_CASES, { settle: 300 });
