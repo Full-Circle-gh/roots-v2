@@ -22,7 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-20 · v4.569 — **§491 · A MADE-HERE ITEM SOLD AT THE COUNTER TAKES NOTHING OFF THE SHELF, EVEN WHEN A STRAY SHELF ROW EXISTS — DECIDED BY ASH:** *"yes build it"*, after asking *"how can it go below zero it's made here . on the spot"* about the 09:10 alert on 越秀 order TC001423 (美式咖啡 剩余 -2). §43 already says selling a made-here item decrements nothing; the till and the paid QR order did not check the listing, so a shelf row the Americano should never have had went below zero. Version v4.569 and §491 skip past v4.563–v4.568 and §485–§490, which the open PR #1232 claims. No schema, no string, no change to `.gitignore` or CI. See §491.
+2026-10-20 · v4.569 — **§491 · A MADE-HERE ITEM SOLD AT THE COUNTER TAKES NOTHING OFF THE SHELF, EVEN WHEN A STRAY SHELF ROW EXISTS — DECIDED BY ASH:** *"yes build it"*, after asking *"how can it go below zero it's made here . on the spot"* about the 09:10 alert on 越秀 order TC001423 (美式咖啡 剩余 -2). §43 already says selling a made-here item decrements nothing; the till and the paid QR order did not check the listing, so a shelf row the Americano should never have had went below zero. Version v4.569 and §491 skip past v4.563–v4.568 and §485–§490, which the open PR #1232 claims. `lib/inventory.js` becomes the first order path admitted to read `shop_listings`, by name, in `scripts/test_shop_listings.js`'s containment check. No schema, no string, no change to `.gitignore` or CI. See §491.
 
 2026-10-18 · v4.562 — **§82 · THE BOOKED-DAY LINE AND THE SHIP-BY DATE-ONLY TEST READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix all"*, the sixth batch, smaller than planned. The order alert's "booked for a later day" line and the ship-by line's date-only test read Guangzhou's day; they read the shop's now. The survey's Qingyun sites (the push-or-wait day, its reschedule, expiry and needs-a-point counts, the daemon's queue day and rider ETA, and the add-on shelf check) are RECLASSIFIED as platform time and left as they are: every one runs only for a Guangzhou address and a Guangzhou courier whose clock is Beijing's. Claude's recommendation, put to Ash. Nothing changes for Roots. See the amendment at the end of §82.
 
@@ -32577,5 +32577,16 @@ the shelf" alert, and the next sale did the same again. There is no shelf to rec
   nothing reads them for a made-here item. Removing data from a live database is a
   separate decision.
 
-Tests: `scripts/test_counter_made_here_stock.js` (fast shard). Schema: none. No new
-route. No string, EN or CN. No change to `.gitignore` or CI.
+**The containment around `shop_listings` is widened, once and by name.**
+`scripts/test_shop_listings.js` holds every order path to reading nothing from
+that table, and says the next reader has to announce itself. This is that
+announcement. The listing is the only record of what a shop makes, so
+`lib/inventory.js` is admitted, and it reads the table in one helper only. No other
+order path is admitted.
+
+Tests: `scripts/test_counter_made_here_stock.js` (fast shard, 7 checks; the 5 that
+cover the fix fail on the old code). `scripts/test_fresh_stock_deferral.js` and
+`scripts/verify-fulfilment-types.js` copy `commitUnreservedOrder` into an in-memory
+database, so each now also copies the live `madeHereProductIds` and has the two
+empty tables it reads. Schema: none. No new route. No string, EN or CN. No change to
+`.gitignore` or CI.
