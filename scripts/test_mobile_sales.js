@@ -135,13 +135,35 @@ const STUB = `window.__sent=[];
     return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true,data:{}})}}); };`;
 const sent = (frag) => `window.__sent.some(function(r){return r.u.indexOf(${JSON.stringify(frag)})>=0})`;
 const body = (frag) => `window.__sent.some(function(r){return (r.body||'').indexOf(${JSON.stringify(frag)})>=0})`;
+// A WRITE, not any request. Opening the board now reads /channel-status on
+// every entry, so "nothing was sent yet" has to mean nothing was WRITTEN.
+const wrote = (frag) => `window.__sent.some(function(r){return r.m!=='GET'&&r.u.indexOf(${JSON.stringify(frag)})>=0})`;
+const read = (frag) => `window.__sent.some(function(r){return r.m==='GET'&&r.u.indexOf(${JSON.stringify(frag)})>=0})`;
+
+// The board is "today", so it is read on every entry and on every return to
+// the app. It used to be read once per session: opened at 8am and left
+// running, Ash's phone said "In store · 0 today" at 10am over six paid till
+// and QR sales (2026-10-20). GRID marks the board as already loaded before it
+// pushes, which is exactly the state that never refreshed.
+CASES.push(['opening the board reads it again', STUB + GRID, [
+  ['entering asks the server for the grid', read('/channel-status')],
+  ['the figures already on screen stay up meanwhile', `txt('content').includes('6 today · ¥143')`],
+]]);
+CASES.push(['coming back to the app reads it again', STUB + GRID
+  + `window.__sent=[]; document.dispatchEvent(new Event('visibilitychange'));`, [
+  ['the board asks the server again', read('/channel-status')],
+]]);
+CASES.push(['coming back on another screen does not', STUB + GRID
+  + `APP.cmd('back'); window.__sent=[]; document.dispatchEvent(new Event('visibilitychange'));`, [
+  ['no sales read off the Sales board', `!${read('/channel-status')}`],
+]]);
 
 CASES.push(['closing one store asks first', STUB + GRID + `APP.cmd('openChannel','meituan'); APP.cmd('chanCell','meituan','panyu',0);`, [
   ['it names the channel and the store', `sheetText().includes('Close Meituan at Panyu?')`],
   // "Closed" reads as "cancelled" if you do not say otherwise, and the orders
   // already in the kitchen are the first thing anyone would worry about.
   ['it says what does NOT stop',         `sheetText().includes('Orders already placed are not affected')`],
-  ['and nothing was sent yet',           `!${sent('/channel-status')}`],
+  ['and nothing was sent yet',           `!${wrote('/channel-status')}`],
 ]]);
 
 CASES.push(['confirming sends the cell write', STUB + GRID
@@ -177,7 +199,7 @@ CASES.push(['a channel at a shut shop can be opened on its own', STUB + SHUT
   + `APP.cmd('openChannel','web');` + tapRow('Panyu'), [
   ['tapping it asks to open that channel there', `sheetText().includes('Open Web store at Panyu?')`],
   ['not the old "open the shop first" explainer', `!sheetText().includes('Open Panyu under Shops')`],
-  ['and nothing was sent yet', `!${sent('/channel-status')}`],
+  ['and nothing was sent yet', `!${wrote('/channel-status')}`],
 ]]);
 
 CASES.push(['confirming it sends the one cell write', STUB + SHUT
@@ -205,7 +227,7 @@ CASES.push(['closing a channel everywhere asks first', STUB + GRID + `state.caps
   [].slice.call(document.querySelectorAll('.sheet button')).filter(function(b){return /Close channel/.test(b.innerText)})[0].click();`, [
   ['the desktop\'s own question', `sheetText().includes('Close this channel at every store?')`],
   ['it says what does NOT stop',   `sheetText().includes('Orders already placed are not affected')`],
-  ['and nothing was sent yet',     `!${sent('/channel-status')}`],
+  ['and nothing was sent yet',     `!${wrote('/channel-status')}`],
 ]]);
 CASES.push(['confirming sends the whole-channel write', STUB + GRID + `state.caps=['dashboard:view']; APP.cmd('openChannel','meituan');
   APP.cmd('chanAll','meituan',0); APP.cmd('askRun');`, [

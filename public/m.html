@@ -1812,6 +1812,11 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      the form after one was sent is the LAST one sent, and re-opening on it is
      how the same announcement goes out twice. */
   if(route==='bcnew') bcfReset();
+  /* The Sales board is "today", so it is re-read on every entry. It used to be
+     read once per app session: opened at 8am and left running, it still said
+     "In store · 0 today" at 10am over six paid till and QR sales. The old
+     figures stay up until the new ones land, so there is no loading flash. */
+  if(route==='sales') state.chanTried=false;
   state.stack.push({route,title:s.title}); render(); }
 /* LEAVING IS THE LAST PAUSE. The receive screen writes on a pause rather than
    on a button, so the pause the operator never waited out has to be spent here
@@ -39223,6 +39228,14 @@ async function loadChannels(force){
     state.sales=(d&&d.channels)||null; state.salesSummary=(d&&d.summary)||null; }catch(e){}
   render();
 }
+/* Back to the app with the Sales board on top is the other way to be looking at
+   stale figures: a phone put down on this screen and picked up hours later
+   never passes through push() again. */
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState!=='visible') return;
+  const top=state.stack.length?state.stack[state.stack.length-1].route:null;
+  if(top==='sales') loadChannels(true);
+});
 /* ==========================================================================
    §325 M5 — THE MEDIA LIBRARY, AS THE DESKTOP KEEPS IT (07-content-billing.js)
    --------------------------------------------------------------------------
