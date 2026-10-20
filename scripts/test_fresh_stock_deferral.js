@@ -88,7 +88,11 @@ const ROUTE_FNS = ['prepareCommitUnreservedOrder', 'freshLinesDeferred',
   // here rather than stubbed so the hold-back under test is the live one.
   'orderWaitingPids'];
 const INV_FNS = ['commitUnreservedOrder', 'reverseCommittedLedger',
-  'isStockPending', 'hasUndeductedFreshLine'];
+  'isStockPending', 'hasUndeductedFreshLine',
+  // §491 — what a location's shop makes on the spot. commitUnreservedOrder
+  // reads it for a counter sale; named rather than stubbed so the counter case
+  // below runs the live one. Owned by test_counter_made_here_stock.js.
+  'madeHereProductIds'];
 
 const routeSrc = {};
 for (const n of ROUTE_FNS) routeSrc[n] = extractFn(n, ROUTES_SRC);
@@ -142,6 +146,12 @@ db.exec(`
     id INTEGER PRIMARY KEY, store_id INTEGER, product_id INTEGER, order_id INTEGER,
     qty INTEGER, channel TEXT, status TEXT, expires_at DATETIME,
     created_at DATETIME, committed_at DATETIME, released_at DATETIME
+  );
+  -- §491 — madeHereProductIds reads these for a counter sale. Empty here: no
+  -- shop, so nothing at this location is made here and every line is a shelf.
+  CREATE TABLE shops (id INTEGER PRIMARY KEY, location_id INTEGER);
+  CREATE TABLE shop_listings (
+    id INTEGER PRIMARY KEY, shop_id INTEGER, store_product_id INTEGER, fulfilment_mode TEXT
   );
 `);
 

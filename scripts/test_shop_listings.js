@@ -528,6 +528,15 @@ function call(method, url, body) {
            reader: nothing in that file queries this table, and the containment
            this check exists to hold is unaffected. */
         path.join('lib', 'money-columns.js'),
+        /* WIDENED 2026-10-20 for §491, the first order path admitted, by name.
+           A counter sale must take nothing for a made-here item (§43), and two
+           stock doors kept that only by assuming the item had no shelf row.
+           When one did, Mark paid took it below zero and the till paged a
+           "miscount" for a coffee (越秀 TC001423). The listing is the only
+           record of what is made here, so lib/inventory.js reads its mode in
+           ONE helper, madeHereProductIds, and nowhere else. Every other order
+           path is still held to reading nothing here. */
+        path.join('lib', 'inventory.js'),
       ]);
       const hits = [];
       const walk = d => {

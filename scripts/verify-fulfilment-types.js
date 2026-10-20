@@ -1385,15 +1385,23 @@ db.exec(`
     qty INTEGER, channel TEXT, status TEXT, expires_at DATETIME,
     created_at DATETIME, committed_at DATETIME, released_at DATETIME
   );
+  -- §491 — madeHereProductIds reads these for a counter sale. Empty here: no
+  -- shop, so nothing is made here and the counter sale below is a real shelf.
+  CREATE TABLE shops (id INTEGER PRIMARY KEY, location_id INTEGER);
+  CREATE TABLE shop_listings (
+    id INTEGER PRIMARY KEY, shop_id INTEGER, store_product_id INTEGER, fulfilment_mode TEXT
+  );
 `);
 
 const INVENTORY_SRC = fs.readFileSync(
   path.join(__dirname, '..', 'lib', 'inventory.js'), 'utf8');
-const STOCK_FNS = ['commitUnreservedOrder', 'reverseCommittedLedger'];
+// §491 — madeHereProductIds is the reader commitUnreservedOrder calls for a
+// counter sale; named rather than stubbed so the live one runs.
+const STOCK_FNS = ['commitUnreservedOrder', 'reverseCommittedLedger', 'madeHereProductIds'];
 const stockSrc = {};
 for (const n of STOCK_FNS) stockSrc[n] = extractFn(n, INVENTORY_SRC);
 const stockMissing = STOCK_FNS.filter(n => !stockSrc[n]);
-check('both stock functions were found in lib/inventory.js (extraction is intact)',
+check('the stock functions were found in lib/inventory.js (extraction is intact)',
   stockMissing, []);
 
 if (!stockMissing.length) {

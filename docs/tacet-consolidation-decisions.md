@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.562
+# Tacet shared-core consolidation — decisions record, v4.569
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-20 · v4.569 — **§491 · A MADE-HERE ITEM SOLD AT THE COUNTER TAKES NOTHING OFF THE SHELF, EVEN WHEN A STRAY SHELF ROW EXISTS — DECIDED BY ASH:** *"yes build it"*, after asking *"how can it go below zero it's made here . on the spot"* about the 09:10 alert on 越秀 order TC001423 (美式咖啡 剩余 -2). §43 already says selling a made-here item decrements nothing; the till and the paid QR order did not check the listing, so a shelf row the Americano should never have had went below zero. Version v4.569 and §491 skip past v4.563–v4.568 and §485–§490, which the open PR #1232 claims. `lib/inventory.js` becomes the first order path admitted to read `shop_listings`, by name, in `scripts/test_shop_listings.js`'s containment check. No schema, no string, no change to `.gitignore` or CI. See §491.
 
 2026-10-18 · v4.562 — **§82 · THE BOOKED-DAY LINE AND THE SHIP-BY DATE-ONLY TEST READ THE SHOP'S CLOCK — DECIDED BY ASH:** *"fix all"*, the sixth batch, smaller than planned. The order alert's "booked for a later day" line and the ship-by line's date-only test read Guangzhou's day; they read the shop's now. The survey's Qingyun sites (the push-or-wait day, its reschedule, expiry and needs-a-point counts, the daemon's queue day and rider ETA, and the add-on shelf check) are RECLASSIFIED as platform time and left as they are: every one runs only for a Guangzhou address and a Guangzhou courier whose clock is Beijing's. Claude's recommendation, put to Ash. Nothing changes for Roots. See the amendment at the end of §82.
 
@@ -32518,3 +32520,73 @@ the picture itself and nothing on the box changes.
 - **Untried against the real page.** It was built and tested without a view of
   the real page, so its first real use is the test.
 
+## §491 — A MADE-HERE ITEM SOLD AT THE COUNTER TAKES NOTHING OFF THE SHELF, EVEN WHEN A STRAY SHELF ROW EXISTS
+
+**Decided by Ash, 2026-10-20:** *"yes build it"*. Asked first, about a 09:10
+alert on 越秀 order TC001423 that read *前台收银 … 可能是数错了:美式咖啡 剩余 -2*:
+*"how can it go below zero it's made here . on the spot"*.
+
+**It cannot, and §43 already says so.** *"A made-here item consumes no counted
+material stock. Selling one decrements nothing."* §42 adds that finished-product
+stock never exists for it, and §460 rule 1 repeats it for the QR order: *"Made-here
+items take nothing, as before (§43)."*
+
+**What went wrong.** The rule was kept by ASSUMING a made-here product has no shelf
+row at that location. Every take does `UPDATE retail_store_stock … WHERE store_id =
+? AND product_id = ?`, which moves nothing when no row exists. The QR order's take
+at placement reads the listing and only reserves `stocked` lines. Two other doors
+did not read the listing at all and leaned on the assumption:
+
+1. **Mark paid on a counter sale** (`prepareCommitUnreservedOrder` →
+   `commitUnreservedOrder`). This is the till's sale, and also the QR order's paid
+   step, because a QR order is a counter sale too (`fulfillment_type = 'counter'`).
+2. **A held till bill** (`setTillHoldStock`, §461). Its header says a made-here
+   item is not taken because it has no shelf row.
+
+So as soon as a made-here product picked up a shelf row at that location (a count,
+a transfer, a receipt, or a listing that was `stocked` for a while), each sale took
+one off it. §137 then reset the counter shelf to 0 and sent the "miscount, recount
+the shelf" alert, and the next sale did the same again. There is no shelf to recount.
+
+**The rule.**
+
+1. **A counter sale takes nothing for a product listed `made_here` on the shop at
+   the sale's location.** Not at Mark paid, and not while a bill is held. Read from
+   `shop_listings` joined to `shops.location_id`, in one helper
+   (`madeHereProductIds` in `lib/inventory.js`) that both doors call.
+2. **The mode decides, not the daily switch.** A made-here item switched off for
+   the day is still made here.
+3. **Its extras still take their own stock.** Oat milk added to an Americano is a
+   separate stocked product and comes off its own shelf, as §120 and §183 say.
+4. **A held bill that already took a made-here unit gives it back** the next time
+   the bill is sent, because the item is no longer wanted from the shelf.
+5. **No order line, no ledger row, no alert** for the made-here line. With nothing
+   taken, nothing can go below zero, so §137's correction and the alert never fire
+   for it.
+
+**Not changed.**
+- **Only counter sales.** Mini-app, web and platform orders fulfilled from that
+  location still take from its shelf as before. A made-here listing is a statement
+  about the shop menu. A product that is made here on the menu but also sold from
+  a counted shelf through another channel is a case nobody has asked about, and
+  changing it silently could stop real stock coming off.
+- **Stocked listings and unlisted products.** A counter sale of anything not listed
+  `made_here` takes from the shelf exactly as before, and §137 still catches a
+  real miscount on it.
+- **The stray shelf rows are not deleted.** After a counter sale they sit at 0 and
+  nothing reads them for a made-here item. Removing data from a live database is a
+  separate decision.
+
+**The containment around `shop_listings` is widened, once and by name.**
+`scripts/test_shop_listings.js` holds every order path to reading nothing from
+that table, and says the next reader has to announce itself. This is that
+announcement. The listing is the only record of what a shop makes, so
+`lib/inventory.js` is admitted, and it reads the table in one helper only. No other
+order path is admitted.
+
+Tests: `scripts/test_counter_made_here_stock.js` (fast shard, 7 checks; the 5 that
+cover the fix fail on the old code). `scripts/test_fresh_stock_deferral.js` and
+`scripts/verify-fulfilment-types.js` copy `commitUnreservedOrder` into an in-memory
+database, so each now also copies the live `madeHereProductIds` and has the two
+empty tables it reads. Schema: none. No new route. No string, EN or CN. No change to
+`.gitignore` or CI.
