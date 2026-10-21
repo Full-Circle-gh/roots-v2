@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.348 · 2026-10-22 · §493 FOLDED INTO §495 — NOTHING COMPOSED; 8 STRINGS RETIRED WITH THE QUICK STOCK SHEET (`说出或输入库存变动`, `请说数量，或“售罄”。`, `这里只能加库存，不能设置数量。`, `哪个商品？`, `请先完成未保存的改动。`, `售罄 — 设为 0`, `现有 N`, AND THE SHEET'S EXAMPLE LINE); `正在听…`, THE TWO RECOGNISER LINES, `加 N 件` AND `设为 N` LIVE ON IN §495.** See *Saying a stock change (§493)*.
+
 **v1.347 · 2026-10-22 · §495 RULE 12, A SLIP REPRINTED BY VOICE — 1 STRING COMPOSED BY CLAUDE (`重新打印{store}订单 {no} 的小票`), BUILT FROM THE LIVE `重新打印` AND `小票`.** See *The voice assistant (§495)*, *Answers*.
 
 **v1.346 · 2026-10-22 · §495 RULE 11, A QUESTION ANSWERED FROM THE RECORDS — 11 STRINGS COMPOSED BY CLAUDE (`{store}今天 N 单`, `今天共 N 单`, `今天还没有订单`, `{store}库存偏低：a、b（另有 N 项）`, `没有库存偏低的商品。`, `{store}的{product}：N`, `{product}：{store} N、…`, `{store}营业中`, `{store}已关闭`, `网店营业中`, `网店已关闭`), EACH BUILT FROM LIVE FRAGMENTS; THE REFUSAL `你没有此操作的权限` COPIED WHOLE.** See *The voice assistant (§495)*, *Answers*.
@@ -14349,6 +14351,11 @@ picture of the store's Qingyun browser over a remote screen.
 - `重新获取二维码` for *Show a new code* — also live-built, but twice the length of `刷新二维码` on a button that sits beside *Close*.
 
 ## Saying a stock change (§493)
+
+> **Retired 2026-10-22 (v1.348).** The sheet these strings were composed for
+> folded into the voice assistant (§495 rule 14). `正在听…`, the two recogniser
+> lines, `加 N 件` and `设为 N` live on there; the rest are no longer shipped
+> and are kept here as the record of what was composed and why.
 
 Quick Stock's microphone: one sheet, one field, one card to confirm. Register:
 OPERATOR (Rule 1). Everything here is on the phone, said to kitchen staff and

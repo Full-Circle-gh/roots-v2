@@ -8167,6 +8167,22 @@ db.exec(`
   );
 `);
 
+// THE PHRASES QUICK STOCK'S MICROPHONE LEARNED (§493 rule 7) CARRY OVER into
+// the assistant's names (§495 rule 14): the same person, the same recogniser,
+// the same mishearing, now read by the one microphone that is left. One-time,
+// by _migrations name; a row already present keeps its own count.
+try {
+  const ranFold = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('fold_quick_stock_heard_into_assistant_names_v1');
+  if (!ranFold) {
+    const rows = db.prepare('SELECT user_key, heard, product_id, hits FROM quick_stock_heard').all();
+    const ins = db.prepare(`INSERT OR IGNORE INTO assistant_names (user_key, kind, heard, target_id, hits, last_at)
+      VALUES (?, 'product', ?, ?, ?, CURRENT_TIMESTAMP)`);
+    db.transaction(() => { for (const r of rows) ins.run(r.user_key, r.heard, r.product_id, r.hits || 1); })();
+    if (rows.length) console.log(`[migration] fold_quick_stock_heard_into_assistant_names_v1: ${rows.length} learned phrase(s) carried over`);
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('fold_quick_stock_heard_into_assistant_names_v1');
+  }
+} catch (e) { console.error('[migration fold_quick_stock_heard_into_assistant_names_v1]', e); }
+
 // ─────────────────────────────────────────────────────────────────────────
 // THE KITCHEN QUEUE SPLIT — docs/tacet-consolidation-decisions.md §61
 // (2026-09-07). A kitchen request used to move as one block: one status on

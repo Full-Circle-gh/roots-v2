@@ -101,6 +101,9 @@ console.log('\nThe catalogue');
   ok(dyn.indexOf('"ramada" means store 2') > -1, 'the person\'s own names are passed on');
   ok(dyn.indexOf('store_id = 2') > -1, 'and an earlier answer');
   ok(dyn.indexOf('Chinese mode') > -1, 'and the language');
+  const ctx = A.dynamicText({ cat, names: [], answers: {}, lang: 'en', context: { store_id: 2, mode: 'add' } });
+  ok(ctx.indexOf('Quick Stock screen for store 2 (Yuexiu)') > -1 && ctx.indexOf('mode "add"') > -1, 'the screen the mic was opened from rides with the request (rule 14)');
+  ok(A.dynamicText({ cat, names: [], answers: {}, lang: 'en' }).indexOf('Quick Stock') === -1, 'and not when it was the header');
 }
 
 console.log('\nKeeping only what exists');

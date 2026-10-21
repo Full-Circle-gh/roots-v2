@@ -23,7 +23,10 @@
  *     plan that is only answers offers Close, not Approve, and tells the log
  *     nothing more (the server marked it answered when it was shown);
  *   • a route that answers 200 with ok:false (a printer not set up) is a
- *     failed row with that reason.
+ *     failed row with that reason;
+ *   • Quick Stock's microphone is this one (§495 rule 14): it opens the same
+ *     sheet with the screen's store and its meaning for a bare number, and is
+ *     drawn only for an operator the assistant is open to.
  *
  * Drives Chromium through scripts/lib/m-probe, so it belongs in the slow
  * shard and is listed there by name in scripts/run-suites.js.
@@ -184,6 +187,25 @@ run('the voice assistant, a plan', [
       ['one ✗', "(document.querySelector('.overlay').innerText.match(/✗/g)||[]).length===1"],
       ['the reason', `${otext}.indexOf('no_printer_for_store')>-1`],
       ['1 failed', `${otext}.indexOf('1 failed')>-1`],
+    ]],
+  ['Quick Stock\'s microphone opens the assistant with the screen\'s context',
+    "state.caps=['assistant:use','quickstock:recount']; state.cfg={features:{assistant:true}}; " + NO_SR + FETCH(PLAN) +
+    "state.qs.ctx={enabled:true,mode:'recount',stores:[{id:1,name_en:'Tianhe',name_cn:'天河'},{id:2,name_en:'Yuexiu',name_cn:'越秀'}]}; state.qs.ctxTried=true; state.qs.storeId=2; state.qs.itemsTried=true; state.qs.items=[{product_id:7,name_en:'Hummus Asli',name_cn:'鹰嘴豆泥',sku:'1-10',physical_qty:11}]; state.stack=[{route:'stockadd',title:SUBS.stockadd.title}]; render();" +
+    "var mic=document.querySelector('#content .stick-top button[onclick=\"APP.cmd(\\'asstOpen\\',\\'qs\\')\"]'); window.__hadMic=!!mic; APP.cmd('asstOpen','qs'); APP.cmd('asstText','pita 12'); APP.cmd('asstPlan');", [
+      ['the mic is beside the shelf\'s search', 'window.__hadMic===true'],
+      ['it opened the assistant', `${otext}.indexOf('Voice assistant')>-1`],
+      ['the plan carries the store on screen', `JSON.parse(${sent('/assistant/plan')}[0].b).context.store_id===2`],
+      ['and the screen\'s meaning for a number', `JSON.parse(${sent('/assistant/plan')}[0].b).context.mode==='set'`],
+    ]],
+  ['the shelf\'s mic is not drawn for a role the assistant is closed to',
+    "state.caps=['quickstock:recount']; state.cfg={features:{assistant:true}}; " + NO_SR +
+    "state.qs.ctx={enabled:true,mode:'recount',stores:[{id:1,name_en:'Tianhe',name_cn:'天河'}]}; state.qs.ctxTried=true; state.qs.storeId=1; state.qs.itemsTried=true; state.qs.items=[{product_id:7,name_en:'Hummus Asli',name_cn:'鹰嘴豆泥',sku:'1-10',physical_qty:11}]; state.stack=[{route:'stockadd',title:SUBS.stockadd.title}]; render();", [
+      ['no mic', "!document.querySelector('#content .stick-top button[onclick*=\"asstOpen\"]')"],
+      ['the search is still there', "!!document.getElementById('mQsQ')"],
+    ]],
+  ['from the header, the plan carries no context',
+    OWNER + NO_SR + FETCH(PLAN) + SAY('x'), [
+      ['no context', `JSON.parse(${sent('/assistant/plan')}[0].b).context===undefined`],
     ]],
   ['a plan with nothing it can do says so', OWNER + NO_SR + FETCH({ id: 79, say: 'I cannot help with refunds.', actions: [], question: null, unknown_names: [] }) + SAY('refund order 5'), [
     ['the model\'s words', `${otext}.indexOf('I cannot help with refunds.')>-1`],
