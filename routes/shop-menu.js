@@ -2267,6 +2267,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var body=document.getElementById('dsheetB'),ttl=document.getElementById('dsheetT'),` +
   `pr=document.getElementById('dPr'),add=document.getElementById('dAdd'),` +
   `addA=document.querySelector('#dAdd .dadd-a'),addS=document.querySelector('#dAdd .dadd-s'),` +
+  `addO=document.querySelector('#dAdd .dadd-o'),` +
   `big=document.getElementById('big'),bigImg=document.getElementById('bigImg');` +
   `var openPid=null;` +
   /* §129 · THE PHONE'S BACK BUTTON CLOSES THE PAGE, and it is pushState that
@@ -2327,7 +2328,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      this case). Read off the card's own + , so the page and the grid cannot
      disagree about which kind of product this is. */
   `var vb=card.querySelector('.add[data-sizes]');` +
-  `if(addA)addA.hidden=!!vb;if(addS)addS.hidden=!vb;` +
+  /* A PRODUCT WITH QUESTIONS SAYS CHOOSE OPTIONS, for the same reason: the tap
+     opens the picker, it does not add. Asked by Ash from the live menu, on a
+     selection box whose choices carry its whole price. Sizes win when a card
+     has both — the size is asked first, and its own questions after it. The
+     price line is left as it was. */
+  `var vo=!vb&&card.querySelector('.add[data-ask]');` +
+  `if(addA)addA.hidden=!!(vb||vo);if(addS)addS.hidden=!vb;if(addO)addO.hidden=!vo;` +
   `pr.hidden=!!vb;` +
   // classList, not className: the same lesson the language toggle had to learn.
   `if(add.parentElement)add.parentElement.classList.toggle('solo',!!vb);` +
@@ -4048,8 +4055,11 @@ router.get('/s/:shopCode', (req, res) => {
         `<div class="sheet-f">` +
           `<div class="tot"><span id="dPr"></span>` +
           /* BOTH LABELS SHIP, AND THE SCRIPT SWAPS WHICH IS SHOWN (§129). The
-             button says ADD TO BASKET for a plain product and CHOOSE A SIZE for
-             one with siblings — the mini app's own two states for this control.
+             button says ADD TO BASKET for a plain product, CHOOSE A SIZE for
+             one with siblings and CHOOSE OPTIONS for one with questions — the
+             mini app's own three states for this control. The Chinese of the
+             third is the picker's own title (L_OPTS), so the button and the
+             sheet it opens use the same words.
              They are rendered here rather than assigned from a constant for a
              reason that cost a round: the script's label constants live inside
              the BASKET's closure, and this button is driven from the product
@@ -4059,6 +4069,7 @@ router.get('/s/:shopCode', (req, res) => {
           `<button type="button" class="place dadd" id="dAdd">` +
             `<span class="dadd-a">${bi('ADD TO BASKET', '加入购物车')}</span>` +
             `<span class="dadd-s" hidden>${bi('CHOOSE A SIZE', '选择规格')}</span>` +
+            `<span class="dadd-o" hidden>${bi('CHOOSE OPTIONS', '选择选项')}</span>` +
           `</button>` +
           `</div>` +
         `</div>` +

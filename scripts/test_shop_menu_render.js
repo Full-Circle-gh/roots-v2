@@ -2693,6 +2693,30 @@ function boxOf(text) {
     const cardsNamed = (name) => page.evaluate((n) => Array.from(document.querySelectorAll('.it'))
       .filter(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n).length, name);
 
+    /* A PRODUCT WITH QUESTIONS SAYS CHOOSE OPTIONS on its page, because the
+       tap opens the picker rather than adding — asked by Ash from the live
+       menu. The latte, which asks nothing, keeps ADD TO BASKET: the label is
+       read off the card, so the two must not bleed into each other. */
+    await check('a product with questions says CHOOSE OPTIONS; a plain one ADD TO BASKET', async () => {
+      const labelOf = async (sel) => {
+        await page.evaluate((s) => document.querySelector(s).click(), sel);
+        await page.waitForTimeout(300);
+        const m = await page.evaluate(() => ({
+          open: !document.getElementById('dsheet').hidden,
+          label: document.getElementById('dAdd').innerText.replace(/\s+/g, ' ').trim(),
+        }));
+        await page.evaluate(() => document.getElementById('dsheetX').click());
+        await page.waitForTimeout(300);
+        return m;
+      };
+      const ask = await labelOf(`.it[data-open="${P_ASK}"]`);
+      assert.ok(ask.open, 'the asking product\'s page did not open');
+      assert.strictEqual(ask.label, 'CHOOSE OPTIONS', `the asker's button said: ${JSON.stringify(ask.label)}`);
+      const ok = await labelOf(OK_CARD);
+      assert.ok(ok.open, 'the latte\'s page did not open');
+      assert.strictEqual(ok.label, 'ADD TO BASKET', `the latte's button said: ${JSON.stringify(ok.label)}`);
+    });
+
     await check('§129 two sizes are ONE card, not two', async () => {
       assert.strictEqual(await cardsNamed(EN_VAR), 1,
         'the siblings are still drawn as separate products');
