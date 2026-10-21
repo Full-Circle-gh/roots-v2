@@ -9268,6 +9268,7 @@
   .td-store-sel:hover { border-color: var(--td-text2); }
   .td-store-sel:focus { outline: none; border-color: var(--td-dusk); }
   .td-pill-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  .td-pill-sage  { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
   .td-attn-clear { font-size: 14px; color: var(--td-text2); padding: 2px 0; }
   /* Running-low rolling window: the rows box cross-fades as it pages through the
      out/low pool (see tdLowRotTick). 220ms matches the JS fade timing. */

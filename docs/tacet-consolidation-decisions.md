@@ -32676,3 +32676,98 @@ databases by `initTenantSchema`. One new route, `PUT
 /api/retail-admin/shops/:id/listings/:lid/choices/:cid/off`. No new string, EN or
 CN: the chip prints the answer's own label and the existing *Sold out · 售罄*
 pair. No change to `.gitignore` or CI.
+
+## §493 — SETTINGS IS SORTED BY THE QUESTION THE TENANT ASKS, AND THE EXPLANATIONS STEP BEHIND A "?"
+
+**Decided by Ash, 2026-10-21:** *"do all as you recommend. also the visual
+design of each page should be according to tacet design system. every setting
+page!"* — on a survey of the Settings tab that found about 190 controls and 85
+explanatory paragraphs across eight panels, and a tenant who could not find a
+setting in a second. Ash's brief: *"tenant need to find setting he looking for
+in a second"* and *"the explanation of each function should be as a thumbnail,
+mouse over or click on it so explanation open up."*
+
+**What was wrong, in four parts.** Panels were named by mechanism, not by the
+question in a tenant's head: *Push notifications* held currency, tax and the
+manual-Alipay 收款码; *Operations* held a banner with no control, the store
+list, the open/closed switch, a recycle bin, three feature switches, a note
+telling the reader to edit `/root/roots-v2/.env`, and the printer setup. Logs
+(*Change history*, *What was sent*) and developer rules (*SKU codes*, geocoding)
+sat at the same level as *Shop tab*. Every card showed a 150–260 character
+paragraph in two languages all the time, so the control sat under its own
+manual. And one screen saved three ways: cards that saved themselves, cards
+with their own Save, and three cards that only saved from a hidden bar at the
+foot of the panel, which their help text had to point at.
+
+**The rule.**
+
+1. **Nine groups, named by the question asked, in this order:** Store ·
+   Online shop · Payments and tax · Delivery and pickup · Notifications ·
+   Printing · Features on and off · Advanced · History. A divider in the left
+   list separates the first seven from *Advanced* and *History*: those two are
+   not settings a tenant changes, they are where credentials and records live.
+   *Brand*, *Team* and *Billing* stay as links out, as today.
+2. **Every card keeps one short visible line, and the long explanation opens
+   on a tap.** The visible line is at most about twelve words. The long text is
+   kept in the page, hidden, so the Settings search (audit G-03) and the
+   command palette still read it. It opens from a small "?" beside the card's
+   title — **on tap or click, never hover alone**, because half the team is on
+   a phone and hover does not exist there. It is a popover on the desktop and a
+   bottom sheet on the phone, not the §1.14a tooltip: that bubble is capped at
+   250px and 12px for text that explains something already on screen, and these
+   paragraphs are longer and are the only copy of what the setting does.
+   **This does not reopen §121's "no ⓘ per row".** That was the Operations
+   menu, a list of links where position does the explaining; a settings card
+   carries a control whose consequence has to be said somewhere.
+3. **No shared Save bar, anywhere in Settings.** A card saves itself (§279) or
+   carries its own Save pinned to the card, for money and keys (§279 rule 2).
+   The three *Notifications* cards that rode the bar — the order-status
+   template id, the group-bot webhook, System alerts — are plain text and a
+   switch, not money or a secret, and save themselves from this decision on.
+   The §279 note that read *"keys and money, which keep their button"* was
+   right about the Alipay card and wrong about the other three.
+4. **Nothing on a tenant's screen names a server file, an environment variable
+   or a process.** What the host has to set is reported as a state — *Map key
+   set* / *No map key* — in a Sage or Amber pill (§1.10), never as an
+   instruction the tenant cannot carry out.
+5. **A card with no control is not a settings card.** The *Ownership* banner,
+   which said the store manages itself and offered nothing to change, is gone
+   until a central system exists for it to point at.
+6. **Every settings page follows `docs/tacet-design-system.md` and the A4
+   Console archetype** (`docs/tacet-desktop-patterns.md` §A4): one page
+   header, group cards, label and one-line description left with the control
+   right, no Dusk, sentence case, the shared pill and tooltip, Inter 400/500
+   only. Inline-styled green and red chips (`#d1fae5`, `#fee2e2`) are retired
+   as each page is passed.
+7. **The phone's Settings mirror the same nine groups and the same "?"**, per
+   the parity rule (§345, §353).
+
+**Shipped in three PRs, one area each (§279 rule 5).**
+
+- **PR 1 — this decision and the four cheap fixes.** *Payments & tax* is a
+  new panel between Customer service and Delivery, gated on
+  `settings:payments` like the three cards it holds; same ids, same save
+  functions. The Alipay card has its own Save again. The *Ownership* card is
+  gone. The geocoding card says the key is the server's and shows the pill.
+  The shared Save bar and `saveConfig()` are gone; the three Notifications
+  cards are autosave cards with a foot each (`notifications.order_status`,
+  `notifications.group_bot`, `system_alerts`); a webhook off
+  `qyapi.weixin.qq.com` is held with a sentence rather than sent. The setup
+  guide's *choose how customers pay* step opens the new panel.
+- **PR 2 — the regroup, the "?" and the design pass.** Cards move between
+  panels keeping every id and handler; the left list becomes the nine groups
+  with the divider; the "?" component is built once; each panel is audited
+  against the design system.
+- **PR 3 — the phone.**
+
+**Not changed by PR 1.** Delivery's hub and sub-views. Brand, Billing, Team.
+The phone's Settings (its Push screen keeps its Save until PR 3). Every input
+id and every save endpoint.
+
+Tests: `scripts/test_settings_payments_panel.js` (fast shard; where each thing
+now lives, that nothing points at the bar, that no tenant screen names a server
+file). `scripts/test_delivery_in_settings.js` §7 now guards that the shared bar
+does not come back rather than that Delivery was kept off it. Schema: none. No
+new route. Strings: `收款与税费` and `地图密钥在服务器上配置` composed, declared
+in `docs/tacet-delivery-vocabulary.md` v1.342; the pills reuse the live
+`已启用` / `未启用` / `已配置密钥` / `缺少密钥`. No change to `.gitignore` or CI.

@@ -796,8 +796,9 @@ function suPayWechat() {
   suCloseModal();
   suReturnHint('Turn on a payment method here, then this step ticks itself off.', '在这里开启一种收款方式，此步骤会自动完成。');
   goTab('config');
-  const opsBtn = document.querySelector('#settings-nav button[data-sub="ops"]');
-  if (opsBtn) opsBtn.click();
+  // §493 — the money cards live on Settings → Payments & tax now.
+  const payBtn = document.querySelector('#settings-nav button[data-sub="payments"]');
+  if (payBtn) payBtn.click();
   suScrollTo('[data-pay-methods], #alipay-manual-enabled');
 }
 

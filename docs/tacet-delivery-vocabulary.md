@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.342 · 2026-10-21 · §493 SETTINGS → PAYMENTS & TAX, AND THE GEOCODING CARD — 2 STRINGS COMPOSED BY CLAUDE (`收款与税费`, `地图密钥在服务器上配置`), EACH BUILT FROM LIVE FRAGMENTS; THE PILLS `On · 已启用`, `Off · 未启用`, `Map key set · 已配置密钥`, `No map key · 缺少密钥` REUSE THE LIVE CHINESE; THE KEY-MISSING TOAST `服务器缺少地图密钥,未定位。` IS COMPOSED TOO (3 IN ALL).** See *Settings → Payments & tax (§493)*.
+
 **v1.341 · 2026-10-18 · SIGNING QINGYUN BACK IN FROM A PICTURE (§484) — 6 STRINGS COMPOSED BY CLAUDE (`请用青云 App 扫码登录`, `青云聚信未显示二维码，需要有人在服务器上处理。`, `青云聚信要求人工验证，需要有人在服务器上处理。`, `无法连接该门店的青云同步服务。`, `刷新二维码`, and the sign-in title's `青云聚信`), EACH BUILT FROM LIVE FRAGMENTS; `重新登录成功，配送跟踪继续` LIFTED FROM THE QINGYUN DAEMON'S OWN ALERT; THE REST COPIED FROM `public/channel-signin.html`.** See *Signing Qingyun back in from a picture*.
 
 **v1.340 · 2026-10-18 · A QINGYUN STORE THAT IS SIGNED OUT SAYS SO — 1 STRING COMPOSED BY CLAUDE (`同步服务离线`), CUT FROM THE LIVE `美团同步服务离线`; `Signed out · 已退出登录` AND `青云 已退出登录` COPIED FROM THE LIVE SIGNED-OUT PAIR AND HOME'S `${name} 已退出登录`.** See *A Qingyun store that is signed out*.
@@ -14336,3 +14338,32 @@ picture of the store's Qingyun browser over a remote screen.
 - `浏览器` for the thing Tacet cannot reach — accurate, and nowhere else on a screen; staff know it as the sync service.
 - `重新获取二维码` for *Show a new code* — also live-built, but twice the length of `刷新二维码` on a button that sits beside *Close*.
 
+
+## Settings → Payments & tax (§493)
+
+**Composed by Claude, 2026-10-21, under the 2026-09-06 amendment.** Operator
+register. The new Settings panel that holds Currency, Tax and the manual-Alipay
+收款码 (`public/retail-admin.html`, `#sub-payments`), and the geocoding card in
+Operations, whose help text stopped telling a tenant to edit a file on the
+server. Asked by Ash: *"do all as you recommend"*.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Payments & tax` / `收款与税费` | The panel's nav row and its title | `收款` is the live stem of the setup guide's `选择收款方式` (*Choose how customers pay*) and of the Alipay card's own `收款码`; `税费` is the live Tax card title. Joined with `与`, as the live `费用与起送` (*Fees & minimum*) joins its pair. |
+| `The map key is set on the server by whoever hosts Tacet.` / `地图密钥在服务器上配置。` | Geocoding card, Operations | `密钥` is live on the same card's pill (`已配置密钥`); `服务器上` is the live `服务器上的登录服务未运行` (`channel-signin.html`); `配置` is the verb in the live `已配置密钥`. |
+| `No map key on the server, so nothing was geocoded.` / `服务器缺少地图密钥,未定位。` | The toast when *Geocode all* is pressed with no key | `缺少密钥` is the live pill; `地图` and `定位` are the card's own words (`地图定位`, `已定位`). |
+
+### Copied whole
+
+- `On` / `已启用`, `Off` / `未启用` — the Alipay card's pill: the old chip's own Chinese (`✓ LIVE · 已启用`, `✗ OFF · 未启用`), with the English brought to sentence case (§1.16).
+- `Map key set` / `已配置密钥`, `No map key` / `缺少密钥` — the geocoding pill: the old chip's own Chinese (`KEY CONFIGURED · 已配置密钥`, `KEY MISSING · 缺少密钥`).
+- `Save` / `保存` — the Alipay card's button, the live pair.
+- `Only qyapi.weixin.qq.com URLs are accepted` / `仅接受 qyapi.weixin.qq.com 地址` — the held-webhook sentence, lifted from the same card's help text.
+
+### Rejected
+
+- `支付与税费` for the panel: `支付` is live only as the name of a payment *method* (`微信支付`, `支付宝`); the panel is about what the shop *collects*, which every live string on it calls `收款`.
+- `付款方式` — the customer's side of the same act; this panel is the operator's.
+- `请联系管理员配置地图密钥` for the geocoding line: an instruction, and §493 rule 4 is that the screen reports a state, not a task the tenant cannot do.

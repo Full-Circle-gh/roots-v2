@@ -4,18 +4,18 @@
  *
  *   node scripts/test_alipay_manual_unread_save.js
  *
- * Settings → Operations' manual-Alipay card (public/retail-admin/02-settings-ops.js)
- * is saved by the shared "Save settings" bar (05-marketing.js saveConfig →
- * saveAlipayManualInline), and PUT /alipay-manual replaces the whole record
- * from what it is sent. When the read failed, loadAlipayManual returned
- * quietly and left the card blank, so the next Save switched manual Alipay off
- * and wiped its account and OCR settings.
+ * Settings → Payments & tax's manual-Alipay card (public/retail-admin/02-settings-ops.js)
+ * is saved by its own Save button (_saveAlipayManual → saveAlipayManualInline;
+ * §493 — it rode the shared "Save settings" bar until 2026-10-21), and PUT
+ * /alipay-manual replaces the whole record from what it is sent. When the read
+ * failed, loadAlipayManual returned quietly and left the card blank, so the
+ * next Save switched manual Alipay off and wiped its account and OCR settings.
  *
  * Asserted: a failed read (HTTP error, refusal, a non-success answer, a network
  * throw) says so on the card with a retry, and Save then sends no
- * /alipay-manual write; a Save pressed while the read is still in flight sends
- * none either; a good read, and a retry that succeeds, save as before with the
- * fields read; the other Save-bar cards still save. No browser — fast shard.
+ * /alipay-manual write and claims nothing; a Save pressed while the read is
+ * still in flight sends none either; a good read, and a retry that succeeds,
+ * save as before with the fields read. No browser — fast shard.
  */
 'use strict';
 
@@ -28,7 +28,6 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const OPS = fs.readFileSync(path.join(ROOT, 'public/retail-admin/02-settings-ops.js'), 'utf8');
-const MKT = fs.readFileSync(path.join(ROOT, 'public/retail-admin/05-marketing.js'), 'utf8');
 
 let passed = 0, failed = 0;
 const pending = [];
@@ -56,10 +55,7 @@ function block(src, anchor) {
   throw new Error('unbalanced: ' + anchor);
 }
 
-const CODE = [
-  slice(OPS, '// ── Manual-Alipay (静态收款码) fallback card', '// Backward-compat shim'),
-  block(MKT, 'async function saveConfig() {'),
-].join('\n');
+const CODE = slice(OPS, '// ── Manual-Alipay (静态收款码) fallback card', '// ── Stores · 门店 — list + add/edit');
 
 const IDS = ['alipay-manual-enabled', 'alipay-manual-account', 'alipay-manual-preview', 'alipay-manual-ocr', 'alipay-manual-autoflip',
   'alipay-manual-payee', 'alipay-manual-window', 'alipay-manual-proof-age', 'alipay-manual-key', 'alipay-manual-status', 'alipay-manual-chip',
@@ -113,11 +109,9 @@ for (const [name, read] of [['an HTTP 500', { status: 500, body: { success: fals
     const st = h.els['alipay-manual-status'].innerHTML;
     assert.ok(st.includes('Could not load this card, so Save leaves it unchanged.'), st);
     assert.ok(st.includes('onclick="loadAlipayManual()"') && st.includes('Try again'));
-    await h.ctx.saveConfig(); await tick();
+    await h.ctx._saveAlipayManual(); await tick();
     assert.strictEqual(h.calls.puts.length, 0, 'no PUT /alipay-manual');
-    assert.strictEqual(h.calls.apiPuts.length, 1, 'the other cards on the bar still save');
-    assert.strictEqual(h.calls.apiPuts[0].p, '/api/retail-admin/config');
-    assert.deepStrictEqual(h.calls.toasts, ['Settings saved · 设置已保存']);
+    assert.deepStrictEqual(h.calls.toasts, [], 'and Save does not say "Saved" over a card it left alone');
   });
 }
 it('a Save pressed while the read is still in flight sends nothing either', async () => {
@@ -135,9 +129,10 @@ it('the fields read are the fields sent, and the QR is kept server-side (not re-
   const h = mk([{ body: GOOD }]);
   await h.ctx.loadAlipayManual(); await tick();
   assert.strictEqual(h.els['alipay-manual-status'].textContent, '');
-  assert.ok(h.els['alipay-manual-chip'].innerHTML.includes('LIVE'));
-  await h.ctx.saveConfig(); await tick();
+  assert.ok(h.els['alipay-manual-chip'].innerHTML.includes('>On<'));
+  await h.ctx._saveAlipayManual(); await tick();
   assert.strictEqual(h.calls.puts.length, 1);
+  assert.deepStrictEqual(h.calls.toasts, ['Saved']);
   assert.deepStrictEqual(h.calls.puts[0], { enabled: true, account: '收款 Roots', ocrEnabled: true, autoFlip: true, payeeMatch: 'Roots', timeWindowMin: 30, proofAgeMin: 20 });
   const put = h.calls.fetches.find((f) => f.method === 'PUT');
   assert.strictEqual(put.url, '/api/retail-admin/alipay-manual');
@@ -159,18 +154,27 @@ it('a read that fails after a good one shuts the save again', async () => {
 });
 
 section('2b · §412.2 — the payments permission');
-it('without settings:payments the shared Save bar never sends the (hidden) card, even after a good read', async () => {
+it('without settings:payments the write never sends the (hidden) card, even after a good read', async () => {
   const h = mk([{ body: GOOD }]);
   h.ctx.can = (k) => k !== 'settings:payments';
   await h.ctx.loadAlipayManual(); await tick();
-  await h.ctx.saveConfig(); await tick();
+  await h.ctx._saveAlipayManual(); await tick();
   assert.strictEqual(h.calls.puts.length, 0, 'no PUT /alipay-manual');
-  assert.strictEqual(h.calls.apiPuts.length, 1, 'the other cards still save');
+  assert.deepStrictEqual(h.calls.toasts, []);
   const g = mk([{ body: GOOD }]);
   g.ctx.can = () => true;
   await g.ctx.loadAlipayManual(); await tick();
-  await g.ctx.saveConfig(); await tick();
+  await g.ctx._saveAlipayManual(); await tick();
   assert.strictEqual(g.calls.puts.length, 1, 'with it, the card saves');
+});
+it('the Save button is disabled while it writes (§1.12 in flight)', async () => {
+  const h = mk([{ body: GOOD }]);
+  await h.ctx.loadAlipayManual(); await tick();
+  const btn = { disabled: false };
+  const p = h.ctx._saveAlipayManual(btn);
+  assert.strictEqual(btn.disabled, true);
+  await p; await tick();
+  assert.strictEqual(btn.disabled, false);
 });
 
 section('3 · the words');
