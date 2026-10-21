@@ -587,6 +587,8 @@ section('8 · THE PDP BUY BUTTON FITS THE BAND BESIDE EVERY PRICE IT DRAWS');
     const labels = [
       single('ADD TO BASKET'), single('CHOOSE A SIZE'), single('SOLD OUT'),
       single('PRE-ORDER'), single('加入购物车'), single('选择规格'),
+      // A product with questions — the button opens the options sheet.
+      single('CHOOSE OPTIONS'), single('选择选项'),
       // §170's arrivals
       stacked('NEXT BATCH', 'TOMORROW'), stacked('NEXT BATCH', 'TODAY'),
       stacked('NEXT BATCH', 'SEP 23'),
@@ -610,11 +612,15 @@ section('8 · THE PDP BUY BUTTON FITS THE BAND BESIDE EVERY PRICE IT DRAWS');
     // over before any appender existed — it simply had no min-width:0 to make
     // it visible, and pushed the price off the screen instead. Recorded here
     // rather than fixed: fixing it means resizing the compare-at row, which is
-    // not this change, and the case below proves it now degrades safely. A
-    // THIRD pair joining this list means something regressed.
+    // not this change, and the case below proves it now degrades safely.
+    // CHOOSE OPTIONS joined it knowingly: measured at 55.5rpx over against
+    // ADD TO BASKET's 49.6, the same compare-at column and nothing else, and it
+    // is the label ADD TO BASKET gives way to on a product with questions. Any
+    // OTHER pair joining this list means something regressed.
     const KNOWN = [
       'ADD TO BASKET beside ¥158.50 struck + SAVE ¥30.50',
       'CHOOSE A SIZE beside ¥158.50 struck + SAVE ¥30.50',
+      'CHOOSE OPTIONS beside ¥158.50 struck + SAVE ¥30.50',
     ];
     const unexpected = over.filter(o => !KNOWN.some(k => o.startsWith(k)));
     assert.deepStrictEqual(unexpected, [],

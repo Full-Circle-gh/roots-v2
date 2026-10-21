@@ -969,7 +969,15 @@ Page({
             // §170's date did: this is the tap that commits, so "back in a few
             // days" belongs on it more than anywhere else on the page.
             ? freshEta.withRestockWindow(L === 'cn' ? '预订' : 'PRE-ORDER', preWin, L)
-            : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET');
+            // A product with questions opens the options sheet on this tap, so
+            // the button says so — the sheet's own title (`opTitle`) gives the
+            // Chinese. Asked by Ash from the QR menu, where a selection box
+            // whose choices carry its whole price read ADD TO BASKET.
+            // NEXT BATCH / PRE-ORDER above still win: they are §108's word
+            // for the badge, and the sheet still opens from them.
+            : options.length
+              ? (L === 'cn' ? '选择选项' : 'CHOOSE OPTIONS')
+              : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET');
 
     // Whatever an appender added to the bare word, or '' when none did — the
     // one string, split, never derived twice. See `addBtnQual` in setData.

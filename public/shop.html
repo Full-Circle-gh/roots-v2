@@ -6134,7 +6134,7 @@ async function renderProduct(id){
             : `<div class="pd-qty"><button type="button" data-q="dec">−</button><span id="pdQty">1</span><button type="button" data-q="inc">+</button></div>
           ${hasVariants
             ? `<button class="btn-primary" id="addBtn">${state.lang==='cn'?'选择规格':'CHOOSE A SIZE'}</button>`
-            : `<button class="btn-primary" id="addBtn"><span class="add-label">${state.lang==='cn'?'加入购物车':'ADD TO BASKET'}</span><span class="add-price"></span></button>`}`}
+            : `<button class="btn-primary" id="addBtn"><span class="add-label">${popts.length?(state.lang==='cn'?'选择选项':'CHOOSE OPTIONS'):(state.lang==='cn'?'加入购物车':'ADD TO BASKET')}</span><span class="add-price"></span></button>`}`}
         </div>
       </div>
     </div>
@@ -6216,7 +6216,11 @@ async function renderProduct(id){
     const priceLabel=()=>(state.lang==='cn'?'加入购物车 · ':'Add to basket · ')+money(unit()*qty);
     function refreshBar(){
       const lbl=$('#addBtn .add-label'), pr=$('#addBtn .add-price');
-      if(lbl) lbl.textContent=(state.lang==='cn'?'加入购物车':'ADD TO BASKET');
+      // A product with options says CHOOSE OPTIONS: this tap opens that sheet,
+      // it does not add. The Chinese is the sheet's own title.
+      if(lbl) lbl.textContent=popts.length
+        ?(state.lang==='cn'?'选择选项':'CHOOSE OPTIONS')
+        :(state.lang==='cn'?'加入购物车':'ADD TO BASKET');
       if(pr) pr.textContent=money(unit()*qty);
     }
     $('.pd-qty').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
