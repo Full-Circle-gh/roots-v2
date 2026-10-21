@@ -90,7 +90,7 @@ router.post('/api/retail-admin/assistant/plan', requireRetailAdmin, requireAssis
   catch (e) { console.error('[assistant catalogue]', e && e.message); return res.status(500).json({ success: false, error: 'catalogue_failed' }); }
   let plan;
   try {
-    plan = await assistant.plan({ text, lang, cat, names: namesFor(req), answers });
+    plan = await assistant.plan({ text, lang, cat, names: namesFor(req), answers, db: t, caps: req.caps instanceof Set ? req.caps : null });
   } catch (e) {
     console.error('[assistant plan]', e && e.message, e && e._detail ? e._detail : '');
     return res.status(502).json({ success: false, error: 'model_failed' });
@@ -98,18 +98,20 @@ router.post('/api/retail-admin/assistant/plan', requireRetailAdmin, requireAssis
   // The log row: one per sentence, carried on through outcome. A re-plan after
   // a question updates the same row.
   let logId = parseInt(b.log_id, 10);
-  const planJson = JSON.stringify({ say: plan.say, actions: plan.actions.map(a => ({ key: a.key, type: a.type, suggested: a.suggested, label_en: a.label_en, action: a.action })), question: plan.question, unknown_names: plan.unknown_names, dropped: plan.dropped, answers });
+  const planJson = JSON.stringify({ say: plan.say, actions: plan.actions.map(a => ({ key: a.key, type: a.type, suggested: a.suggested, label_en: a.label_en, action: a.action })), answers_given: plan.answers, question: plan.question, unknown_names: plan.unknown_names, dropped: plan.dropped, answers });
+  // A plan that is only answers has nothing to approve: it is done when shown.
+  const outcome = plan.question ? 'asked' : (!plan.actions.length && plan.answers.length ? 'answered' : 'shown');
   try {
     if (Number.isInteger(logId) && t.prepare('SELECT 1 FROM assistant_log WHERE id = ? AND user_key = ?').get(logId, me)) {
-      t.prepare('UPDATE assistant_log SET plan_json = ?, outcome = ? WHERE id = ?').run(planJson, plan.question ? 'asked' : 'shown', logId);
+      t.prepare('UPDATE assistant_log SET plan_json = ?, outcome = ? WHERE id = ?').run(planJson, outcome, logId);
     } else {
       const info = t.prepare('INSERT INTO assistant_log (user_key, said, via, lang, plan_json, outcome) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(me, text.slice(0, 400), via, lang, planJson, plan.question ? 'asked' : 'shown');
+        .run(me, text.slice(0, 400), via, lang, planJson, outcome);
       logId = Number(info.lastInsertRowid);
     }
     t.prepare(`DELETE FROM assistant_log WHERE created_at < datetime('now', '-${KEEP_DAYS} days')`).run();
   } catch (e) { /* the log is never worth a failed plan */ }
-  res.json({ success: true, data: { id: logId, say: plan.say, actions: plan.actions, question: plan.question, unknown_names: plan.unknown_names } });
+  res.json({ success: true, data: { id: logId, say: plan.say, actions: plan.actions, answers: plan.answers, question: plan.question, unknown_names: plan.unknown_names } });
 });
 
 // POST /api/retail-admin/assistant/outcome  { id, outcome, approved, results }

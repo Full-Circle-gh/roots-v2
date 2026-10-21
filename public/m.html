@@ -23532,7 +23532,7 @@ function asstOpen(){
 function asstClose(){
   const a=state.asst; if(!a) return;
   voiceAbort(a);
-  if(a.logId&&(a.stage==='plan')) apiWrite('/assistant/outcome',{id:a.logId, outcome:'cancelled', approved:[], results:[]}).catch(()=>{});
+  if(a.logId&&a.stage==='plan'&&a.plan&&(a.plan.question||(a.plan.actions||[]).length)) apiWrite('/assistant/outcome',{id:a.logId, outcome:'cancelled', approved:[], results:[]}).catch(()=>{});
   state.asst=null; render();
 }
 function asstRepaint(){
@@ -23559,7 +23559,8 @@ function asstErrText(e){
   if(e.code==='not_configured') return T('The assistant needs the model key on the server.','语音助手需要在服务器上配置模型密钥。');
   if(e.code==='module_not_held') return T('The voice assistant is not part of this account’s plan.','当前套餐不包含语音助手。');
   if(e.code==='assistant_off') return T('The voice assistant is switched off for this account.','本账户已关闭语音助手。');
-  return (e.message&&e.code!=='model_failed')?e.message:T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+  if(e.code==='__plain'&&e.message) return e.message;
+  return (e.message&&e.code!=='model_failed'&&e.code!=='__plain')?e.message:T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
 }
 function asstPlan(){
   const a=state.asst; if(!a||a.busy) return;
@@ -23582,7 +23583,7 @@ function asstPlan(){
 function asstTick(key){ const a=state.asst; if(!a||a.stage!=='plan') return; a.ticks[key]=!a.ticks[key]; render(); }
 function asstBack(){
   const a=state.asst; if(!a) return;
-  if(a.logId&&a.plan&&!a.plan.question) apiWrite('/assistant/outcome',{id:a.logId, outcome:'declined', approved:[], results:[]}).catch(()=>{});
+  if(a.logId&&a.plan&&!a.plan.question&&(a.plan.actions||[]).length) apiWrite('/assistant/outcome',{id:a.logId, outcome:'declined', approved:[], results:[]}).catch(()=>{});
   a.plan=null; a.err=null; a.stage='say'; a.answers={}; a.learn=null; a.logId=null; render();
 }
 /* An option tapped under a question: the answer, and — when the sentence
@@ -23606,7 +23607,9 @@ async function asstRun(){
   a.stage='run'; a.results={}; render();
   for(const r of rows){
     a.running=r.key; render();
-    try{ await apiWrite(r.cmd.path, r.cmd.body, r.cmd.method); a.results[r.key]={ok:true}; }
+    try{ const d=await apiWrite(r.cmd.path, r.cmd.body, r.cmd.method);
+      if(d&&d.ok===false) a.results[r.key]={ok:false, error:asstErrText({code:'__plain', message:String(d.error||d.message||'')})};
+      else a.results[r.key]={ok:true}; }
     catch(e){ if(String(e.message)==='auth') return; a.results[r.key]={ok:false, error:asstErrText(e)}; }
   }
   a.running=null; a.stage='done'; render();
@@ -23646,20 +23649,26 @@ function sheetAssistant(){
       <div>${(q.options||[]).map(o=>`<button class="row" style="min-height:52px;padding:11px 20px" onclick="APP.cmd('asstAnswer',${o.id})"><span style="flex:1;font-size:15px">${escAttr(o.label)}</span>${o.sku?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(o.sku)}</span>`:''}</button>`).join('')}</div>
       <div style="display:flex;gap:8px;padding:16px 20px 0"><button class="btn2" style="flex:1" onclick="APP.cmd('asstBack')">${T('Something else','都不是')}</button></div>`;
   } else if(a.stage==='plan'&&a.plan){
-    const rows=a.plan.actions||[];
+    const rows=a.plan.actions||[], answers=a.plan.answers||[];
     const asked=rows.filter(r=>!r.suggested), sugg=rows.filter(r=>r.suggested);
+    /* A QUESTION'S ANSWER (§495 rule 11): read from the records at plan time,
+       shown as words, nothing to approve. A plan that is only answers offers
+       Back and Close and no Approve. */
+    const answerBlock=answers.length?`<div style="margin:8px 20px 0;display:flex;flex-direction:column;gap:8px">${answers.map(x=>`<div style="padding:12px 14px;border-radius:12px;background:var(--surface-raised);font-size:15px;line-height:1.5;${x.refused?'color:var(--brick-ink)':''}">${escAttr(LANG==='en'?x.text_en:(x.text_cn||x.text_en))}</div>`).join('')}</div>`:'';
     const row=r=>`<button class="row" style="min-height:52px;padding:10px 20px;gap:12px" onclick="APP.cmd('asstTick','${r.key}')" aria-pressed="${a.ticks[r.key]?'true':'false'}">
         <span style="flex:none;width:24px;height:24px;border-radius:6px;border:1.5px solid var(--edge);display:flex;align-items:center;justify-content:center;${a.ticks[r.key]?'background:var(--text-primary);color:var(--bg);border-color:var(--text-primary)':''}">${a.ticks[r.key]?ic('check',16,2.4):''}</span>
         <span style="flex:1;font-size:15px;line-height:1.4">${escAttr(LANG==='en'?r.label_en:(r.label_cn||r.label_en))}</span></button>`;
     const n=rows.filter(r=>a.ticks[r.key]).length;
     body=`<div style="padding:16px 20px 4px;font-size:14px;color:var(--text-secondary)">“${escAttr(a.text)}”</div>
       ${a.plan.say?`<div style="padding:4px 20px 8px;font-size:15px;line-height:1.5">${escAttr(a.plan.say)}</div>`:''}
-      ${rows.length?'':`<div style="padding:12px 20px;font-size:14px;color:var(--brick-ink)">${T('Nothing I can do with that. Try other words.','这个我做不了，请换种说法。')}</div>`}
+      ${answerBlock}
+      ${rows.length||answers.length?'':`<div style="padding:12px 20px;font-size:14px;color:var(--brick-ink)">${T('Nothing I can do with that. Try other words.','这个我做不了，请换种说法。')}</div>`}
       <div>${asked.map(row).join('')}</div>
       ${sugg.length?`<div class="eyebrow" style="padding:14px 20px 4px">${T('Also suggested','建议同时')}</div><div>${sugg.map(row).join('')}</div>`:''}
       <div style="display:flex;gap:8px;padding:16px 20px 0">
         <button class="btn2" style="flex:1" onclick="APP.cmd('asstBack')">${T('Back','返回')}</button>
-        ${rows.length?`<button class="btn2" style="flex:1"${n?'':' disabled'} onclick="APP.cmd('asstRun')">${T('Approve','批准')}${n?' · '+n:''}</button>`:''}
+        ${rows.length?`<button class="btn2" style="flex:1"${n?'':' disabled'} onclick="APP.cmd('asstRun')">${T('Approve','批准')}${n?' · '+n:''}</button>`
+          :(answers.length?`<button class="btn2" style="flex:1" onclick="APP.cmd('asstClose')">${T('Close','关闭')}</button>`:'')}
       </div>`;
   } else if(a.stage==='run'||a.stage==='done'){
     const rows=(a.plan.actions||[]).filter(r=>a.ticks[r.key]);

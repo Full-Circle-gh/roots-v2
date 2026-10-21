@@ -22,7 +22,11 @@
  *   • the words on a row name the shop, the item and the answer in both
  *     languages;
  *   • the prompt carries the catalogue, today's open/closed state, the
- *     person's own names and an earlier answer.
+ *     person's own names and an earlier answer;
+ *   • a question is answered from the records at plan time, by the rules the
+ *     screens use (the order-date rule on the shop's clock, the low-stock
+ *     rule, the shelf), only to an operator whose capabilities would let them
+ *     open that screen, and a plan of only answers has no rows to approve.
  */
 'use strict';
 
@@ -36,19 +40,28 @@ const eq = (a, b, msg) => ok(a === b, `${msg} (got ${JSON.stringify(a)})`);
 
 const db = new Database(':memory:');
 db.exec(`
-  CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, code TEXT, name_en TEXT, name_cn TEXT, is_active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0);
+  CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, code TEXT, name_en TEXT, name_cn TEXT, is_active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0, timezone TEXT DEFAULT 'Asia/Shanghai');
   CREATE TABLE shops (id INTEGER PRIMARY KEY, location_id INTEGER, display_name_en TEXT, display_name_cn TEXT, is_active INTEGER DEFAULT 1);
-  CREATE TABLE store_products (id INTEGER PRIMARY KEY, sku TEXT, name_en TEXT, name_cn TEXT, variant_label TEXT, variant_label_cn TEXT, is_active INTEGER DEFAULT 1);
+  CREATE TABLE store_products (id INTEGER PRIMARY KEY, sku TEXT, name_en TEXT, name_cn TEXT, variant_label TEXT, variant_label_cn TEXT, is_active INTEGER DEFAULT 1,
+    status TEXT DEFAULT 'Active', is_published INTEGER DEFAULT 1, low_stock_threshold INTEGER, stock_qty INTEGER DEFAULT 0);
+  CREATE TABLE retail_orders (id INTEGER PRIMARY KEY, order_no TEXT, status TEXT, store_id INTEGER, placed_at DATETIME, paid_at DATETIME, replacement_for_order_id INTEGER);
+  CREATE TABLE retail_store_stock (store_id INTEGER, product_id INTEGER, physical_qty INTEGER, PRIMARY KEY (store_id, product_id));
   CREATE TABLE shop_listings (id INTEGER PRIMARY KEY, shop_id INTEGER, store_product_id INTEGER, fulfilment_mode TEXT, is_available INTEGER DEFAULT 1, sort_position INTEGER DEFAULT 0);
   CREATE TABLE retail_product_options (id INTEGER PRIMARY KEY, product_id INTEGER, question_en TEXT, sort_order INTEGER DEFAULT 0);
   CREATE TABLE retail_product_option_choices (id INTEGER PRIMARY KEY, option_id INTEGER, label_en TEXT, label_cn TEXT);
   CREATE TABLE shop_option_choices_off (shop_id INTEGER, store_product_id INTEGER, label TEXT, PRIMARY KEY (shop_id, store_product_id, label));
   CREATE TABLE store_business_status (store_code TEXT PRIMARY KEY, fulfillment_open INTEGER);
   CREATE TABLE storefront_config (key TEXT PRIMARY KEY, value_json TEXT);
-  INSERT INTO retail_stores VALUES (1,'tianhe','Tianhe','天河',1,0),(2,'yuexiu','Yuexiu','越秀',1,1);
+  INSERT INTO retail_stores VALUES (1,'tianhe','Tianhe','天河',1,0,'Asia/Shanghai'),(2,'yuexiu','Yuexiu','越秀',1,1,'Asia/Shanghai');
   INSERT INTO shops VALUES (10,1,NULL,NULL,1),(20,2,NULL,NULL,1);
-  INSERT INTO store_products VALUES (100,'OT-1','Open Toast','开放三明治',NULL,NULL,1),(101,'CS-1','Club Sandwich','俱乐部三明治',NULL,NULL,1),
+  INSERT INTO store_products (id,sku,name_en,name_cn,variant_label,variant_label_cn,is_active) VALUES (100,'OT-1','Open Toast','开放三明治',NULL,NULL,1),(101,'CS-1','Club Sandwich','俱乐部三明治',NULL,NULL,1),
     (102,'HP-1','Hummus Platter','鹰嘴豆泥拼盘','Large','大',1),(103,'1-50','Hummus classic','鹰嘴豆泥',NULL,NULL,1),(104,'BG-1','Bagel','贝果',NULL,NULL,1);
+  -- today's orders, on the shop's clock: three paid at Yuexiu, one at Tianhe, one unpaid, one from yesterday
+  INSERT INTO retail_orders (id,order_no,status,store_id,placed_at,paid_at) VALUES (1,'TC000001','paid',2,datetime('now'),datetime('now')),(2,'TC000002','preparing',2,datetime('now'),datetime('now')),
+    (3,'TC000003','delivered',2,datetime('now','-1 hour'),datetime('now','-1 hour')),(4,'TC000004','paid',1,datetime('now'),datetime('now')),
+    (5,'TC000005','pending_payment',2,datetime('now'),NULL),(6,'TC000006','paid',2,datetime('now','-2 days'),datetime('now','-2 days'));
+  -- the shelf: hummus 3 at Yuexiu (low), bagel 40 at Yuexiu, hummus 12 at Tianhe, toast 0 at Yuexiu (out, not low)
+  INSERT INTO retail_store_stock VALUES (2,103,3),(2,104,40),(1,103,12),(2,100,0);
   -- Yuexiu's menu: three made-here items, two with Whole wheat bread; one stocked item
   INSERT INTO shop_listings VALUES (1,20,100,'made_here',1,0),(2,20,101,'made_here',1,1),(3,20,102,'made_here',1,2),(4,20,104,'stocked',1,3);
   -- Tianhe also sells Open Toast made here
@@ -181,6 +194,54 @@ console.log('\nThe routes and the words');
   const q = A.buildPlan(A.coercePlan({ say: '?', actions: [], question: { kind: 'store', text: 'Which store?', option_ids: [1, 2] }, unknown_names: ['Ramada'] }, cat2), cat2, 'zh');
   eq(q.question.options.map(o => o.label).join(','), '天河,越秀', 'a question\'s options are named in the phone\'s language');
   eq(q.actions.length, 0, 'and a question has no rows');
+}
+
+console.log('\nQuestions, answered from the records');
+{
+  const cat2 = A.catalogue(db);
+  const all = null;   // RBAC dark: every question answers
+  let a = A.answerOne(db, { type: 'ask', what: 'orders_today', store_id: 2, product_id: null }, cat2, all);
+  eq(a.n, 3, 'three paid orders today at Yuexiu — not the unpaid one, not yesterday\'s');
+  eq(a.text_en, '3 orders today at Yuexiu', 'in English');
+  eq(a.text_cn, '越秀今天 3 单', 'and in Chinese');
+  a = A.answerOne(db, { type: 'ask', what: 'orders_today', store_id: null, product_id: null }, cat2, all);
+  eq(a.n + ' ' + a.text_en, '4 4 orders today across all stores', 'four across all stores');
+  a = A.answerOne(db, { type: 'ask', what: 'orders_today', store_id: 1, product_id: null }, cat2, all);
+  eq(a.text_en, '1 order today at Tianhe', 'one order, singular');
+  db.prepare("UPDATE retail_orders SET placed_at = datetime('now','-3 days'), paid_at = datetime('now','-3 days') WHERE store_id = 1").run();
+  a = A.answerOne(db, { type: 'ask', what: 'orders_today', store_id: 1, product_id: null }, cat2, all);
+  eq(a.text_en + ' · ' + a.text_cn, 'No orders yet today at Tianhe · 天河今天还没有订单', 'none yet');
+  a = A.answerOne(db, { type: 'ask', what: 'low_stock', store_id: 2, product_id: null }, cat2, all);
+  eq(a.n, 1, 'one product is low at Yuexiu: hummus at 3; the toast at 0 is out, not low; the bagel at 40 is fine');
+  eq(a.text_en, 'Running low at Yuexiu: Hummus classic (3)', 'named with its count');
+  eq(a.text_cn, '越秀库存偏低：鹰嘴豆泥（3）', 'in Chinese');
+  a = A.answerOne(db, { type: 'ask', what: 'low_stock', store_id: 1, product_id: null }, cat2, all);
+  eq(a.text_en, 'Nothing is running low at Tianhe.', 'nothing low at Tianhe');
+  a = A.answerOne(db, { type: 'ask', what: 'low_stock', store_id: null, product_id: null }, cat2, all);
+  ok(a.text_en.indexOf('Running low') === 0 || a.text_en.indexOf('Nothing') === 0, 'across all stores it answers by the digest\'s own rule');
+  a = A.answerOne(db, { type: 'ask', what: 'stock_of', store_id: 2, product_id: 103 }, cat2, all);
+  eq(a.text_en + ' · ' + a.text_cn, 'Hummus classic at Yuexiu: 3 · 越秀的鹰嘴豆泥：3', 'the shelf at one store');
+  a = A.answerOne(db, { type: 'ask', what: 'stock_of', store_id: null, product_id: 103 }, cat2, all);
+  eq(a.text_en, 'Hummus classic: Tianhe 12, Yuexiu 3', 'and at every store');
+  a = A.answerOne(db, { type: 'ask', what: 'status', store_id: null, product_id: null }, cat2, all);
+  eq(a.text_en, 'Tianhe is open; Yuexiu is closed; the online store is open', 'who is open');
+  eq(a.text_cn, '天河营业中；越秀已关闭；网店营业中', 'in Chinese');
+  a = A.answerOne(db, { type: 'ask', what: 'status', store_id: 2, product_id: null }, cat2, all);
+  eq(a.text_en, 'Yuexiu is closed', 'one store');
+  const clerk = new Set(['quickstock:recount']);
+  a = A.answerOne(db, { type: 'ask', what: 'orders_today', store_id: 2, product_id: null }, cat2, clerk);
+  eq(a.refused + ' ' + a.text_en, 'true You don’t have permission for this', 'a clerk cannot hear the order count');
+  a = A.answerOne(db, { type: 'ask', what: 'stock_of', store_id: 2, product_id: 103 }, cat2, clerk);
+  eq(a.refused, undefined, 'but can hear the shelf');
+  ok(A.mayAsk(new Set(['dashboard:view']), 'orders_today') && !A.mayAsk(new Set(['till:use']), 'orders_today') && A.mayAsk(new Set(['till:use']), 'status'), 'the capability rule per question');
+  const p = A.coercePlan({ say: 'ok', actions: [
+    { type: 'ask', what: 'orders_today', store_id: 2 }, { type: 'ask', what: 'stock_of', store_id: 2, product_id: 103 },
+    { type: 'ask', what: 'stock_of', store_id: 2 }, { type: 'ask', what: 'weather' }, { type: 'ask', what: 'status', store_id: 9 }], question: null, unknown_names: [] }, cat2);
+  eq(p.actions.length, 2, 'a question without its product, an unknown question and an unknown store are dropped');
+  const plan = A.buildPlan(p, cat2, 'en', A.answerAll(db, p.actions, cat2, all));
+  eq(plan.actions.length, 0, 'questions are not rows');
+  eq(plan.answers.length, 2, 'they are answers');
+  eq(plan.answers[0].text_en, '3 orders today at Yuexiu', 'in order');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
