@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.575
+# Tacet shared-core consolidation — decisions record, v4.576
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-22 · v4.576 — **§495 AMENDED · A SLIP IS REPRINTED BY VOICE — DECIDED BY ASH:** *"do all those … Reprint a slip"*. Rule 12 added: a fifth shape, `reprint`, resolved against the last two days' orders in the catalogue plus any order number the sentence names (looked up directly, however the recogniser wrote it), run through the order's own print route; a printer not set up is a failed row with its reason. No schema, no new route. One string composed, declared in `docs/tacet-delivery-vocabulary.md` v1.347. No change to `.gitignore` or CI. See §495 rule 12.
 
 2026-10-22 · v4.575 — **§495 AMENDED · A QUESTION IS ANSWERED FROM THE RECORDS, WITH NOTHING TO APPROVE — DECIDED BY ASH:** *"do all those … Questions like \"how many orders today\", answered without an approve step"*. Rule 11 added: a fourth shape, `ask`, with four questions (orders today, what is running low, how many of a product, which shops are open), answered at plan time by the rules the screens use and only to an operator whose capabilities open that screen; shown as words, no rows, no Approve; a plan of only answers is logged `answered` when shown. No schema, no new route. Eleven strings composed, declared in `docs/tacet-delivery-vocabulary.md` v1.346. No change to `.gitignore` or CI. See §495 rule 11.
 
@@ -33158,6 +33160,21 @@ today\", answered without an approve step"*.
     not among the four: a revenue figure is `finance` reach (§301), and the
     count of orders is not.
 
+**Amended 2026-10-22 (v4.576), by Ash:** *"Reprint a slip"*.
+
+12. **A slip is reprinted by voice.** A fifth shape, `reprint`, with one
+    field, the order. The catalogue carries the last two days' orders
+    (number, store, status, time — no customer details) so *"the last order
+    at Yuexiu"* resolves, and any order number the sentence names is looked
+    up directly, spaces, dashes and case removed, so an older one said aloud
+    is still found. An order the catalogue does not hold is dropped and the
+    model is told to ask rather than guess. The row runs `POST
+    /api/retail-admin/orders/:id/print`, the order's own route, which picks
+    the printer the order belongs to; its *"not configured"* and *"no printer
+    for store"* answers arrive as `ok:false` on a 200 and are shown as a
+    failed row with that reason, which is why the phone reads `ok` on every
+    row's reply.
+
 **Not in this round.** The same microphone on the desktop top bar; read-only
 questions without an approve step; reprinting a slip; folding §493's Quick
 Stock microphone into this one (the stock action already exists here; the
@@ -33183,5 +33200,7 @@ rather than softened: the switch table is read through a new
 `scripts/test_assistant_plan.js` (55 checks, fast),
 `scripts/test_mobile_assistant.js` (68 assertions in Chromium, slow list),
 `scripts/test_tenant_roles.js` now counts 120 capabilities. Rule 11 adds
-`answerOne` / `answerAll` / `mayAsk` to `lib/assistant.js` and 29 checks to
-`scripts/test_assistant_plan.js`. No change to `.gitignore` or CI.
+`answerOne` / `answerAll` / `mayAsk` to `lib/assistant.js` and 23 checks to
+`scripts/test_assistant_plan.js`. Rule 12 adds `orderNoKey` / `orderNosIn`
+and the orders in `catalogue()`, with 12 checks. No change to `.gitignore`
+or CI.

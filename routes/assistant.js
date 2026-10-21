@@ -86,7 +86,7 @@ router.post('/api/retail-admin/assistant/plan', requireRetailAdmin, requireAssis
     }
   }
   let cat;
-  try { cat = assistant.catalogue(t); }
+  try { cat = assistant.catalogue(t, { text }); }
   catch (e) { console.error('[assistant catalogue]', e && e.message); return res.status(500).json({ success: false, error: 'catalogue_failed' }); }
   let plan;
   try {
