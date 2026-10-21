@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.577
+# Tacet shared-core consolidation — decisions record, v4.578
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-22 · v4.578 — **§493 FOLDED INTO §495 · ONE MICROPHONE — DECIDED BY ASH:** *"The Quick Stock mic joins this one, so there is only one mic"*. §495 rule 14: Quick Stock's mic button opens the voice assistant with the screen's store and its meaning for a bare number; §493's own sheet, parser, three write routes (`understand`, `heard`, `said` POST/PATCH) and `lib/stock-command-ai.js` are deleted; the phrases it learned carry into `assistant_names` by migration; its sentence log stays readable (`GET …/quick-stock/said`) for its ninety days. §493 rules 1–9 are superseded; rule 10's reader stands. Voice now needs the model key on every screen, which Ash chose. Strings of the retired sheet marked retired in `docs/tacet-delivery-vocabulary.md` v1.348. Two suites and one lib removed; no change to `.gitignore` or CI. See §495 rule 14.
 
 2026-10-22 · v4.577 — **§495 AMENDED · THE SAME MICROPHONE ON THE COMPUTER — DECIDED BY ASH:** *"do all those … The same mic on the computer"*. Rule 13 added: the back office's top bar carries the mic beside Search (`public/retail-admin/32-assistant.js`), the same two routes, the same rows, the same approval; it hides itself unless the module is on and the role carries `assistant:use`, and the plan route holds the real locks. No new string: every pair is the phone's, copied whole, and `scripts/test_desktop_assistant.js` holds it to that. No schema, no new route. No change to `.gitignore` or CI. See §495 rule 13.
 
@@ -32693,6 +32695,12 @@ pair. No change to `.gitignore` or CI.
 
 ## §493 — A STOCK CHANGE CAN BE SAID, AND IS WRITTEN ONLY AFTER A CARD IS CONFIRMED
 
+> **Folded into §495 on 2026-10-22 (v4.578, Ash: *"only one mic"*).** Rules
+> 1–9 below describe the sheet, parser and routes that no longer exist; the
+> card, the confirm, the learned phrases and the language chip live on in
+> §495, and the stock action is §495's `stock` row. Rule 10's log reader
+> stands. Kept as written, because it is where those decisions were made.
+
 **Decided by Ash, 2026-10-21:** *"I was thinking about creating a microphone
 feature where you can say an sku or a product name and give a command like 1-50
 out of stock at yuexiu location . and system will deduct automatic from yuexiu
@@ -33194,6 +33202,25 @@ today\", answered without an approve step"*.
     one address for staff stays the back office at `store.`: the mic is now
     on both of its faces.
 
+**Amended 2026-10-22 (v4.578), by Ash:** *"The Quick Stock mic joins this
+one, so there is only one mic"*.
+
+14. **One microphone.** Quick Stock's mic button opens this assistant, not
+    a sheet of its own, and sends the screen's context with every plan: the
+    store on screen and whether a bare number there is an add or a count
+    (`context` on the plan route, a line in the dynamic prompt). So *"pita
+    12"* said on the shelf is twelve pita on that shelf, through the same
+    rows and the same Approve. The button is drawn only for an operator the
+    assistant is open to, because the assistant is the whole of it now.
+    §493's own sheet and parser, its `understand` / `heard` / `said` write
+    routes and `lib/stock-command-ai.js` are deleted; the phrases it learned
+    carry into `assistant_names` (kind `product`) by migration, so nothing a
+    person taught it is lost; its sentence log stays readable for its ninety
+    days. **What this costs, and Ash chose it:** §493's phone-side reader
+    worked with no model key; after the fold, voice needs the key on every
+    screen, and a shop without it has a mic that says so and does nothing.
+    §493 rules 1–9 are superseded by this section; rule 10's reader stands.
+
 **Not in this round.** The same microphone on the desktop top bar; read-only
 questions without an approve step; reprinting a slip; folding §493's Quick
 Stock microphone into this one (the stock action already exists here; the
@@ -33224,4 +33251,7 @@ rather than softened: the switch table is read through a new
 and the orders in `catalogue()`, with 12 checks. Rule 13 adds
 `public/retail-admin/32-assistant.js`, the mic in `retail-admin.html`'s top
 bar, its styles in `retail-admin.css`, and `scripts/test_desktop_assistant.js`.
-No change to `.gitignore` or CI.
+Rule 14 removes `scripts/test_quick_stock_command.js`,
+`scripts/test_mobile_stock_command.js`, `scripts/test_stock_command_ai.js`
+and `lib/stock-command-ai.js`, and adds the `fold_quick_stock_heard_into_assistant_names_v1`
+migration in `database.js`. No change to `.gitignore` or CI.

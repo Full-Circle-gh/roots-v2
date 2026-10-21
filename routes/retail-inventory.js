@@ -91,7 +91,6 @@ function requireInventoryRead(req, res, next) {
 // the server — three routes here read it and they must agree. See the module
 // for why the decision moved from the job title onto the capability.
 const { quickStockMode, mayRecount, mayLogProduction, addOnlyOperator, RECOUNT_MISCOUNT, RECOUNT_CLEARS_DEBT } = require('../lib/quick-stock-grant');
-const stockAi = require('../lib/stock-command-ai');
 const said = require('../lib/quick-stock-said');
 
 /* WHICH STORES THIS OPERATOR MAY WRITE TO (§493 moved it out of the context
@@ -121,26 +120,10 @@ function quickStockStores(req) {
   return { stores, fullAccess };
 }
 
-/* The operator behind a heard phrase (§493 rule 7). requireInventoryRead
-   admits only a backend session, so this is always a tenant_users id. */
+/* The operator behind a log row (§493 rule 10). requireInventoryRead admits
+   only a backend session, so this is always a tenant_users id. */
 function heardUserKey(req) {
   return req.backendUser ? 'b:' + req.backendUser.id : null;
-}
-
-/* Every learned phrase in this tenant, split into this person's and everyone
-   else's. Small by construction: one row per phrase per operator. */
-function heardFor(req) {
-  const me = heardUserKey(req);
-  const mine = {}, others = {};
-  let rows = [];
-  try {
-    rows = tdb().prepare('SELECT user_key, heard, product_id, hits FROM quick_stock_heard ORDER BY hits ASC').all();
-  } catch (e) { rows = []; }
-  for (const r of rows) {
-    if (r.user_key === me) mine[r.heard] = r.product_id;
-    else others[r.heard] = r.product_id;   // ascending hits, so the most-hit row lands last and wins
-  }
-  return { mine, others };
 }
 
 // The shelf figure as it stands right now. Read outside adjustStock's
@@ -1041,10 +1024,6 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
          question through its route-capability table; the derivation is shared
          so the two apps cannot answer it differently. */
       can_log_production: mayLogProduction(req),
-      /* §493: whether a sentence the phone cannot read may go to the model,
-         and the phrases learned so far — this person's, then everyone's. */
-      ai: stockAi.available(),
-      heard: heardFor(req),
       home,                       // the tool list, when there is somewhere to go back to
       home_label: homeLabel,      // that screen's own name, so Back can say it
       user: {
@@ -1063,97 +1042,16 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
   });
 });
 
-/* ── SAYING A STOCK CHANGE (§493) ──────────────────────────────────────────
-   Two endpoints behind Quick Stock's microphone. Neither writes stock: the
-   write is the phone's, through the stock PATCH above, after the card is
-   confirmed. */
-
-// POST /api/retail-admin/quick-stock/heard  { heard, product_id }
-// Records what this person's recogniser wrote for a product (rule 7), on a
-// confirmed card. The same phrase again moves to the product confirmed last.
-router.post('/api/retail-admin/quick-stock/heard', requireInventoryRead, express.json({ limit: '4kb' }), (req, res) => {
-  const me = heardUserKey(req);
-  if (!me) return res.status(403).json({ success: false, error: 'no_operator' });
-  const b = req.body || {};
-  const heard = String(b.heard || '').toLowerCase().replace(/[^0-9a-z\u4e00-\u9fff]+/g, '').slice(0, 80);
-  const productId = parseInt(b.product_id, 10);
-  if (!heard || heard.length < 2) return res.status(400).json({ success: false, error: 'heard_required' });
-  const product = tdb().prepare('SELECT id FROM store_products WHERE id = ?').get(productId);
-  if (!product) return res.status(404).json({ success: false, error: 'product_not_found' });
-  tdb().prepare(`
-    INSERT INTO quick_stock_heard (user_key, heard, product_id, hits, last_at)
-    VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
-    ON CONFLICT(user_key, heard) DO UPDATE SET
-      product_id = excluded.product_id,
-      hits = CASE WHEN quick_stock_heard.product_id = excluded.product_id THEN quick_stock_heard.hits + 1 ELSE 1 END,
-      last_at = CURRENT_TIMESTAMP
-  `).run(me, heard, productId);
-  res.json({ success: true, data: { heard, product_id: productId } });
-});
-
-// POST /api/retail-admin/quick-stock/understand  { text, store_id }
-// The model's reading of a sentence the phone could not read by itself
-// (rule 8). Answers a plan — product, candidates, store, action, qty — never
-// a write. 503 when no model is configured; 502 when it fails, and the phone
-// falls back to its own reading either way.
-router.post('/api/retail-admin/quick-stock/understand', requireInventoryRead, express.json({ limit: '4kb' }), async (req, res) => {
-  if (!stockAi.available()) return res.status(503).json({ success: false, error: 'not_configured' });
-  const b = req.body || {};
-  const text = String(b.text || '').trim();
-  if (!text) return res.status(400).json({ success: false, error: 'text_required' });
-  const { stores } = quickStockStores(req);
-  const storeId = parseInt(b.store_id, 10);
-  const products = tdb().prepare(`
-    SELECT id, sku, name_en, name_cn FROM store_products
-     WHERE COALESCE(is_active, 1) = 1
-     ORDER BY id
-  `).all();
-  try {
-    const answer = await stockAi.understand({
-      text, products, stores,
-      storeId: stores.some(s => s.id === storeId) ? storeId : null,
-      defaultAction: quickStockMode(req),
-      heard: heardFor(req).mine,
-    });
-    res.json({ success: true, data: answer });
-  } catch (e) {
-    console.error('[quick-stock understand]', e && e.message, e && e._detail ? e._detail : '');
-    res.status(502).json({ success: false, error: 'model_failed' });
-  }
-});
-
-/* ── THE SENTENCE LOG (§493 rule 10) ───────────────────────────────────────
-   What was said, what was made of it, what the operator did. Written by the
-   phone twice per sentence — once when the card (or its refusal) is shown,
-   once with the outcome — and read by whoever decides what to build next. */
-
-// POST /api/retail-admin/quick-stock/said  → { id }
-router.post('/api/retail-admin/quick-stock/said', requireInventoryRead, express.json({ limit: '4kb' }), (req, res) => {
-  const me = heardUserKey(req);
-  if (!me) return res.status(403).json({ success: false, error: 'no_operator' });
-  const row = said.shapeNew(req.body, me);
-  if (!row) return res.status(400).json({ success: false, error: 'said_required' });
-  const t = tdb();
-  const info = t.prepare(said.SQL.insert).run(row);
-  try { t.prepare(said.SQL.prune).run(); } catch (e) { /* the log is never worth a failed write */ }
-  res.json({ success: true, data: { id: Number(info.lastInsertRowid) } });
-});
-
-// PATCH /api/retail-admin/quick-stock/said/:id  { outcome, picked_product_id }
-router.patch('/api/retail-admin/quick-stock/said/:id', requireInventoryRead, express.json({ limit: '2kb' }), (req, res) => {
-  const me = heardUserKey(req);
-  if (!me) return res.status(403).json({ success: false, error: 'no_operator' });
-  const id = parseInt(req.params.id, 10);
-  const patch = said.shapeOutcome(req.body);
-  if (!Number.isInteger(id) || !patch) return res.status(400).json({ success: false, error: 'nothing_to_change' });
-  const info = tdb().prepare(said.SQL.outcome).run({ id, user_key: me, outcome: patch.outcome || null, picked_product_id: patch.picked_product_id || null });
-  res.json({ success: true, data: { changed: info.changes } });
-});
+/* ── THE SENTENCE LOG (§493 rule 10), READ ONLY ────────────────────────────
+   The microphone that wrote this log is folded into the voice assistant
+   (§495 rule 14), which keeps its own (assistant_log). What was logged before
+   the fold stays readable here for its ninety days; nothing writes it now. */
 
 // GET /api/retail-admin/quick-stock/said?days=7      → { summary, rows }
 // GET /api/retail-admin/quick-stock/said.csv?days=7  → the same rows, for Excel
 // The whole tenant's log, so full access only: a store clerk reads nothing here.
 function listSaid(req, res, asCsv) {
+  if (!heardUserKey(req)) return res.status(403).json({ success: false, error: 'no_operator' });
   const { fullAccess } = quickStockStores(req);
   if (!fullAccess) return res.status(403).json({ success: false, error: 'full_access_required' });
   const days = Math.min(said.KEEP_DAYS, Math.max(1, parseInt(req.query.days, 10) || 7));

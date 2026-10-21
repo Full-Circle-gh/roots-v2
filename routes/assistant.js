@@ -78,6 +78,13 @@ router.post('/api/retail-admin/assistant/plan', requireRetailAdmin, requireAssis
   // A name the person just explained by answering a question is learned
   // BEFORE the plan, so this plan already reads it.
   if (Array.isArray(b.learn) && b.learn.length) learn(req, b.learn);
+  // The screen the mic was opened from (rule 14): a store the operator holds, and
+  // what a bare number means there. Anything else is ignored.
+  let context = null;
+  if (b.context && typeof b.context === 'object') {
+    const sid = parseInt(b.context.store_id, 10);
+    if (Number.isInteger(sid)) context = { store_id: sid, mode: b.context.mode === 'add' ? 'add' : 'set' };
+  }
   const answers = {};
   if (b.answers && typeof b.answers === 'object') {
     for (const k of ['store_id', 'shop_id', 'product_id', 'listing_id']) {
@@ -90,7 +97,8 @@ router.post('/api/retail-admin/assistant/plan', requireRetailAdmin, requireAssis
   catch (e) { console.error('[assistant catalogue]', e && e.message); return res.status(500).json({ success: false, error: 'catalogue_failed' }); }
   let plan;
   try {
-    plan = await assistant.plan({ text, lang, cat, names: namesFor(req), answers, db: t, caps: req.caps instanceof Set ? req.caps : null });
+    if (context && !cat.stores.some(s => s.id === context.store_id)) context = null;
+    plan = await assistant.plan({ text, lang, cat, names: namesFor(req), answers, db: t, caps: req.caps instanceof Set ? req.caps : null, context });
   } catch (e) {
     console.error('[assistant plan]', e && e.message, e && e._detail ? e._detail : '');
     return res.status(502).json({ success: false, error: 'model_failed' });
@@ -98,7 +106,7 @@ router.post('/api/retail-admin/assistant/plan', requireRetailAdmin, requireAssis
   // The log row: one per sentence, carried on through outcome. A re-plan after
   // a question updates the same row.
   let logId = parseInt(b.log_id, 10);
-  const planJson = JSON.stringify({ say: plan.say, actions: plan.actions.map(a => ({ key: a.key, type: a.type, suggested: a.suggested, label_en: a.label_en, action: a.action })), answers_given: plan.answers, question: plan.question, unknown_names: plan.unknown_names, dropped: plan.dropped, answers });
+  const planJson = JSON.stringify({ say: plan.say, actions: plan.actions.map(a => ({ key: a.key, type: a.type, suggested: a.suggested, label_en: a.label_en, action: a.action })), answers_given: plan.answers, question: plan.question, unknown_names: plan.unknown_names, dropped: plan.dropped, answers, context });
   // A plan that is only answers has nothing to approve: it is done when shown.
   const outcome = plan.question ? 'asked' : (!plan.actions.length && plan.answers.length ? 'answered' : 'shown');
   try {

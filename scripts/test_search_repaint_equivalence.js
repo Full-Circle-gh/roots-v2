@@ -117,6 +117,7 @@ function makeSandbox(state) {
     rqName: (p) => p.name_en || '',
     batId: (p) => (p.product_id != null ? p.product_id : p.id),
     qsMode: () => 'add',
+    asstCan: () => false,   // §495 rule 14: the shelf's mic is the assistant's, drawn only when it is open to the operator
     qsShelf: (p) => p.shelf == null ? 0 : p.shelf,
     qsMeta: (p, id) => `[meta:${id}]`,
     qsCountCell: (p, id) => `[count:${id}]`,
