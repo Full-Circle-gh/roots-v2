@@ -370,6 +370,7 @@ app.use(require('./routes/retail-materials')); // Materials (物料) — the sha
 app.use(require('./routes/retail-recipes')); // Recipes (食谱) — backend door onto the same recipes tables the kitchen app writes; not wired into any UI yet
 app.use(require('./routes/retail-waste')); // Waste (损耗) — §32: a stock movement with a reason; product subjects only for now. NOT routes/waste.js, which is the kitchen screen's API and stays live until cutover
 app.use(require('./routes/retail-shops')); // Shops + shop listings (门店商品) — §41/§42/§44 step 2: admin-only; the ONE other reader is the public menu mounted just below
+app.use(require('./routes/assistant')); // The voice assistant (§495) — a paid module; plans only, the phone executes through the routes above
 // Public QR menu (§44 step 5a) — /s/:shopCode, unauthenticated, outside the
 // admin route tree, menu only: no cart and no ordering (that is step 5b).
 //

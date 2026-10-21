@@ -116,6 +116,8 @@ const SLOW = new Set([
      through scripts/lib/m-probe like the block above, so isSlow() cannot see
      the browser in it and it is named here for the same reason. */
   'test_mobile_stock_command.js',
+  /* §495's sheet probe (the voice assistant), for the same reason. */
+  'test_mobile_assistant.js',
   /* §113's probe, listed here for the reason the block comment above gives and
      test_mobile_live_guards.js repeats: it drives Chromium through
      scripts/lib/m-probe, so it defines no findChrome() of its own and prints no

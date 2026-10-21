@@ -2341,6 +2341,16 @@ const FEATURE_CATALOG = [
   // off would take a live control away from everyone to suit one account.
   // The English title is copied word for word from the strip itself, so the
   // switch names the thing it switches and nobody has to guess.
+  // The voice assistant (§495) — a PAID module: the switch is mounted only
+  // for a tenant the platform has granted it to (ENTITLEMENTS gates
+  // mountFeatureControls), and this is the tenant's own on/off under that.
+  // ON by default once granted, like every switch above: a tenant who has
+  // just paid for it expects to find it on. Server reader:
+  // lib/features.js assistantEnabled.
+  { key: 'assistant',   en: 'Voice assistant',      cn: '语音助手',   def: true,
+    desc: 'The microphone in the phone app\'s header. Say what you need; Tacet shows the plan in words and does it once you approve. Nothing changes from voice alone. · 手机端顶部的麦克风。说出你的需求，Tacet 先用文字展示方案，你批准后再执行。语音本身不会改动任何数据。',
+    descOn:  'On. Operators whose role allows it see the microphone. · 已开启：角色允许的成员可看到麦克风。',
+    descOff: 'Off. The microphone is hidden for everyone. · 已关闭：所有人都看不到麦克风。' },
   { key: 'lowStockHints', en: 'Running low here', cn: '此门店库存偏低', def: true,
     desc: 'Suggestions at the top of a purchase order: the products that store is running low on, each with an Add button. · 采购单顶部的推荐:该门店库存偏低的商品,可直接添加。',
     descOn:  'On. Every purchase order suggests the products that store is short of, so the usual restock is one tap. · 已开启:每张采购单会推荐该门店库存偏低的商品,可直接添加。',

@@ -537,6 +537,14 @@ function call(method, url, body) {
            ONE helper, madeHereProductIds, and nowhere else. Every other order
            path is still held to reading nothing here. */
         path.join('lib', 'inventory.js'),
+        /* WIDENED 2026-10-22 for §495, by name. The voice assistant's plan
+           needs to know which items at a shop are made here and which answers
+           each offers — the listing is the only record of the first — so
+           lib/assistant.js reads it in ONE place, its catalogue(), and only to
+           SHOW a plan: nothing in that file writes, and the switch it proposes
+           runs through routes/retail-shops.js's own route from the phone. No
+           order path is admitted by this line. */
+        path.join('lib', 'assistant.js'),
       ]);
       const hits = [];
       const walk = d => {

@@ -154,6 +154,31 @@ for (const [c, t] of [
 // full self-serve control via storefront_config `features.*`.
 try { db.exec('ALTER TABLE tenants ADD COLUMN features_json TEXT'); } catch (e) { /* already added */ }
 
+// THE VOICE ASSISTANT IS A PAID MODULE (§495), held only when granted in so
+// many words — and Roots, the first tenant, is granted it here rather than by
+// hand in saas-admin, so the deploy that ships the module does not take it
+// away from the account it was built for. Other tenants are granted it from
+// /saas-admin → Features once they have paid. Idempotent by _migrations name;
+// an explicit false already stored is left alone. It lives HERE, after the
+// column it writes, because database.js runs before this file creates the
+// tenants table on a fresh database.
+try {
+  const ranAssistantGrant = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('grant_assistant_to_roots_v1');
+  if (!ranAssistantGrant) {
+    const roots = db.prepare('SELECT id, features_json FROM tenants WHERE id = 1').get();
+    if (roots) {
+      let map = {};
+      try { map = roots.features_json ? (JSON.parse(roots.features_json) || {}) : {}; } catch (e) { map = {}; }
+      if (map.assistant === undefined) {
+        map.assistant = true;
+        db.prepare('UPDATE tenants SET features_json = ? WHERE id = ?').run(JSON.stringify(map), roots.id);
+        console.log('[migration] grant_assistant_to_roots_v1: assistant granted to tenant 1');
+      }
+    }
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('grant_assistant_to_roots_v1');
+  }
+} catch (e) { console.error('[migration grant_assistant_to_roots_v1]', e); }
+
 // Operator avatar (Google-style profile circle). Stored as a small data-URL
 // (client downscales before upload); null = fall back to an initials monogram.
 // Consistent with how customer avatars + other images live in SQLite today; the
