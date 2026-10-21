@@ -489,6 +489,43 @@
   .gsearch-item .gs-body { min-width: 0; flex: 1; }
   .gsearch-item .gs-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .gsearch-item .gs-crumb { font-size: 11.5px; color: var(--text-3); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* ── The voice assistant (§495 rule 13) — the palette's own chrome, with a
+     few parts of its own: the mic button in the top bar, the rows with a tick,
+     the answers, the lines after Approve. */
+  .asst-mic { width: 36px; padding: 0; justify-content: center; margin-right: 8px; }
+  .asst-box { max-width: 620px; }
+  .asst-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px 0; }
+  .asst-title { flex: 1; font-weight: 600; font-size: 15px; }
+  .asst-chips { display: flex; gap: 6px; }
+  .asst-chip { height: 28px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text-1); font: 500 12.5px var(--f-sans); cursor: pointer; }
+  .asst-chip.on { background: var(--text-1); color: var(--bg-pane); border-color: var(--text-1); }
+  .asst-x { width: 32px; height: 32px; border: none; background: transparent; color: var(--text-3); font-size: 22px; line-height: 1; cursor: pointer; border-radius: 8px; }
+  .asst-x:hover { background: var(--bg-elev-1); }
+  .asst-inputrow input { flex: 1; min-width: 0; border: none; background: transparent; color: var(--text-1); font: 500 15px var(--f-sans); outline: none; }
+  .asst-micbtn { width: 36px; height: 36px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--text-1); cursor: pointer; }
+  .asst-micbtn.on { background: var(--text-1); color: var(--bg-pane); border-color: var(--text-1); }
+  .asst-muted, .asst-stat { padding: 0 16px; font-size: 13px; color: var(--text-3); min-height: 18px; line-height: 1.5; }
+  .asst-muted { padding-top: 10px; }
+  .asst-stat.err, .asst-ans.err, .asst-bad { color: var(--td-brick, #B4533E); }
+  .asst-ok { color: var(--td-sage, #5F7357); }
+  .asst-said { padding: 12px 16px 0; font-size: 13.5px; color: var(--text-3); }
+  .asst-say { padding: 6px 16px 4px; font-size: 15px; line-height: 1.5; }
+  .asst-q { padding: 10px 16px 4px; font-size: 15px; font-weight: 600; }
+  .asst-answers { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px 0; }
+  .asst-ans { padding: 12px 14px; border-radius: 10px; background: var(--bg-elev-1); font-size: 14.5px; line-height: 1.5; }
+  .asst-rows { border-top: none; padding-top: 8px; max-height: 44vh; }
+  .asst-row, .asst-opt { gap: 12px; }
+  .asst-tick { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--line); display: inline-flex; align-items: center; justify-content: center; color: var(--bg-pane); }
+  .asst-tick.on { background: var(--text-1); border-color: var(--text-1); }
+  .asst-lbl { flex: 1; min-width: 0; line-height: 1.4; }
+  .asst-sku { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .asst-eyebrow { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 12px 28px 0; }
+  .asst-lines { padding: 6px 16px 0; }
+  .asst-line { display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; font-size: 14.5px; }
+  .asst-mark { flex: none; width: 22px; text-align: center; }
+  .asst-why { display: block; font-size: 12.5px; color: var(--td-brick, #B4533E); }
+  .asst-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 16px 16px; }
+  .asst-foot .btn { min-width: 120px; }
   .gsearch-item .gs-tag {
     flex: 0 0 auto; font-size: 10px; font-weight: 600; letter-spacing: .02em; color: var(--text-3);
     border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px;
