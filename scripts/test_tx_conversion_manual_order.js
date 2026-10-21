@@ -191,7 +191,7 @@ function makeHandler(db, spies) {
        extra may be sold at all. Stubbed, the cases below would assert the
        stub's idea of a line rather than the route's. */
     resolveManualOrderLines: new Function(
-      'tdb', 'productUnitCostYuan', 'productOptions', 'inventory',
+      'tdb', 'productUnitCostYuan', 'productOptions', 'inventory', 'optionSwitch',
       `${extractFunction(RETAIL_SRC, 'costAtSale')}\n`
       + `${extractFunction(RETAIL_SRC, 'manualOrderAddonSoldOut')}\n`
       + `${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
@@ -202,7 +202,9 @@ function makeHandler(db, spies) {
       // that stops meaning anything.
     )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan,
       require(path.join(ROOT, 'lib', 'product-options')),
-      require(path.join(ROOT, 'lib', 'inventory'))),
+      require(path.join(ROOT, 'lib', 'inventory')),
+      // §492 — the shop's answer switch, real like the rest.
+      require(path.join(ROOT, 'lib', 'option-switch'))),
     /* §183 — WHAT THE CHOSEN EXTRAS COST US, snapshotted onto the line beside
        the price. Real, and for the same reason costAtSale above is real: it
        swallows its own errors and answers null, so leaving it undefined would

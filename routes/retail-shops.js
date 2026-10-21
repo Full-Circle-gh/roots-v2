@@ -37,6 +37,7 @@ const inventory = require('../lib/inventory');
 // §183 — the questions a product asks (hot or iced, extra shot, sugar), shared
 // with the QR menu so the counter and the phone ask the same things.
 const productOptions = require('../lib/product-options');
+const optionSwitch = require('../lib/option-switch');
 const { requireRetailAdmin } = require('./retail');
 // §289 — which rows have a photo, the same test the shop lists use.
 const { hasImageFallbackSql } = require('../lib/product-image-sql');
@@ -563,6 +564,51 @@ router.put('/api/retail-admin/shops/:id/listings/:lid/sold-out', requireRetailAd
   ok(res, { listing_id: lid, sold_out: b.sold_out });
 });
 
+/* §492 — SWITCH ONE ANSWER OFF, OR BACK ON, AT THIS SHOP. "Whole wheat
+   crackers" in a made-here Hummus Platter comes out of a kitchen container, so
+   no shelf can say it has run out; the cashier says so here. The answer greys
+   on this shop's QR menu and till and is refused at their submit. Other shops,
+   the web shop and the mini app are untouched (Ash, 2026-10-21: the counter's
+   crackers are not the retail bags).
+
+   Made-here listings only, the rule the item switch above keeps: a stocked
+   product's answers come off a counted shelf when they come off anything.
+
+   The choice id names the answer; what is stored is its label, because the id
+   is gone at the product's next save (lib/option-switch.js). Like the item
+   switch, it stays as set until someone taps it back. */
+router.put('/api/retail-admin/shops/:id/listings/:lid/choices/:cid/off', requireRetailAdmin, requireTillOrStoresEdit, express.json(), (req, res) => {
+  const id = intParam(req.params.id);
+  const lid = intParam(req.params.lid);
+  const cid = intParam(req.params.cid);
+  const shop = id ? getShop(id) : null;
+  const listing = shop && lid ? getListing(id, lid) : null;
+  if (!listing || !cid) return bad(res, 404, 'not_found');
+  if (Array.isArray(req.scopeStores) && req.scopeStores.indexOf(shop.location_id) === -1) {
+    return res.status(403).json({ success: false, error: 'forbidden_store' });
+  }
+  if (listing.fulfilment_mode !== 'made_here') return bad(res, 409, 'not_made_here');
+  const b = req.body || {};
+  if (typeof b.off !== 'boolean') return bad(res, 400, 'off_required');
+  const choice = tdb().prepare(
+    `SELECT c.label_en, c.label_cn
+       FROM retail_product_option_choices c
+       JOIN retail_product_options o ON o.id = c.option_id
+      WHERE c.id = ? AND o.product_id = ?`
+  ).get(cid, listing.store_product_id);
+  const label = choice ? optionSwitch.labelOf(choice) : '';
+  if (!label) return bad(res, 404, 'not_found');
+  optionSwitch.setSwitchedOff(tdb(), {
+    shopId: id, productId: listing.store_product_id, label, off: b.off, userId: req.user.id,
+  });
+  logActivity(req.user.id, req.user.username, 'update', 'shop_option_choice', cid,
+    { shop_id: id, store_product_id: listing.store_product_id, label, off: b.off, via: 'till_sold_out' }, req.ip);
+  // The same ring the item switch sends, so a second till at this shop redraws.
+  try { require('./shop-events').shopStockChanged(currentTenantId(), shop.location_id); }
+  catch (e) { /* no till stream; the till's own poll catches up */ }
+  ok(res, { listing_id: lid, choice_id: cid, label, off: b.off });
+});
+
 // Re-sequence the whole menu in one write: ids in the order they should read.
 // Ids not on this shop are ignored rather than refused, so a stale client that
 // still names a just-removed row cannot block the reorder of the rest.
@@ -582,8 +628,12 @@ router.delete('/api/retail-admin/shops/:id/listings/:lid', requireRetailAdmin, r
   const id = intParam(req.params.id);
   const lid = intParam(req.params.lid);
   if (!id || !lid) return bad(res, 404, 'not_found');
+  const gone = getListing(id, lid);
   const r = tdb().prepare('DELETE FROM shop_listings WHERE shop_id = ? AND id = ?').run(id, lid);
   if (!r.changes) return bad(res, 404, 'not_found');
+  // §492 — its switched-off answers leave with it, so re-adding the product
+  // later does not bring back an "off" nobody remembers setting.
+  if (gone) optionSwitch.clearForProduct(tdb(), id, gone.store_product_id);
   logActivity(req.user.id, req.user.username, 'delete', 'shop_listing', lid, { shop_id: id }, req.ip);
   ok(res, { removed: lid });
 });
@@ -927,8 +977,11 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
     // catalogue reads, so an extra that is ALSO sold as a product of its own
     // has a tile here to keep honest after a sale. This is a staff endpoint
     // behind requireRetailAdmin; the public QR menu asks for no such thing.
+    // §492 — answers this shop has switched off grey in the sheet like a
+    // sold-out extra, and carry `off` so Sold out mode can draw the switch.
+    const isChoiceSwitchedOff = optionSwitch.switchedOffAt(tdb(), locationId);
     const byProduct = productOptions.questionsForProducts(
-      tdb(), [...rowByProduct.keys()], { isChoiceSoldOut, withStockLink: true }
+      tdb(), [...rowByProduct.keys()], { isChoiceSoldOut, isChoiceSwitchedOff, withStockLink: true }
     );
     for (const [pid, qs] of byProduct) {
       const row = rowByProduct.get(pid);

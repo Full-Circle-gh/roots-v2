@@ -568,12 +568,14 @@ function handlerFor(d) {
     // chain — what a line's answers cost, and whether a stock-backed extra may
     // be sold. Both real for the same reason costAtSale is: a stub would decide
     // the price these cases assert.
-    resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan', 'productOptions', 'inventory',
+    resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan', 'productOptions', 'inventory', 'optionSwitch',
       `${extractFunction('costAtSale')}\n${extractFunction('manualOrderAddonSoldOut')}\n`
       + `${extractFunction('resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
     )(() => d, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan,
       require(path.join(ROOT, 'lib', 'product-options')),
-      require(path.join(ROOT, 'lib', 'inventory'))),
+      require(path.join(ROOT, 'lib', 'inventory')),
+      // §492 — the shop's answer switch, real like the rest.
+      require(path.join(ROOT, 'lib', 'option-switch'))),
     // The cost of those answers, snapshotted beside the price — see the INSERT.
     optionsCostAtSale: new Function('chosenOptionCostYuan',
       `${extractFunction('optionsCostAtSale')}\nreturn optionsCostAtSale;`
