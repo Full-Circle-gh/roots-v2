@@ -8121,6 +8121,21 @@ db.exec(`
 `);
 
 // ─────────────────────────────────────────────────────────────────────────
+// EVERY SENTENCE SAID TO THE MICROPHONE, AND WHAT CAME OF IT — decisions §493
+// rule 10. A log, not a memory: nothing reads it on the way in. It exists so
+// that after a week someone can tell whether the weak half is the HEARING
+// (the text is wrong) or the UNDERSTANDING (the text is right, the card was
+// not), which decides what to build next. `said` is the text as the
+// recogniser wrote it or the operator typed it; `read_by` says who read it
+// (the phone, the model, or nobody could); the card's product, candidates,
+// store, action and qty are what was shown; `outcome` is what the operator
+// did, and `picked_product_id` what they chose when the card offered a
+// choice. Pruned to 90 days on write. Tenant data, copied to tenant databases
+// by lib/tenant-db.js initTenantSchema.
+// ─────────────────────────────────────────────────────────────────────────
+db.exec(require('./lib/quick-stock-said').SQL.create);
+
+// ─────────────────────────────────────────────────────────────────────────
 // THE KITCHEN QUEUE SPLIT — docs/tacet-consolidation-decisions.md §61
 // (2026-09-07). A kitchen request used to move as one block: one status on
 // restock_orders, every line forced to start and finish together. Each

@@ -23,7 +23,11 @@
  *     confirmed card teaches the next one (§493 rule 7);
  *   • a sentence the phone cannot read goes to the model when the shop has one
  *     (rule 8), and the model's answer becomes the card — or the phone's own
- *     reading stands when the model fails.
+ *     reading stands when the model fails;
+ *   • every sentence is logged with its card when the card is shown, and its
+ *     outcome when the sheet is left (rule 10) — confirmed, back, cancelled,
+ *     the product picked when a choice was offered — and the outcome waits
+ *     for the log's id when the operator is faster than the server.
  *
  * Drives Chromium through scripts/lib/m-probe, so it belongs in the slow
  * shard and is listed there by name in scripts/run-suites.js.
@@ -68,6 +72,13 @@ const AI = (fx, answer) => fx.replace("mode:'recount',", "ai:true,mode:'recount'
   window.fetch=function(u,o){ window.__sent.push({u:String(u),b:o&&o.body,m:o&&o.method});
     var isAi=String(u).indexOf('/quick-stock/understand')>-1;
     return Promise.resolve({ok:${answer === 'FAIL' ? 'false' : 'true'},status:${answer === 'FAIL' ? 502 : 200},json:function(){return Promise.resolve(isAi?${answer === 'FAIL' ? '{success:false,error:"model_failed"}' : `{success:true,data:${answer}}`}:{success:true})}}); };`;
+/* fetch that answers the sentence log with an id and records every call. */
+const LOGGED = `window.__sent=[];
+  window.fetch=function(u,o){ window.__sent.push({u:String(u),b:o&&o.body,m:o&&o.method});
+    var isSaid=/\\/quick-stock\\/said$/.test(String(u));
+    return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve(isSaid?{success:true,data:{id:41}}:{success:true})}}); };`;
+const saidPosts = "window.__sent.filter(function(s){return /\\/quick-stock\\/said$/.test(s.u)&&s.m!=='PATCH'})";
+const saidPatches = "window.__sent.filter(function(s){return s.u.indexOf('/quick-stock/said/41')>-1&&s.m==='PATCH'})";
 const MIC = "document.querySelector('#content button[onclick=\"APP.cmd(\\'qsCmdOpen\\')\"]')";
 const SAY = (text) => `APP.cmd('qsCmdOpen'); APP.cmd('qsCmdText',${JSON.stringify(text)}); APP.cmd('qsCmdCheck');`;
 const body = "txt('content').replace(/\\s+/g,' ')";
@@ -132,10 +143,10 @@ run('saying a stock change', [
   ]],
   ['a clerk confirming sold out writes an absolute 0 through the card', COUNTING + CATCH + SAY('1-10 sold out') + "APP.cmd('qsCmdGo');", [
     ['the sheet is gone', "!document.querySelector('.sheet')"],
-    ['one write', 'window.__sent.length===1'],
-    ['to this store and product', "window.__sent[0].u.indexOf('/stores/1/stock/7')>-1"],
-    ['a PATCH', "window.__sent[0].m==='PATCH'"],
-    ['of physical_qty 0', 'JSON.parse(window.__sent[0].b).physical_qty===0'],
+    ['one stock write', "window.__sent.filter(function(s){return s.u.indexOf('/stock/')>-1}).length===1"],
+    ['to this store and product', "window.__sent.find(function(s){return s.u.indexOf('/stock/')>-1}).u.indexOf('/stores/1/stock/7')>-1"],
+    ['a PATCH', "window.__sent.find(function(s){return s.u.indexOf('/stock/')>-1}).m==='PATCH'"],
+    ['of physical_qty 0', "JSON.parse(window.__sent.find(function(s){return s.u.indexOf('/stock/')>-1}).b).physical_qty===0"],
     ['the search shows that card', "state.qs.q==='1-10' && document.getElementById('mQsQ').value==='1-10'"],
     ['and the card says so', `${body}.indexOf('Hummus Asli')>-1 && ${body}.indexOf('Turkish Tomato')===-1`],
   ]],
@@ -152,7 +163,7 @@ run('saying a stock change', [
   ['a kitchen with the grant lowering a count meets §46’s fork, and nothing is written yet', GRANTED + CATCH + SAY('1-10 sold out') + "APP.cmd('qsCmdGo');", [
     ['the fork is asked', "state.ask && sheetText().indexOf('The count has gone down')>-1"],
     ['shelf 11, said 0', "sheetText().indexOf('Shelf says 11, you counted 0')>-1"],
-    ['nothing on the wire', 'window.__sent.length===0'],
+    ['no stock write on the wire', "!window.__sent.some(function(s){return s.u.indexOf('/stock/')>-1})"],
   ]],
   ['a store named in the sentence is switched to before anything is written', TWO_STORES + CATCH + SAY('1-10 sold out at yuexiu'), [
     ['the card names Yuexiu', "sheetText().indexOf('Yuexiu')>-1"],
@@ -247,3 +258,55 @@ run('saying a stock change, with a model', [
       ['and the count was written', "window.__sent.some(function(s){return s.m==='PATCH' && JSON.parse(s.b).physical_qty===4})"],
     ]],
 ], { settle: 300 });
+
+run('the sentence log', [
+  ['a card shown is a sentence logged, with what was made of it', COUNTING + LOGGED + SAY('1-10 sold out'), [
+    ['one sentence posted', `${saidPosts}.length===1`],
+    ['the text as said', `JSON.parse(${saidPosts}[0].b).said==='1-10 sold out'`],
+    ['typed, no language', `JSON.parse(${saidPosts}[0].b).via==='typed' && JSON.parse(${saidPosts}[0].b).lang===null`],
+    ['read by the phone', `JSON.parse(${saidPosts}[0].b).read_by==='phone'`],
+    ['the card\'s product, store, action and amount', `(function(b){return b.product_id===7&&b.store_id===1&&b.action==='set'&&b.qty===0})(JSON.parse(${saidPosts}[0].b))`],
+    ['outcome shown', `JSON.parse(${saidPosts}[0].b).outcome==='shown'`],
+  ]],
+  ['a sentence that found nothing is logged as no card', COUNTING + LOGGED + SAY('zebra 4'), [
+    ['posted', `${saidPosts}.length===1`],
+    ['read by nobody', `JSON.parse(${saidPosts}[0].b).read_by==='none'`],
+    ['no card', `JSON.parse(${saidPosts}[0].b).outcome==='no_card'`],
+  ]],
+  ['a choice offered logs the candidates', COUNTING.replace("sku:'1-15'", "sku:'1-15',name_en:'Hummus Spicy'") + LOGGED + SAY('hummus 4'), [
+    ['both candidates', `JSON.parse(${saidPosts}[0].b).candidate_ids.join()==='7,8'`],
+    ['no product', `JSON.parse(${saidPosts}[0].b).product_id===null`],
+  ]],
+  ['a sentence from the recogniser is logged as voice, with its language',
+    WITH_SR(COUNTING) + LOGGED + "APP.cmd('qsCmdOpen'); state.qs.cmd.rec.onresult({results:[[{transcript:'1-10 sold out'}]]}); state.qs.cmd.rec.stop();", [
+      ['voice', `JSON.parse(${saidPosts}[0].b).via==='voice'`],
+      ['in English', `JSON.parse(${saidPosts}[0].b).lang==='en'`],
+    ]],
+], { settle: 300 });
+
+run('the sentence log, outcomes', [
+  ['Confirm logs confirmed, after the id has come back', COUNTING + LOGGED + SAY('1-10 sold out') + "setTimeout(function(){ APP.cmd('qsCmdGo'); },60);", [
+    ['one patch', `${saidPatches}.length===1`],
+    ['confirmed', `JSON.parse(${saidPatches}[0].b).outcome==='confirmed'`],
+  ]],
+  ['Confirm before the id has come back still logs confirmed, once the id arrives', COUNTING + LOGGED + SAY('1-10 sold out') + "APP.cmd('qsCmdGo');", [
+    ['the patch went with the id', `${saidPatches}.length===1 && JSON.parse(${saidPatches}[0].b).outcome==='confirmed'`],
+  ]],
+  ['Back logs back', COUNTING + LOGGED + SAY('1-10 sold out') + "setTimeout(function(){ APP.cmd('qsCmdBack'); },60);", [
+    ['back', `${saidPatches}.length===1 && JSON.parse(${saidPatches}[0].b).outcome==='back'`],
+  ]],
+  ['closing logs cancelled, once', COUNTING + LOGGED + SAY('1-10 sold out') + "setTimeout(function(){ APP.cmd('qsCmdClose'); },60);", [
+    ['cancelled', `${saidPatches}.length===1 && JSON.parse(${saidPatches}[0].b).outcome==='cancelled'`],
+  ]],
+  ['picking another product logs the pick, then the confirm',
+    COUNTING.replace("sku:'1-15'", "sku:'1-15',name_en:'Hummus Spicy'") + LOGGED + SAY('hummus 4') + "setTimeout(function(){ APP.cmd('qsCmdPick',1); APP.cmd('qsCmdGo'); },60);", [
+      ['two patches', `${saidPatches}.length===2`],
+      ['the pick', `JSON.parse(${saidPatches}[0].b).picked_product_id===8`],
+      ['the confirm', `JSON.parse(${saidPatches}[1].b).outcome==='confirmed'`],
+    ]],
+  ['Back then a new sentence is a new row, and the old one is not written again',
+    COUNTING + LOGGED + SAY('1-10 sold out') + "setTimeout(function(){ APP.cmd('qsCmdBack'); APP.cmd('qsCmdText','1-15 sold out'); APP.cmd('qsCmdCheck'); },60);", [
+      ['two sentences', `${saidPosts}.length===2`],
+      ['one patch, the back', `${saidPatches}.length===1 && JSON.parse(${saidPatches}[0].b).outcome==='back'`],
+    ]],
+], { settle: 400 });

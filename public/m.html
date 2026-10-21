@@ -2411,7 +2411,7 @@ reg('qsStore', id=>qsSwitchStore(Number(id)));
 /* §493 — saying a change. */
 reg('qsCmdOpen', ()=>qsCmdOpen());
 reg('qsCmdClose', ()=>qsCmdClose());
-reg('qsCmdText', v=>{ if(state.qs.cmd) state.qs.cmd.text=String(v==null?'':v); });
+reg('qsCmdText', v=>{ if(state.qs.cmd){ state.qs.cmd.text=String(v==null?'':v); state.qs.cmd.via='typed'; } });
 reg('qsCmdMic', ()=>qsCmdMic());
 reg('qsCmdCheck', ()=>qsCmdCheck());
 reg('qsCmdPick', ix=>qsCmdPick(ix));
@@ -23685,7 +23685,7 @@ function qsCmdLangDefault(){
 }
 function qsCmdOpen(){
   if(!state.qs.ctx||!state.qs.items) return;
-  state.qs.cmd={text:'', listening:false, rec:null, err:null, plan:null, busy:false, lang:qsCmdLangDefault()};
+  state.qs.cmd={text:'', listening:false, rec:null, err:null, plan:null, busy:false, lang:qsCmdLangDefault(), via:'typed', saidId:null, saidLater:null, saidOpen:false};
   render();
   /* The button tapped was a microphone, so it is already listening when the
      sheet opens — one tap, not two. Still inside the tap, which is what iOS
@@ -23696,6 +23696,7 @@ function qsCmdOpen(){
 }
 function qsCmdClose(){
   const c=state.qs.cmd; if(!c) return;
+  qsCmdSaidOutcome(c,{outcome:'cancelled'});
   if(c.rec){ const r=c.rec; c.rec=null; r.onend=null; try{ r.abort(); }catch(e){} }
   state.qs.cmd=null; render();
 }
@@ -23719,7 +23720,7 @@ function qsCmdMic(){
   c.rec=r; c.listening=true; c.err=null;
   r.onresult=e=>{
     let t=''; for(let i=0;i<e.results.length;i++) t+=e.results[i][0].transcript;
-    c.text=t; const el=document.getElementById('mQsCmd'); if(el) el.value=t;
+    c.text=t; c.via='voice'; const el=document.getElementById('mQsCmd'); if(el) el.value=t;
   };
   r.onerror=e=>{
     const k=e&&e.error;
@@ -23785,6 +23786,7 @@ function qsCmdMerge(plan, a){
   const byId=id=>items.find(x=>(x.product_id!=null?x.product_id:x.id)===id)||null;
   const out=Object.assign({},plan);
   const p=a.product_id!=null?byId(a.product_id):null;
+  out.readBy='model';
   if(p){ out.product=p; out.candidates=[]; out.how='model'; }
   else if(Array.isArray(a.candidates)&&a.candidates.length){ const cs=a.candidates.map(byId).filter(Boolean); if(cs.length){ out.product=null; out.candidates=cs; out.how=null; } }
   if(a.store_id!=null){ const s=stores.find(x=>x.id===a.store_id); if(s){ out.store=s; out.storeSaid=true; } }
@@ -23799,7 +23801,36 @@ function qsCmdShow(plan){
   if(!plan.product&&!plan.candidates.length) c.err=T('No products match','没有匹配的商品');
   else if(plan.product&&plan.qty==null) c.err=T('Say how many, or “sold out”.','请说数量，或“售罄”。');
   else if(plan.product&&plan.action==='set'&&qsMode()==='add'&&!state.qs.canRecount) c.err=T('Here you can add stock, not set the count.','这里只能加库存，不能设置数量。');
+  qsCmdSaid(c, plan);
   render();
+}
+/* ── THE SENTENCE LOG (§493 rule 10) ──────────────────────────────
+   Every sentence, what was made of it, and what the operator then did, so
+   that after a week someone can tell whether the hearing or the reading is
+   the weak half. Two writes: the sentence with its card (or its refusal)
+   when the card is shown, and the outcome when the sheet is left. Both fire
+   and forget — a log that fails to save costs nothing the operator can see.
+   The outcome can arrive before the first write has answered with an id;
+   it waits in `saidLater` and goes with the id. */
+function qsCmdSaid(c, plan){
+  const pid=p=>p?(p.product_id!=null?p.product_id:p.id):null;
+  const body={said:c.text.trim(), via:c.via, lang:c.via==='voice'?c.lang:null,
+    read_by: plan.readBy==='model'?'model':((plan.product||plan.candidates.length)?'phone':'none'),
+    product_id:pid(plan.product), candidate_ids:(plan.candidates||[]).map(pid),
+    store_id:plan.store?plan.store.id:null, action:plan.action, qty:plan.qty,
+    outcome:c.err?'no_card':'shown'};
+  c.saidId=null; c.saidLater=null; c.saidOpen=true;
+  apiWrite('/quick-stock/said',body).then(d=>{
+    const id=d&&d.data&&d.data.id; if(!id) return;
+    c.saidId=id;
+    if(c.saidLater){ const later=c.saidLater; c.saidLater=null; apiWrite('/quick-stock/said/'+id,later,'PATCH').catch(()=>{}); }
+  }).catch(()=>{});
+}
+function qsCmdSaidOutcome(c, patch){
+  if(!c||!c.saidOpen) return;
+  if(patch.outcome) c.saidOpen=false;
+  if(c.saidId){ apiWrite('/quick-stock/said/'+c.saidId,patch,'PATCH').catch(()=>{}); }
+  else c.saidLater=Object.assign(c.saidLater||{},patch);
 }
 function qsCmdPick(ix){
   const c=state.qs.cmd; if(!c||!c.plan) return;
@@ -23810,12 +23841,13 @@ function qsCmdPick(ix){
   const again=qsCmdParse((p.sku||'')+' '+c.text, [p], (state.qs.ctx&&state.qs.ctx.stores)||[], {storeId:state.qs.storeId, defaultAction:qsMode()});
   c.plan.action=again.action; c.plan.qty=again.qty;
   c.plan.product=p; c.plan.how='picked';
+  qsCmdSaidOutcome(c,{picked_product_id:(p.product_id!=null?p.product_id:p.id)});
   c.err=null;
   if(c.plan.qty==null) c.err=T('Say how many, or “sold out”.','请说数量，或“售罄”。');
   else if(c.plan.action==='set'&&qsMode()==='add'&&!state.qs.canRecount) c.err=T('Here you can add stock, not set the count.','这里只能加库存，不能设置数量。');
   render();
 }
-function qsCmdBack(){ const c=state.qs.cmd; if(!c) return; c.plan=null; c.err=null; render(); }
+function qsCmdBack(){ const c=state.qs.cmd; if(!c) return; qsCmdSaidOutcome(c,{outcome:'back'}); c.plan=null; c.err=null; render(); }
 /* What the card says will happen, from the plan. One of three sentences, all
    built from pairs this screen already ships. */
 function qsCmdActionText(plan, p){
@@ -23844,6 +23876,7 @@ function qsCmdGo(){
   const plan=c.plan, p=plan.product; if(!p||plan.qty==null||!plan.store) return;
   const id=p.product_id!=null?p.product_id:p.id;
   qsCmdLearn(plan);
+  qsCmdSaidOutcome(c,{outcome:'confirmed'});
   if(plan.store.id!==state.qs.storeId){
     // The same lock the chips have: nothing moves store while something is unsaved.
     if(qsStoreBusy()){ c.err=T('Finish what is unsaved first.','请先完成未保存的改动。'); render(); return; }
