@@ -14366,7 +14366,9 @@ shop clerks, so each string is cut from what this screen already says to them.
 ### Copied whole
 
 - `Cancel` / `取消`, `Next` / `下一步`, `Back` / `返回`, `Confirm` / `确认`, `No
-  products match` / `没有匹配的商品` — `public/m.html`, unchanged.
+  products match` / `没有匹配的商品`, `Working…` / `处理中…` (while the model
+  reads, §493 rule 8) — `public/m.html`, unchanged. The language chips carry
+  `English` and `中文`, each in its own language on both sides: no string.
 
 ### Rejected
 

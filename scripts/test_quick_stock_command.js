@@ -52,11 +52,19 @@ function sliceConst(name) {
   return SRC.slice(start, end + 2);
 }
 
+// A one-line const (the verb lists are regexes, so sliceConst's `};` is wrong for them).
+function sliceLine(name) {
+  const start = SRC.indexOf(`const ${name}=`);
+  if (start < 0) throw new Error(`const ${name} not found in m.html`);
+  return SRC.slice(start, SRC.indexOf(';\n', start) + 1);
+}
+
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext([
   sliceConst('QS_CMD_WORDS'), sliceConst('QS_CMD_CN_DIGITS'),
-  sliceFn('qsCmdKey'), sliceFn('qsCmdCn'), sliceFn('qsCmdNumber'),
+  ...['QS_CMD_ZERO_EN', 'QS_CMD_ZERO_CN', 'QS_CMD_ADD_EN', 'QS_CMD_ADD_CN', 'QS_CMD_SET_EN', 'QS_CMD_SET_CN'].map(sliceLine),
+  sliceFn('qsCmdKey'), sliceFn('qsCmdCn'), sliceFn('qsCmdNumber'), sliceFn('qsCmdResidue'),
   sliceFn('qsCmdMatchProduct'), sliceFn('qsCmdParse'),
 ].join('\n'), ctx);
 const { qsCmdParse, qsCmdCn } = ctx;
@@ -170,6 +178,33 @@ console.log('\nChinese said without spaces, and names that look like numbers or 
   eq(r.product && r.product.sku, '1-50', 'sku, store and verb run together still read');
   eq(r.store && r.store.id, 2, 'Yuexiu');
   eq(r.qty, 0, 'sold out');
+}
+
+console.log('\nWhat this person has said before (§493 rule 7)');
+{
+  let r = parse('homeless sold out');
+  eq(r.product, null, 'a mishearing nobody has corrected matches nothing');
+  eq(r.heard, 'homeless', 'and the residue is the mishearing, verbs and all taken out');
+  const heard = { mine: { homeless: 10 }, others: { 哈姆斯: 12 } };
+  r = parse('homeless sold out', { heard });
+  eq(r.product && r.product.sku, '1-50', 'once learned, the phrase is the product');
+  eq(r.how, 'heard', 'and the reading says it came from memory');
+  eq(r.qty, 0, 'sold out still reads');
+  r = parse('homeless 5 left at yuexiu', { heard });
+  eq(r.product && r.product.sku, '1-50', 'the same phrase with a count and a store');
+  eq(r.qty, 5, 'the count is 5');
+  eq(r.store && r.store.id, 2, 'the store is Yuexiu');
+  eq(r.heard, 'homeless', 'the residue is still just the phrase');
+  r = parse('哈姆斯卖完了', { heard });
+  eq(r.product && r.product.sku, 'PB-01', 'a colleague\'s learned phrase counts too');
+  eq(r.qty, 0, '卖完了 is sold out');
+  r = parse('1-50 sold out', { heard: { mine: { '150': 12 } } });
+  eq(r.product && r.product.sku, '1-50', 'a sku said plainly is never overridden by memory');
+  eq(r.how, 'skuDigits', 'and the reading says sku (a short all-digit one)');
+  r = parse('三文鱼剩三');
+  eq(r.heard, '三文鱼', 'the residue keeps a numeral inside a name and drops the one standing alone');
+  r = parse('made twenty five pita bread at tianhe', { defaultAction: 'add' });
+  eq(r.heard, 'pitabread', 'word numbers, verbs and the store leave the residue');
 }
 
 console.log('\nThe store');

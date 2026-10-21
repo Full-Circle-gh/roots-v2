@@ -1460,7 +1460,11 @@ const state = {
          rec, err, plan}. `cmdPending` is a confirmed change waiting for the
          shelf of the store it named to load, because the write goes through
          that shelf's own card. */
-      cmd:null, cmdPending:null},
+      cmd:null, cmdPending:null,
+      /* What this person's recogniser has written for a product before (§493
+         rule 7): {mine:{heard:product_id}, others:{...}}. Read with the context,
+         added to on every confirmed card. */
+      heard:null},
   /* WASTE — the ledger and its one write. Namespaced like `qs` rather than
      spread across a dozen flat keys, for the reason the note above this
      literal gives: `pick`, `note`, `range` and `busy` are exactly the short
@@ -2409,6 +2413,7 @@ reg('qsCmdCheck', ()=>qsCmdCheck());
 reg('qsCmdPick', ix=>qsCmdPick(ix));
 reg('qsCmdBack', ()=>qsCmdBack());
 reg('qsCmdGo', ()=>qsCmdGo());
+reg('qsCmdLang', l=>qsCmdLang(String(l)));
 reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
 reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; forgetPushed(); state.stack=[]; state.tab=t; state.detailId=null;
   /* Opening Orders IS reading them — the same rule the inbox already follows.
@@ -22869,6 +22874,7 @@ function loadQsCtx(){
   if(state.qs.ctxTried) return; state.qs.ctxTried=true;
   api('/quick-stock/context').then(d=>{
     state.qs.ctx=d||{}; state.qs.ctxErr=null;
+    state.qs.heard=(d&&d.heard)||{mine:{},others:{}};
     // §46: whether this operator may also SEE the count and correct it. The
     // server decides, from the `quickstock:recount` grant on their role.
     state.qs.canRecount=(d&&d.can_recount)===true;
@@ -23507,6 +23513,30 @@ function qsCmdNumber(tokens, skip){
   close();
   return found;
 }
+/* The words that say what to do, in both languages. Shared by the reading
+   and by the residue below, so the two cannot disagree on what is a verb. */
+const QS_CMD_ZERO_EN=/\b(out of stock|sold out|none left|no more|nothing left|all gone|sell out|sold|gone|finished|empty)\b/;
+const QS_CMD_ZERO_CN=/售罄|缺货|没有了|没了|卖完|卖光|没货|清零|用完|空了/;
+const QS_CMD_ADD_EN=/\b(add|added|adding|made|make|making|plus|put|received|baked|more)\b/;
+const QS_CMD_ADD_CN=/加|增加|做了|做好|新增|入库|补货|补了|多了/;
+const QS_CMD_SET_EN=/\b(set|left|remaining|remains|remain|have|has|there are|there is|now|count|is|are|total|only)\b/;
+const QS_CMD_SET_CN=/剩|还有|设为|改为|设置|库存|数量|总共|共|只有/;
+/* WHAT WAS SAID FOR THE PRODUCT, once the store, the numbers and the verbs are
+   out: the part a recogniser gets wrong the same way every time. It is the key
+   a learned phrase is stored under (§493 rule 7), so it is computed the same
+   way on the way in and on the way out. */
+function qsCmdResidue(tokens, skip){
+  let s=tokens.filter((t,i)=>!skip[i]).join(' ').toLowerCase();
+  s=(' '+s+' ').replace(new RegExp(QS_CMD_ZERO_EN.source,'g'),' ').replace(new RegExp(QS_CMD_ADD_EN.source,'g'),' ').replace(new RegExp(QS_CMD_SET_EN.source,'g'),' ');
+  s=s.replace(new RegExp(QS_CMD_ZERO_CN.source,'g'),' ').replace(new RegExp(QS_CMD_ADD_CN.source,'g'),' ').replace(new RegExp(QS_CMD_SET_CN.source,'g'),' ');
+  s=s.replace(/\b(at|the|of|to|in|on|for|location|store|shop|please|pcs|pc|and|hundred)\b/g,' ');
+  s=s.replace(/[店请把的了是个件包份瓶盒袋]/g,' ');
+  s=s.replace(/\d+/g,' ');
+  // A Chinese numeral standing on its own is a number; one inside a name (三文鱼) is not.
+  s=s.replace(/(^|[^\u4e00-\u9fff])([零〇一二两三四五六七八九十]+)(?=$|[^\u4e00-\u9fff])/g,'$1 ');
+  s=s.split(/\s+/).filter(w=>w&&!(w in QS_CMD_WORDS)).join(' ');
+  return qsCmdKey(s);
+}
 /* How well a product matches the sentence, and which tokens it used up so
    they are not read again as a quantity. The sku wins outright when a token
    (or two or three glued together — "1 - 50") IS the sku; a name scores by
@@ -23587,11 +23617,21 @@ function qsCmdParse(text, products, stores, opts){
   }
   if(!store) store=(stores||[]).find(s=>s.id===opts.storeId)||(stores||[])[0]||null;
 
-  /* The product. */
+  /* The product. First by what this person has said for it before (rule 7):
+     an exact phrase of theirs is as good as the sku; a colleague's is a strong
+     hint. Then by sku and by name. */
+  const residue=qsCmdResidue(tokens,skip);
+  const heard=opts.heard||{};
   const cn=raw.replace(/[^\u4e00-\u9fff]+/g,'');
-  const scored=(products||[]).map(p=>({p, m:qsCmdMatchProduct(p,tokens,keys,cn)})).filter(x=>x.m.score>=0.4)
+  const scored=(products||[]).map(p=>{
+    const m=qsCmdMatchProduct(p,tokens,keys,cn);
+    const id=p.product_id!=null?p.product_id:p.id;
+    if(residue&&heard.mine&&heard.mine[residue]===id&&m.score<1){ m.score=1; m.kind='heard'; m.used=[]; m.cnUsed=''; }
+    else if(residue&&heard.others&&heard.others[residue]===id&&m.score<0.9){ m.score=0.9; m.kind='heard'; m.used=[]; m.cnUsed=''; }
+    return {p, m};
+  }).filter(x=>x.m.score>=0.4)
     .sort((a,b)=>b.m.score-a.m.score);
-  let product=null, candidates=[], cnUsed='';
+  let product=null, candidates=[], cnUsed='', how=null;
   if(scored.length){
     const fullName=x=>(x.m.kind==='name'&&x.m.score>=0.9)||(x.m.kind==='cn'&&x.m.score>=0.92);
     let list=scored;
@@ -23607,7 +23647,7 @@ function qsCmdParse(text, products, stores, opts){
     const clear=top&&top.m.score>=0.5&&(!next||next.m.score<=top.m.score-0.15||(top.m.score>=0.95&&next.m.score<0.95));
     // One thing it could be, even below the bar, is one thing — the card
     // shows it and the operator confirms it.
-    if(clear||list.length===1){ product=top.p; top.m.used.forEach(i=>{ skip[i]=true; }); cnUsed=top.m.cnUsed||''; }
+    if(clear||list.length===1){ product=top.p; how=top.m.kind; top.m.used.forEach(i=>{ skip[i]=true; }); cnUsed=top.m.cnUsed||''; }
     else candidates=list.slice(0,3).map(x=>x.p);
   }
 
@@ -23620,23 +23660,28 @@ function qsCmdParse(text, products, stores, opts){
   if(cnUsed) rest=rest.split(cnUsed).join(' ');
   if(store&&storeSaid&&store.name_cn) rest=rest.split(String(store.name_cn)).join(' ');
   const restCn=rest.replace(/[^\u4e00-\u9fff]+/g,'');
-  if(/\b(out of stock|sold out|none left|no more|nothing left|all gone|sell out|sold|gone|finished|empty)\b/.test(' '+rest+' ')||/售罄|缺货|没有了|没了|卖完|卖光|没货|清零|用完|空了/.test(restCn)){ action='set'; qty=0; }
-  else if(/\b(add|added|adding|made|make|making|plus|put|received|baked|more)\b/.test(' '+rest+' ')||/^\+|\s\+/.test(rest)||/加|增加|做了|做好|新增|入库|补货|补了|多了/.test(restCn)) action='add';
-  else if(/\b(set|left|remaining|remains|remain|have|has|there are|there is|now|count|is|are|total|only)\b/.test(' '+rest+' ')||/剩|还有|设为|改为|设置|库存|数量|总共|共|只有/.test(restCn)) action='set';
+  if(QS_CMD_ZERO_EN.test(' '+rest+' ')||QS_CMD_ZERO_CN.test(restCn)){ action='set'; qty=0; }
+  else if(QS_CMD_ADD_EN.test(' '+rest+' ')||/^\+|\s\+/.test(rest)||QS_CMD_ADD_CN.test(restCn)) action='add';
+  else if(QS_CMD_SET_EN.test(' '+rest+' ')||QS_CMD_SET_CN.test(restCn)) action='set';
   else action=opts.defaultAction==='add'?'add':'set';
   if(qty==null){ const n=qsCmdNumber(rest.split(/\s+/).filter(Boolean),{}); if(n) qty=n.n; }
   // Unspaced Chinese: the last run of numerals left once the names are out.
   if(qty==null){ const runs=restCn.match(/[零〇一二两三四五六七八九十]+/g)||[]; for(const r of runs){ const v=qsCmdCn(r); if(v!=null) qty=v; } }
   if(action==='add'&&qty===0) qty=null;   // "add nothing" is not a request
 
-  return {text:raw, product, candidates, store, storeSaid, action, qty};
+  return {text:raw, product, candidates, store, storeSaid, action, qty, how, heard:residue};
 }
 
 /* ── The sheet ─────────────────────────────────────────────────────────── */
 function qsCmdSR(){ return (typeof window!=='undefined'&&(window.SpeechRecognition||window.webkitSpeechRecognition))||null; }
+const QS_VOICE_LANG_KEY='roots_qs_voice_lang';
+function qsCmdLangDefault(){
+  let v=null; try{ v=localStorage.getItem(QS_VOICE_LANG_KEY); }catch(e){}
+  return v==='en'||v==='zh' ? v : (LANG==='en'?'en':'zh');
+}
 function qsCmdOpen(){
   if(!state.qs.ctx||!state.qs.items) return;
-  state.qs.cmd={text:'', listening:false, rec:null, err:null, plan:null};
+  state.qs.cmd={text:'', listening:false, rec:null, err:null, plan:null, busy:false, lang:qsCmdLangDefault()};
   render();
   /* The button tapped was a microphone, so it is already listening when the
      sheet opens — one tap, not two. Still inside the tap, which is what iOS
@@ -23647,7 +23692,7 @@ function qsCmdOpen(){
 }
 function qsCmdClose(){
   const c=state.qs.cmd; if(!c) return;
-  if(c.rec){ try{ c.rec.abort(); }catch(e){} }
+  if(c.rec){ const r=c.rec; c.rec=null; r.onend=null; try{ r.abort(); }catch(e){} }
   state.qs.cmd=null; render();
 }
 /* Listening state and the error line are painted IN PLACE: a render would
@@ -23665,7 +23710,7 @@ function qsCmdMic(){
   const SR=qsCmdSR();
   if(!SR){ c.err=T('Voice isn’t available in this browser. Type it instead.','此浏览器不支持语音，请输入。'); qsCmdRepaint(); return; }
   const r=new SR();
-  r.lang=LANG==='en'?'en-US':'zh-CN';
+  r.lang=c.lang==='en'?'en-US':'zh-CN';   // the chip on the sheet, remembered per device
   r.interimResults=true; r.continuous=false; r.maxAlternatives=1;
   c.rec=r; c.listening=true; c.err=null;
   r.onresult=e=>{
@@ -23687,11 +23732,65 @@ function qsCmdMic(){
   try{ r.start(); }catch(e){ c.rec=null; c.listening=false; c.err=T('Could not make that out — try again, or type it.','无法识别，请重试或输入。'); }
   qsCmdRepaint();
 }
+/* ENGLISH OR CHINESE: the recogniser hears one language at a time, and the
+   app's language is not always the one a sentence is said in — a Chinese
+   screen, an English product name. The chip is remembered on the device, and
+   switching while listening starts again in the other language. */
+function qsCmdLang(l){
+  const c=state.qs.cmd; if(!c||(l!=='en'&&l!=='zh')||c.lang===l) return;
+  c.lang=l; try{ localStorage.setItem(QS_VOICE_LANG_KEY,l); }catch(e){}
+  const was=!!c.rec;
+  if(was){ const r=c.rec; c.rec=null; c.listening=false; r.onend=null; try{ r.abort(); }catch(e){} }
+  render();
+  if(was) qsCmdMic();
+}
 function qsCmdCheck(){
-  const c=state.qs.cmd; if(!c) return;
+  const c=state.qs.cmd; if(!c||c.busy) return;
   const text=c.text.trim(); if(!text) return;
   const plan=qsCmdParse(text, state.qs.items||[], (state.qs.ctx&&state.qs.ctx.stores)||[],
-    {storeId:state.qs.storeId, defaultAction:qsMode()});
+    {storeId:state.qs.storeId, defaultAction:qsMode(), heard:state.qs.heard||{}});
+  /* THE PHONE'S OWN READING IS ENOUGH when the product was said by its sku or
+     by a phrase this person has said before, and an amount was said. Anything
+     less sure goes to the model (§493 rule 8) when the shop has one: a name
+     the recogniser garbled, two products that fit, a sentence with no amount
+     the phone could find. The card is shown either way; only Confirm writes. */
+  const sure=plan.product&&plan.qty!=null&&(plan.how==='sku'||plan.how==='skuDigits'||plan.how==='heard');
+  if(!sure&&state.qs.ctx&&state.qs.ctx.ai){
+    c.busy=true; c.plan=null; c.err=null; render();
+    apiWrite('/quick-stock/understand',{text, store_id:state.qs.storeId}).then(d=>{
+      if(state.qs.cmd!==c) return;   // closed meanwhile
+      c.busy=false;
+      qsCmdShow(qsCmdMerge(plan,(d&&d.data)||d));
+    }).catch(e=>{
+      if(state.qs.cmd!==c||String(e.message)==='auth') return;
+      c.busy=false;
+      qsCmdShow(plan);   // the phone's reading, as it was
+    });
+    return;
+  }
+  qsCmdShow(plan);
+}
+/* The model's answer over the phone's: a product it names (one the shelf
+   holds), its candidates, a store it heard, its action and amount. What it
+   leaves null keeps the phone's reading. The residue — what was said for the
+   product — stays the phone's, because it is the key the phrase is learned
+   under either way. */
+function qsCmdMerge(plan, a){
+  if(!a||typeof a!=='object') return plan;
+  const items=state.qs.items||[], stores=(state.qs.ctx&&state.qs.ctx.stores)||[];
+  const byId=id=>items.find(x=>(x.product_id!=null?x.product_id:x.id)===id)||null;
+  const out=Object.assign({},plan);
+  const p=a.product_id!=null?byId(a.product_id):null;
+  if(p){ out.product=p; out.candidates=[]; out.how='model'; }
+  else if(Array.isArray(a.candidates)&&a.candidates.length){ const cs=a.candidates.map(byId).filter(Boolean); if(cs.length){ out.product=null; out.candidates=cs; out.how=null; } }
+  if(a.store_id!=null){ const s=stores.find(x=>x.id===a.store_id); if(s){ out.store=s; out.storeSaid=true; } }
+  if(a.action==='set'||a.action==='add') out.action=a.action;
+  if(a.qty!=null&&Number.isInteger(a.qty)&&a.qty>=0) out.qty=a.qty;
+  if(out.action==='add'&&out.qty===0) out.qty=null;
+  return out;
+}
+function qsCmdShow(plan){
+  const c=state.qs.cmd; if(!c) return;
   c.plan=plan; c.err=null;
   if(!plan.product&&!plan.candidates.length) c.err=T('No products match','没有匹配的商品');
   else if(plan.product&&plan.qty==null) c.err=T('Say how many, or “sold out”.','请说数量，或“售罄”。');
@@ -23706,7 +23805,7 @@ function qsCmdPick(ix){
   c.plan.product=p; c.plan.candidates=[];
   const again=qsCmdParse((p.sku||'')+' '+c.text, [p], (state.qs.ctx&&state.qs.ctx.stores)||[], {storeId:state.qs.storeId, defaultAction:qsMode()});
   c.plan.action=again.action; c.plan.qty=again.qty;
-  c.plan.product=p;
+  c.plan.product=p; c.plan.how='picked';
   c.err=null;
   if(c.plan.qty==null) c.err=T('Say how many, or “sold out”.','请说数量，或“售罄”。');
   else if(c.plan.action==='set'&&qsMode()==='add'&&!state.qs.canRecount) c.err=T('Here you can add stock, not set the count.','这里只能加库存，不能设置数量。');
@@ -23721,10 +23820,26 @@ function qsCmdActionText(plan, p){
   const shelf=p?qsShelf(p):null;
   return T('Set count to '+plan.qty, '设为 '+plan.qty)+(shelf!=null&&shelf!==plan.qty?' · '+T('now '+shelf,'现有 '+shelf):'');
 }
+/* LEARNING THE PERSON (§493 rule 7). A confirmed card whose product was not
+   said by its sku records what WAS said for it, under this operator: the next
+   time their recogniser writes the same thing, the phone reads it alone, with
+   no model and no mistake. A sku needs no learning; a phrase already known
+   gets its count raised. Fire and forget: the card has been confirmed, and a
+   memory that fails to save costs one more model call next time, nothing else. */
+function qsCmdLearn(plan){
+  const p=plan.product, key=plan.heard;
+  if(!p||!key||key.length<2) return;
+  if(plan.how==='sku'||plan.how==='skuDigits') return;
+  const id=p.product_id!=null?p.product_id:p.id;
+  const h=state.qs.heard||(state.qs.heard={mine:{},others:{}});
+  h.mine=h.mine||{}; h.mine[key]=id;
+  apiWrite('/quick-stock/heard',{heard:key, product_id:id}).catch(()=>{});
+}
 function qsCmdGo(){
-  const c=state.qs.cmd; if(!c||!c.plan||c.err) return;
+  const c=state.qs.cmd; if(!c||!c.plan||c.err||c.busy) return;
   const plan=c.plan, p=plan.product; if(!p||plan.qty==null||!plan.store) return;
   const id=p.product_id!=null?p.product_id:p.id;
+  qsCmdLearn(plan);
   if(plan.store.id!==state.qs.storeId){
     // The same lock the chips have: nothing moves store while something is unsaved.
     if(qsStoreBusy()){ c.err=T('Finish what is unsaved first.','请先完成未保存的改动。'); render(); return; }
@@ -23773,9 +23888,17 @@ function sheetQsCmd(){
        ${plan?'':`<div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${escAttr(example)}</div>`}
      </div>`;
   let body;
-  if(!plan){
+  if(c.busy){
+    body=`<div style="padding:0 20px 4px;font-size:15px;color:var(--text-secondary)">“${escAttr(c.text)}”</div>
+    <div style="padding:16px 20px 0;font-size:14px;color:var(--text-secondary)">${T('Working…','处理中…')}</div>
+    <div style="display:flex;gap:8px;padding:16px 20px 0">
+      <button class="btn2" style="flex:1" onclick="APP.cmd('qsCmdClose')">${T('Cancel','取消')}</button>
+    </div>`;
+  } else if(!plan){
     const hasSR=!!qsCmdSR();
-    body=`<div style="padding:8px 20px 0;display:flex;flex-direction:column;gap:10px">
+    // The language names stand in their own language on both sides: no string.
+    const langRow=hasSR?`<div style="padding:0 0 10px">${chipRow([{key:'en',en:'English',zh:'English'},{key:'zh',en:'中文',zh:'中文'}],c.lang,'qsCmdLang')}</div>`:'';
+    body=langRow+`<div style="padding:8px 20px 0;display:flex;flex-direction:column;gap:10px">
       <div style="display:flex;gap:8px;align-items:center">
         <input id="mQsCmd" value="${escAttr(c.text)}" enterkeyhint="go" autocomplete="off" style="flex:1;min-width:0"
           oninput="APP.cmd('qsCmdText',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('qsCmdCheck')}">
