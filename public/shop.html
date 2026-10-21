@@ -6041,7 +6041,7 @@ function cardHtml(p){
       <div class="nm">${esc(pick(p.name_en,p.name_cn))}${other?`<span class="cn">${esc(other)}</span>`:''}</div>
       ${tag?`<div class="tag">${esc(tag.slice(0,60))}</div>`:''}
       ${p.has_options?`<span class="opt-cue">${state.lang==='cn'?'多规格':'Options'}</span>`:''}
-      <div class="prices"><span class="now">${money(now)}</span>${was>0?`<span class="was">${money(was)}</span>`:''}</div>
+      <div class="prices">${p.has_options&&!(now>0)?'':`<span class="now">${money(now)}</span>`}${was>0?`<span class="was">${money(was)}</span>`:''}</div>
     </div>
   </a>`;
 }
@@ -6088,6 +6088,11 @@ async function renderProduct(id){
   // Per-product options (dressing, spice, paid extras) are chosen in a bottom
   // sheet opened from ADD TO BASKET — not inline — to match the mini-app.
   const popts=Array.isArray(p.options)?p.options:[];
+  // NO ¥0.00 on a product priced only by its choices (its own price is zero
+  // and it asks) — it reads as free or broken. Reported by Ash from the live
+  // QR menu. The card above prints none for the same product, and the button
+  // shows the price once a choice gives it one.
+  const zeroAsk=popts.length>0&&!(now>0);
 
   // Variant siblings are NOT shown inline — mirror of the mini-app, where the
   // sizes are picked in a bottom sheet opened from "Choose a size" (the buy
@@ -6119,7 +6124,7 @@ async function renderProduct(id){
         ${other?`<div class="cn">${esc(other)}</div>`:''}
         ${tag?`<div class="tagline">${esc(tag)}</div>`:''}
         <div class="price-row">
-          <span class="price-now">${money(now)}</span>
+          ${zeroAsk?'':`<span class="price-now">${money(now)}</span>`}
           ${was>0?`<span class="price-was">${money(was)}</span><span class="flash-tag">${state.lang==='cn'?'限时':'Flash'}</span>`:''}
           ${ss.oos?`<span class="pd-oos-tag${ss.soldOut?' sold':' soon'}">${ss.badge}</span>`:''}
         </div>
@@ -6221,7 +6226,8 @@ async function renderProduct(id){
       if(lbl) lbl.textContent=popts.length
         ?(state.lang==='cn'?'选择选项':'CHOOSE OPTIONS')
         :(state.lang==='cn'?'加入购物车':'ADD TO BASKET');
-      if(pr) pr.textContent=money(unit()*qty);
+      // Blank rather than ¥0.00 while the choices have added nothing yet.
+      if(pr) pr.textContent=(popts.length&&!(unit()>0))?'':money(unit()*qty);
     }
     $('.pd-qty').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
       if(b.dataset.q==='inc')qty++;else if(b.dataset.q==='dec'&&qty>1)qty--;

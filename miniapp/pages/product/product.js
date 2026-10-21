@@ -239,6 +239,7 @@ Page({
     bundle: null,          // "buy together" set (resolved item cards) or null
     whatsInside: null,     // bundle PRODUCT component list ("what's inside") or null
     hasVariants: false,    // ≥2 purchasable siblings → "Add" opens the size picker
+    zeroAsk: false,        // own price zero + has choices → the button draws no price
     // Variant size-picker bottom sheet (same UX as the shop grid's +). Opened
     // from "Add to basket" when the product has ≥2 siblings; choosing a size
     // adds that specific sibling (its own price / stock) to the cart.
@@ -1000,6 +1001,11 @@ Page({
       subtitle: L === 'en' ? '' : lang.pick(p.name_cn, p.name_en, 'en'),
       priceN: v,
       price: v > 0 ? money(v) : '—',
+      // A product priced only by its choices — its own price is zero and it
+      // asks — draws no price on the button rather than a dash: there is
+      // nothing to price until a choice is made, and the options sheet's own
+      // button shows the total. Reported by Ash from the live QR menu.
+      zeroAsk: !(v > 0) && options.length > 0,
       isFlash,
       flashWas,
       flashOff,
