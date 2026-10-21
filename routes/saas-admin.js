@@ -184,7 +184,9 @@ router.patch('/api/saas-admin/tenants/:id/features', requireTenantManage, expres
   // client can't write junk. Anything not present defaults to entitled (true).
   const map = {};
   for (const f of featureCatalog.FEATURES) {
-    map[f.key] = body[f.key] === false ? false : true;
+    // A paid module (§495) is granted only by an explicit true; the rest are
+    // held unless explicitly lowered, as before.
+    map[f.key] = f.paid ? body[f.key] === true : body[f.key] !== false;
   }
   db.prepare('UPDATE tenants SET features_json = ? WHERE id = ?').run(JSON.stringify(map), t.id);
   logAudit(req, { action: 'tenant.features', targetType: 'tenant', targetId: t.id, meta: map });

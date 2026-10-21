@@ -1415,6 +1415,7 @@ const FEATURE_HOMES = {
   // no separate entry here on purpose (§28: one switch, not two) — its rail
   // tab is gated by the same data-feat="production" attribute as Materials'.
   production:  '#mat-settings-home',
+  assistant:   '#assistant-settings-home',
   // Low-stock suggestions (§178) sit inside the purchase-order editor, which
   // is a wizard step, not a page with room for a settings bar — so the switch
   // goes where Production's does, Settings → Operations, next to the other

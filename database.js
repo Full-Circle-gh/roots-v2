@@ -8136,6 +8136,38 @@ db.exec(`
 db.exec(require('./lib/quick-stock-said').SQL.create);
 
 // ─────────────────────────────────────────────────────────────────────────
+// THE VOICE ASSISTANT (§495): what was asked, what was planned, what was
+// approved and what ran — one row per sentence, 90 days — and the names a
+// person uses that the catalogue does not ("Ramada" for Yuexiu), learned when
+// a question the assistant asked is answered. Tenant data, copied to tenant
+// databases by lib/tenant-db.js initTenantSchema.
+// ─────────────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS assistant_log (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_key       TEXT    NOT NULL,
+    said           TEXT    NOT NULL,
+    via            TEXT    NOT NULL DEFAULT 'typed',
+    lang           TEXT,
+    plan_json      TEXT,
+    outcome        TEXT    NOT NULL DEFAULT 'shown',
+    approved_json  TEXT,
+    results_json   TEXT,
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_assistant_log_created ON assistant_log (created_at);
+  CREATE TABLE IF NOT EXISTS assistant_names (
+    user_key    TEXT    NOT NULL,
+    kind        TEXT    NOT NULL,
+    heard       TEXT    NOT NULL,
+    target_id   INTEGER NOT NULL,
+    hits        INTEGER NOT NULL DEFAULT 1,
+    last_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_key, kind, heard)
+  );
+`);
+
+// ─────────────────────────────────────────────────────────────────────────
 // THE KITCHEN QUEUE SPLIT — docs/tacet-consolidation-decisions.md §61
 // (2026-09-07). A kitchen request used to move as one block: one status on
 // restock_orders, every line forced to start and finish together. Each

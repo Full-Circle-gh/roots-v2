@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.345 · 2026-10-22 · §495 THE VOICE ASSISTANT, A PAID MODULE — 23 STRINGS COMPOSED BY CLAUDE (`语音助手`, `使用语音助手`, `说出你的需求。例如：“吐司的全麦面包售罄了”，或“关店”。`, `建议同时`, `批准`, `都不是`, `这个我做不了，请换种说法。`, `已完成 N 项`, `N 项失败`, `语音助手需要在服务器上配置模型密钥。`, `当前套餐不包含语音助手。`, `本账户已关闭语音助手。`, THE FEATURE CARD'S THREE LINES, AND THE SEVEN ROW TEMPLATES `在{shop}关闭{item}的{answer}` / `在{shop}恢复{item}的{answer}` / `将{store}的{product}设为售罄` / `将{store}的{product}设为 N` / `在{store}为{product}加 N 件` / `关闭{store}` · `开启{store}` / `全部关闭` · `全部开启` / `关闭网店` · `开启网店`), EACH BUILT FROM LIVE FRAGMENTS; `Working…`, `Listening…`, `Next`, `Back`, `Cancel`, `Close`, `Done`, `Failed`, `Voice` AND §493'S TWO RECOGNISER LINES COPIED WHOLE.** See *The voice assistant (§495)*.
+
 **v1.344 · 2026-10-21 · §494 SETTINGS REGROUPED INTO NINE GROUPS, WITH A "?" ON EVERY CARD — 11 STRINGS COMPOSED BY CLAUDE (`配送与自提`, `功能开关`, `发给顾客`, `发给团队`, `每日库存偏低清单`, `其他功能`, `这些功能在各自的页面上开启或关闭。`, `没有其他可开关的功能。`, `两个值都来自企业微信客服后台,绑定小程序 AppID 之后即可查看。`, `刷新状态仅刷新计数,不定位;全部定位才会真正获取坐标。`, AND THE TWO GEOCODE NOTES), EACH BUILT FROM LIVE FRAGMENTS; THE OTHER GROUP NAMES, THE PILLS AND THE 43 CARD LEADS ARE LIVE TEXT UNCHANGED.** See *Settings → nine groups and the "?" (§494)*.
 
 **v1.343 · 2026-10-21 · §494 SETTINGS → PAYMENTS & TAX, AND THE GEOCODING CARD — 2 STRINGS COMPOSED BY CLAUDE (`收款与税费`, `地图密钥在服务器上配置`), EACH BUILT FROM LIVE FRAGMENTS; THE PILLS `On · 已启用`, `Off · 未启用`, `Map key set · 已配置密钥`, `No map key · 缺少密钥` REUSE THE LIVE CHINESE; THE KEY-MISSING TOAST `服务器缺少地图密钥,未定位。` IS COMPOSED TOO (3 IN ALL).** See *Settings → Payments & tax (§494)*.
@@ -14455,3 +14457,59 @@ in both languages, with a `;` at the cut closed as `。`.
 - `功能` alone for the Features panel — says what, not that it is a switchboard; `开关` is what the phone already calls these.
 - `顾客通知` / `团队通知` for the two sections — reads as two kinds of notification rather than two recipients; `发给` is the column the record already uses.
 - `其它功能` — `其他` is the live spelling (`其他地区`).
+
+## The voice assistant (§495)
+
+One microphone in the phone's header; a plan in words; Approve. Register:
+OPERATOR (Rule 1). The model writes the one line that says what it understood
+(*say*) in the request's own language, so that line is never a string here;
+everything fixed on the sheet is below.
+
+### Composed — declared, by Claude Fable 5.1, under Rule 4's 2026-09-06 delegation
+
+| where | EN | CN | built from |
+|---|---|---|---|
+| the feature, the capability section, the sheet's title, the header mic's label | Voice assistant | 语音助手 | `语音` is live (printer settings); `助手` is the ordinary word for an assistant app. |
+| the capability's label in the role editor | Use the voice assistant | 使用语音助手 | `使用` is live in the role editor's other verbs. |
+| the sheet's one line of guidance | Say what you need. For example: “whole wheat bread on the toast is sold out”, or “close the shop”. | 说出你的需求。例如：“吐司的全麦面包售罄了”，或“关店”。 | `说出` is §493's; `例如` and `售罄` are live; `关店` is the counter's own word for closing. The example names no tenant's product. |
+| the heading over the rows the plan added | Also suggested | 建议同时 | `建议` is live (purchasing's suggestions); `同时` = at the same time. |
+| the button that runs the ticked rows | Approve | 批准 | Ash's own word; `批准` is the standard verb. Not `确认`, which this app uses for a single card; a plan of several rows is approved. |
+| the way out of a question | Something else | 都不是 | "none of these", the plain answer to a list of options. |
+| a plan with no rows | Nothing I can do with that. Try other words. | 这个我做不了，请换种说法。 | `换种说法` is the plain phrase for "say it differently". |
+| the tally after running | N done | 已完成 N 项 | `已完成` is live; `项` is the live counter for rows. |
+| the tally's failures | N failed | N 项失败 | `失败` is live. |
+| no model key on the server | The assistant needs the model key on the server. | 语音助手需要在服务器上配置模型密钥。 | `在服务器上配置` is live (`地图密钥在服务器上配置`, §494); `密钥` is live. |
+| the module not held by the tenant | The voice assistant is not part of this account’s plan. | 当前套餐不包含语音助手。 | `套餐` is the live word for a plan on the billing page; `不包含` is live. |
+| the module switched off | The voice assistant is switched off for this account. | 本账户已关闭语音助手。 | the live `Waste is switched off for this account` shape; `已关闭` is live. |
+| the Settings card, title and lead | Voice assistant · The microphone in the phone app's header. Say what you need; Tacet shows the plan in words and does it once you approve. Nothing changes from voice alone. | 手机端顶部的麦克风。说出你的需求，Tacet 先用文字展示方案，你批准后再执行。语音本身不会改动任何数据。 | `手机端` and `顶部` are live; `方案` is live (purchasing); `批准` as above; `不会改动任何数据` is the live promise shape (`数据不会删除`). |
+| the card's On line | On. Operators whose role allows it see the microphone. | 已开启：角色允许的成员可看到麦克风。 | the other cards' `已开启：` shape; `角色`, `成员` are live (Team). |
+| the card's Off line | Off. The microphone is hidden for everyone. | 已关闭：所有人都看不到麦克风。 | the other cards' `已关闭：` shape. |
+| a row: an answer switched off | Switch off {answer} on {item} at {shop} | 在{shop}关闭{item}的{answer} | `关闭` is live for a switch; the §492 chip's own verb. |
+| a row: an answer switched back on | Switch back on {answer} on {item} at {shop} | 在{shop}恢复{item}的{answer} | `恢复` is live (`评价已恢复`, `空运延误已恢复`). |
+| a row: a product sold out | Mark {product} sold out at {store} | 将{store}的{product}设为售罄 | `设为` and `售罄` are §493's. |
+| a row: a count | Set {product} to N at {store} | 将{store}的{product}设为 N | §493's `设为 N`. |
+| a row: an add | Add N {product} at {store} | 在{store}为{product}加 N 件 | §493's `加 N 件`. |
+| a row: one store | Close {store} / Open {store} | 关闭{store} / 开启{store} | `关闭` and `开启` are the open/close panel's own words. |
+| a row: everything | Close everything / Open everything | 全部关闭 / 全部开启 | the panel's `全部` with the same two verbs. |
+| a row: the online store | Close the online store / Open the online store | 关闭网店 / 开启网店 | `网店` is live (`Web store · 网店`). |
+
+### Copied whole
+
+- `Working…` / `处理中…`, `Listening…` / `正在听…`, `Next` / `下一步`, `Back` /
+  `返回`, `Cancel` / `取消`, `Close` / `关闭`, `Done` / `完成`, `Failed` / `失败`,
+  `Voice` / `语音`, `English` and `中文` on the chips, and §493's two recogniser
+  lines (`此浏览器不支持语音，请输入。`, `无法识别，请重试或输入。`) — `public/m.html`,
+  unchanged.
+
+### Rejected
+
+- **`确认` for Approve.** Live, and right for one card; a plan of several
+  ticked rows is approved, which is the word Ash used.
+- **`智能助手` for the feature.** Reads as a chatbot; the thing is a
+  microphone that does what you said.
+- **`建议` alone for the heading.** Reads as advice; `建议同时` says the rows
+  are offered to run together with the asked ones.
+- **`无法处理` for "nothing I can do".** The app's live `无法` lines are about
+  failures; this is a limit of the list, not a failure, and the second half
+  tells the person what to try.
+

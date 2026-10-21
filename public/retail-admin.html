@@ -11842,6 +11842,21 @@
             </div>
           </div>
 
+          <!-- ── Voice assistant (语音助手, §495) ── a PAID module. The host is
+               only ever filled for a tenant the platform has granted it to
+               (mountFeatureControls skips an unentitled key); for everyone
+               else this card is empty and hidden by the rule below. No
+               data-feat on the host, for the reason the Waste host gives. -->
+          <div id="assistant-settings-home" data-paid-module="assistant">
+            <div class="group-card">
+              <div class="group-card-head">
+                <div class="gch-row"><h3>Voice assistant · 语音助手</h3></div>
+                <div class="muted card-lead">Say what you need in the phone app; Tacet shows the plan in words and does it once you approve. · 在手机端说出你的需求，Tacet 先用文字展示方案，你批准后再执行。</div>
+              </div>
+
+            </div>
+          </div>
+
           <!-- ── Materials (物料) ── -->
           <!-- The on/off switch (.feat-bar) and the "off" card are injected at
                the top of #mat-settings-home by mountFeatureControls()

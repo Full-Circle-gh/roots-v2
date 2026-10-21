@@ -346,7 +346,10 @@ function versionOf(tid) {
   is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 24, '24 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
   // §252 added `integrations:signin`, which moves no money and shows none.
-  is(caps.CAPABILITIES.length, 119, 'across all 119');
+  // §495 added `assistant:use`: the door to the voice assistant, a paid
+  // module. ADDED, read in the diff, as the note above asks; it moves no money
+  // and shows none — every action it proposes runs under the caller's own keys.
+  is(caps.CAPABILITIES.length, 120, 'across all 120');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,

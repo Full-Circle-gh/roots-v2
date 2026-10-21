@@ -1042,6 +1042,8 @@ const state = {
      field. null means no override, exactly as on the desktop. */
   dashCards:null,
   overflow:false, help:null, search:false, detailId:null, detailActions:false, productSku:null,
+  /* §495 — the voice assistant's sheet, or null when closed. */
+  asst:null,
   /* The out-of-stock policy picker, over the product sheet — the SKU it is
      answering for, or null. Keyed by sku the way productSku is, so the picker
      and the sheet under it can never end up addressing two different products. */
@@ -2495,6 +2497,17 @@ reg('toggleSound', ()=>{ state.sound=!state.sound; render();
   if(state.sound) playOrderChime(true); });
 reg('openSearch', ()=>{ state.overflow=false; state.search=true; render(); });
 reg('closeSearch', ()=>{ state.search=false; render(); });
+/* §495 — the voice assistant. */
+reg('asstOpen', ()=>asstOpen());
+reg('asstClose', ()=>asstClose());
+reg('asstText', v=>{ if(state.asst){ state.asst.text=String(v==null?'':v); state.asst.via='typed'; } });
+reg('asstMic', ()=>asstMic());
+reg('asstLang', l=>asstLang(String(l)));
+reg('asstPlan', ()=>asstPlan());
+reg('asstTick', k=>asstTick(String(k)));
+reg('asstBack', ()=>asstBack());
+reg('asstAnswer', id=>asstAnswer(id));
+reg('asstRun', ()=>asstRun());
 /* Opening the inbox IS reading it — the desktop stamps last-seen the moment
    its sub-tab becomes active, and the dot has nothing to count afterwards. */
 reg('push', k=>{ push(k); if(k==='inbox') markInboxSeen(); });
@@ -23446,6 +23459,223 @@ function qsWriteFailed(id,n,msg){
   state.qs.rowErr[id]=msg||E('Didn’t save','未保存');
   render();
 }
+/* ── THE PHONE'S OWN RECOGNISER, shared (§493, §495) ──────────────────────
+   One listener for Quick Stock's mic and the assistant's. `c` is the sheet's
+   state — {lang, rec, listening, err, text, via} — and `h` says where the
+   text goes and what to say when the phone cannot hear:
+     fieldId      the input that shows the transcript as it arrives
+     repaint()    paints listening / error in place, never a render
+     onEnd()      runs when the recogniser stops with text and no error
+     unavailable  the sentence for "no recogniser, or the mic was refused"
+     misheard     the sentence for "heard nothing it could use"
+   Two sheets, one recogniser, so they cannot drift on what a browser without
+   one is told. */
+function voiceSR(){ return (typeof window!=='undefined'&&(window.SpeechRecognition||window.webkitSpeechRecognition))||null; }
+function voiceListen(c, h){
+  if(c.rec){ try{ c.rec.stop(); }catch(e){} return; }
+  const SR=voiceSR();
+  if(!SR){ c.err=h.unavailable; h.repaint(); return; }
+  const r=new SR();
+  r.lang=c.lang==='en'?'en-US':'zh-CN';   // the chip on the sheet, remembered per device
+  r.interimResults=true; r.continuous=false; r.maxAlternatives=1;
+  c.rec=r; c.listening=true; c.err=null;
+  r.onresult=e=>{
+    let t=''; for(let i=0;i<e.results.length;i++) t+=e.results[i][0].transcript;
+    c.text=t; c.via='voice'; const el=document.getElementById(h.fieldId); if(el) el.value=t;
+  };
+  r.onerror=e=>{
+    const k=e&&e.error;
+    c.err = k==='not-allowed'||k==='service-not-allowed' ? h.unavailable : k==='aborted' ? null : h.misheard;
+  };
+  r.onend=()=>{
+    c.rec=null; c.listening=false; h.repaint();
+    // Said and heard: go straight on. The confirm is still a tap away.
+    if(c.text.trim()&&!c.err) h.onEnd();
+  };
+  try{ r.start(); }catch(e){ c.rec=null; c.listening=false; c.err=h.misheard; }
+  h.repaint();
+}
+function voiceAbort(c){ if(c&&c.rec){ const r=c.rec; c.rec=null; c.listening=false; r.onend=null; try{ r.abort(); }catch(e){} } }
+const VOICE_LANG_KEY='roots_qs_voice_lang';
+function voiceLangDefault(){
+  let v=null; try{ v=localStorage.getItem(VOICE_LANG_KEY); }catch(e){}
+  return v==='en'||v==='zh' ? v : (LANG==='en'?'en':'zh');
+}
+function voiceUnavailable(){ return T('Voice isn’t available in this browser. Type it instead.','此浏览器不支持语音，请输入。'); }
+function voiceMisheard(){ return T('Could not make that out — try again, or type it.','无法识别，请重试或输入。'); }
+
+/* ── THE VOICE ASSISTANT (§495) ───────────────────────────────────────────
+   One microphone in the header. Say what you need; the server turns it into
+   a PLAN — rows in plain words, each one a route this app already calls — and
+   nothing runs until Approve. Then this phone calls those routes one by one,
+   under this operator's own login, and shows each row's result.
+
+   THE PLAN IS THE SERVER'S, THE WRITES ARE THE PHONE'S. The server reads the
+   sentence with the model and the tenant's catalogue and hands back rows with
+   their routes; it writes nothing. The phone executes, so a route refuses the
+   assistant exactly as it refuses a tap, and the refusal lands on the row.
+
+   A question comes back instead of a plan when the sentence could mean two
+   things or named something the catalogue does not have. The options are
+   buttons; picking one re-plans with the answer, and a name the model could
+   not place is learned against the pick (rule 7 of §493, widened), so
+   "Ramada" means Yuexiu from then on for everyone at the tenant. */
+function asstCan(){ return mCan('assistant:use') && featOn('assistant'); }
+function asstOpen(){
+  if(!asstCan()||state.asst) return;
+  state.asst={text:'', via:'typed', lang:voiceLangDefault(), listening:false, rec:null, err:null,
+    busy:false, plan:null, logId:null, stage:'say', ticks:{}, results:{}, running:null, answers:{}, learn:null};
+  render();
+  if(voiceSR()) asstMic();
+  else { const el=document.getElementById('mAsst'); if(el) el.focus(); }
+}
+function asstClose(){
+  const a=state.asst; if(!a) return;
+  voiceAbort(a);
+  if(a.logId&&(a.stage==='plan')) apiWrite('/assistant/outcome',{id:a.logId, outcome:'cancelled', approved:[], results:[]}).catch(()=>{});
+  state.asst=null; render();
+}
+function asstRepaint(){
+  const a=state.asst; if(!a) return;
+  const mic=document.getElementById('mAsstMic');
+  if(mic){ mic.classList.toggle('on',!!a.listening); mic.setAttribute('aria-pressed',a.listening?'true':'false'); }
+  const st=document.getElementById('mAsstStat');
+  if(st){ st.textContent=a.listening?T('Listening…','正在听…'):(a.err?String(a.err):''); st.style.color=a.err&&!a.listening?'var(--brick-ink)':'var(--text-secondary)'; }
+}
+function asstMic(){
+  const a=state.asst; if(!a) return;
+  voiceListen(a,{fieldId:'mAsst', repaint:asstRepaint, onEnd:asstPlan, unavailable:voiceUnavailable(), misheard:voiceMisheard()});
+}
+function asstLang(l){
+  const a=state.asst; if(!a||(l!=='en'&&l!=='zh')||a.lang===l) return;
+  a.lang=l; try{ localStorage.setItem(VOICE_LANG_KEY,l); }catch(e){}
+  const was=!!a.rec; voiceAbort(a); render();
+  if(was) asstMic();
+}
+/* What a refused or failed route says on its row. */
+function asstErrText(e){
+  if(!e) return T('Failed','失败');
+  if(e.refused&&e.words) return T(...e.words);
+  if(e.code==='not_configured') return T('The assistant needs the model key on the server.','语音助手需要在服务器上配置模型密钥。');
+  if(e.code==='module_not_held') return T('The voice assistant is not part of this account’s plan.','当前套餐不包含语音助手。');
+  if(e.code==='assistant_off') return T('The voice assistant is switched off for this account.','本账户已关闭语音助手。');
+  return (e.message&&e.code!=='model_failed')?e.message:T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+}
+function asstPlan(){
+  const a=state.asst; if(!a||a.busy) return;
+  const text=a.text.trim(); if(!text) return;
+  a.busy=true; a.err=null; a.plan=null; a.stage='say'; render();
+  const body={text, via:a.via, lang:a.lang, answers:a.answers, log_id:a.logId};
+  if(a.learn&&a.learn.length) body.learn=a.learn;
+  a.learn=null;
+  apiWrite('/assistant/plan',body).then(d=>{
+    if(state.asst!==a) return;
+    const p=(d&&d.data)||d;
+    a.busy=false; a.logId=p.id||a.logId; a.plan=p; a.stage='plan';
+    a.ticks={}; (p.actions||[]).forEach(r=>{ a.ticks[r.key]=true; });
+    render();
+  }).catch(e=>{
+    if(state.asst!==a||String(e.message)==='auth') return;
+    a.busy=false; a.err=asstErrText(e); render();
+  });
+}
+function asstTick(key){ const a=state.asst; if(!a||a.stage!=='plan') return; a.ticks[key]=!a.ticks[key]; render(); }
+function asstBack(){
+  const a=state.asst; if(!a) return;
+  if(a.logId&&a.plan&&!a.plan.question) apiWrite('/assistant/outcome',{id:a.logId, outcome:'declined', approved:[], results:[]}).catch(()=>{});
+  a.plan=null; a.err=null; a.stage='say'; a.answers={}; a.learn=null; a.logId=null; render();
+}
+/* An option tapped under a question: the answer, and — when the sentence
+   held exactly one name the model could not place — that name is learned
+   against the pick, so the next sentence needs no question. */
+function asstAnswer(id){
+  const a=state.asst; if(!a||!a.plan||!a.plan.question) return;
+  const q=a.plan.question, n=Number(id);
+  if(!q.options.some(o=>o.id===n)) return;
+  if(['store','shop','product','listing'].includes(q.kind)){
+    a.answers[q.kind+'_id']=n;
+    const un=a.plan.unknown_names||[];
+    if(un.length===1) a.learn=[{kind:q.kind, heard:un[0], id:n}];
+  }
+  asstPlan();
+}
+async function asstRun(){
+  const a=state.asst; if(!a||a.stage!=='plan'||!a.plan) return;
+  const rows=(a.plan.actions||[]).filter(r=>a.ticks[r.key]);
+  if(!rows.length) return;
+  a.stage='run'; a.results={}; render();
+  for(const r of rows){
+    a.running=r.key; render();
+    try{ await apiWrite(r.cmd.path, r.cmd.body, r.cmd.method); a.results[r.key]={ok:true}; }
+    catch(e){ if(String(e.message)==='auth') return; a.results[r.key]={ok:false, error:asstErrText(e)}; }
+  }
+  a.running=null; a.stage='done'; render();
+  apiWrite('/assistant/outcome',{id:a.logId, outcome:'approved', approved:rows.map(r=>r.key),
+    results:rows.map(r=>({key:r.key, ok:!!(a.results[r.key]&&a.results[r.key].ok), error:(a.results[r.key]&&a.results[r.key].error)||null}))}).catch(()=>{});
+  // What changed under the other screens is re-read when they are next opened;
+  // the one that is cheap and often open is the shelf.
+  if(rows.some(r=>r.type==='stock')&&state.qs.items){ state.qs.itemsTried=false; loadQsItems(true); }
+}
+function sheetAssistant(){
+  const a=state.asst; if(!a) return '';
+  const hasSR=!!voiceSR();
+  const head=`<div style="flex:none;padding:calc(env(safe-area-inset-top,0px) + 16px) 10px 12px 20px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border-default)">
+      <div style="flex:1;font-size:18px;font-weight:500">${T('Voice assistant','语音助手')}</div>
+      <button onclick="APP.cmd('asstClose')" style="background:transparent;border:none;color:var(--text-secondary);font-size:15px;font-weight:500;cursor:pointer;padding:8px 6px;font-family:inherit;flex:none">${a.stage==='done'?T('Close','关闭'):T('Cancel','取消')}</button></div>`;
+  let body='';
+  if(a.stage==='say'&&a.busy){
+    body=`<div style="padding:20px;font-size:15px;color:var(--text-secondary)">“${escAttr(a.text)}”</div>
+      <div style="padding:0 20px;font-size:14px;color:var(--text-secondary)">${T('Working…','处理中…')}</div>`;
+  } else if(a.stage==='say'){
+    const langRow=hasSR?`<div style="padding:14px 0 4px">${chipRow([{key:'en',en:'English',zh:'English'},{key:'zh',en:'中文',zh:'中文'}],a.lang,'asstLang')}</div>`:'';
+    body=langRow+`<div style="padding:12px 20px 0;display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:14px;color:var(--text-secondary);line-height:1.5">${T('Say what you need. For example: “whole wheat bread on the toast is sold out”, or “close the shop”.','说出你的需求。例如：“吐司的全麦面包售罄了”，或“关店”。')}</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="mAsst" value="${escAttr(a.text)}" enterkeyhint="go" autocomplete="off" style="flex:1;min-width:0"
+          oninput="APP.cmd('asstText',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('asstPlan')}">
+        ${hasSR?`<button id="mAsstMic" class="stepbtn${a.listening?' on':''}" style="width:52px;height:52px" aria-pressed="${a.listening?'true':'false'}" aria-label="${T('Voice','语音')}" onclick="APP.cmd('asstMic')">${ic('mic',24)}</button>`:''}
+      </div>
+      <div id="mAsstStat" style="font-size:13px;min-height:18px;color:${a.err?'var(--brick-ink)':'var(--text-secondary)'}">${a.listening?T('Listening…','正在听…'):escAttr(a.err||(hasSR?'':voiceUnavailable()))}</div>
+      <button class="btn2" style="width:100%" onclick="APP.cmd('asstPlan')">${T('Next','下一步')}</button>
+    </div>`;
+  } else if(a.stage==='plan'&&a.plan&&a.plan.question){
+    const q=a.plan.question;
+    body=`<div style="padding:16px 20px 4px;font-size:14px;color:var(--text-secondary)">“${escAttr(a.text)}”</div>
+      ${a.plan.say?`<div style="padding:4px 20px 8px;font-size:15px;line-height:1.5">${escAttr(a.plan.say)}</div>`:''}
+      <div style="padding:8px 20px 4px;font-size:15px;font-weight:500">${escAttr(q.text)}</div>
+      <div>${(q.options||[]).map(o=>`<button class="row" style="min-height:52px;padding:11px 20px" onclick="APP.cmd('asstAnswer',${o.id})"><span style="flex:1;font-size:15px">${escAttr(o.label)}</span>${o.sku?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(o.sku)}</span>`:''}</button>`).join('')}</div>
+      <div style="display:flex;gap:8px;padding:16px 20px 0"><button class="btn2" style="flex:1" onclick="APP.cmd('asstBack')">${T('Something else','都不是')}</button></div>`;
+  } else if(a.stage==='plan'&&a.plan){
+    const rows=a.plan.actions||[];
+    const asked=rows.filter(r=>!r.suggested), sugg=rows.filter(r=>r.suggested);
+    const row=r=>`<button class="row" style="min-height:52px;padding:10px 20px;gap:12px" onclick="APP.cmd('asstTick','${r.key}')" aria-pressed="${a.ticks[r.key]?'true':'false'}">
+        <span style="flex:none;width:24px;height:24px;border-radius:6px;border:1.5px solid var(--edge);display:flex;align-items:center;justify-content:center;${a.ticks[r.key]?'background:var(--text-primary);color:var(--bg);border-color:var(--text-primary)':''}">${a.ticks[r.key]?ic('check',16,2.4):''}</span>
+        <span style="flex:1;font-size:15px;line-height:1.4">${escAttr(LANG==='en'?r.label_en:(r.label_cn||r.label_en))}</span></button>`;
+    const n=rows.filter(r=>a.ticks[r.key]).length;
+    body=`<div style="padding:16px 20px 4px;font-size:14px;color:var(--text-secondary)">“${escAttr(a.text)}”</div>
+      ${a.plan.say?`<div style="padding:4px 20px 8px;font-size:15px;line-height:1.5">${escAttr(a.plan.say)}</div>`:''}
+      ${rows.length?'':`<div style="padding:12px 20px;font-size:14px;color:var(--brick-ink)">${T('Nothing I can do with that. Try other words.','这个我做不了，请换种说法。')}</div>`}
+      <div>${asked.map(row).join('')}</div>
+      ${sugg.length?`<div class="eyebrow" style="padding:14px 20px 4px">${T('Also suggested','建议同时')}</div><div>${sugg.map(row).join('')}</div>`:''}
+      <div style="display:flex;gap:8px;padding:16px 20px 0">
+        <button class="btn2" style="flex:1" onclick="APP.cmd('asstBack')">${T('Back','返回')}</button>
+        ${rows.length?`<button class="btn2" style="flex:1"${n?'':' disabled'} onclick="APP.cmd('asstRun')">${T('Approve','批准')}${n?' · '+n:''}</button>`:''}
+      </div>`;
+  } else if(a.stage==='run'||a.stage==='done'){
+    const rows=(a.plan.actions||[]).filter(r=>a.ticks[r.key]);
+    const line=r=>{ const x=a.results[r.key];
+      const mark=x?(x.ok?`<span style="color:var(--sage-ink)">✓</span>`:`<span style="color:var(--brick-ink)">✗</span>`):(a.running===r.key?`<span style="color:var(--text-secondary)">…</span>`:'');
+      return `<div style="display:flex;gap:12px;padding:10px 20px;align-items:flex-start"><span style="flex:none;width:24px;text-align:center;font-size:16px">${mark}</span>
+        <span style="flex:1;font-size:15px;line-height:1.4">${escAttr(LANG==='en'?r.label_en:(r.label_cn||r.label_en))}${x&&!x.ok?`<span style="display:block;font-size:13px;color:var(--brick-ink)">${escAttr(x.error||'')}</span>`:''}</span></div>`; };
+    const done=Object.values(a.results).filter(x=>x.ok).length, bad=Object.values(a.results).filter(x=>!x.ok).length;
+    body=`<div style="padding:16px 20px 8px;font-size:14px;color:var(--text-secondary)">${a.stage==='done'?T('Done','完成'):T('Working…','处理中…')}</div>
+      <div>${rows.map(line).join('')}</div>
+      ${a.stage==='done'?`<div style="padding:14px 20px 0;font-size:14px;color:var(--text-secondary)">${T(done+' done','已完成 '+done+' 项')}${bad?` · <span style="color:var(--brick-ink)">${T(bad+' failed',bad+' 项失败')}</span>`:''}</div>
+      <div style="display:flex;gap:8px;padding:16px 20px 0"><button class="btn2" style="flex:1" onclick="APP.cmd('asstClose')">${T('Close','关闭')}</button></div>`:''}`;
+  }
+  return `<div class="overlay" style="position:absolute;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;animation:tFade .2s ease both">${head}
+    <div style="flex:1;overflow-y:auto;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px)">${body}</div></div>`;
+}
 /* ── SAYING A STOCK CHANGE (§493) ───────────────────────────────────────────
    Ash, 2026-10-21: "a microphone feature where you can say an sku or a
    product name and give a command like 1-50 out of stock at yuexiu location
@@ -23677,12 +23907,10 @@ function qsCmdParse(text, products, stores, opts){
 }
 
 /* ── The sheet ─────────────────────────────────────────────────────────── */
-function qsCmdSR(){ return (typeof window!=='undefined'&&(window.SpeechRecognition||window.webkitSpeechRecognition))||null; }
-const QS_VOICE_LANG_KEY='roots_qs_voice_lang';
-function qsCmdLangDefault(){
-  let v=null; try{ v=localStorage.getItem(QS_VOICE_LANG_KEY); }catch(e){}
-  return v==='en'||v==='zh' ? v : (LANG==='en'?'en':'zh');
-}
+/* The recogniser and the language default are the shared ones above (§495
+   moved them out, so the assistant and this sheet cannot drift). */
+function qsCmdSR(){ return voiceSR(); }
+function qsCmdLangDefault(){ return voiceLangDefault(); }
 function qsCmdOpen(){
   if(!state.qs.ctx||!state.qs.items) return;
   state.qs.cmd={text:'', listening:false, rec:null, err:null, plan:null, busy:false, lang:qsCmdLangDefault(), via:'typed', saidId:null, saidLater:null, saidOpen:false};
@@ -23697,7 +23925,7 @@ function qsCmdOpen(){
 function qsCmdClose(){
   const c=state.qs.cmd; if(!c) return;
   qsCmdSaidOutcome(c,{outcome:'cancelled'});
-  if(c.rec){ const r=c.rec; c.rec=null; r.onend=null; try{ r.abort(); }catch(e){} }
+  voiceAbort(c);
   state.qs.cmd=null; render();
 }
 /* Listening state and the error line are painted IN PLACE: a render would
@@ -23711,31 +23939,7 @@ function qsCmdRepaint(){
 }
 function qsCmdMic(){
   const c=state.qs.cmd; if(!c) return;
-  if(c.rec){ try{ c.rec.stop(); }catch(e){} return; }
-  const SR=qsCmdSR();
-  if(!SR){ c.err=T('Voice isn’t available in this browser. Type it instead.','此浏览器不支持语音，请输入。'); qsCmdRepaint(); return; }
-  const r=new SR();
-  r.lang=c.lang==='en'?'en-US':'zh-CN';   // the chip on the sheet, remembered per device
-  r.interimResults=true; r.continuous=false; r.maxAlternatives=1;
-  c.rec=r; c.listening=true; c.err=null;
-  r.onresult=e=>{
-    let t=''; for(let i=0;i<e.results.length;i++) t+=e.results[i][0].transcript;
-    c.text=t; c.via='voice'; const el=document.getElementById('mQsCmd'); if(el) el.value=t;
-  };
-  r.onerror=e=>{
-    const k=e&&e.error;
-    c.err = k==='not-allowed'||k==='service-not-allowed'
-      ? T('Voice isn’t available in this browser. Type it instead.','此浏览器不支持语音，请输入。')
-      : k==='aborted' ? null
-      : T('Could not make that out — try again, or type it.','无法识别，请重试或输入。');
-  };
-  r.onend=()=>{
-    c.rec=null; c.listening=false; qsCmdRepaint();
-    // Said and heard: go straight to the card. The confirm is still a tap away.
-    if(c.text.trim()&&!c.err) qsCmdCheck();
-  };
-  try{ r.start(); }catch(e){ c.rec=null; c.listening=false; c.err=T('Could not make that out — try again, or type it.','无法识别，请重试或输入。'); }
-  qsCmdRepaint();
+  voiceListen(c,{fieldId:'mQsCmd', repaint:qsCmdRepaint, onEnd:qsCmdCheck, unavailable:voiceUnavailable(), misheard:voiceMisheard()});
 }
 /* ENGLISH OR CHINESE: the recogniser hears one language at a time, and the
    app's language is not always the one a sentence is said in — a Chinese
@@ -23743,9 +23947,8 @@ function qsCmdMic(){
    switching while listening starts again in the other language. */
 function qsCmdLang(l){
   const c=state.qs.cmd; if(!c||(l!=='en'&&l!=='zh')||c.lang===l) return;
-  c.lang=l; try{ localStorage.setItem(QS_VOICE_LANG_KEY,l); }catch(e){}
-  const was=!!c.rec;
-  if(was){ const r=c.rec; c.rec=null; c.listening=false; r.onend=null; try{ r.abort(); }catch(e){} }
+  c.lang=l; try{ localStorage.setItem(VOICE_LANG_KEY,l); }catch(e){}
+  const was=!!c.rec; voiceAbort(c);
   render();
   if(was) qsCmdMic();
 }
@@ -49508,6 +49711,7 @@ function tabDot(k){ return k==='orders' ? unseenOrders()
    → Inbox, and More keeps its dot. */
 function headControls(){
   return `<span style="display:flex;flex:none">
+    ${asstCan()?`<button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('asstOpen')" aria-label="${T('Voice assistant','语音助手')}">${ic('mic')}</button>`:''}
     <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('openSearch')" aria-label="${T('Search','搜索')}">${ic('search')}</button>
     <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('overflow')" aria-label="${T('Account','账户')}">
       <span style="position:relative;width:28px;height:28px;border-radius:8px;overflow:hidden;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${acctMark()}</span>
@@ -49925,6 +50129,7 @@ function render(){
   if(state.rcp.step!=null && rcpMakeOnTop()) html += layer('rcp', sheetRecipeStep());
   if(state.wst.open) html += layer('wst', sheetWaste());
   if(state.search) html += layer('search', sheetSearch());
+  if(state.asst) html += layer('asst', sheetAssistant());
   if(state.imgZoom) html += layer('zoom:'+state.imgZoom, sheetImgZoom());
   if(state.toast) html += layer('toast:'+state.toast, `<div class="toast">${state.toast}</div>`);
   // Rule 6 under PUTTING THE KEYBOARD AWAY: a paint no event caused keeps the caret.

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.573
+# Tacet shared-core consolidation — decisions record, v4.574
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-22 · v4.574 — **§495 · THE VOICE ASSISTANT: ONE MICROPHONE, A PLAN IN WORDS, NOTHING RUNS UNTIL APPROVED — A PAID MODULE — DECIDED BY ASH:** *"can we take the microphone idea to the next level and actually have a multi function microphone that can do many things? … tacet will confirm with me what I asked for … I approve and he do that + … he will even suggest me to disable it for more items"*, then *"yes I want you to build it, but just one thing. it should be built as a module, a function that a new tenant need to pay extra for get it. same as production module we already have"*. A microphone in Tacet Mobile's header; the sentence goes to the model with the tenant's catalogue (stores, shops, made-here items and their answers, products); the plan comes back as rows in plain words, each one an existing route, with suggestions; the phone runs the approved rows under the operator's own login. Three actions in round one: an answer switched off or on at a shop (§492) with the same answer suggested on the shop's other items, stock set or add at a store, open or close a shop, the business or the online store. THE MODULE: `assistant` is the first PAID feature in `lib/features.js` (`paid: true`: held only when granted by the platform, never by default), with its own Settings switch and the `assistant:use` capability; Roots is granted it by migration. Two new tenant tables, three new routes, one new lib. Twenty-three strings composed, declared in `docs/tacet-delivery-vocabulary.md` v1.345. No change to `.gitignore` or CI; two browser suites named in the runner's slow list. Merged and deployed on Ash's instruction. See §495.
 
 2026-10-22 · v4.573 — **§493 AMENDED · EVERY SENTENCE SAID TO THE MICROPHONE IS LOGGED WITH WHAT CAME OF IT — DECIDED BY ASH:** *"build step 2 , the sentence log"*, on Claude's recommendation that a week of real sentences should decide whether the weak half is the hearing or the reading before anything bigger is built. Rule 10 added: one new tenant table `quick_stock_said`, three routes (`POST /api/retail-admin/quick-stock/said`, `PATCH …/said/:id`, `GET …/said` and `…/said.csv` for full access), pruned to 90 days. A log, not a memory; nothing reads it on the way in. No new string. No change to `.gitignore` or CI. See §493 rule 10.
 
@@ -33038,3 +33040,124 @@ each door went, the "?" driven in a sandbox, the pills, the self-saving
 cards); `scripts/test_mobile_settings_keys.js` §5 drives the three engines
 through the shared module instead of the Save. No new string, EN or CN.
 Schema: none. No new route. No change to `.gitignore` or CI.
+
+## §495 — THE VOICE ASSISTANT: ONE MICROPHONE, A PLAN IN WORDS, NOTHING RUNS UNTIL APPROVED — A PAID MODULE
+
+**Decided by Ash, 2026-10-22:** *"can we take the microphone idea to the next
+level and actually have a multi function microphone that can do many things?
+it can locate at the top menu, everytime I need something I click the mic,
+say it. tacet system confirm with me that that's what I want. I approve or
+disapprove. if approve tacet system make the changes for me. for example I
+click the microphone and say: wholewheat bread for open toast in Ramada
+location sold out. disable the wholewheat bread option. tacet will confirm
+with me what I asked for … I approve and he do that + if I forgot that not
+just open toast has whole wheat bread option he will even suggest me to
+disable it for more items, once approve or disapprove, he execute. I don't
+need to do it manually"*. Then, on the proposed list: *"Ramada is yuexiu
+location. #2 is not something that you really change … what might change
+often is the stock of the variant of that item … everything else confirmed"*.
+Then: *"yes I want you to build it, but just one thing. it should be built as
+a module, a function that a new tenant need to pay extra for get it. same as
+production module we already have"*.
+
+**What it is.** §493's microphone read one sentence into one card for one
+screen. This is the same shape widened to the whole back office: one
+microphone in the phone's header, any request Tacet already has a route
+for, a plan shown in words, approval, execution, a log. The model
+understands; Tacet computes the consequences; the operator decides; the
+existing routes do the work.
+
+**The rules.**
+
+1. **A fixed list of actions, never free-form.** The model fills in one of
+   three shapes (`lib/assistant.js`): `answer_switch` (one answer of a
+   made-here item, off or back on, at one shop — §492's switch),
+   `stock` (set or add a product's count at a store — §493's write), and
+   `shop_open` (open or close one store, the whole business, or the online
+   store with a message — the three store-status routes). A sentence asking
+   for anything else gets a plan with no rows and the model's own words
+   saying so. Adding an action is adding to this list, with its own card
+   words, its own route, and its own test; nothing else widens.
+2. **Only ids the catalogue holds.** The model reads the tenant's own
+   catalogue as cached system text — stores, shops with their made-here
+   listings and each listing's answers (marked where already off), products
+   — and answers with ids. `coercePlan` drops any id that does not exist, a
+   listing at the wrong shop, an answer the item does not offer, a bad
+   quantity, a missing on/off. A dropped action is counted, not guessed at.
+3. **Nothing runs until approved, and every row is shown.** The plan is rows
+   in plain words — the asked rows first, suggestions under their own heading
+   — each with a tick box, ticked. One Approve. A suggestion is ticked by
+   default because Ash asked for exactly that; it is marked and can be
+   unticked. No action ever runs from voice alone.
+4. **The plan is the server's, the writes are the phone's.** The plan route
+   writes nothing. On Approve the phone calls each ticked row's route — the
+   route that already does that thing — in order, under the operator's own
+   login. So permissions stay where they are: a route refuses the assistant
+   exactly as it refuses a tap, and the refusal's words land on that row. A
+   till user can switch an answer off by voice and still cannot close the
+   shop.
+5. **Unsure means a question, never a guess.** Two things that fit equally,
+   or a name the catalogue does not have, come back as a question with
+   options as buttons. A pick re-plans with the answer. When the sentence
+   held exactly one name the model could not place, that name is learned
+   against the pick (`assistant_names`, per operator, read by everyone at
+   the tenant as a weaker hint): *"Ramada"* means Yuexiu from then on.
+6. **The consequences are computed, not imagined.** For an answer switched
+   at one shop, the shop's other made-here items offering the same answer,
+   where it is not already in that state, become suggested rows. This is a
+   query, not a model guess, and it never crosses to another shop.
+7. **Everything is logged.** One `assistant_log` row per sentence: the text,
+   voice or typed and in which language, the plan, what was approved, what
+   each row returned; `asked`, `shown`, `approved`, `declined` or
+   `cancelled`. Ninety days. Full access reads it at
+   `GET /api/retail-admin/assistant/log?days=7`.
+8. **Either language, one chip.** The same recogniser and language chip as
+   §493 rule 9, now shared code (`voiceListen`) so the two sheets cannot
+   drift. The model answers *say* in the request's own language; the rows
+   carry both.
+9. **It is a paid module, and the first one.** `assistant` is the first
+   feature in `lib/features.js` with `paid: true`: `entitlements()` holds a
+   paid feature only when the platform has written `true` for it, where every
+   other feature is held unless lowered. saas-admin's Features patch writes
+   the same way. A new tenant therefore does not have it until someone marks
+   it granted after payment. Under the entitlement sit the two layers every
+   feature has: the tenant's own switch (Settings → Features, `features.assistant`,
+   on by default once granted, read by `assistantEnabled`) and the operator's
+   role (`assistant:use`, tagged `feature: 'assistant'` so an unentitled tenant
+   resolves without it; in the owner, admin, manager and store_manager
+   presets, not staff or kitchen). The plan route checks all three, in that
+   order. Roots is granted the module by migration (`grant_assistant_to_roots_v1`,
+   in `routes/backend-auth.js` after the column it writes), so the deploy
+   does not take it from the account it was built for. The production module
+   Ash named is NOT gated this way today — it is held by default — and is
+   left as it is; this rule is the shape a paid module takes from here on.
+10. **The model is required.** §493's mic falls back to the phone's own
+    rules; this one cannot, because the whole point is any sentence. Without
+    the model key the sheet says so in words and does nothing.
+
+**Not in this round.** The same microphone on the desktop top bar; read-only
+questions without an approve step; reprinting a slip; folding §493's Quick
+Stock microphone into this one (the stock action already exists here; the
+Quick Stock sheet stays until the fold). Marking a made-here ITEM sold out
+(Ash: *"not something that you really change"*). Hours for today (no such
+control exists; the three open/close routes are what there is). Money and
+deletions, which would need a second explicit confirm and are deliberately
+outside the list.
+
+**Where it lives.** `lib/assistant.js` (catalogue, prompt, tool, coercion,
+suggestions, words, routes), `routes/assistant.js` (plan, outcome, log),
+`lib/features.js` (`paid`, `assistantEnabled`), `lib/capabilities.js`
+(`assistant:use`, section `assistant`), `routes/saas-admin.js` (paid patch),
+`routes/backend-auth.js` (the Roots grant), `database.js` (`assistant_log`,
+`assistant_names`), `public/retail-admin/02-settings-ops.js` /
+`05-marketing.js` / `retail-admin.html` (the switch and its home),
+`public/m.html` (`voiceListen`, `sheetAssistant`, the `asst*` commands, the
+header mic, `state.asst`). Two containment guards held and were honoured
+rather than softened: the switch table is read through a new
+`optionSwitch.allSwitchedOff`, still that file's only query, and
+`lib/assistant.js` is admitted by name to read `shop_listings` in
+`scripts/test_shop_listings.js`, to show a plan and never to write. Tests:
+`scripts/test_assistant_plan.js` (55 checks, fast),
+`scripts/test_mobile_assistant.js` (55 assertions in Chromium, slow list),
+`scripts/test_tenant_roles.js` now counts 120 capabilities. No change to
+`.gitignore` or CI.
