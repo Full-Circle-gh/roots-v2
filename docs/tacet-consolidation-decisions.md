@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.574
+# Tacet shared-core consolidation — decisions record, v4.575
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-22 · v4.575 — **§495 AMENDED · A QUESTION IS ANSWERED FROM THE RECORDS, WITH NOTHING TO APPROVE — DECIDED BY ASH:** *"do all those … Questions like \"how many orders today\", answered without an approve step"*. Rule 11 added: a fourth shape, `ask`, with four questions (orders today, what is running low, how many of a product, which shops are open), answered at plan time by the rules the screens use and only to an operator whose capabilities open that screen; shown as words, no rows, no Approve; a plan of only answers is logged `answered` when shown. No schema, no new route. Eleven strings composed, declared in `docs/tacet-delivery-vocabulary.md` v1.346. No change to `.gitignore` or CI. See §495 rule 11.
 
 2026-10-22 · v4.574 — **§495 · THE VOICE ASSISTANT: ONE MICROPHONE, A PLAN IN WORDS, NOTHING RUNS UNTIL APPROVED — A PAID MODULE — DECIDED BY ASH:** *"can we take the microphone idea to the next level and actually have a multi function microphone that can do many things? … tacet will confirm with me what I asked for … I approve and he do that + … he will even suggest me to disable it for more items"*, then *"yes I want you to build it, but just one thing. it should be built as a module, a function that a new tenant need to pay extra for get it. same as production module we already have"*. A microphone in Tacet Mobile's header; the sentence goes to the model with the tenant's catalogue (stores, shops, made-here items and their answers, products); the plan comes back as rows in plain words, each one an existing route, with suggestions; the phone runs the approved rows under the operator's own login. Three actions in round one: an answer switched off or on at a shop (§492) with the same answer suggested on the shop's other items, stock set or add at a store, open or close a shop, the business or the online store. THE MODULE: `assistant` is the first PAID feature in `lib/features.js` (`paid: true`: held only when granted by the platform, never by default), with its own Settings switch and the `assistant:use` capability; Roots is granted it by migration. Two new tenant tables, three new routes, one new lib. Twenty-three strings composed, declared in `docs/tacet-delivery-vocabulary.md` v1.345. No change to `.gitignore` or CI; two browser suites named in the runner's slow list. Merged and deployed on Ash's instruction. See §495.
 
@@ -33135,6 +33137,27 @@ existing routes do the work.
     rules; this one cannot, because the whole point is any sentence. Without
     the model key the sheet says so in words and does nothing.
 
+**Amended 2026-10-22 (v4.575), by Ash:** *"Questions like \"how many orders
+today\", answered without an approve step"*.
+
+11. **A question is answered from the records, with nothing to approve.** A
+    fourth shape, `ask`, with four questions: how many orders today, what is
+    running low, how many of a product are on the shelf, which shops are open
+    — each for one store or every store. They are answered on the server at
+    plan time, by the rule the screen for each already uses: today's orders
+    by `lib/finance-window.js`'s order-date rule on the shop's own clock
+    (§82) and its paid allow-list; low stock by `lib/low-stock-digest.js`'s
+    rule (above zero, at or under the product's threshold) and, for one
+    store, that store's shelf; the shelf by `retail_store_stock`; open or
+    closed by the store-status table and the online switch. **The answer
+    asks the operator's capabilities first**: an operator who cannot open
+    Orders is told *"You don’t have permission for this"*, not the count
+    (`ASK_CAPS` in `lib/assistant.js`). Answers are shown as words above any
+    rows; a plan that is only answers offers Back and Close and no Approve,
+    and is logged `answered` the moment it is shown. Money is deliberately
+    not among the four: a revenue figure is `finance` reach (§301), and the
+    count of orders is not.
+
 **Not in this round.** The same microphone on the desktop top bar; read-only
 questions without an approve step; reprinting a slip; folding §493's Quick
 Stock microphone into this one (the stock action already exists here; the
@@ -33158,6 +33181,7 @@ rather than softened: the switch table is read through a new
 `lib/assistant.js` is admitted by name to read `shop_listings` in
 `scripts/test_shop_listings.js`, to show a plan and never to write. Tests:
 `scripts/test_assistant_plan.js` (55 checks, fast),
-`scripts/test_mobile_assistant.js` (55 assertions in Chromium, slow list),
-`scripts/test_tenant_roles.js` now counts 120 capabilities. No change to
-`.gitignore` or CI.
+`scripts/test_mobile_assistant.js` (68 assertions in Chromium, slow list),
+`scripts/test_tenant_roles.js` now counts 120 capabilities. Rule 11 adds
+`answerOne` / `answerAll` / `mayAsk` to `lib/assistant.js` and 29 checks to
+`scripts/test_assistant_plan.js`. No change to `.gitignore` or CI.

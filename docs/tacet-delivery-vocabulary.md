@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.346 · 2026-10-22 · §495 RULE 11, A QUESTION ANSWERED FROM THE RECORDS — 11 STRINGS COMPOSED BY CLAUDE (`{store}今天 N 单`, `今天共 N 单`, `今天还没有订单`, `{store}库存偏低：a、b（另有 N 项）`, `没有库存偏低的商品。`, `{store}的{product}：N`, `{product}：{store} N、…`, `{store}营业中`, `{store}已关闭`, `网店营业中`, `网店已关闭`), EACH BUILT FROM LIVE FRAGMENTS; THE REFUSAL `你没有此操作的权限` COPIED WHOLE.** See *The voice assistant (§495)*, *Answers*.
+
 **v1.345 · 2026-10-22 · §495 THE VOICE ASSISTANT, A PAID MODULE — 23 STRINGS COMPOSED BY CLAUDE (`语音助手`, `使用语音助手`, `说出你的需求。例如：“吐司的全麦面包售罄了”，或“关店”。`, `建议同时`, `批准`, `都不是`, `这个我做不了，请换种说法。`, `已完成 N 项`, `N 项失败`, `语音助手需要在服务器上配置模型密钥。`, `当前套餐不包含语音助手。`, `本账户已关闭语音助手。`, THE FEATURE CARD'S THREE LINES, AND THE SEVEN ROW TEMPLATES `在{shop}关闭{item}的{answer}` / `在{shop}恢复{item}的{answer}` / `将{store}的{product}设为售罄` / `将{store}的{product}设为 N` / `在{store}为{product}加 N 件` / `关闭{store}` · `开启{store}` / `全部关闭` · `全部开启` / `关闭网店` · `开启网店`), EACH BUILT FROM LIVE FRAGMENTS; `Working…`, `Listening…`, `Next`, `Back`, `Cancel`, `Close`, `Done`, `Failed`, `Voice` AND §493'S TWO RECOGNISER LINES COPIED WHOLE.** See *The voice assistant (§495)*.
 
 **v1.344 · 2026-10-21 · §494 SETTINGS REGROUPED INTO NINE GROUPS, WITH A "?" ON EVERY CARD — 11 STRINGS COMPOSED BY CLAUDE (`配送与自提`, `功能开关`, `发给顾客`, `发给团队`, `每日库存偏低清单`, `其他功能`, `这些功能在各自的页面上开启或关闭。`, `没有其他可开关的功能。`, `两个值都来自企业微信客服后台,绑定小程序 AppID 之后即可查看。`, `刷新状态仅刷新计数,不定位;全部定位才会真正获取坐标。`, AND THE TWO GEOCODE NOTES), EACH BUILT FROM LIVE FRAGMENTS; THE OTHER GROUP NAMES, THE PILLS AND THE 43 CARD LEADS ARE LIVE TEXT UNCHANGED.** See *Settings → nine groups and the "?" (§494)*.
@@ -14500,6 +14502,22 @@ everything fixed on the sheet is below.
   `Voice` / `语音`, `English` and `中文` on the chips, and §493's two recogniser
   lines (`此浏览器不支持语音，请输入。`, `无法识别，请重试或输入。`) — `public/m.html`,
   unchanged.
+
+### Answers (rule 11, v1.346)
+
+The model never writes these: a question is answered by the server from the
+records, in both languages, and the phone shows the one its language asks for.
+
+| question | EN | CN | built from |
+|---|---|---|---|
+| orders today, one store | N orders today at {store} · No orders yet today at {store} | {store}今天 N 单 · {store}今天还没有订单 | `单` is the live counter for orders (`N 单`); `今天` and `还没有` are live. |
+| orders today, every store | N orders today across all stores · No orders yet today | 今天共 N 单 · 今天还没有订单 | `共` is live in totals. |
+| running low, named | Running low at {store}: a (3), b (2), and N more | {store}库存偏低：a（3）、b（2），另有 N 项 | `库存偏低` is the live switch name (`此门店库存偏低`); `另有 N 项` is the live tail shape. |
+| nothing low | Nothing is running low at {store}. | {store}没有库存偏低的商品。 | the same fragments, with the live `没有…的商品`. |
+| the shelf, one store | {product} at {store}: N | {store}的{product}：N | the §495 row shape without a verb. |
+| the shelf, every store | {product}: Tianhe 12, Yuexiu 3 | {product}：天河 12、越秀 3 | names and numbers, `、` as the live list joiner. |
+| open | {store} is open · the online store is open | {store}营业中 · 网店营业中 | `营业中` is live (the open/close panel). |
+| closed | {store} is closed · the online store is closed | {store}已关闭 · 网店已关闭 | `已关闭` is live. |
 
 ### Rejected
 

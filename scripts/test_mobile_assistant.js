@@ -18,7 +18,12 @@
  *   • a question is buttons; a pick re-plans with the answer and teaches the
  *     one name the model could not place;
  *   • Back declines, Cancel cancels, and both tell the log;
- *   • no model key, the module not held, or the module off is said in words.
+ *   • no model key, the module not held, or the module off is said in words;
+ *   • a question's answer is shown as words with nothing to approve, and a
+ *     plan that is only answers offers Close, not Approve, and tells the log
+ *     nothing more (the server marked it answered when it was shown);
+ *   • a route that answers 200 with ok:false (a printer not set up) is a
+ *     failed row with that reason.
  *
  * Drives Chromium through scripts/lib/m-probe, so it belongs in the slow
  * shard and is listed there by name in scripts/run-suites.js.
@@ -152,6 +157,34 @@ run('the voice assistant, a plan', [
     ['the sentence', `${otext}.indexOf('needs the model key')>-1`],
     ['the field stays', "!!document.getElementById('mAsst')"],
   ]],
+  ['a question is answered in words, with nothing to approve',
+    OWNER + NO_SR + FETCH({ id: 80, say: 'Yuexiu has 3 orders today.', actions: [], answers: [{ what: 'orders_today', store_id: 2, text_en: '3 orders today at Yuexiu', text_cn: '越秀今天 3 单' }], question: null, unknown_names: [] }) + SAY('how many orders today at yuexiu'), [
+      ['the answer', `${otext}.indexOf('3 orders today at Yuexiu')>-1`],
+      ['no Approve', `${otext}.indexOf('Approve')===-1`],
+      ['Close offered', "!!document.querySelector('.overlay button[onclick=\"APP.cmd(\\'asstClose\\')\"]')"],
+      ['not the empty-plan line', `${otext}.indexOf('Nothing I can do')===-1`],
+    ]],
+  ['closing an answered plan tells the log nothing more',
+    OWNER + NO_SR + FETCH({ id: 80, say: '', actions: [], answers: [{ what: 'status', text_en: 'Yuexiu is closed', text_cn: '越秀已关闭' }], question: null, unknown_names: [] }) + SAY('is yuexiu open') + "setTimeout(function(){ APP.cmd('asstClose'); },60);", [
+      ['closed', `!${overlay()}`],
+      ['no outcome sent', `${sent('/assistant/outcome')}.length===0`],
+    ]],
+  ['a refused answer is shown as the refusal',
+    OWNER + NO_SR + FETCH({ id: 81, say: '', actions: [], answers: [{ what: 'orders_today', refused: true, text_en: 'You don’t have permission for this', text_cn: '你没有此操作的权限' }], question: null, unknown_names: [] }) + SAY('orders today'), [
+      ['in words', `${otext}.indexOf('permission')>-1`],
+    ]],
+  ['an answer beside an action keeps the Approve for the action',
+    OWNER + NO_SR + FETCH({ id: 82, say: '', actions: [PLAN.actions[2]], answers: [{ what: 'status', text_en: 'Yuexiu is open', text_cn: '越秀营业中' }], question: null, unknown_names: [] }) + SAY('is yuexiu open? close it'), [
+      ['the answer', `${otext}.indexOf('Yuexiu is open')>-1`],
+      ['the row', `${otext}.indexOf('Close Yuexiu')>-1`],
+      ['Approve · 1', `${otext}.indexOf('Approve · 1')>-1`],
+    ]],
+  ['a route that says ok:false is a failed row with its reason',
+    OWNER + NO_SR + FETCH({ id: 83, say: '', actions: [{ key: 'a0', type: 'reprint', suggested: false, label_en: 'Reprint the slip for order TC000001', label_cn: '重新打印订单 TC000001 的小票', cmd: { method: 'POST', path: '/api/retail-admin/orders/1/print', body: {} } }], answers: [], question: null, unknown_names: [] }).replace("return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true})}});", "return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve(u.indexOf('/print')>-1?{success:true,ok:false,error:'no_printer_for_store'}:{success:true})}});") + SAY('x') + "setTimeout(function(){ APP.cmd('asstRun'); },60);", [
+      ['one ✗', "(document.querySelector('.overlay').innerText.match(/✗/g)||[]).length===1"],
+      ['the reason', `${otext}.indexOf('no_printer_for_store')>-1`],
+      ['1 failed', `${otext}.indexOf('1 failed')>-1`],
+    ]],
   ['a plan with nothing it can do says so', OWNER + NO_SR + FETCH({ id: 79, say: 'I cannot help with refunds.', actions: [], question: null, unknown_names: [] }) + SAY('refund order 5'), [
     ['the model\'s words', `${otext}.indexOf('I cannot help with refunds.')>-1`],
     ['and the sheet\'s', `${otext}.indexOf('Nothing I can do with that')>-1`],
