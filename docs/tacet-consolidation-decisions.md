@@ -32901,3 +32901,73 @@ does not come back rather than that Delivery was kept off it. Schema: none. No
 new route. Strings: `收款与税费` and `地图密钥在服务器上配置` composed, declared
 in `docs/tacet-delivery-vocabulary.md` v1.342; the pills reuse the live
 `已启用` / `未启用` / `已配置密钥` / `缺少密钥`. No change to `.gitignore` or CI.
+
+### §494 — PR 2 shipped: the nine groups, the "?", and the design pass (2026-10-21)
+
+**What changed on the screen.** The left list is the nine groups of rule 1,
+with the divider before *Advanced*. Settings opens on *Store*. Every id and
+every save function is unchanged; cards moved, nothing was rewritten.
+
+| Group | Holds |
+|---|---|
+| Store · 门店 | Open for business (first card, A4's master switch), the store list with the low-stock threshold, Tacet on a phone |
+| Online shop · 线上商城 | Shop tab (layout, sort, filter bar), Product page sections, Support button, Customer service (six cards, one autosave card, root `#cs-cards`) |
+| Payments & tax · 收款与税费 | as PR 1 |
+| Delivery & pickup · 配送与自提 | the §79 hub and its sub-views, unchanged except that Label printing and Box label left Package tracking |
+| Notifications · 通知 | *To customers*: order-status template, what customers receive, SMS when delivered. *To your team*: the WeCom app, the group-bot webhook, the kitchen evening message, the daily low-stock list (out of the Stores card; its threshold stayed), System alerts |
+| Printing · 打印 | the cloud printers, Label printing, Box label |
+| Features · 功能开关 | the Waste, Materials and Running-low switches (their hosts, as `FEATURE_HOMES` mounts them), and *Other features*: the catalogue features switched on their own pages and Fresh batches, each with its state and a door — never a second switch |
+| Advanced · 高级 | map geocoding, SKU codes |
+| History · 记录 | Change history, What was sent, Recently deleted |
+
+**One amendment to rule 1, on the evidence of the markup.** The carrier
+credential forms (Kuaidi100, JD, Qingyun) stay in *Delivery & pickup*, not
+*Advanced*: the hub's status lines and its *Set up* buttons are the same
+setup as the forms, and moving the forms would split one job across two
+panels. *Advanced* holds what a tenant changes once, if ever.
+
+**The "?" (rule 2), as built.** Each card head is `.gch-row` (the title and
+the "?"), `.card-lead` (the first sentence of the old paragraph, in both
+languages) and `.card-help` (the rest, `hidden`). A card-level `.helper`
+block and any field hint over about 110 characters fold into `.card-help`
+under the field's own label; short field hints stay by their field. The lead
+is the old text's first sentence, not a new string, so nothing was composed
+for 43 cards. The controller (`01-core.js`, beside the tooltip) opens on tap
+or click only, shows a clone of the hidden text, and closes on ✕, Escape,
+tap-elsewhere, resize, a desktop scroll and a language change; on a phone the
+same element is a bottom sheet. The Settings search reads the whole card and
+the palette indexes `.card-help p`, so a folded sentence still finds its card.
+
+**Loaders.** Each panel reads its live parts when it opens (`01-core.js`
+switcher): Store → `loadStorePanel`; Delivery → the hub and the carrier
+forms (which until now were read only when Operations opened, so a Delivery
+visit that had not passed through Operations showed them blank); Printing →
+`loadPrinterPrefs`; Features → `paintFeatureLinks`; Advanced → the geocoding
+status and `skuLoad`; History → `chLoad`, `nlLoad`, `loadRecycle`. Opening
+the Settings tab runs the lit panel's loader. `settingsOpen(sub, view)` opens
+a panel from anywhere.
+
+**The design pass (rule 6).** Inline-styled green, red and yellow chips in
+the three modules became the shared pill: Sage for on or connected, Amber for
+signed out, offline or waiting for a JD account, a quiet pill for not set up.
+Switch labels, labels and headings are sentence case and Inter 500; the
+glyphs left the buttons and status lines; the two geocode error banners are
+`.td-note` in the tint for their weight; the per-store printer labels are the
+shared field label. The phone lays the left list out as one scrolling row of
+chips. Not touched: the mini-phone mockups inside the Shop and Notifications
+cards (illustrations, not UI), and the Delivery wizard's Dusk *Continue*.
+
+**Strings.** Composed and declared in `docs/tacet-delivery-vocabulary.md`
+v1.344: `配送与自提`, `功能开关`, `发给顾客`, `发给团队`, `每日库存偏低清单`,
+`其他功能` and its lead, the empty line of the feature list, the WeCom
+credentials hint (which had no Chinese at all), and the geocode notes. The
+other seven group names are live pairs.
+
+Tests: `scripts/test_settings_groups.js` (fast shard, 109 checks: the list,
+where each thing lives, the loaders, the "?", the design rules, the words).
+Seven suites that pinned a card to its old panel were re-pinned
+(`test_product_page_sections`, `test_store_staff_gates`,
+`test_restore_geocode_gates`, `test_open_close_panel`,
+`test_send_test_gates`, `test_delivery_in_settings`,
+`test_settings_payments_panel`); `test_feature_switches_mount` accepts the
+lead's class. Schema: none. No new route. No change to `.gitignore` or CI.

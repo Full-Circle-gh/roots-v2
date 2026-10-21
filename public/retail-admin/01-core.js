@@ -230,7 +230,7 @@ const TD_ERR = {
   would_go_negative:      ['That would take the count below zero.', '该操作会使库存变为负数。'],
   flash_stock_exceeded:   ['That is more than the flash sale has left.', '超出限时特惠剩余数量。'],
   product_unavailable:    ['That product is not on sale at the moment.', '该商品当前不可售。'],
-  no_active_store:        ['No location is open. Add or reopen one in Settings → Operations.', '没有营业中的门店,请在设置 → 运营中添加或重新开启。'],
+  no_active_store:        ['No location is open. Add or reopen one in Settings → Store.', '没有营业中的门店,请在设置 → 门店中添加或重新开启。'],
   catalog_locked:         ['The catalogue is managed upstream and cannot be edited here.', '商品库由上游统一管理,此处不可编辑。'],
 
   // ── Orders, refunds, delivery ──
@@ -1316,7 +1316,125 @@ $$('.tabs [data-tab]').forEach(btn => btn.addEventListener('click', () => {
   // drilled (§2.1) — Coupons → Flash sales is the common motion; picking a root
   // row returns it to root.
   railResolveFor(btn.dataset.tab);
+  // §494 — Settings opens on Store, whose cards are live records (open/closed,
+  // the store list). The panel switcher below is what reads them, and it runs
+  // on a click of the panel's row, so opening the TAB runs it for whichever
+  // row is lit. Before this the default panel was painted by loadConfig alone.
+  if (btn.dataset.tab === 'config') {
+    const lit = document.querySelector('#settings-nav button.active');
+    if (lit) lit.click();
+  }
 }));
+// ── The "?" on a settings card (decisions §494) ─────────────────────────────
+// Every settings card keeps one short visible line (.card-lead); the rest of
+// its explanation sits in .card-help, hidden, and opens from the "?" beside
+// the title. It is a POPOVER, not the tooltip above: the tooltip is capped at
+// 250px and 12px for a line that explains something already on screen, and
+// these paragraphs are the only copy of what the setting does. On a phone
+// (≤820px, the same break the settings layout uses) the CSS lays the same
+// element out as a bottom sheet. Opens on tap or click, never hover alone —
+// half the team is on a phone. Closes on ✕, Escape, tap-elsewhere, a resize,
+// a page scroll on the desktop (it is anchored to a rect that has moved), and
+// a language change (the copy inside is a clone, so it would go stale).
+// Search still finds the hidden text: _cfgCards() reads textContent.
+(function () {
+  const canHover = window.matchMedia && window.matchMedia('(hover: hover)').matches;
+  let pop = null, current = null;
+  function phone() { return window.innerWidth <= 820; }
+  function ensure() {
+    if (pop) return pop;
+    pop = document.createElement('div');
+    pop.className = 'help-pop';
+    pop.id = 'help-pop';
+    pop.setAttribute('role', 'dialog');
+    pop.tabIndex = -1;
+    document.body.appendChild(pop);
+    return pop;
+  }
+  function labelAll() {
+    document.querySelectorAll('.help-q').forEach(b => {
+      b.setAttribute('aria-label', cuT('What this does', '说明'));
+    });
+  }
+  function close() {
+    if (!current) return;
+    const btn = current; current = null;
+    btn.setAttribute('aria-expanded', 'false');
+    if (pop) pop.classList.remove('on');
+    if (document.activeElement === pop || (pop && pop.contains(document.activeElement))) btn.focus();
+  }
+  function open(btn) {
+    const head = btn.closest('.group-card-head');
+    const src = head && head.querySelector('.card-help');
+    if (!src) return;
+    if (current === btn) { close(); return; }
+    close();
+    current = btn;
+    const b = ensure();
+    const h3 = head.querySelector('h3');
+    const title = h3 ? h3.cloneNode(true) : null;
+    if (title) title.querySelectorAll('span, button').forEach(n => n.remove());   // a chip, a badge
+    b.innerHTML = '';
+    const x = document.createElement('button');
+    x.type = 'button'; x.className = 'help-pop-x';
+    x.setAttribute('aria-label', cuT('Close', '关闭'));
+    x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    x.addEventListener('click', close);
+    b.appendChild(x);
+    if (title) { const t = document.createElement('div'); t.className = 'help-pop-t'; t.textContent = title.textContent.replace(/\s+/g, ' ').trim(); b.appendChild(t); }
+    const body = src.cloneNode(true);
+    body.removeAttribute('hidden'); body.className = 'help-pop-body';
+    b.appendChild(body);
+    b.classList.remove('on');
+    b.style.left = ''; b.style.top = '';
+    if (!phone()) {
+      const r = btn.getBoundingClientRect();
+      const bb = b.getBoundingClientRect();
+      const EDGE = 12;
+      // Under the "?", left edge on the card title; shifted to stay on screen,
+      // and above the button when there is no room below.
+      const cardHead = head.getBoundingClientRect();
+      let left = Math.max(EDGE, Math.min(cardHead.left, window.innerWidth - bb.width - EDGE));
+      let top = r.bottom + 8;
+      if (top + bb.height > window.innerHeight - EDGE) top = Math.max(EDGE, r.top - bb.height - 8);
+      b.style.left = Math.round(left) + 'px';
+      b.style.top = Math.round(top) + 'px';
+    }
+    btn.setAttribute('aria-expanded', 'true');
+    void b.offsetWidth;
+    b.classList.add('on');
+    b.focus({ preventScroll: true });
+  }
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    const q = t && t.closest ? t.closest('.help-q') : null;
+    if (q) { e.preventDefault(); open(q); return; }
+    if (current && pop && !pop.contains(t)) close();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && current) { e.stopPropagation(); close(); } }, true);
+  window.addEventListener('resize', close);
+  window.addEventListener('scroll', () => { if (current && !phone()) close(); }, { passive: true });
+  if (typeof onLangChange === 'function') onLangChange(() => { close(); labelAll(); });
+  else document.addEventListener('DOMContentLoaded', labelAll);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', labelAll);
+  else labelAll();
+  window.helpPopClose = close;
+  // The hover flag is read so a future "open on hover too" is a one-line
+  // decision rather than a rediscovery; today nothing opens on hover.
+  void canHover;
+})();
+
+// §494 — open one Settings panel from anywhere (a feature link, a status line),
+// and a Delivery sub-view when one is named. Refuses a panel the role cannot
+// open, the way goTab refuses a tab: the row is hidden, not merely unlit.
+function settingsOpen(sub, view) {
+  goTab('config');
+  const row = document.querySelector('#settings-nav button[data-sub="' + sub + '"]');
+  if (!row || row.style.display === 'none') return;
+  row.click();
+  if (sub === 'delivery' && view && typeof dlvGo === 'function') dlvGo(view);
+}
+window.settingsOpen = settingsOpen;
 // Sales overview → jump into a single channel's full admin. The "Configure"
 // buttons on #tab-sales call this. Now a thin alias for goTab: channel admins
 // (meituan/guanyi/eleme) have had no rail button of their own since the Sales-
@@ -3502,24 +3620,37 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   // keys: tax, manual Alipay, the credential forms). A bar at the foot that
   // saved some cards and not others was the one thing on this screen the
   // help text had to explain.
-  // Lazy-load the Operations panel's live data each time it is opened.
-  if (sub === 'ops') loadOpsPanel();
-  // Payments & tax (§494): the manual-Alipay card replaces its whole record on
-  // save, so it is read fresh each time the panel opens (§325 D1) — never
-  // saved from a form that did not load. Currency and tax are loadConfig's.
+  // §494 — each panel reads its live parts when it opens; a panel whose
+  // cards are all painted by loadConfig() (Online shop, Payments' currency
+  // and tax) needs nothing here.
+  // Store: open/closed per channel and the store list, both live records.
+  if (sub === 'store' && typeof loadStorePanel === 'function') loadStorePanel();
+  // Payments & tax: the manual-Alipay card replaces its whole record on save,
+  // so it is read fresh each time the panel opens (§325 D1) — never saved from
+  // a form that did not load.
   if (sub === 'payments' && typeof loadAlipayManual === 'function') loadAlipayManual();
   // Delivery opens on its hub with fresh status lines, never on whichever
   // sub-view the last visit left behind (§79). This is what the rail button's
-  // own click handler did before the page moved into Settings.
+  // own click handler did before the page moved into Settings. The carrier
+  // credential forms on its sub-views are read here too — they used to be
+  // read only when Operations opened, so a Delivery visit that had not passed
+  // through Operations showed them blank.
   if (sub === 'delivery' && typeof dlvGo === 'function') dlvGo('hub');
-  // Same, for the SKU rules — the category lists it offers are read from the
-  // live catalogue, so a stale copy would hide a category added since boot.
-  if (sub === 'sku' && typeof skuLoad === 'function') skuLoad();
-  // Same, for the change history — it is a live record, so it is read fresh on
-  // every open rather than cached from whenever the tab was last visited.
+  if (sub === 'delivery' && typeof loadShippingIntegrations === 'function') loadShippingIntegrations();
+  // Printing: the cloud-printer account and each store's printer.
+  if (sub === 'printing' && typeof loadPrinterPrefs === 'function') loadPrinterPrefs();
+  // Features: the state of every switch that lives on another page.
+  if (sub === 'features' && typeof paintFeatureLinks === 'function') paintFeatureLinks();
+  // Advanced: the geocoding status, and the SKU rules — their category lists
+  // are read from the live catalogue, so a stale copy would hide a category
+  // added since boot.
+  if (sub === 'advanced' && typeof loadIntegrationsStatus === 'function') loadIntegrationsStatus();
+  if (sub === 'advanced' && typeof skuLoad === 'function') skuLoad();
+  // History: three live records, read fresh on every open rather than cached
+  // from whenever the panel was last visited.
   if (sub === 'history' && typeof chLoad === 'function') chLoad();
-  // Same, for the send record — a live log, read fresh on every open.
-  if (sub === 'sent' && typeof nlLoad === 'function') nlLoad();
+  if (sub === 'history' && typeof nlLoad === 'function') nlLoad();
+  if (sub === 'history' && typeof loadRecycle === 'function') loadRecycle();
   // Scroll the settings body to top within the page
   window.scrollTo({ top: document.querySelector('.tabs').offsetTop - 8, behavior: 'smooth' });
 }));

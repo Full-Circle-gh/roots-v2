@@ -984,7 +984,7 @@
   // Only mount for a signed-in operator — probe the lightweight notices endpoint.
   fetch('/api/backend/me',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null;}).then(function(j){
     if(!j||!j.user) return;
-    // Operators can hide this launcher from Settings → Operations (support.hidden).
+    // Operators can hide this launcher from Settings → Online shop (support.hidden).
     fetch('/api/retail-admin/config',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null;}).then(function(cfg){
       var hidden=!!(cfg&&cfg.data&&cfg.data.support&&cfg.data.support.hidden);
       mount(hidden);
@@ -1067,7 +1067,7 @@
     function head(title,back){ return '<div style="display:flex;align-items:center;gap:8px;padding:13px 14px;border-bottom:1px solid '+LINE+'">'+(back?'<button id="sp-back" style="background:0;border:0;font-size:16px;cursor:pointer;color:'+FG+'">‹</button>':'')+'<strong style="flex:1;font-size:14px">'+title+'</strong><button id="sp-close" style="background:0;border:0;font-size:20px;line-height:1;cursor:pointer;color:#888">×</button></div>'; }
     function wire(){ var c=panel.querySelector('#sp-close'); if(c)c.addEventListener('click',function(){panel.style.display='none';btn.style.display='block';}); var b=panel.querySelector('#sp-back'); if(b)b.addEventListener('click',list); }
     function list(){
-      panel.innerHTML=head('Support · 客服',false)+'<div id="sp-body" style="padding:12px 14px;overflow:auto;flex:1"><div style="color:#888;font-size:13px">Loading… · 加载中…</div></div>'+'<div style="padding:9px 14px;border-top:1px solid '+LINE+';display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="color:#aaa;font-size:11px;line-height:1.35">Drag the button to move it. Turn it back on in Settings › Operations. · 可拖动移动;在设置›运营重新开启。</span><button id="sp-hide" style="background:0;border:0;color:#888;font-size:12px;cursor:pointer;white-space:nowrap">Hide · 隐藏</button></div>'; wire();
+      panel.innerHTML=head('Support · 客服',false)+'<div id="sp-body" style="padding:12px 14px;overflow:auto;flex:1"><div style="color:#888;font-size:13px">Loading… · 加载中…</div></div>'+'<div style="padding:9px 14px;border-top:1px solid '+LINE+';display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="color:#aaa;font-size:11px;line-height:1.35">Drag the button to move it. Turn it back on in Settings › Online shop. · 可拖动移动;在设置›线上商城重新开启。</span><button id="sp-hide" style="background:0;border:0;color:#888;font-size:12px;cursor:pointer;white-space:nowrap">Hide · 隐藏</button></div>'; wire();
       var hb=panel.querySelector('#sp-hide'); if(hb)hb.addEventListener('click',function(){ fetch('/api/retail-admin/config',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({'support.hidden':true})}).catch(function(){}); if(window.__fcSupportButton)window.__fcSupportButton.setHidden(true); });
       fetch('/api/backend/support',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
         var body=panel.querySelector('#sp-body'); if(!body) return; var h='<button id="sp-new" style="width:100%;background:'+AC+';color:'+FG+';border:0;border-radius:8px;padding:10px;font:600 13px/1 inherit;cursor:pointer;margin-bottom:12px">+ New request · 新建</button>';
@@ -1540,7 +1540,7 @@
        from anywhere by dlvOpen() (06-delivery.js). Its gate went with it:
        TAB_CAP.delivery is gone and the nav button carries data-cap. -->
 
-  <!-- Quick Stock moved into Settings → Operations (see #qs-home). No top-level tab. -->
+  <!-- Quick Stock moved into Settings → Store (see #qs-home, §494). No top-level tab. -->
 
 
   <!-- Activity left the rail 2026-07-10: the inventory ledger lives inside
@@ -9308,70 +9308,48 @@
                  aria-label="Search settings · 搜索设置">
         </div>
         <div id="cfg-search-results" hidden></div>
-        <button data-sub="shop" class="active">
+        <div class="settings-nav-rows">
+        <!-- §494 — nine groups, named by the question the tenant asks, in
+             this order. A divider separates the seven a tenant changes from the
+             two that hold credentials and records. The rows gated with data-cap
+             are hidden by applyCapGates for a role without the key. -->
+        <button data-sub="store" class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.6-5h14.8L21 9"/><path d="M4 9v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9h18"/><path d="M9.5 19v-5h5v5"/></svg>
+          Store · 门店
+        </button>
+        <button data-sub="shop">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18l-2 13H5L3 7z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg>
-          Shop tab · 商城页
+          Online shop · 线上商城
         </button>
-        <button data-sub="push">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0v5l2 3H4l2-3V8z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
-          Push notifications · 推送通知
-        </button>
-        <button data-sub="cs">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-          Customer service · 客户服务
-        </button>
-        <!-- Payments & tax (§494) — gated on settings:payments like the cards
-             inside it; applyCapGates hides the row for a role without it. -->
         <button data-sub="payments" data-cap="settings:payments">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>
           Payments &amp; tax · 收款与税费
         </button>
-        <!-- Delivery (§79, 2026-09-09) — the rail row became a panel. It sits
-             between Customer service and Operations because it is the same kind
-             of thing as the three above it: a rule the customer meets, not a
-             record of what the shop did. Gated with data-cap rather than a
-             TAB_CAP key — that table is keyed by data-tab and this row has none
-             any more; applyCapGates hides it for a role without delivery:view.
-             delivery:view also joins TAB_CAP.config's any-of list, or a role
-             holding it and nothing else in Settings could not open the door. -->
         <button data-sub="delivery" data-cap="delivery:view">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2-6h8l3 4h4v5h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/></svg>
-          Delivery · 配送
+          Delivery &amp; pickup · 配送与自提
         </button>
-        <button data-sub="ops">
+        <button data-sub="push">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0v5l2 3H4l2-3V8z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+          Notifications · 通知
+        </button>
+        <button data-sub="printing">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>
+          Printing · 打印
+        </button>
+        <button data-sub="features">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="10" rx="5"/><circle cx="15" cy="12" r="3"/></svg>
+          Features · 功能开关
+        </button>
+        <div class="settings-nav-sep" role="separator"></div>
+        <button data-sub="advanced">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2M19.07 4.93l-2.12 2.12M7.05 16.95l-2.12 2.12M19.07 19.07l-2.12-2.12M7.05 7.05 4.93 4.93"/></svg>
-          Operations · 运营
+          Advanced · 高级
         </button>
-        <!-- Change history — who changed what. The rows have been written since
-             long before there was anywhere to read them (audit E-01); this is
-             the reading surface. Not gated: an operator who can reach Settings
-             can see what was done to the shop they work in, and the endpoint
-             scopes every row to their own account. -->
         <button data-sub="history">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg>
-          Change history · 修改记录
+          History · 记录
         </button>
-        <!-- What was sent — the delivery record (audit P-03). Twenty kinds of
-             notification could leave the system and no screen listed any of
-             them, so "did the customer get told?" had no answer. -->
-        <button data-sub="sent">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-          What was sent · 发送记录
-        </button>
-        <!-- SKU codes. Gated on materials:view because that is whose catalogue
-             the rules number — an operator who cannot see materials has no use
-             for a screen about how materials are coded. The write endpoints are
-             gated on materials:edit (lib/cap-routes.js), which is the pair the
-             Materials page itself already uses. -->
-        <button data-sub="sku" data-cap="materials:view">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14M7 5v14M11 5v14M15 5v14M19 5v14"/></svg>
-          SKU codes · 编码规则
-        </button>
-        <!-- Brand + Billing — moved off the profile pop-up (2026-07-14), then
-             off the rail into Settings (2026-07-14): business identity /
-             account, not a rail-level concern. Real page links, not
-             data-sub tabs, so they navigate away from Settings. Gated to
-             owner/admin via data-cap (applyCapGates hides them otherwise). -->
         <a href="/backend/brand" data-cap="settings:shop">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.5 7.1 18.2 8 12.7 4 8.8 9.5 8z"/></svg>
           Brand · 品牌
@@ -9380,21 +9358,121 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>
           Billing · 账单
         </a>
+        </div>
       </aside>
 
       <!-- ───────── content panels ───────── -->
       <div class="settings-body">
 
-        <!-- ────── SHOP ────── -->
-        <div class="sub-panel active" id="sub-shop">
-          <h2>Shop tab · 商城页</h2>
+        <!-- ────── STORE ────── (§494, 2026-10-21 — the first question a
+             tenant brings to Settings: are we open, where are we, who is on the
+             floor. Open/closed (audit B-03), the store list (dual-realm
+             /api/retail-admin/stores) and the staff phone link moved here from
+             Operations; every id and handler is unchanged. loadStorePanel()
+             (02-settings-ops.js) reads the live parts each time it opens. -->
+        <div class="sub-panel active" id="sub-store">
+          <h2>Store · 门店</h2>
+
+          <!-- ══ Open / closed, per channel (audit B-03) ═════════════════
+               Four endpoints implemented pausing and resuming the shop per
+               sales channel — GET /store-status and three POSTs — and NOTHING
+               called any of them. This is that screen. It is the FIRST card of
+               Store (§494, A4: the master switch first): "are we open?" is the
+               question somebody arrives at this page holding. -->
+          <div class="group-card" id="ops-openclose">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>Open for business · 营业状态 <span id="oc-master-pill" class="muted" style="font-size:12px;margin-left:8px"></span></h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">Closing pauses new orders. Your marketplace shops are queued and follow within about a minute; the online store stops at once. · 关闭后将暂停接单。外卖平台会在约一分钟内跟随，线上商城立即生效。</div>
+              <div class="card-help" hidden><p>Eleme is the exception: it is not told, so Eleme orders can still come in. · 饿了么除外：它不会收到通知，饿了么订单仍可能进来。</p></div>
+            </div>
+
+            <div id="oc-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
+          </div>
+
+          <!-- ── Stores · 门店 — the online store self-manages its own stores
+               (independent of the kitchen app). Uses the dual-realm
+               /api/retail-admin/stores endpoints. The street address sets each
+               store's GPS location used for nearest-store order routing. ── -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>Stores · 门店</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">The stores / warehouses this online store ships and routes orders from.</span><span data-lang-block="cn">本店派单/发货的门店与仓库。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">Each store's <strong>street address</strong> sets the GPS location used to route orders to the nearest store — keep it accurate.</span><span data-lang-block="cn">每个门店的<strong>详细地址</strong>决定其 GPS 定位(用于就近派单),请保持准确。</span></p></div>
+            </div>
+
+            <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--line)">
+              <label class="field-label">Low-stock alert at · 低库存提醒 <span style="color:var(--text-3);font-weight:400">— flag any product low when it drops to this many units. Each store can set its own number below. · 商品降到此数量时提醒;每个门店可在下方单独设置。</span></label>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+                <span style="color:var(--text-2);font-size:15px">≤</span>
+                <input type="number" id="cfg-low-stock" aria-label="Flag a product low at this many units · 低库存提醒数量" min="0" step="1" value="5" style="width:90px" onchange="paSaveLowStockDefault(this.value)">
+                <span style="color:var(--text-3);font-size:13px">units · 件</span>
+                <span id="cfg-low-stock-status" style="color:var(--accent);font-size:12px"></span>
+              </div>
+            </div>
+            <div id="ops-stores-list" class="muted" style="font-size:13px">Loading…</div>
+            <div style="margin-top:12px"><button class="btn" onclick="_opsStoreForm(null)">+ Add store · 添加门店</button></div>
+            <div id="ops-store-form"></div>
+            <div id="ops-store-staff"></div>
+          </div>
+
+
+          <!-- ── The staff phone app ── -->
+          <!-- ONE CARD, WHERE THERE WERE TWO (§48 step 4). "Quick Stock" and
+               "Add Stock" were the same app described twice, under two names,
+               because the ROLE decided which view opened — and the second card
+               said so itself: "It's the same link as Quick Stock." Both named an
+               app that no longer exists: public/stock.html is deleted and every
+               screen it held is in Tacet Mobile, which is what the link opens
+               now. Ash: "the whole quick stock indenended app is over. i need it
+               to go away. i want all to be unified as one."
+
+               THE BUTTON NAVIGATES IN THIS TAB and carries no ?from=. It used to
+               be window.open(_blank) — Ash: "i dont see any reason for this to
+               be a new window" — and then a same-tab link with ?from=dashboard,
+               which existed only so the separate app's Back knew where it came
+               from. /m is not a separate document and has the app's own
+               navigation, so there is nothing left for the provenance to answer.
+
+               The staff LINK stays bare, which is the rule it always kept: a
+               staffer opening it came from nowhere, and a ?from= would offer
+               them a Back into a back office their role is locked out of.
+
+               NO SWITCH HERE (§53): the quickStock feature is deleted, so what
+               is left is the card itself — what the app is, and the link. -->
+          <div id="qs-home">
+            <div class="group-card">
+              <div class="group-card-head">
+                <div class="gch-row"><h3>Tacet on a phone · 手机上的 Tacet</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+                <div class="muted card-lead"><span data-lang-block="en">The same Tacet, on your staff's phones.</span><span data-lang-block="cn">同一个 Tacet,装在员工手机上。</span></div>
+                <div class="card-help" hidden><p><span data-lang-block="en">What they see follows the role you gave them (Settings → Team): a shop staffer counts that store's shelves, a kitchen staffer enters only <b>how many they just made</b>. No PC, and no access to the rest of this back office. Open it on a phone and tap <b>Add to Home Screen</b> to use it like an installed app, then share the link below with staff.</span><span data-lang-block="cn">看到哪些功能取决于你为其设置的角色(设置 → 团队):门店员工盘点本店货架,后厨员工<b>只需输入刚制作的数量</b>。无需电脑,也无法进入后台其他功能。在手机上打开后点按<b>“添加到主屏幕”</b>即可像已安装的应用一样使用,再把下面的链接发给员工。</span></p></div>
+              </div>
+
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 2px 2px;">
+                <button class="btn" onclick="window.location.href='/m'">Open Tacet · 打开 Tacet</button>
+                <button class="btn" id="qs-copy-link" onclick="qsCopyStockLink()">Copy staff link · 复制员工链接</button>
+                <code id="qs-link" style="font-size:12px;color:var(--text-3);"></code>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ────── ONLINE SHOP ────── -->
+        <!-- §494: the Shop tab's look, the product page's sections, how a
+             customer reaches you, and the support launcher — everything a
+             customer meets in the online shop, in one panel. -->
+        <div class="sub-panel" id="sub-shop">
+          <h2>Online shop · 线上商城</h2>
+          <h2 class="settings-section">Shop tab · 商城页</h2>
 
           <!-- LAYOUT picker -->
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
-              <h3>Layout · 布局</h3>
-              <div class="muted"><span data-lang-block="en">The <b>default</b> arrangement when a customer opens the Shop — they can switch views themselves unless you lock it below. List and Grid both keep the fixed left category sidebar (Grid just swaps the rows for tiles); Gallery is one big hero per row with a chip bar on top.</span><span data-lang-block="cn">顾客打开商城时的<b>默认</b>排列方式 —— 除非在下方锁定,否则顾客可自行切换视图。列表与网格都保留左侧固定分类侧栏(网格只是把行换成瓦片)/画廊(每行一张大图,顶部横向标签)。</span></div>
+              <div class="gch-row"><h3>Layout · 布局</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">The <b>default</b> arrangement when a customer opens the Shop — they can switch views themselves unless you lock it below.</span><span data-lang-block="cn">顾客打开商城时的<b>默认</b>排列方式 —— 除非在下方锁定,否则顾客可自行切换视图。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">List and Grid both keep the fixed left category sidebar (Grid just swaps the rows for tiles); Gallery is one big hero per row with a chip bar on top.</span><span data-lang-block="cn">列表与网格都保留左侧固定分类侧栏(网格只是把行换成瓦片)/画廊(每行一张大图,顶部横向标签)。</span></p></div>
             </div>
+
             <select id="cfg-shop-layout" aria-label="Shop layout · 商城布局" class="picker-source">
               <option value="list">List with sidebar · 列表 + 侧栏</option>
               <option value="list-compact">List compact · 紧凑列表</option>
@@ -9494,9 +9572,11 @@
           <!-- DEFAULT SORT -->
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
-              <h3>Default sort · 默认排序</h3>
-              <div class="muted">The order products appear in when a customer opens the Shop. "Featured" follows the manual order you set on the Products page (drag-and-drop). · 顾客打开商城时的默认排序;"精选"沿用产品页手动排序(拖拽)。</div>
+              <div class="gch-row"><h3>Default sort · 默认排序</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">The order products appear in when a customer opens the Shop. · 顾客打开商城时的默认排序。</div>
+              <div class="card-help" hidden><p>"Featured" follows the manual order you set on the Products page (drag-and-drop). · "精选"沿用产品页手动排序(拖拽)。</p><p><span data-lang-block="en"><b>Featured</b> uses the manual order on the Products page.<br> <b>Newest</b> sorts by date added (descending).<br> <b>Popular</b> sorts by order count in the last 30 days.</span><span data-lang-block="cn"><b>精选</b>采用产品页上的手动排序;<b>最新</b>按添加日期倒序排列;<b>最热销</b>按最近 30 天的下单次数排序。</span></p></div>
             </div>
+
             <div class="illus-row">
               <div class="mini-phone">
                 <div class="mp-notch"></div>
@@ -9519,9 +9599,6 @@
                     <option value="popular">Popular (most ordered) · 最热销</option>
                   </select>
                 </div>
-                <div class="helper" style="margin-top: 8px;">
-                  <span data-lang-block="en"><b>Featured</b> uses the manual order on the Products page.<br> <b>Newest</b> sorts by date added (descending).<br> <b>Popular</b> sorts by order count in the last 30 days.</span><span data-lang-block="cn"><b>精选</b>采用产品页上的手动排序;<b>最新</b>按添加日期倒序排列;<b>最热销</b>按最近 30 天的下单次数排序。</span>
-                </div>
               </div>
             </div>
           </div>
@@ -9529,9 +9606,11 @@
           <!-- FILTER CHIPS -->
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
-              <h3>Filter &amp; controls bar · 筛选与操作条</h3>
-              <div class="muted">Toggle which filter widgets appear above the product list. Each adds a row to the top of the Shop. The preview below updates live to show what customers will see. · 控制产品列表上方显示哪些筛选控件;每项会在商城顶部加一行。下方预览实时更新顾客看到的样式。</div>
+              <div class="gch-row"><h3>Filter &amp; controls bar · 筛选与操作条</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">Toggle which filter widgets appear above the product list. · 控制产品列表上方显示哪些筛选控件。</div>
+              <div class="card-help" hidden><p>Each adds a row to the top of the Shop. The preview below updates live to show what customers will see. · 每项会在商城顶部加一行。下方预览实时更新顾客看到的样式。</p><p><span data-lang-block="en">Set a product's badge with the <b>Badge</b> dropdown in its editor (Products page).</span><span data-lang-block="cn">在产品编辑器(产品页)的<b>徽标</b>下拉中设置某个产品的徽标。</span></p></div>
             </div>
+
             <div class="illus-row">
               <div class="mini-phone" id="pv-shop-filters">
                 <div class="mp-notch"></div>
@@ -9586,7 +9665,6 @@
                     <span class="chip lit">SALE</span>
                     <span class="chip lit">HOT</span>
                   </div>
-                  <div class="helper" style="margin-left: 24px; margin-top: -4px;"><span data-lang-block="en">Set a product's badge with the <b>Badge</b> dropdown in its editor (Products page).</span><span data-lang-block="cn">在产品编辑器(产品页)的<b>徽标</b>下拉中设置某个产品的徽标。</span></div>
 
                   <label class="ckbox"><input type="checkbox" id="cfg-shop-showPriceFilter"> <span>Show price ¥min – ¥max · 显示价格 ¥min – ¥max 筛选</span></label>
                   <label class="ckbox"><input type="checkbox" id="cfg-shop-hideOutOfStock"> <span>Hide out-of-stock products entirely · 完全隐藏缺货产品</span></label>
@@ -9600,306 +9678,60 @@
 
           <!-- Categories moved to their own top-level "Categories" tab (2-level
                tree editor). Nothing category-related lives in Settings → Shop. -->
-        </div>
 
-        <!-- (Tab-bar design lives in the CMS / mini-app editor — open /cms
-             and use the "TAB BAR" picker in the topbar.) -->
-
-        <!-- ────── PUSH ────── -->
-        <div class="sub-panel" id="sub-push">
-          <h2>Push notifications · 推送通知</h2>
-
-          <div class="group-card" id="notif-template-card" data-sees="customer">
+          <h2 class="settings-section">Product page · 产品页</h2>
+          <!-- ── Product page · 产品页 (§206) — the order the full product page
+               shows its sections in, and which it shows at all. One setting
+               for the whole business, kept in storefront_config under
+               product_page.sections and painted by retail-admin/31-product-page.js
+               (ppgSettingsRender). Saves on every change: a drag or a switch is
+               the whole decision, so a Save button would only be a second click
+               to say the same thing. data-no-i18n: every string in the list is
+               baked by cuT(). ── -->
+          <div class="group-card" id="ppg-settings-card">
             <div class="group-card-head">
-              <h3>Order-status subscribe-message template · 订单状态订阅消息模板</h3>
-              <div class="muted"><span data-lang-block="en">WeChat doesn't allow free push — instead, each customer opts in to <em>one</em> notification per submission. We use that slot to send "Order paid", "Preparing", "Dispatched", and "Delivered" updates.</span><span data-lang-block="cn">微信不允许免费推送 —— 顾客每次提交只能订阅<em>一条</em>通知。我们用这个名额发送“已付款”“备货中”“已发货”“已送达”等更新。</span></div>
+              <div class="gch-row"><h3>Product page · 产品页</h3></div>
+              <div class="muted card-lead">The order your product page shows its sections in, and which ones it shows at all. · 产品页各分区的显示顺序，以及显示哪些分区。</div>
             </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <!-- 1: Checkout opt-in sheet -->
-                <div style="position: absolute; left: 4px; right: 4px; top: 22px; bottom: 4px; background: #f5f0e1; border-radius: 4px; padding: 5px; color: #2a2a30">
-                  <div style="font-size: 7px; font-weight: 700; margin-bottom: 4px; color: #16161a">Allow updates?</div>
-                  <div style="font-size: 6px; color: #2a2a30; opacity: .7; margin-bottom: 6px; line-height: 1.4">Get notified when your order ships, arrives.</div>
-                  <div style="background: #fff; padding: 3px 4px; border-radius: 2px; margin-bottom: 8px; display: flex; gap: 3px; align-items: center">
-                    <div style="width: 6px; height: 6px; background: var(--accent); border-radius: 1px"></div>
-                    <div style="font-size: 5px">Order Status</div>
-                  </div>
-                  <div style="display: flex; gap: 3px">
-                    <div style="flex: 1; height: 12px; background: #ddd; border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 5px; color: #2a2a30">Deny</div>
-                    <div style="flex: 1; height: 12px; background: var(--accent); border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 5px; color: #16161a; font-weight: 700">Allow</div>
-                  </div>
-                </div>
-              </div>
-              <div class="ctrl">
-                <div class="field" style="margin: 0;">
-                  <label for="cfg-notifications-order_status_template_id" class="stacked">Template ID · 模板 ID</label>
-                  <input type="text" id="cfg-notifications-order_status_template_id"
-                         placeholder="e.g. WrA_C5n8KuQ0vWBg…"
-                         style="width: 100%; font-family: monospace;">
-                </div>
-                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
-                  <b>1.</b> Register at mp.weixin.qq.com → 功能 → 订阅消息.<br>
-                  <b>2.</b> Pick a "运输状态/Shipping status" template.<br>
-                  <b>3.</b> Paste the template ID here.<br>
-                  <b>4.</b> It saves itself — the checkout prompt activates automatically.<br>
-                  Leave blank to disable until AppID is registered. In DEV mode (no AppID) pushes are logged, not sent.
-                </div>
-                <div data-as-foot="notifications.order_status"></div>
-              </div>
+
+            <div class="ppg-setrows" id="ppg-setrows" data-no-i18n></div>
+            <div class="ppg-setnote">A hidden section keeps its data. Switch it back on and everything is still there. Basics cannot be hidden: a product needs a name. · 隐藏的分区会保留其数据，重新开启后一切仍在。基础分区不能隐藏：产品需要一个名称。</div>
+            <div class="ppg-setfoot">
+              <button type="button" class="btn btn-sm" onclick="ppgSettingsReset()">Reset to default order · 重置为默认顺序</button>
+              <span class="muted" id="ppg-set-status" aria-live="polite"></span>
             </div>
           </div>
 
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>New-order alert to your phone · 新订单手机提醒
-                <span id="wecom-app-chip" style="margin-left:8px;vertical-align:middle"></span>
-              </h3>
-              <div class="muted"><span data-lang-block="en">Get a card in your WeChat Work (企业微信 / WeCom) app the moment a new order is paid — order number, amount, recipient and address. Works even when this backend is closed, and works on the international WeCom app.</span><span data-lang-block="cn">每当有新订单付款,立即在企业微信 App 收到一张卡片(订单号、金额、收货人、地址)。即使后台没开也能收到,国际版 WeCom 同样适用。</span></div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; bottom: 4px; background: #f0f0ec; border-radius: 4px; padding: 4px;">
-                  <div style="background: #fff; border-radius: 3px; padding: 4px;">
-                    <div style="font-size: 6px; font-weight: 700; color: #2a2a30; margin-bottom: 3px">🌿 新订单 · New order</div>
-                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.5">订单号 Order: 10257097<br>金额 Amount: <span style="color:#e6a23c">¥57.00</span><br>收货人 To: asher<br>地址 Address: 广东省广州市番禺区…</div>
-                  </div>
-                </div>
-              </div>
-              <div class="ctrl">
-                <div class="field" style="margin: 0 0 8px;">
-                  <label for="wecom-app-corp_id" class="stacked">Company ID (CorpID) · 企业 ID</label>
-                  <input type="text" id="wecom-app-corp_id" placeholder="ww… (我的企业 → 企业信息)" style="width: 100%; font-family: monospace;">
-                </div>
-                <div class="field" style="margin: 0 0 8px;">
-                  <label for="wecom-app-agent_id" class="stacked">App ID (AgentId) · 应用 AgentId</label>
-                  <input type="text" id="wecom-app-agent_id" placeholder="e.g. 1000002" style="width: 100%; font-family: monospace;">
-                </div>
-                <div class="field" style="margin: 0;">
-                  <label for="wecom-app-secret" class="stacked">App Secret · 应用 Secret</label>
-                  <input type="password" id="wecom-app-secret" autocomplete="off" data-ph-en="paste app Secret" data-ph-cn="粘贴应用 Secret" placeholder="paste app Secret" style="width: 100%; font-family: monospace;">
-                </div>
-                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="saveWecomApp()">Save · 保存</button>
-                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="testWecomWebhook()">Send a test · 发送测试</button>
-                  <span id="wecom-test-status" class="muted" style="font-size: 11px;"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
-                  <b>1.</b> In WeCom admin (work.weixin.qq.com) → 应用管理 → create a self-built app (自建应用).<br>
-                  <b>2.</b> Copy its <b>AgentId</b> and <b>Secret</b>; copy your <b>CorpID</b> from 我的企业 → 企业信息.<br>
-                  <b>3.</b> In that app → 企业可信IP (trusted IP), add this server's IP. (Send a test below — if the IP is missing, the result tells you exactly which IP to add.)<br>
-                  <b>4.</b> Make sure the app's 可见范围 (visible range) includes you, then Save and Send a test.<br>
-                  Clear all three fields to turn off. · 清空三项即关闭。
-                </div>
-              </div>
-            </div>
-          </div>
 
+          <!-- ── Support button · 客服按钮 — hide the floating platform-support
+               launcher (bottom-right) for operators who don't want it. ── -->
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
-              <h3>SMS when delivered (out-of-Guangzhou orders) · 送达短信(广州市外订单)
-                <span id="aliyun_sms-chip" style="margin-left:8px;vertical-align:middle"></span>
-              </h3>
-              <div class="muted"><span data-lang-block="en">Text the customer the moment an out-of-town courier order is marked delivered — for shoppers who aren't watching the mini app. Same-city Guangzhou deliveries and in-store pickups are skipped (they already get the in-app notice). Uses your Aliyun 短信服务 package.</span><span data-lang-block="cn">当广州市外的快递订单标记为「已送达」时,给顾客发一条短信(适合不盯着小程序的顾客)。广州同城配送与到店自提不发送(已有应用内通知)。使用你的阿里云短信套餐包。</span></div>
+              <div class="gch-row"><h3>Support button · 客服按钮</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">The floating <b>Support</b> button in the bottom-right corner opens a chat with platform support.</span><span data-lang-block="cn">右下角悬浮的<b>客服</b>按钮用于联系平台客服。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">Turn it off to hide it.</span><span data-lang-block="cn">关闭即可隐藏。</span></p></div>
             </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; bottom: 4px; background: #f0f0ec; border-radius: 4px; padding: 4px;">
-                  <div style="background: #fff; border-radius: 3px; padding: 4px;">
-                    <div style="font-size: 6px; font-weight: 700; color: #2a2a30; margin-bottom: 3px">信息 · SMS</div>
-                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.6">【满圆】您的订单 R260616…<br>已送达,请注意查收,<br>感谢您的惠顾。</div>
-                  </div>
-                </div>
-              </div>
-              <div class="ctrl">
-                <div class="field" style="margin: 0 0 8px;">
-                  <label for="aliyun_sms-ak_id" class="stacked">AccessKey ID · 访问密钥 ID</label>
-                  <input type="text" id="aliyun_sms-ak_id" placeholder="LTAI… (RAM 用户, 仅授权 AliyunDysmsFullAccess)" style="width: 100%; font-family: monospace;">
-                </div>
-                <div class="field" style="margin: 0 0 8px;">
-                  <label for="aliyun_sms-ak_secret" class="stacked">AccessKey Secret · 访问密钥</label>
-                  <input type="password" id="aliyun_sms-ak_secret" autocomplete="off" data-ph-en="paste AccessKey Secret" data-ph-cn="粘贴 AccessKey Secret" placeholder="paste AccessKey Secret" style="width: 100%; font-family: monospace;">
-                </div>
-                <div class="field" style="margin: 0 0 8px;">
-                  <label for="aliyun_sms-sign_name" class="stacked"><span data-lang-block="en">Signature (签名)</span><span data-lang-block="cn">短信签名</span></label>
-                  <input type="text" id="aliyun_sms-sign_name" placeholder="e.g. 满圆 (must be approved in 签名管理)" style="width: 100%;">
-                </div>
-                <div class="field" style="margin: 0;">
-                  <label for="aliyun_sms-template_delivered" class="stacked"><span data-lang-block="en">Delivered template code (模板CODE)</span><span data-lang-block="cn">送达模板编号</span></label>
-                  <input type="text" id="aliyun_sms-template_delivered" placeholder="e.g. SMS_123456789" style="width: 100%; font-family: monospace;">
-                </div>
-                <div class="field" style="margin: 0;">
-                  <label for="aliyun_sms-template_otp" class="stacked"><span data-lang-block="en">Login OTP template code (模板CODE)</span><span data-lang-block="cn">网页登录验证码模板编号</span></label>
-                  <input type="text" id="aliyun_sms-template_otp" placeholder="e.g. SMS_987654321 (template variable must be code)" style="width: 100%; font-family: monospace;">
-                </div>
-                <div class="field" style="margin: 10px 0 0;">
-                  <label for="aliyun_sms-testphone" class="stacked">Test to this phone · 测试发送至此手机号</label>
-                  <input type="text" id="aliyun_sms-testphone" data-ph-en="11-digit mainland mobile" data-ph-cn="11 位手机号" placeholder="11-digit mainland mobile" style="width: 100%; font-family: monospace;">
-                </div>
-                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_saveAliyunSms()">Save · 保存</button>
-                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_testAliyunSms()">Send a test SMS · 发送测试短信</button>
-                  <span id="aliyun_sms-test-status" class="muted" style="font-size: 11px;"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
-                  <b>1.</b> Aliyun console → AccessKey 管理 → create a key (ideally a RAM user with only <b>AliyunDysmsFullAccess</b>).<br>
-                  <b>2.</b> 短信服务 → 签名管理 → copy your approved <b>签名</b> text (the one your old app already uses).<br>
-                  <b>3.</b> 短信服务 → 模板管理 → 添加模板 (type 通知短信), submit a delivered notice using the variable <code>${order}</code>, e.g. <i>您的订单${order}已送达,请注意查收,感谢您的惠顾。</i> Once approved, copy its <b>模板CODE</b>.<br>
-                  <b>4.</b> Paste all four above, Save, then Send a test SMS to your own phone.<br>
-                  Clear all four fields to turn off. · 清空四项即关闭。
-                </div>
-              </div>
+
+            <div style="display:flex;align-items:center;gap:10px;padding:4px 2px 2px">
+              <input type="checkbox" id="cfg-support-btn" style="width:18px;height:18px">
+              <label for="cfg-support-btn" style="font-size:13px;color:var(--text-1)">Show the Support button · 显示客服按钮</label>
             </div>
           </div>
 
-          <div class="group-card" id="notif-webhook-card">
-            <div class="group-card-head">
-              <h3>Alternative: group-bot webhook · 备选:群机器人 Webhook</h3>
-              <div class="muted"><span data-lang-block="en">Only if you use mainland 企业微信 with an internal (company-only) group. Paste the group robot's webhook and the card posts there instead. Leave blank if you're using the app above.</span><span data-lang-block="cn">仅当你使用国内企业微信且有内部群时。填入群机器人的 Webhook,卡片会发到群里。若用上面的 App 方式,请留空。</span></div>
-            </div>
-            <div class="illus-row">
-              <div class="ctrl">
-                <div class="field" style="margin: 0;">
-                  <label for="cfg-notifications-wecom_order_webhook" class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
-                  <input type="text" id="cfg-notifications-wecom_order_webhook"
-                         placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
-                         style="width: 100%; font-family: monospace;">
-                </div>
-                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
-                  Only qyapi.weixin.qq.com URLs are accepted. The app above takes priority when both are set. · 仅接受 qyapi.weixin.qq.com 地址。两者都填时优先使用上面的 App。
-                </div>
-                <div data-as-foot="notifications.group_bot"></div>
-              </div>
-            </div>
-          </div>
 
-          <!-- §432. The evening to-make message: the next morning's kitchen list,
-               posted to its OWN WeCom group (not the new-order one above). Saved
-               by its own button through its own endpoint — the webhook is under
-               the private `kitchen.` prefix, which the main Save cannot read
-               back. 05-marketing.js loadKitchenPrep / saveKitchenPrep. Chinese —
-               docs/tacet-delivery-vocabulary.md v1.314. -->
-          <div class="group-card" id="kprep-card">
-            <div class="group-card-head">
-              <h3>Kitchen: evening to-make message · 厨房:晚间待制作消息</h3>
-              <div class="muted">The evening before, posts the next morning's to-make list to a WeCom group — the same list the kitchen slip prints. If orders change it afterwards, an update follows, at most every 30 minutes, until the slip prints. Nothing is sent when there is nothing to make. · 前一天晚上,把次日早上的待制作清单发到企业微信群——与厨房小票打印的清单相同。之后订单若有变化,会发送更新,最多每 30 分钟一次,直到小票打印。无需制作时不发送。</div>
-            </div>
-            <div class="illus-row">
-              <div class="ctrl">
-                <div class="field" style="margin: 0 0 8px;">
-                  <label for="kprep-webhook" class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
-                  <input type="text" id="kprep-webhook"
-                         placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
-                         style="width: 100%; font-family: monospace;">
-                </div>
-                <div class="field" style="margin: 0;">
-                  <label for="kprep-time" class="stacked">Send time · 发送时间</label>
-                  <input type="time" id="kprep-time" min="12:00" max="23:59" step="60" style="width: 140px;">
-                </div>
-                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="saveKitchenPrep()">Save · 保存</button>
-                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="testKitchenPrep()">Send a test · 发送测试</button>
-                  <span id="kprep-status" class="muted" style="font-size: 11px;"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
-                  Use a different group from the new-order alerts. Only qyapi.weixin.qq.com URLs are accepted. Leave the time blank to turn it off. · 请使用与新订单提醒不同的群。仅接受 qyapi.weixin.qq.com 地址。时间留空则关闭。
-                </div>
-                <div class="helper" id="kprep-morning-off" style="margin-top: 6px; color: var(--danger, #b91c1c); display: none;">
-                  The morning request hour is off (Delivery → Fresh batches), so nothing is sent. · 厨房制作请求时间已关闭(配送 → 新鲜现做),因此不会发送。
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="group-card" data-sees="customer">
-            <div class="group-card-head">
-              <h3>What customers receive · 顾客收到的内容</h3>
-              <div class="muted">After opt-in, each status transition in Mini App Backend → Orders fires one push. Customers see it in the WeChat "Service notifications" feed. · 顾客订阅后,小程序后台 → 订单的每次状态变更都会触发一次推送,显示在微信"服务通知"中。</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; bottom: 4px; background: #f0f0ec; border-radius: 4px; padding: 4px;">
-                  <div style="background: #fff; border-radius: 3px; padding: 4px; margin-bottom: 3px">
-                    <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 2px">
-                      <div style="width: 8px; height: 8px; background: var(--accent); border-radius: 2px"></div>
-                      <div style="font-size: 6px; font-weight: 700; color: #2a2a30">Roots</div>
-                    </div>
-                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.4">Order #1042 paid. We're preparing your food now.</div>
-                  </div>
-                  <div style="background: #fff; border-radius: 3px; padding: 4px; margin-bottom: 3px">
-                    <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 2px">
-                      <div style="width: 8px; height: 8px; background: var(--accent); border-radius: 2px"></div>
-                      <div style="font-size: 6px; font-weight: 700; color: #2a2a30">Roots</div>
-                    </div>
-                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.4">Dispatched · SF Express SF12345…</div>
-                  </div>
-                  <div style="background: #fff; border-radius: 3px; padding: 4px;">
-                    <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 2px">
-                      <div style="width: 8px; height: 8px; background: var(--accent); border-radius: 2px"></div>
-                      <div style="font-size: 6px; font-weight: 700; color: #2a2a30">Roots</div>
-                    </div>
-                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.4">Delivered. Enjoy! 🌱</div>
-                  </div>
-                </div>
-              </div>
-              <div class="ctrl">
-                <div class="helper" style="line-height: 1.55;">
-                  <b>One opt-in covers one transition.</b> WeChat re-prompts the customer after each push is consumed, so opt-in is effectively per-order.<br><br>
-                  <b>Transitions that push:</b><br>
-                  • pending_payment → paid<br>
-                  • paid → preparing<br>
-                  • preparing → dispatched<br>
-                  • dispatched → delivered<br>
-                  • any → cancelled or refunded
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- System Alerts (ops) — dedicated WeCom group, kept SEPARATE from orders -->
-          <div class="group-card" id="sysalert-card">
-            <div class="group-card-head">
-              <h3>System alerts · 系统告警</h3>
-              <div class="muted"><span data-lang-block="en">Sends operational alerts — a channel (Meituan/闪购) disconnecting, the proxy going down, or the storefront not responding — to a dedicated WeCom group. Keep this separate from your order group so ops noise doesn't bury orders.</span><span data-lang-block="cn">把运营告警(渠道掉线、代理中断、店铺无响应等)发到一个专用企业微信群,与订单群分开,避免淹没订单。</span></div>
-            </div>
-            <div class="illus-row">
-              <div class="ctrl">
-                <label class="ckbox" style="margin-bottom:10px;display:block"><input type="checkbox" id="cfg-system_alerts-enabled"> <span>Enable system alerts · 开启系统告警</span></label>
-                <div class="field" style="margin: 0;">
-                  <label for="cfg-system_alerts-wecom_webhook" class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
-                  <input type="text" id="cfg-system_alerts-wecom_webhook"
-                         placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
-                         style="width: 100%; font-family: monospace;">
-                </div>
-                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_testSystemAlert()">Send test · 发送测试</button>
-                  <span id="system_alerts-test-status" class="muted" style="font-size: 11px;"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
-                  <span data-lang-block="en">Create a NEW WeCom group (separate from orders) → ··· → 群机器人 → 添加 → copy its Webhook. Paste it here, tick Enable, Send test to confirm it lands. Only qyapi.weixin.qq.com URLs are accepted.</span><span data-lang-block="cn">新建一个企业微信群(与订单群分开)→ ··· → 群机器人 → 添加 → 复制 Webhook,粘贴到此处,勾选开启,点"发送测试"确认。仅接受 qyapi.weixin.qq.com 地址。</span>
-                </div>
-                <div data-as-foot="system_alerts"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ────── CUSTOMER SERVICE ────── -->
-        <div class="sub-panel" id="sub-cs">
-          <h2>Customer service · 客户服务</h2>
-          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
-            <span data-lang-block="en">Shows a chat-bubble button on the Me tab, checkout, and order pages. Tapping opens a chat with your team. WeCom (企业微信) is the preferred mode — customers get a live conversation with a staff agent.</span><span data-lang-block="cn">在"我的"页、结算页和订单页显示一个聊天气泡按钮,点击即可与你的团队对话。推荐使用企业微信(WeCom)模式 —— 顾客可与客服人员实时交流。</span>
-          </div>
+          <h2 class="settings-section">Customer service · 客户服务</h2>
+          <!-- §279: the six customer-service cards are ONE self-saving card
+               (CS_CARD, root #cs-cards). -->
+          <div id="cs-cards">
 
           <!-- Mode -->
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
-              <h3>How customers reach you · 顾客联系方式</h3>
-              <div class="muted"><span data-lang-block="en">Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet.</span><span data-lang-block="cn">三种方式可选。企业微信最适合持续对话;微信客服是轻量的内置方案;二维码则是两者都未配置时的备选。</span></div>
+              <div class="gch-row"><h3>How customers reach you · 顾客联系方式</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">Three options. WeCom is best for ongoing conversations.</span><span data-lang-block="cn">三种方式可选。企业微信最适合持续对话。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">WeChat customer service is the lightweight built-in. QR code is the fallback when neither is set up yet.</span><span data-lang-block="cn">微信客服是轻量的内置方案;二维码则是两者都未配置时的备选。</span></p></div>
             </div>
+
             <select id="cfg-cs-mode" aria-label="How customers reach you · 顾客联系方式" style="width:100%;max-width:460px;padding:10px 12px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
               <option value="off">Off — hide the button entirely · 关闭 — 完全隐藏按钮</option>
               <option value="wecom">WeCom — recommended · 企业微信 — 推荐</option>
@@ -9917,9 +9749,10 @@
           <!-- WeCom fields -->
           <div class="group-card" id="cs-wecom-fields">
             <div class="group-card-head">
-              <h3>WeCom credentials · 企业微信凭证</h3>
-              <div class="muted">Both values come from your WeCom 客服 admin page after you bind the mini-program AppID. The mini-app calls <code>wx.openCustomerServiceChat({ corpId, url })</code> with these.</div>
+              <div class="gch-row"><h3>WeCom credentials · 企业微信凭证</h3></div>
+              <div class="muted card-lead">Both values come from your WeCom customer-service admin page, once the mini-program AppID is bound there. · 两个值都来自企业微信客服后台,绑定小程序 AppID 之后即可查看。</div>
             </div>
+
             <div class="field">
               <label for="cfg-cs-corp_id" class="stacked">Corp ID (企业ID)</label>
               <input type="text" id="cfg-cs-corp_id" placeholder="ww1234abcd567890ef" style="width: 100%; font-family: monospace;">
@@ -9933,9 +9766,10 @@
           <!-- QR fallback -->
           <div class="group-card" id="cs-qr-fields" data-sees="customer">
             <div class="group-card-head">
-              <h3>QR code image · 二维码图片</h3>
-              <div class="muted">Upload the scannable code. PNG/JPG, ideally square ≥600×600. · 上传可扫码图片,PNG/JPG,建议方形 ≥600×600。</div>
+              <div class="gch-row"><h3>QR code image · 二维码图片</h3></div>
+              <div class="muted card-lead">Upload the scannable code. PNG/JPG, ideally square ≥600×600. · 上传可扫码图片,PNG/JPG,建议方形 ≥600×600。</div>
             </div>
+
             <div class="field" style="margin: 0;">
               <input type="file" id="cfg-cs-qr-file" accept="image/*" aria-label="Upload a QR code image · 上传二维码图片">
               <div id="cfg-cs-qr-preview" style="margin-top: 12px;"></div>
@@ -9946,9 +9780,11 @@
           <!-- Labels + hours -->
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
-              <h3>Button label &amp; hours · 按钮文案与营业时间</h3>
-              <div class="muted">Both languages — customers see one. Hours shown beneath the button on the Me tab; leave blank to hide. · 两种语言都填,顾客看到其中一种;营业时间显示在"我的"页按钮下方,留空则隐藏。</div>
+              <div class="gch-row"><h3>Button label &amp; hours · 按钮文案与营业时间</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">Both languages — customers see one. · 两种语言都填,顾客看到其中一种。</div>
+              <div class="card-help" hidden><p>Hours shown beneath the button on the Me tab; leave blank to hide. · 营业时间显示在"我的"页按钮下方,留空则隐藏。</p></div>
             </div>
+
             <div class="row" style="gap: var(--s3);">
               <div class="field" style="flex: 1;">
                 <label for="cfg-cs-label_en" class="stacked">EN label · 英文标签</label>
@@ -9979,9 +9815,11 @@
           <!-- Placement -->
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
-              <h3>Where to show · 显示位置</h3>
-              <div class="muted">Pick which pages show the floating chat bubble. The look below applies to every page you tick. · 选择哪些页面显示悬浮客服按钮;下方样式将应用于所有勾选的页面。</div>
+              <div class="gch-row"><h3>Where to show · 显示位置</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">Pick which pages show the floating chat bubble. · 选择哪些页面显示悬浮客服按钮。</div>
+              <div class="card-help" hidden><p>The look below applies to every page you tick. · 下方样式将应用于所有勾选的页面。</p></div>
             </div>
+
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
               <input type="checkbox" id="cfg-cs-show_me"> Me tab · 我的页
             </label>
@@ -10002,9 +9840,11 @@
           <!-- Floating-bubble appearance -->
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
-              <h3>Floating bubble look · 悬浮按钮样式</h3>
-              <div class="muted">Style the round chat bubble — size, shape, colour, icon and where it sits. Applies on every page you enabled above. · 自定义悬浮客服按钮的大小、形状、颜色、图标与位置;应用于以上所有已开启的页面。</div>
+              <div class="gch-row"><h3>Floating bubble look · 悬浮按钮样式</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">Style the round chat bubble — size, shape, colour, icon and where it sits. · 自定义悬浮客服按钮的大小、形状、颜色、图标与位置。</div>
+              <div class="card-help" hidden><p>Applies on every page you enabled above. · 应用于以上所有已开启的页面。</p></div>
             </div>
+
             <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start;">
               <div style="flex: 1; min-width: 160px;">
                 <label for="cfg-cs-fab_size" class="muted" style="display:block; margin-bottom:4px;">Size · 大小</label>
@@ -10064,6 +9904,8 @@
           </div>
           <!-- §279: customer service saves itself. -->
           <div data-as-foot="customer_service" style="margin-top: var(--s4);"></div>
+          </div>
+
         </div>
 
         <!-- ────── PAYMENTS & TAX ────── (§494, 2026-10-21 — the three money
@@ -10080,9 +9922,11 @@
           <!-- DISPLAY CURRENCY — sits with payment; tenant-wide price display. -->
           <div class="group-card" data-cap="settings:payments" data-sees="customer">
             <div class="group-card-head">
-              <h3>Currency · 货币</h3>
-              <div class="muted">The currency your prices, cart and balances show in. Enter your product prices in this currency. WeChat Pay and Alipay always charge in RMB — this only changes how amounts are shown, so it's for cash / bank / manual-payment stores until a matching payment method is added. · 店铺价格、购物车和余额显示所用的货币。请以此货币填写商品价格。微信支付和支付宝始终以人民币收款,此项仅改变金额的显示方式。</div>
+              <div class="gch-row"><h3>Currency · 货币</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">The currency your prices, cart and balances show in. · 店铺价格、购物车和余额显示所用的货币。</div>
+              <div class="card-help" hidden><p>Enter your product prices in this currency. WeChat Pay and Alipay always charge in RMB — this only changes how amounts are shown, so it's for cash / bank / manual-payment stores until a matching payment method is added. · 请以此货币填写商品价格。微信支付和支付宝始终以人民币收款,此项仅改变金额的显示方式。</p></div>
             </div>
+
             <div class="illus-row">
               <div class="ctrl" style="flex: 1;">
                 <div class="field" style="margin: 0; max-width: 340px;">
@@ -10106,9 +9950,11 @@
                ¥120.00" is not. -->
           <div class="group-card" data-cap="settings:payments" data-sees="customer">
             <div class="group-card-head">
-              <h3>Tax · 税费 <span id="tax-chip" style="margin-left:8px;vertical-align:middle"></span></h3>
-              <div class="muted">Sales tax or VAT on what the customer pays. Choose whether your prices already include it or it is added at checkout, and the rate. The tax lands on the order, the receipt and the finance report. Leave it off if your prices carry no tax. · 顾客支付金额中的销售税/增值税。请选择价格是否已含税、以及税率。税额会记录在订单、小票与财务报表中。若价格不含税,保持关闭即可。</div>
+              <div class="gch-row"><h3>Tax · 税费 <span id="tax-chip" style="margin-left:8px;vertical-align:middle"></span></h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">Sales tax or VAT on what the customer pays. · 顾客支付金额中的销售税/增值税。</div>
+              <div class="card-help" hidden><p>Choose whether your prices already include it or it is added at checkout, and the rate. The tax lands on the order, the receipt and the finance report. Leave it off if your prices carry no tax. · 请选择价格是否已含税、以及税率。税额会记录在订单、小票与财务报表中。若价格不含税,保持关闭即可。</p></div>
             </div>
+
             <div style="display:flex;align-items:center;gap:10px;padding:2px 2px 14px">
               <input type="checkbox" id="cfg-tax-enabled" style="width:18px;height:18px" onchange="taxCardSync()">
               <label for="cfg-tax-enabled" style="font-size:13px;color:var(--text-1)">Charge tax on orders · 订单收取税费</label>
@@ -10155,14 +10001,16 @@
 
           <div class="group-card" data-cap="settings:payments" data-sees="customer">
             <div class="group-card-head">
-              <h3>Manual Alipay payment (static QR code) · 支付宝手动收款
+              <div class="gch-row"><h3>Manual Alipay payment (static QR code) · 支付宝手动收款
                 <span id="alipay-manual-chip" style="margin-left:8px;vertical-align:middle"></span>
-              </h3>
-              <div class="muted"><span data-lang-block="en">Temporary fallback while 当面付 API access is pending. Customer picks Alipay → sees this收款码 + the amount → scans, pays, and uploads the payment screenshot in the app. Staff verify the screenshot on the order and click "Mark paid". Money lands in whatever account this收款码 belongs to.</span><span data-lang-block="cn">当面付接口开通前的临时方案。顾客选择支付宝后看到此收款码与金额,扫码付款并在小程序上传付款截图;客服在订单中核对截图后点击「标记已付款」。款项进入此收款码所属账户。</span></div>
+              </h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">Temporary fallback while 当面付 API access is pending.</span><span data-lang-block="cn">当面付接口开通前的临时方案。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">Customer picks Alipay → sees this收款码 + the amount → scans, pays, and uploads the payment screenshot in the app. Staff verify the screenshot on the order and click "Mark paid". Money lands in whatever account this收款码 belongs to.</span><span data-lang-block="cn">顾客选择支付宝后看到此收款码与金额,扫码付款并在小程序上传付款截图;客服在订单中核对截图后点击「标记已付款」。款项进入此收款码所属账户。</span></p><p>When a customer uploads their Alipay screenshot, AI reads the amount, payee and time and checks them against the order — shown as a green ✓ / red ⚠ on the order. ~¥0.03/order. · 顾客上传支付宝截图后,AI 自动读取金额、收款方、时间并与订单核对,在订单上显示 ✓/⚠。约¥0.03/单。</p><p><span class="hl">Accepted payee names · 收款方名称(可多个)</span><span><span data-lang-block="en">List every name your 收钱码 can show and any one is enough to pass. The success screen shows the shop's display name (哈素萌); the 账单详情 page the customer opens later shows the registered name instead (*玲(个人)) — list both, or leave blank to skip this check. Stars, brackets and spaces are ignored.</span><span data-lang-block="cn">请列出收钱码可能显示的所有名称,命中任一即通过。支付成功页显示店铺名(哈素萌),顾客事后打开的账单详情页显示的是账户全称(*玲(个人)) — 两个都填,或留空则不检查。星号、括号、空格自动忽略。</span></span></p><p><span class="hl">Pay within (minutes, 0 = no deadline) · 付款期限(分钟,0=不限)</span><span>The deadline shown to the customer: an Alipay order with no screenshot uploaded by then is auto-cancelled and its stock released. Keep it tight. · 顾客看到的付款期限:到期仍未上传截图的支付宝订单会自动取消并释放库存,建议设短一些。</span></p><p><span class="hl">Screenshot may be up to (minutes old, 0 = same as above) · 截图最长可早于上传(分钟,0=同上)</span><span>Only affects the AI check: the gap between the payment time printed on the screenshot and the moment the customer uploads it. Keep this generous (120 is a good start) even with a tight deadline above — paying, then digging the receipt out of the Alipay bill history a while later is normal, and a re-used screenshot is already blocked by the image/transaction check. · 仅影响 AI 核对:截图上的付款时间与上传时间之间的间隔。即使上面期限较短,这里也建议放宽(120 分钟起步) — 顾客付完款过一会儿再去账单里翻截图很常见;重复使用的截图已由图片/交易号去重拦截。</span></p><p>Leave OFF at first: AI shows a verdict but staff still tap Mark paid. Turn ON only once you trust it — a perfect fake screenshot can then auto-pass. Reuse is blocked by the transaction-id check. · 建议先关闭:AI 仅给出判断,仍由人工点击「标记已付款」。信任后再开启 — 开启后伪造完美的截图也会自动通过;重复使用由交易号去重拦截。</p><p><span data-lang-block="en">Open Alipay App → 收付款 → 收款 → save the收款码 image, then upload it here. The static code carries no amount, so the customer types the shown amount when paying. Uncheck Enable (or clear the image) to turn off and fall back to WeChat-only.</span><span data-lang-block="cn">支付宝 App → 收付款 → 收款 → 保存收款码图片,上传到这里。静态码不含金额,顾客付款时手动输入页面显示的金额。取消勾选或清除图片即关闭。</span></p></div>
             </div>
+
             <div class="illus-row">
               <div class="ctrl">
-                <label style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-weight:700;">
+                <label style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-weight:500;">
                   <input type="checkbox" id="alipay-manual-enabled"> Enable manual Alipay · 启用手动支付宝收款
                 </label>
                 <div class="field" style="margin: 0 0 8px;">
@@ -10177,10 +10025,9 @@
 
                 <!-- Vision-AI auto-read of the customer's payment screenshot -->
                 <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--line);">
-                  <label style="display:flex; align-items:center; gap:8px; font-weight:700;">
-                    <input type="checkbox" id="alipay-manual-ocr" onchange="_alipayOcrToggle()"> 🔍 Auto-read payment screenshots (AI) · 自动识别付款截图
+                  <label style="display:flex; align-items:center; gap:8px; font-weight:500;">
+                    <input type="checkbox" id="alipay-manual-ocr" onchange="_alipayOcrToggle()"> Auto-read payment screenshots (AI) · 自动识别付款截图
                   </label>
-                  <div class="muted" style="margin-top:4px;">When a customer uploads their Alipay screenshot, AI reads the amount, payee and time and checks them against the order — shown as a green ✓ / red ⚠ on the order. ~¥0.03/order. · 顾客上传支付宝截图后,AI 自动读取金额、收款方、时间并与订单核对,在订单上显示 ✓/⚠。约¥0.03/单。</div>
                   <!-- Always rendered. _alipayOcrToggle() only greys/disables it
                        when auto-read is off — no display:none, so these settings
                        stay visible even if that toggle never runs. -->
@@ -10192,31 +10039,24 @@
                     <div class="field" style="margin: 0 0 8px;">
                       <label for="alipay-manual-payee" class="stacked">Accepted payee names · 收款方名称(可多个)</label>
                       <input type="text" id="alipay-manual-payee" data-ph-en="哈素萌, 玲 — separate with commas" data-ph-cn="多个用逗号分隔" placeholder="哈素萌, 玲 — separate with commas" style="width: 100%;">
-                      <div class="muted" style="margin-top:4px; line-height:1.5;"><span data-lang-block="en">List every name your 收钱码 can show and any one is enough to pass. The success screen shows the shop's display name (哈素萌); the 账单详情 page the customer opens later shows the registered name instead (*玲(个人)) — list both, or leave blank to skip this check. Stars, brackets and spaces are ignored.</span><span data-lang-block="cn">请列出收钱码可能显示的所有名称,命中任一即通过。支付成功页显示店铺名(哈素萌),顾客事后打开的账单详情页显示的是账户全称(*玲(个人)) — 两个都填,或留空则不检查。星号、括号、空格自动忽略。</span></div>
                     </div>
                     <div class="field" style="margin: 0 0 8px;">
                       <label for="alipay-manual-window" class="stacked">Pay within (minutes, 0 = no deadline) · 付款期限(分钟,0=不限)</label>
                       <input type="number" id="alipay-manual-window" min="0" max="1440" placeholder="30" style="width: 100%; font-family: monospace;">
-                      <div class="muted" style="margin-top:4px; line-height:1.5;">The deadline shown to the customer: an Alipay order with no screenshot uploaded by then is auto-cancelled and its stock released. Keep it tight. · 顾客看到的付款期限:到期仍未上传截图的支付宝订单会自动取消并释放库存,建议设短一些。</div>
                     </div>
                     <div class="field" style="margin: 0 0 8px;">
                       <label for="alipay-manual-proof-age" class="stacked">Screenshot may be up to (minutes old, 0 = same as above) · 截图最长可早于上传(分钟,0=同上)</label>
                       <input type="number" id="alipay-manual-proof-age" min="0" max="1440" placeholder="120" style="width: 100%; font-family: monospace;">
-                      <div class="muted" style="margin-top:4px; line-height:1.5;">Only affects the AI check: the gap between the payment time printed on the screenshot and the moment the customer uploads it. Keep this generous (120 is a good start) even with a tight deadline above — paying, then digging the receipt out of the Alipay bill history a while later is normal, and a re-used screenshot is already blocked by the image/transaction check. · 仅影响 AI 核对:截图上的付款时间与上传时间之间的间隔。即使上面期限较短,这里也建议放宽(120 分钟起步) — 顾客付完款过一会儿再去账单里翻截图很常见;重复使用的截图已由图片/交易号去重拦截。</div>
                     </div>
-                    <label style="display:flex; align-items:center; gap:8px; font-weight:700; color:#991b1b;">
-                      <input type="checkbox" id="alipay-manual-autoflip"> ⚡ Auto-mark paid on full match (no human review) · 完全匹配时自动标记付款(无需人工)
+                    <label style="display:flex; align-items:center; gap:8px; font-weight:500;">
+                      <input type="checkbox" id="alipay-manual-autoflip"> Auto-mark paid on full match (no human review) · 完全匹配时自动标记付款(无需人工)
                     </label>
-                    <div class="muted" style="margin-top:4px; line-height:1.5;">Leave OFF at first: AI shows a verdict but staff still tap Mark paid. Turn ON only once you trust it — a perfect fake screenshot can then auto-pass. Reuse is blocked by the transaction-id check. · 建议先关闭:AI 仅给出判断,仍由人工点击「标记已付款」。信任后再开启 — 开启后伪造完美的截图也会自动通过;重复使用由交易号去重拦截。</div>
                   </div>
                 </div>
 
                 <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                   <button type="button" class="btn" onclick="_saveAlipayManual(this)">Save · 保存</button>
                   <span id="alipay-manual-status" class="muted" data-no-i18n style="font-size: 12px;"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
-                  <span data-lang-block="en">Open Alipay App → 收付款 → 收款 → save the收款码 image, then upload it here. The static code carries no amount, so the customer types the shown amount when paying. Uncheck Enable (or clear the image) to turn off and fall back to WeChat-only.</span><span data-lang-block="cn">支付宝 App → 收付款 → 收款 → 保存收款码图片,上传到这里。静态码不含金额,顾客付款时手动输入页面显示的金额。取消勾选或清除图片即关闭。</span>
                 </div>
               </div>
             </div>
@@ -10607,17 +10447,19 @@
             <datalist id="china-cities-datalist"></datalist>
 
             <div class="card" style="margin: var(--s4) 0;">
-              <h3 class="fc-sec" style="margin-bottom: 4px;">
-                Everywhere else — default delivery · 其他地区 — 默认配送
-              </h3>
-              <div class="muted" style="font-size: 11px; margin-bottom: 12px;">A zone above always wins over this default. Guangzhou same-day and Hong Kong are unaffected. · 上方任何区域都优先于此默认值。广州当日达与香港不受影响。</div>
+              <div class="group-card-head">
+                <div class="gch-row"><h3>Everywhere else — default delivery · 其他地区 — 默认配送</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+                <div class="muted card-lead">A zone above always wins over this default. · 上方任何区域都优先于此默认值。</div>
+                <div class="card-help" hidden><p>Guangzhou same-day and Hong Kong are unaffected. · 广州当日达与香港不受影响。</p></div>
+              </div>
+
               <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
                 <div class="field" style="margin: 0;">
                   <label class="stacked">Status · 状态</label>
                   <label class="fc-switch">
                     <input type="checkbox" id="dlv-default-enabled">
                     <span class="fc-switch-track"></span>
-                    <span id="dlv-default-status-label" style="font-size: 12px;">OFF · 关闭</span>
+                    <span id="dlv-default-status-label" style="font-size: 12px;">Off · 关闭</span>
                   </label>
                 </div>
                 <div class="field" style="margin: 0;">
@@ -10663,8 +10505,11 @@
               <!-- ── Guangzhou same-day: excluded districts ── (IDs unchanged; rendered
                    by _loadGzExcludedDistricts on init.) -->
               <div class="card" style="margin-bottom: var(--s4);">
-                <h3 class="fc-sec" style="margin-bottom: 4px;">Guangzhou delivery zones · 广州配送区 — excluded districts · 排除区</h3>
-                <div class="muted" style="font-size: 11px; margin-bottom: 12px; line-height: 1.6;"><span data-lang-block="en">The 5-option in-stock fallback (cancel item / replace / ship farther / wait / cancel order) only shows for <b>广州市 right-away orders</b> in districts NOT listed here. Excluded districts (and non-Guangzhou) keep the simple yes/no fallback.</span><span data-lang-block="cn">仅广州市 + 立即配送 + 不在排除清单内的区才看 5 选项弹窗。</span></div>
+                <div class="group-card-head">
+                  <div class="gch-row"><h3>Guangzhou delivery zones · 广州配送区 — excluded districts · 排除区</h3></div>
+                  <div class="muted card-lead"><span data-lang-block="en">The 5-option in-stock fallback (cancel item / replace / ship farther / wait / cancel order) only shows for <b>广州市 right-away orders</b> in districts NOT listed here. Excluded districts (and non-Guangzhou) keep the simple yes/no fallback.</span><span data-lang-block="cn">仅广州市 + 立即配送 + 不在排除清单内的区才看 5 选项弹窗。</span></div>
+                </div>
+
                 <div class="muted" style="font-size: 11px; margin-bottom: 8px;">Tap a district to exclude it. · 点击区名将其加入排除列表。</div>
                 <div id="gz-excl-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
                 <div id="gz-excl-summary" class="muted" style="font-size:12px"></div>
@@ -10684,16 +10529,17 @@
             <!-- FREE SHIPPING THRESHOLD -->
             <div class="group-card">
               <div class="group-card-head">
-                <h3>Free-shipping threshold · 包邮门槛</h3>
-                <div class="muted">When a customer's subtotal reaches this number AND they pick Standard delivery, shipping is free. The Cart shows a progress bar — "¥XX more for free shipping" — that fills up as they add items. · 当顾客小计达到该金额且选择标准配送时,运费免除。购物车会显示"再凑 ¥XX 包邮"的进度条,随加购上涨。</div>
+                <div class="gch-row"><h3>Free-shipping threshold · 包邮门槛</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+                <div class="muted card-lead">When a customer's subtotal reaches this number AND they pick Standard delivery, shipping is free. · 当顾客小计达到该金额且选择标准配送时,运费免除。</div>
+                <div class="card-help" hidden><p>The Cart shows a progress bar — "¥XX more for free shipping" — that fills up as they add items. · 购物车会显示"再凑 ¥XX 包邮"的进度条,随加购上涨。</p><p><span data-lang-block="en">Set high to push average-order-value up; set low (or 0) to be more generous. Set to <b>0</b> for "always free shipping" on standard delivery. Same-day delivery never qualifies — it always charges its own fee.</span><span data-lang-block="cn">设得高可以拉高客单价,设得低（或为 0）则更慷慨。设为 <b>0</b> 表示标准配送"始终包邮"。当日达永远不享受包邮。</span></p></div>
               </div>
+
               <div class="illus-row">
                 <div class="ctrl" style="flex: 1;">
                   <div class="field" style="margin: 0;">
                     <label class="stacked">Threshold · 门槛</label>
                     <span class="yen-input"><input type="number" id="cfg-fees-freeShippingThreshold" aria-label="Free-shipping threshold · 包邮门槛"></span>
                   </div>
-                  <div class="helper" style="margin-top: 10px;"><span data-lang-block="en">Set high to push average-order-value up; set low (or 0) to be more generous. Set to <b>0</b> for "always free shipping" on standard delivery. Same-day delivery never qualifies — it always charges its own fee.</span><span data-lang-block="cn">设得高可以拉高客单价,设得低（或为 0）则更慷慨。设为 <b>0</b> 表示标准配送"始终包邮"。当日达永远不享受包邮。</span></div>
                 </div>
               </div>
             </div>
@@ -10701,17 +10547,16 @@
 <!-- MINIMUM ORDER — saves with the fee keys via saveDeliveryFees → fees.minOrder. -->
             <div class="group-card">
               <div class="group-card-head">
-                <h3>Minimum order · 起送金额</h3>
-                <div class="muted">Blocks checkout below this subtotal. Set to <b>0</b> to disable. When triggered, the Pay button is disabled and shows "Order minimum ¥X — add ¥Y more". · 低于该小计时阻止结算;设为 0 关闭。</div>
+                <div class="gch-row"><h3>Minimum order · 起送金额</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+                <div class="muted card-lead">Blocks checkout below this subtotal. · 低于该小计时阻止结算。</div>
+                <div class="card-help" hidden><p>Set to <b>0</b> to disable. When triggered, the Pay button is disabled and shows "Order minimum ¥X — add ¥Y more". · 设为 0 关闭。</p><p>Useful to avoid loss-making tiny orders, or leave at 0 if you want trial customers to buy one item. · 有助于避免亏本的小额订单;若想让尝鲜顾客只买一件,可保持为 0。</p></div>
               </div>
+
               <div class="illus-row">
                 <div class="ctrl" style="flex: 1;">
                   <div class="field" style="margin: 0;">
                     <label class="stacked">Minimum subtotal · 起送金额</label>
                     <span class="yen-input"><input type="number" id="cfg-fees-minOrder" aria-label="Minimum order subtotal · 起送金额"></span>
-                  </div>
-                  <div class="helper" style="margin-top: 10px;">
-                    Useful to avoid loss-making tiny orders, or leave at 0 if you want trial customers to buy one item. · 有助于避免亏本的小额订单;若想让尝鲜顾客只买一件,可保持为 0。
                   </div>
                 </div>
               </div>
@@ -10735,9 +10580,12 @@
             <!-- STORE PICKUP HOURS -->
             <div class="group-card">
               <div class="group-card-head">
-                <h3>Pickup hours · 取货时间</h3>
-                <div class="muted">The daily window customers can choose to collect an order at checkout when they pick <b>Store pickup</b>. Times outside this window are blocked. · 顾客在结算选择"到店自提"时可选的每日取货时间窗,窗口之外不可选。</div>
+                <div class="gch-row"><h3>Pickup hours · 取货时间</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+                <div class="muted card-lead">The daily window customers can choose to collect an order at checkout when they pick <b>Store pickup</b>. Times outside this window are blocked. · 顾客在结算选择"到店自提"时可选的每日取货时间窗,窗口之外不可选。</div>
+                <div class="card-help" hidden><p>One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure. · 所有开通自提的门店共用一个全局时间窗。不确定时保留默认值(10:00–20:00)即可。<br>
+                    "Earliest pickup" is how many minutes after ordering the first slot opens, so staff have time to pack. 0 = customers can collect right away. · "最早可取"是下单后多少分钟才可取货,方便备货。填 0 表示可立即自取。</p></div>
               </div>
+
               <div class="illus-row">
                 <div class="ctrl" style="flex: 1;">
                   <div style="display: flex; gap: 14px; flex-wrap: wrap;">
@@ -10754,10 +10602,6 @@
                       <input type="number" id="cfg-pickup-lead" min="0" step="5" placeholder="0" style="width: 120px;">
                     </div>
                   </div>
-                  <div class="helper" style="margin-top: 10px;">
-                    One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure. · 所有开通自提的门店共用一个全局时间窗。不确定时保留默认值(10:00–20:00)即可。<br>
-                    "Earliest pickup" is how many minutes after ordering the first slot opens, so staff have time to pack. 0 = customers can collect right away. · "最早可取"是下单后多少分钟才可取货,方便备货。填 0 表示可立即自取。
-                  </div>
                   <!-- §279: the hours and lead time save themselves; the packing fee below is money and keeps Save. -->
                   <div data-as-foot="pickup" style="margin-top: 10px;"></div>
                 </div>
@@ -10767,17 +10611,16 @@
             <!-- STORE PICKUP PACKING FEE -->
             <div class="group-card">
               <div class="group-card-head">
-                <h3>Packing fee · 包装费</h3>
-                <div class="muted"><span data-lang-block="en">A flat fee added to every <b>Store pickup</b> order so the store is paid for boxing the items. Charged once per order regardless of item count. Set to <b>0</b> for no pickup packing fee.</span><span data-lang-block="cn">每笔"到店自提"订单收取的固定包装费,按单收取一次,与件数无关。设为 <b>0</b> 则不收。</span></div>
+                <div class="gch-row"><h3>Packing fee · 包装费</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+                <div class="muted card-lead"><span data-lang-block="en">A flat fee added to every <b>Store pickup</b> order so the store is paid for boxing the items.</span><span data-lang-block="cn">每笔"到店自提"订单收取的固定包装费,按单收取一次,与件数无关。</span></div>
+                <div class="card-help" hidden><p><span data-lang-block="en">Charged once per order regardless of item count. Set to <b>0</b> for no pickup packing fee.</span><span data-lang-block="cn">设为 <b>0</b> 则不收。</span></p><p>Shows as a "Packing fee" line on the pickup checkout breakdown. Delivery orders keep their own per-zone packing fee (set under Delivery zones). · 在自提结算明细中显示为"包装费"一行。配送订单仍使用各自配送区的包装费(在"配送区"中设置)。</p></div>
               </div>
+
               <div class="illus-row">
                 <div class="ctrl" style="flex: 1;">
                   <div class="field" style="margin: 0;">
                     <label class="stacked">Packing fee · 包装费</label>
                     <span class="yen-input"><input type="number" id="cfg-fees-pickupPackingFee" aria-label="Pickup packing fee · 自提包装费"></span>
-                  </div>
-                  <div class="helper" style="margin-top: 10px;">
-                    Shows as a "Packing fee" line on the pickup checkout breakdown. Delivery orders keep their own per-zone packing fee (set under Delivery zones). · 在自提结算明细中显示为"包装费"一行。配送订单仍使用各自配送区的包装费(在"配送区"中设置)。
                   </div>
                 </div>
               </div>
@@ -10803,7 +10646,7 @@
                   <label class="fc-switch">
                     <input type="checkbox" id="dlv-holiday-mode">
                     <span class="fc-switch-track"></span>
-                    <span id="dlv-holiday-status-label" style="font-size: 12px;">OFF · 关闭</span>
+                    <span id="dlv-holiday-status-label" style="font-size: 12px;">Off · 关闭</span>
                   </label>
                 </div>
                 <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
@@ -11257,17 +11100,19 @@
             <!-- ── Bulk attach tracking — opt-in Orders tool (it's a tracking tool,
                  so it's filed with tracking) ── -->
             <div class="card" id="dlv-card-bulktrk" style="margin-bottom: var(--s4);">
-              <h3 class="fc-sec" style="margin-bottom: 4px;">
-                Bulk attach tracking · 批量绑定运单号
-              </h3>
-              <div class="muted" style="font-size: 11px; margin-bottom: 12px;">When on, a button appears in the Orders toolbar. When off, the button is hidden — the tool stays available but out of the way. · 开启后订单页工具栏会显示该按钮;关闭后按钮隐藏,不占据界面。</div>
+              <div class="group-card-head">
+                <div class="gch-row"><h3>Bulk attach tracking · 批量绑定运单号</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+                <div class="muted card-lead">When on, a button appears in the Orders toolbar. · 开启后订单页工具栏会显示该按钮。</div>
+                <div class="card-help" hidden><p>When off, the button is hidden — the tool stays available but out of the way. · 关闭后按钮隐藏,不占据界面。</p></div>
+              </div>
+
               <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
                 <div class="field" style="margin: 0;">
                   <label class="stacked">Status · 状态</label>
                   <label class="fc-switch">
                     <input type="checkbox" id="dlv-bulk-trk">
                     <span class="fc-switch-track"></span>
-                    <span id="dlv-bulk-trk-status-label" style="font-size: 12px;">OFF · 关闭</span>
+                    <span id="dlv-bulk-trk-status-label" style="font-size: 12px;">Off · 关闭</span>
                   </label>
                 </div>
                 <!-- §279: saves itself when flipped. -->
@@ -11275,46 +11120,6 @@
               </div>
             </div>
 
-            <!-- ── Label printing (this computer) — auto-print the JD waybill label the
-                 moment a waybill is created. Per-MACHINE (localStorage), so it lives
-                 here, set once on the label-printer PC — it used to sit on every order
-                 drawer, which read as order-specific when it wasn't. ── -->
-            <div class="card" style="margin-bottom: var(--s4);">
-              <h3 class="fc-sec" style="margin-bottom: 4px;">
-                Label printing · 面单打印
-              </h3>
-              <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Auto-print the JD waybill label on this computer as soon as a waybill is created. · 生成京东运单时,在本机自动打印面单。</div>
-              <div class="field" style="margin: 0;">
-                <label class="stacked">This computer · 本机</label>
-                <label class="fc-switch">
-                  <input type="checkbox" id="dlv-jd-autoprint" onchange="setJdAutoPrint(this.checked)">
-                  <span class="fc-switch-track"></span>
-                  <span id="dlv-jd-autoprint-status-label" style="font-size: 12px;">OFF · 关闭</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- ── Box label — opt-in order-drawer sticker printing (70×45mm parcel
-                 stickers on a local label printer). Off by default: most stores ship
-                 with the JD waybill label and never print their own stickers. ── -->
-            <div class="card" id="dlv-card-boxlabel" style="margin-bottom: var(--s4);">
-              <h3 class="fc-sec" style="margin-bottom: 4px;">
-                Box label · 箱贴打印
-              </h3>
-              <div class="muted" style="font-size: 11px; margin-bottom: 12px;">When on, the order page shows the Box-label controls. When off, they're hidden — the tool stays available but out of the way. · 开启后订单页显示箱贴按钮;关闭后隐藏,不占据界面。</div>
-              <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Status · 状态</label>
-                  <label class="fc-switch">
-                    <input type="checkbox" id="dlv-box-label">
-                    <span class="fc-switch-track"></span>
-                    <span id="dlv-box-label-status-label" style="font-size: 12px;">OFF · 关闭</span>
-                  </label>
-                </div>
-                <!-- §279: saves itself when flipped. -->
-                <div data-as-foot="delivery.boxlabel"></div>
-              </div>
-            </div>
           </div>
 
           <!-- ══ JD LOGISTICS VIEW ══ (京东物流 LOP direct waybill) -->
@@ -11384,7 +11189,7 @@
             <div class="card" style="margin-bottom: var(--s4);" id="logpanel-qy">
               <div id="qy-autopush-row" style="display:none;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:12px">
                 <div style="max-width:78%">
-                  <div style="font-weight:600">Auto-send paid orders to Qingyun · 付款后自动发到青云</div>
+                  <div style="font-weight:500">Auto-send paid orders to Qingyun · 付款后自动发到青云</div>
                   <div class="muted" style="font-size:11px;margin-top:2px"><span data-lang-block="en">When on, every paid delivery order appears in your Qingyun 待配送 list, ready to pick a courier — no re-typing.</span><span data-lang-block="cn">开启后,已付款的配送订单自动出现在青云"待配送",直接选运力发单,无需手动录入。</span></div>
                 </div>
                 <input type="checkbox" id="qy-autopush" aria-label="Send paid delivery orders to the courier automatically · 自动将已付款配送订单推送给运力" onchange="_setQingyunAutoPush(this.checked)" style="width:20px;height:20px;flex-shrink:0;cursor:pointer">
@@ -11528,254 +11333,338 @@
 
         </div><!-- /#sub-delivery -->
 
-        <!-- ────── OPERATIONS ────── (integrations moved here from the kitchen
-             app 2026-06-09 so the online store is self-contained. The data layer
-             was already on /api/retail-admin/*; only the UI moved. Grouped as
-             "Operations" — the bundle that would later delegate to a central
-             multi-channel system via an ownership-mode flag, kept deliberately
-             separate from the channel settings (Shop / Push / CS) above. ) -->
-        <div class="sub-panel" id="sub-ops">
-          <h2>Operations · 运营</h2>
-
-          <!-- ── Product page · 产品页 (§206) — the order the full product page
-               shows its sections in, and which it shows at all. One setting
-               for the whole business, kept in storefront_config under
-               product_page.sections and painted by retail-admin/31-product-page.js
-               (ppgSettingsRender). Saves on every change: a drag or a switch is
-               the whole decision, so a Save button would only be a second click
-               to say the same thing. data-no-i18n: every string in the list is
-               baked by cuT(). ── -->
-          <div class="group-card" id="ppg-settings-card">
+        <!-- ────── NOTIFICATIONS ────── -->
+        <!-- §494: two sections — what customers receive, and what your team
+             receives. The daily low-stock list moved here from the Stores card
+             (its threshold stays with the stores); every id is unchanged. -->
+        <div class="sub-panel" id="sub-push">
+          <h2>Notifications · 通知</h2>
+          <h2 class="settings-section">To customers · 发给顾客</h2>
+          <div class="group-card" id="notif-template-card" data-sees="customer">
             <div class="group-card-head">
-              <h3>Product page · 产品页</h3>
-              <div class="muted">The order your product page shows its sections in, and which ones it shows at all. · 产品页各分区的显示顺序，以及显示哪些分区。</div>
+              <div class="gch-row"><h3>Order-status subscribe-message template · 订单状态订阅消息模板</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">WeChat doesn't allow free push — instead, each customer opts in to <em>one</em> notification per submission.</span><span data-lang-block="cn">微信不允许免费推送 —— 顾客每次提交只能订阅<em>一条</em>通知。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">We use that slot to send "Order paid", "Preparing", "Dispatched", and "Delivered" updates.</span><span data-lang-block="cn">我们用这个名额发送“已付款”“备货中”“已发货”“已送达”等更新。</span></p></div>
             </div>
-            <div class="ppg-setrows" id="ppg-setrows" data-no-i18n></div>
-            <div class="ppg-setnote">A hidden section keeps its data. Switch it back on and everything is still there. Basics cannot be hidden: a product needs a name. · 隐藏的分区会保留其数据，重新开启后一切仍在。基础分区不能隐藏：产品需要一个名称。</div>
-            <div class="ppg-setfoot">
-              <button type="button" class="btn btn-sm" onclick="ppgSettingsReset()">Reset to default order · 重置为默认顺序</button>
-              <span class="muted" id="ppg-set-status" aria-live="polite"></span>
+
+            <div class="illus-row">
+              <div class="mini-phone">
+                <div class="mp-notch"></div>
+                <!-- 1: Checkout opt-in sheet -->
+                <div style="position: absolute; left: 4px; right: 4px; top: 22px; bottom: 4px; background: #f5f0e1; border-radius: 4px; padding: 5px; color: #2a2a30">
+                  <div style="font-size: 7px; font-weight: 700; margin-bottom: 4px; color: #16161a">Allow updates?</div>
+                  <div style="font-size: 6px; color: #2a2a30; opacity: .7; margin-bottom: 6px; line-height: 1.4">Get notified when your order ships, arrives.</div>
+                  <div style="background: #fff; padding: 3px 4px; border-radius: 2px; margin-bottom: 8px; display: flex; gap: 3px; align-items: center">
+                    <div style="width: 6px; height: 6px; background: var(--accent); border-radius: 1px"></div>
+                    <div style="font-size: 5px">Order Status</div>
+                  </div>
+                  <div style="display: flex; gap: 3px">
+                    <div style="flex: 1; height: 12px; background: #ddd; border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 5px; color: #2a2a30">Deny</div>
+                    <div style="flex: 1; height: 12px; background: var(--accent); border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 5px; color: #16161a; font-weight: 700">Allow</div>
+                  </div>
+                </div>
+              </div>
+              <div class="ctrl">
+                <div class="field" style="margin: 0;">
+                  <label for="cfg-notifications-order_status_template_id" class="stacked">Template ID · 模板 ID</label>
+                  <input type="text" id="cfg-notifications-order_status_template_id"
+                         placeholder="e.g. WrA_C5n8KuQ0vWBg…"
+                         style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
+                  <b>1.</b> Register at mp.weixin.qq.com → 功能 → 订阅消息.<br>
+                  <b>2.</b> Pick a "运输状态/Shipping status" template.<br>
+                  <b>3.</b> Paste the template ID here.<br>
+                  <b>4.</b> It saves itself — the checkout prompt activates automatically.<br>
+                  Leave blank to disable until AppID is registered. In DEV mode (no AppID) pushes are logged, not sent.
+                </div>
+                <div data-as-foot="notifications.order_status"></div>
+              </div>
             </div>
           </div>
 
-          <!-- ── Support button · 客服按钮 — hide the floating platform-support
-               launcher (bottom-right) for operators who don't want it. ── -->
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
-              <h3>Support button · 客服按钮</h3>
-              <div class="muted"><span data-lang-block="en">The floating <b>Support</b> button in the bottom-right corner opens a chat with platform support. Turn it off to hide it.</span><span data-lang-block="cn">右下角悬浮的<b>客服</b>按钮用于联系平台客服。关闭即可隐藏。</span></div>
+              <div class="gch-row"><h3>What customers receive · 顾客收到的内容</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">After opt-in, each status transition in Mini App Backend → Orders fires one push. Customers see it in the WeChat "Service notifications" feed. · 顾客订阅后,小程序后台 → 订单的每次状态变更都会触发一次推送,显示在微信"服务通知"中。</div>
+              <div class="card-help" hidden><p><b>One opt-in covers one transition.</b> WeChat re-prompts the customer after each push is consumed, so opt-in is effectively per-order.<br><br>
+                  <b>Transitions that push:</b><br>
+                  • pending_payment → paid<br>
+                  • paid → preparing<br>
+                  • preparing → dispatched<br>
+                  • dispatched → delivered<br>
+                  • any → cancelled or refunded</p></div>
             </div>
-            <div style="display:flex;align-items:center;gap:10px;padding:4px 2px 2px">
-              <input type="checkbox" id="cfg-support-btn" style="width:18px;height:18px">
-              <label for="cfg-support-btn" style="font-size:13px;color:var(--text-1)">Show the Support button · 显示客服按钮</label>
+
+            <div class="illus-row">
+              <div class="mini-phone">
+                <div class="mp-notch"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 10px; bottom: 4px; background: #f0f0ec; border-radius: 4px; padding: 4px;">
+                  <div style="background: #fff; border-radius: 3px; padding: 4px; margin-bottom: 3px">
+                    <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 2px">
+                      <div style="width: 8px; height: 8px; background: var(--accent); border-radius: 2px"></div>
+                      <div style="font-size: 6px; font-weight: 700; color: #2a2a30">Roots</div>
+                    </div>
+                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.4">Order #1042 paid. We're preparing your food now.</div>
+                  </div>
+                  <div style="background: #fff; border-radius: 3px; padding: 4px; margin-bottom: 3px">
+                    <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 2px">
+                      <div style="width: 8px; height: 8px; background: var(--accent); border-radius: 2px"></div>
+                      <div style="font-size: 6px; font-weight: 700; color: #2a2a30">Roots</div>
+                    </div>
+                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.4">Dispatched · SF Express SF12345…</div>
+                  </div>
+                  <div style="background: #fff; border-radius: 3px; padding: 4px;">
+                    <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 2px">
+                      <div style="width: 8px; height: 8px; background: var(--accent); border-radius: 2px"></div>
+                      <div style="font-size: 6px; font-weight: 700; color: #2a2a30">Roots</div>
+                    </div>
+                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.4">Delivered. Enjoy! 🌱</div>
+                  </div>
+                </div>
+              </div>
+              <div class="ctrl">
+              </div>
             </div>
           </div>
 
-          <!-- ── Stores · 门店 — the online store self-manages its own stores
-               (independent of the kitchen app). Uses the dual-realm
-               /api/retail-admin/stores endpoints. The street address sets each
-               store's GPS location used for nearest-store order routing. ── -->
+          <div class="group-card" data-sees="customer">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>SMS when delivered (out-of-Guangzhou orders) · 送达短信(广州市外订单)
+                <span id="aliyun_sms-chip" style="margin-left:8px;vertical-align:middle"></span>
+              </h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">Text the customer the moment an out-of-town courier order is marked delivered — for shoppers who aren't watching the mini app.</span><span data-lang-block="cn">当广州市外的快递订单标记为「已送达」时,给顾客发一条短信(适合不盯着小程序的顾客)。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">Same-city Guangzhou deliveries and in-store pickups are skipped (they already get the in-app notice). Uses your Aliyun 短信服务 package.</span><span data-lang-block="cn">广州同城配送与到店自提不发送(已有应用内通知)。使用你的阿里云短信套餐包。</span></p></div>
+            </div>
+
+            <div class="illus-row">
+              <div class="mini-phone">
+                <div class="mp-notch"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 10px; bottom: 4px; background: #f0f0ec; border-radius: 4px; padding: 4px;">
+                  <div style="background: #fff; border-radius: 3px; padding: 4px;">
+                    <div style="font-size: 6px; font-weight: 700; color: #2a2a30; margin-bottom: 3px">信息 · SMS</div>
+                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.6">【满圆】您的订单 R260616…<br>已送达,请注意查收,<br>感谢您的惠顾。</div>
+                  </div>
+                </div>
+              </div>
+              <div class="ctrl">
+                <div class="field" style="margin: 0 0 8px;">
+                  <label for="aliyun_sms-ak_id" class="stacked">AccessKey ID · 访问密钥 ID</label>
+                  <input type="text" id="aliyun_sms-ak_id" placeholder="LTAI… (RAM 用户, 仅授权 AliyunDysmsFullAccess)" style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 0 0 8px;">
+                  <label for="aliyun_sms-ak_secret" class="stacked">AccessKey Secret · 访问密钥</label>
+                  <input type="password" id="aliyun_sms-ak_secret" autocomplete="off" data-ph-en="paste AccessKey Secret" data-ph-cn="粘贴 AccessKey Secret" placeholder="paste AccessKey Secret" style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 0 0 8px;">
+                  <label for="aliyun_sms-sign_name" class="stacked"><span data-lang-block="en">Signature (签名)</span><span data-lang-block="cn">短信签名</span></label>
+                  <input type="text" id="aliyun_sms-sign_name" placeholder="e.g. 满圆 (must be approved in 签名管理)" style="width: 100%;">
+                </div>
+                <div class="field" style="margin: 0;">
+                  <label for="aliyun_sms-template_delivered" class="stacked"><span data-lang-block="en">Delivered template code (模板CODE)</span><span data-lang-block="cn">送达模板编号</span></label>
+                  <input type="text" id="aliyun_sms-template_delivered" placeholder="e.g. SMS_123456789" style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 0;">
+                  <label for="aliyun_sms-template_otp" class="stacked"><span data-lang-block="en">Login OTP template code (模板CODE)</span><span data-lang-block="cn">网页登录验证码模板编号</span></label>
+                  <input type="text" id="aliyun_sms-template_otp" placeholder="e.g. SMS_987654321 (template variable must be code)" style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 10px 0 0;">
+                  <label for="aliyun_sms-testphone" class="stacked">Test to this phone · 测试发送至此手机号</label>
+                  <input type="text" id="aliyun_sms-testphone" data-ph-en="11-digit mainland mobile" data-ph-cn="11 位手机号" placeholder="11-digit mainland mobile" style="width: 100%; font-family: monospace;">
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_saveAliyunSms()">Save · 保存</button>
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_testAliyunSms()">Send a test SMS · 发送测试短信</button>
+                  <span id="aliyun_sms-test-status" class="muted" style="font-size: 11px;"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
+                  <b>1.</b> Aliyun console → AccessKey 管理 → create a key (ideally a RAM user with only <b>AliyunDysmsFullAccess</b>).<br>
+                  <b>2.</b> 短信服务 → 签名管理 → copy your approved <b>签名</b> text (the one your old app already uses).<br>
+                  <b>3.</b> 短信服务 → 模板管理 → 添加模板 (type 通知短信), submit a delivered notice using the variable <code>${order}</code>, e.g. <i>您的订单${order}已送达,请注意查收,感谢您的惠顾。</i> Once approved, copy its <b>模板CODE</b>.<br>
+                  <b>4.</b> Paste all four above, Save, then Send a test SMS to your own phone.<br>
+                  Clear all four fields to turn off. · 清空四项即关闭。
+                </div>
+              </div>
+            </div>
+          </div>
+
+
+          <h2 class="settings-section">To your team · 发给团队</h2>
           <div class="group-card">
             <div class="group-card-head">
-              <h3>Stores · 门店</h3>
-              <div class="muted"><span data-lang-block="en">The stores / warehouses this online store ships and routes orders from. Each store's <strong>street address</strong> sets the GPS location used to route orders to the nearest store — keep it accurate.</span><span data-lang-block="cn">本店派单/发货的门店与仓库。每个门店的<strong>详细地址</strong>决定其 GPS 定位(用于就近派单),请保持准确。</span></div>
-            </div>
-            <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--line)">
-              <label class="field-label">Low-stock alert at · 低库存提醒 <span style="color:var(--text-3);font-weight:400">— flag any product low when it drops to this many units. Each store can set its own number below. · 商品降到此数量时提醒;每个门店可在下方单独设置。</span></label>
-              <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-                <span style="color:var(--text-2);font-size:15px">≤</span>
-                <input type="number" id="cfg-low-stock" aria-label="Flag a product low at this many units · 低库存提醒数量" min="0" step="1" value="5" style="width:90px" onchange="paSaveLowStockDefault(this.value)">
-                <span style="color:var(--text-3);font-size:13px">units · 件</span>
-                <span id="cfg-low-stock-status" style="color:var(--accent);font-size:12px"></span>
-              </div>
-              <!-- The daily digest (audit E-06). The threshold above fed a
-                   dashboard card and nothing else, so a merchant who did not
-                   open the admin never found out they were running out. Sits
-                   here, under the number that drives it, rather than in Push
-                   notifications — a setting belongs beside the thing it acts on.
-                   Saves itself; the Operations panel has no shared Save bar. -->
-              <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
-                <input type="checkbox" id="cfg-lowstock-digest" style="width:18px;height:18px"
-                       onchange="saveLowStockDigest()">
-                <label for="cfg-lowstock-digest" style="font-size:13px;color:var(--text-1)">
-                  Send me a daily list of what is running low · 每天发送库存偏低清单
-                </label>
-                <span style="color:var(--text-3);font-size:13px">at · 时间</span>
-                <input type="time" id="cfg-lowstock-hour" step="3600" value="09:00"
-                       aria-label="Hour to send the daily low-stock list"
-                       onchange="saveLowStockDigest()" style="width:110px">
-                <span id="cfg-lowstock-status" style="color:var(--accent);font-size:12px"></span>
-              </div>
-              <div class="helper" style="margin-top:6px;line-height:1.55">
-                One message a day, naming the shortest few and counting the rest — not one alert per product, which is how a busy Saturday buries the notifications that matter. It goes to everyone on your team who can edit products or raise a restock request. · 每天一条消息,列出库存最少的几件并统计其余,而不是每件商品一条提醒。发送给团队中可编辑商品或发起补货的成员。
-              </div>
-            </div>
-            <!-- ══ Open / closed, per channel (audit B-03) ═════════════════
-                 Four endpoints implemented pausing and resuming the shop per
-                 sales channel — GET /store-status and three POSTs — and NOTHING
-                 called any of them. Closing for a day was done somewhere else,
-                 or not at all from here. This is that screen.
-
-                 It sits above the store list on purpose: "are we open?" is the
-                 question somebody arrives at this page holding, and the list of
-                 shops is what they read afterwards. -->
-            <div id="ops-openclose" style="margin:4px 0 18px">
-              <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
-                <strong style="color:var(--text-1);font-size:14px">Open for business · 营业状态</strong>
-                <span id="oc-master-pill" class="muted" style="font-size:12px"></span>
-              </div>
-              <div class="helper" style="margin:4px 0 10px;line-height:1.55">
-                Closing pauses new orders. Your marketplace shops are queued and follow within about a minute; the online store stops at once. Eleme is the exception: it is not told, so Eleme orders can still come in. · 关闭后将暂停接单。外卖平台会在约一分钟内跟随，线上商城立即生效。饿了么除外：它不会收到通知，饿了么订单仍可能进来。
-              </div>
-              <div id="oc-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
+              <div class="gch-row"><h3>New-order alert to your phone · 新订单手机提醒
+                <span id="wecom-app-chip" style="margin-left:8px;vertical-align:middle"></span>
+              </h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">Get a card in your WeChat Work (企业微信 / WeCom) app the moment a new order is paid — order number, amount, recipient and address.</span><span data-lang-block="cn">每当有新订单付款,立即在企业微信 App 收到一张卡片(订单号、金额、收货人、地址)。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">Works even when this backend is closed, and works on the international WeCom app.</span><span data-lang-block="cn">即使后台没开也能收到,国际版 WeCom 同样适用。</span></p></div>
             </div>
 
-            <div id="ops-stores-list" class="muted" style="font-size:13px">Loading…</div>
-            <div style="margin-top:12px"><button class="btn" onclick="_opsStoreForm(null)">+ Add store · 添加门店</button></div>
-            <div id="ops-store-form"></div>
-            <div id="ops-store-staff"></div>
-          </div>
-
-          <!-- Recently deleted (audit E-07). Products had version history and
-               nothing else in the admin had anything. It lives here rather than
-               on each screen it covers: somebody looking for something they
-               deleted usually cannot remember which screen they deleted it
-               from, and four half-lists in four places is four things to find
-               instead of one. -->
-          <div class="group-card">
-            <div class="group-card-head"><h3>Recently deleted · 最近删除</h3></div>
-            <div class="helper" style="margin:2px 0 10px;line-height:1.55">
-              Coupons, delivery zones, ledger rows and draft purchase orders removed in the last 60 days can be put back. A restored purchase order keeps its own date, so it still lands in the month it was placed. · 最近 60 天内删除的优惠券、配送区、账目行与采购单草稿可以恢复。恢复的采购单保留原有日期，仍计入原来的月份。
-            </div>
-            <div id="ops-recycle-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
-          </div>
-
-          <!-- ── The staff phone app ── -->
-          <!-- ONE CARD, WHERE THERE WERE TWO (§48 step 4). "Quick Stock" and
-               "Add Stock" were the same app described twice, under two names,
-               because the ROLE decided which view opened — and the second card
-               said so itself: "It's the same link as Quick Stock." Both named an
-               app that no longer exists: public/stock.html is deleted and every
-               screen it held is in Tacet Mobile, which is what the link opens
-               now. Ash: "the whole quick stock indenended app is over. i need it
-               to go away. i want all to be unified as one."
-
-               THE BUTTON NAVIGATES IN THIS TAB and carries no ?from=. It used to
-               be window.open(_blank) — Ash: "i dont see any reason for this to
-               be a new window" — and then a same-tab link with ?from=dashboard,
-               which existed only so the separate app's Back knew where it came
-               from. /m is not a separate document and has the app's own
-               navigation, so there is nothing left for the provenance to answer.
-
-               The staff LINK stays bare, which is the rule it always kept: a
-               staffer opening it came from nowhere, and a ?from= would offer
-               them a Back into a back office their role is locked out of.
-
-               NO SWITCH HERE (§53): the quickStock feature is deleted, so what
-               is left is the card itself — what the app is, and the link. -->
-          <div id="qs-home">
-            <div class="group-card">
-              <div class="group-card-head">
-                <h3>Tacet on a phone · 手机上的 Tacet</h3>
-                <div class="muted"><span data-lang-block="en">The same Tacet, on your staff's phones. What they see follows the role you gave them (Settings → Team): a shop staffer counts that store's shelves, a kitchen staffer enters only <b>how many they just made</b>. No PC, and no access to the rest of this back office. Open it on a phone and tap <b>Add to Home Screen</b> to use it like an installed app, then share the link below with staff.</span><span data-lang-block="cn">同一个 Tacet,装在员工手机上。看到哪些功能取决于你为其设置的角色(设置 → 团队):门店员工盘点本店货架,后厨员工<b>只需输入刚制作的数量</b>。无需电脑,也无法进入后台其他功能。在手机上打开后点按<b>“添加到主屏幕”</b>即可像已安装的应用一样使用,再把下面的链接发给员工。</span></div>
+            <div class="illus-row">
+              <div class="mini-phone">
+                <div class="mp-notch"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 10px; bottom: 4px; background: #f0f0ec; border-radius: 4px; padding: 4px;">
+                  <div style="background: #fff; border-radius: 3px; padding: 4px;">
+                    <div style="font-size: 6px; font-weight: 700; color: #2a2a30; margin-bottom: 3px">🌿 新订单 · New order</div>
+                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.5">订单号 Order: 10257097<br>金额 Amount: <span style="color:#e6a23c">¥57.00</span><br>收货人 To: asher<br>地址 Address: 广东省广州市番禺区…</div>
+                  </div>
+                </div>
               </div>
-              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 2px 2px;">
-                <button class="btn" onclick="window.location.href='/m'">Open Tacet · 打开 Tacet</button>
-                <button class="btn" id="qs-copy-link" onclick="qsCopyStockLink()">Copy staff link · 复制员工链接</button>
-                <code id="qs-link" style="font-size:12px;color:var(--text-3);"></code>
+              <div class="ctrl">
+                <div class="field" style="margin: 0 0 8px;">
+                  <label for="wecom-app-corp_id" class="stacked">Company ID (CorpID) · 企业 ID</label>
+                  <input type="text" id="wecom-app-corp_id" placeholder="ww… (我的企业 → 企业信息)" style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 0 0 8px;">
+                  <label for="wecom-app-agent_id" class="stacked">App ID (AgentId) · 应用 AgentId</label>
+                  <input type="text" id="wecom-app-agent_id" placeholder="e.g. 1000002" style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 0;">
+                  <label for="wecom-app-secret" class="stacked">App Secret · 应用 Secret</label>
+                  <input type="password" id="wecom-app-secret" autocomplete="off" data-ph-en="paste app Secret" data-ph-cn="粘贴应用 Secret" placeholder="paste app Secret" style="width: 100%; font-family: monospace;">
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="saveWecomApp()">Save · 保存</button>
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="testWecomWebhook()">Send a test · 发送测试</button>
+                  <span id="wecom-test-status" class="muted" style="font-size: 11px;"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
+                  <b>1.</b> In WeCom admin (work.weixin.qq.com) → 应用管理 → create a self-built app (自建应用).<br>
+                  <b>2.</b> Copy its <b>AgentId</b> and <b>Secret</b>; copy your <b>CorpID</b> from 我的企业 → 企业信息.<br>
+                  <b>3.</b> In that app → 企业可信IP (trusted IP), add this server's IP. (Send a test below — if the IP is missing, the result tells you exactly which IP to add.)<br>
+                  <b>4.</b> Make sure the app's 可见范围 (visible range) includes you, then Save and Send a test.<br>
+                  Clear all three fields to turn off. · 清空三项即关闭。
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- ── Waste (损耗) — §32 addendum ── -->
-          <!-- mountFeatureControls() (05-marketing.js) injects the .feat-bar as
-               this host's FIRST child; the card below it is the "what is this"
-               the bar's own descOn/descOff cannot be, because they say what
-               STATE it is in.
-               THE CARD IS NOT DECORATION — IT IS HOW THE SWITCH IS FOUND.
-               Settings search is built by indexCards() (02-settings-ops.js)
-               from `.group-card-head h3` and the `.muted` text beside it. This
-               host shipped EMPTY, so neither was there and the switch was in no
-               search result at all. That bites hardest in the one state where
-               it matters: with Waste off, gatedOff() drops the rail row from
-               the index too, so "waste" / "损耗" found nothing whatsoever —
-               including the only control that turns it back on.
-               NO data-feat ON THIS HOST, deliberately, and that is the
-               difference from #mat-settings-home below: a card that vanishes
-               when the feature is off cannot be what an operator reads to
-               decide to turn it back on. The injected "off" card stays hidden
-               by the default `.feat-off { display: none }`.
-               THE SWITCH LIVES HERE AND NOT ON THE WASTE PAGE, which is the
-               reason retail-admin.css hides the Waste rail row when the feature
-               is off instead of dimming it: a dimmed row leads to a page that
-               still works wearing a badge saying it does not. -->
-          <div id="waste-settings-home">
-            <div class="group-card">
-              <div class="group-card-head">
-                <h3>Waste · 损耗</h3>
-                <div class="muted">Recording waste moves stock: the on-hand count goes down and the sales channels are told. · 登记损耗会变动库存:库存数量相应减少,并同步至各销售渠道。</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Materials (物料) ── -->
-          <!-- The on/off switch (.feat-bar) and the "off" card are injected at
-               the top of #mat-settings-home by mountFeatureControls()
-               (05-marketing.js), driven by FEATURE_CATALOG/FEATURE_HOMES.
-               Everything below is the "on" content. data-feat="production" —
-               §28: one switch, shared with Recipes, not a materials-only key. -->
-          <div id="mat-settings-home" data-feat="production">
-            <div class="group-card">
-              <div class="group-card-head">
-                <h3>Materials · 物料</h3>
-                <div class="muted">The list of everything you buy and hold but don't sell — ingredients, packaging, equipment, supplies. Each one records what you pay per pack, and the cost per unit is worked out from that, so recipes and purchase orders price themselves. Turn this off if you don't stock anything: the Materials tab disappears from the sidebar. · 你采购并库存但不出售的物品清单 —— 原料、包装、设备、耗材。每条记录整包价格,并据此折算单位成本,配方与采购单即可自动计价。若你无需库存,可关闭此功能:侧边栏中的“物料”将不再显示。</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Low-stock suggestions (此门店库存偏低) — §178 ── -->
-          <!-- Same shape as the Waste host above, for the same reason: the card
-               carries the heading and the `.muted` line indexCards() reads, so
-               the switch is reachable from Settings search. This one has no
-               rail row of its own at all, so before the card it could not be
-               found by searching for anything.
-               "An empty host is correct" is what the comment here used to say.
-               It was wrong: a control nobody can find is not a control. NO
-               data-feat, so the card reads the same whichever way the switch is
-               set. -->
-          <div id="lowstock-settings-home">
-            <div class="group-card">
-              <div class="group-card-head">
-                <h3>Running low here · 此门店库存偏低</h3>
-                <div class="muted">Suggestions at the top of a purchase order: the products that store is running low on, each with an Add button. · 采购单顶部的推荐:该门店库存偏低的商品,可直接添加。</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Order routing: Maps geocoding ── -->
-          <div class="group-card">
+          <div class="group-card" id="notif-webhook-card">
             <div class="group-card-head">
-              <h3>Order routing · 派单 — Maps geocoding · 地图定位</h3>
-              <div class="muted"><span data-lang-block="en">Turns store and customer addresses into map points, so a paid order goes to the store that is nearest by real distance, not by district name. The map key is set on the server by whoever hosts Tacet. Without one, distances fall back to district centres and can be several km off.</span><span data-lang-block="cn">地址保存时自动转经纬度,按 GPS 距离选最近门店。地图密钥在服务器上配置。无可用密钥时退回到区中心点,距离会偏差数公里。</span></div>
+              <div class="gch-row"><h3>Alternative: group-bot webhook · 备选:群机器人 Webhook</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">Only if you use mainland 企业微信 with an internal (company-only) group.</span><span data-lang-block="cn">仅当你使用国内企业微信且有内部群时。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">Paste the group robot's webhook and the card posts there instead. Leave blank if you're using the app above.</span><span data-lang-block="cn">填入群机器人的 Webhook,卡片会发到群里。若用上面的 App 方式,请留空。</span></p><p>Only qyapi.weixin.qq.com URLs are accepted. The app above takes priority when both are set. · 仅接受 qyapi.weixin.qq.com 地址。两者都填时优先使用上面的 App。</p></div>
             </div>
-            <div id="integrations-status" class="muted" style="font-size:13px;padding:14px 16px;background:var(--bg-elev-1);border-radius:8px;margin-bottom:14px">Loading status…</div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
-              <button class="btn" onclick="loadIntegrationsStatus()">↻ Refresh status · 刷新状态</button>
-              <button class="btn" onclick="_geocodeBackfill()">🗺 Geocode all stores &amp; addresses now · 立即定位所有门店与地址</button>
+
+            <div class="illus-row">
+              <div class="ctrl">
+                <div class="field" style="margin: 0;">
+                  <label for="cfg-notifications-wecom_order_webhook" class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
+                  <input type="text" id="cfg-notifications-wecom_order_webhook"
+                         placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
+                         style="width: 100%; font-family: monospace;">
+                </div>
+                <div data-as-foot="notifications.group_bot"></div>
+              </div>
             </div>
-            <div class="muted" style="font-size:11px;margin-top:10px"><strong>↻ Refresh status</strong> only re-counts — it does NOT geocode. Use <strong>🗺 Geocode all</strong> to actually fetch coordinates. New addresses + stores also geocode automatically on save. · ↻ 仅刷新计数,不定位;🗺 才会真正获取坐标。新地址保存时自动定位。</div>
           </div>
+
+          <!-- §432. The evening to-make message: the next morning's kitchen list,
+               posted to its OWN WeCom group (not the new-order one above). Saved
+               by its own button through its own endpoint — the webhook is under
+               the private `kitchen.` prefix, which the main Save cannot read
+               back. 05-marketing.js loadKitchenPrep / saveKitchenPrep. Chinese —
+               docs/tacet-delivery-vocabulary.md v1.314. -->
+          <div class="group-card" id="kprep-card">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>Kitchen: evening to-make message · 厨房:晚间待制作消息</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">The evening before, posts the next morning's to-make list to a WeCom group — the same list the kitchen slip prints. · 前一天晚上,把次日早上的待制作清单发到企业微信群——与厨房小票打印的清单相同。</div>
+              <div class="card-help" hidden><p>If orders change it afterwards, an update follows, at most every 30 minutes, until the slip prints. Nothing is sent when there is nothing to make. · 之后订单若有变化,会发送更新,最多每 30 分钟一次,直到小票打印。无需制作时不发送。</p><p>Use a different group from the new-order alerts. Only qyapi.weixin.qq.com URLs are accepted. Leave the time blank to turn it off. · 请使用与新订单提醒不同的群。仅接受 qyapi.weixin.qq.com 地址。时间留空则关闭。</p></div>
+            </div>
+
+            <div class="illus-row">
+              <div class="ctrl">
+                <div class="field" style="margin: 0 0 8px;">
+                  <label for="kprep-webhook" class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
+                  <input type="text" id="kprep-webhook"
+                         placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
+                         style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 0;">
+                  <label for="kprep-time" class="stacked">Send time · 发送时间</label>
+                  <input type="time" id="kprep-time" min="12:00" max="23:59" step="60" style="width: 140px;">
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="saveKitchenPrep()">Save · 保存</button>
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="testKitchenPrep()">Send a test · 发送测试</button>
+                  <span id="kprep-status" class="muted" style="font-size: 11px;"></span>
+                </div>
+                <div class="helper" id="kprep-morning-off" style="margin-top: 6px; color: var(--danger, #b91c1c); display: none;">
+                  The morning request hour is off (Delivery → Fresh batches), so nothing is sent. · 厨房制作请求时间已关闭(配送 → 新鲜现做),因此不会发送。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- The daily digest (audit E-06) — one message a day to everyone
+               who can edit products or raise a restock request. Saves itself
+               (saveLowStockDigest); painted by loadConfig → paSyncLowStockDigestUi. -->
+          <div class="group-card" id="lowstock-digest-card">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>Daily low-stock list · 每日库存偏低清单</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">One message a day, naming the shortest few and counting the rest — not one alert per product, which is how a busy Saturday buries the notifications that matter. · 每天一条消息,列出库存最少的几件并统计其余,而不是每件商品一条提醒。</div>
+              <div class="card-help" hidden><p>It goes to everyone on your team who can edit products or raise a restock request. · 发送给团队中可编辑商品或发起补货的成员。</p></div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <input type="checkbox" id="cfg-lowstock-digest" style="width:18px;height:18px"
+                     onchange="saveLowStockDigest()">
+              <label for="cfg-lowstock-digest" style="font-size:13px;color:var(--text-1)">
+                Send me a daily list of what is running low · 每天发送库存偏低清单
+              </label>
+              <span style="color:var(--text-3);font-size:13px">at · 时间</span>
+              <input type="time" id="cfg-lowstock-hour" step="3600" value="09:00"
+                     aria-label="Hour to send the daily low-stock list"
+                     onchange="saveLowStockDigest()" style="width:110px">
+              <span id="cfg-lowstock-status" style="color:var(--accent);font-size:12px"></span>
+            </div>
+          </div>
+
+          <!-- System Alerts (ops) — dedicated WeCom group, kept SEPARATE from orders -->
+          <div class="group-card" id="sysalert-card">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>System alerts · 系统告警</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">Sends operational alerts — a channel (Meituan/闪购) disconnecting, the proxy going down, or the storefront not responding — to a dedicated WeCom group. Keep this separate from your order group so ops noise doesn't bury orders.</span><span data-lang-block="cn">把运营告警(渠道掉线、代理中断、店铺无响应等)发到一个专用企业微信群,与订单群分开,避免淹没订单。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">Create a NEW WeCom group (separate from orders) → ··· → 群机器人 → 添加 → copy its Webhook. Paste it here, tick Enable, Send test to confirm it lands. Only qyapi.weixin.qq.com URLs are accepted.</span><span data-lang-block="cn">新建一个企业微信群(与订单群分开)→ ··· → 群机器人 → 添加 → 复制 Webhook,粘贴到此处,勾选开启,点"发送测试"确认。仅接受 qyapi.weixin.qq.com 地址。</span></p></div>
+            </div>
+
+            <div class="illus-row">
+              <div class="ctrl">
+                <label class="ckbox" style="margin-bottom:10px;display:block"><input type="checkbox" id="cfg-system_alerts-enabled"> <span>Enable system alerts · 开启系统告警</span></label>
+                <div class="field" style="margin: 0;">
+                  <label for="cfg-system_alerts-wecom_webhook" class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
+                  <input type="text" id="cfg-system_alerts-wecom_webhook"
+                         placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
+                         style="width: 100%; font-family: monospace;">
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_testSystemAlert()">Send test · 发送测试</button>
+                  <span id="system_alerts-test-status" class="muted" style="font-size: 11px;"></span>
+                </div>
+                <div data-as-foot="system_alerts"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ────── PRINTING ────── (§494, 2026-10-21 — the cloud receipt
+             printers from Operations, and the two label switches from
+             Delivery → Package tracking. Same ids; loadPrinterPrefs() reads the
+             printer card when the panel opens, loadDeliverySettings() still
+             paints the two switches. -->
+        <div class="sub-panel" id="sub-printing">
+          <h2>Printing · 打印</h2>
 
           <!-- ── Fulfillment: 飞鹅 cloud printer ── -->
           <div class="group-card">
             <div class="group-card-head">
-              <h3>Receipt printing — cloud printers · 云打印出单</h3>
-              <div class="muted" data-lang-block="en">Auto-prints a ticket at the store the moment an order is paid — no PC needed, the printer also voice-announces it. Fill in the account for whichever brands you own, then pick each store's brand and <b>SN</b> below.</div>
-              <div class="muted" data-lang-block="cn">付款后自动在门店打印小票并语音播报。填写你所用品牌的账号,再为每家门店选择品牌与编号。</div>
+              <div class="gch-row"><h3>Receipt printing — cloud printers · 云打印出单</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">Auto-prints a ticket at the store the moment an order is paid — no PC needed, the printer also voice-announces it.</span><span data-lang-block="cn">付款后自动在门店打印小票并语音播报。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">Fill in the account for whichever brands you own, then pick each store's brand and <b>SN</b> below.</span><span data-lang-block="cn">填写你所用品牌的账号,再为每家门店选择品牌与编号。</span></p><p>The kitchen prints its own request slip when a job lands in the production queue — the paper copy of the notification, for a room where nobody is watching a phone. Leave the SN blank if the kitchen has no printer. · 制作请求进入队列时,厨房自动打印制作单;没有打印机则留空。</p><p>A stock request prints at the shop that has to fill it, the moment it is sent. It uses that shop's own printer — the one set below — so there is nothing extra to configure. · 补货申请发出时,在供货门店自动打印,使用该门店下方设置的打印机,无需另行配置。</p><p>Orders shipping outside Guangzhou always print at this store's printer (the warehouse that ships them). In-Guangzhou orders print at their own store. · 广州以外的订单始终在此门店出单;市内订单仍在各自门店打印。</p></div>
             </div>
+
             <div class="muted" style="font-size:11px;margin-bottom:12px;background:var(--bg-elev-1);border-radius:6px;padding:8px 10px">
-              <div data-lang-block="en">⚠ For <b>both</b> brands the credentials come from the vendor's <b>developer console</b> — <em>not</em> the 密钥/KEY printed on the device label. That label key only binds the printer to your account, once, in the vendor's own app. One account holds all your printers of that brand; each store's <b>SN</b> is set per-store below.</div>
-              <div data-lang-block="cn">⚠ 两个品牌的凭据都来自厂商<b>开发者后台</b> —— <em>不是</em>设备标签上的 密钥/KEY(标签密钥只用于在厂商 App 里绑定设备一次)。一个账号管理该品牌的所有打印机;各门店的编号在下方逐店设置。</div>
+              <div data-lang-block="en">For <b>both</b> brands the credentials come from the vendor's <b>developer console</b> — <em>not</em> the 密钥/KEY printed on the device label. That label key only binds the printer to your account, once, in the vendor's own app. One account holds all your printers of that brand; each store's <b>SN</b> is set per-store below.</div>
+              <div data-lang-block="cn">两个品牌的凭据都来自厂商<b>开发者后台</b> —— <em>不是</em>设备标签上的 密钥/KEY(标签密钥只用于在厂商 App 里绑定设备一次)。一个账号管理该品牌的所有打印机;各门店的编号在下方逐店设置。</div>
             </div>
             <div class="field-label" style="margin-bottom:6px">飞鹅 Feie <span id="feie-chip"></span></div>
             <div class="muted" style="font-size:11px;margin-bottom:8px" data-lang-block="en">Bind the printer in the Feie app, then take your <b>USERKEY</b> from a developer app at <a href="https://www.feieyun.com" target="_blank" style="color:var(--accent)">feieyun.com</a>.</div>
@@ -11828,7 +11717,6 @@
             </div>
             <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
             <div class="field-label">Kitchen printer · 厨房打印机</div>
-            <div class="muted" style="font-size:12px;margin-bottom:10px">The kitchen prints its own request slip when a job lands in the production queue — the paper copy of the notification, for a room where nobody is watching a phone. Leave the SN blank if the kitchen has no printer. · 制作请求进入队列时,厨房自动打印制作单;没有打印机则留空。</div>
             <div style="display:grid;grid-template-columns:1.6fr 1fr 1.4fr 0.7fr;gap:10px;align-items:end;margin-bottom:14px">
               <div>
                 <label for="feie-kitchen-sn" class="field-label" style="font-size:10px">Printer SN · 编号</label>
@@ -11854,22 +11742,174 @@
             </div>
             <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
             <div class="field-label">Stock requests · 补货申请</div>
-            <div class="muted" style="font-size:12px;margin-bottom:10px">A stock request prints at the shop that has to fill it, the moment it is sent. It uses that shop's own printer — the one set below — so there is nothing extra to configure. · 补货申请发出时,在供货门店自动打印,使用该门店下方设置的打印机,无需另行配置。</div>
             <select id="feie-transfer-when" aria-label="When a stock request prints · 补货申请何时打印" style="margin-bottom:14px">
               <option value="sent">When a request arrives · 请求到达时</option>
               <option value="off">Never — notification only · 不打印,仅通知</option>
             </select>
             <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
             <div class="field-label">Out-of-Guangzhou orders · 广州以外订单</div>
-            <div class="muted" style="font-size:12px;margin-bottom:8px">Orders shipping outside Guangzhou always print at this store's printer (the warehouse that ships them). In-Guangzhou orders print at their own store. · 广州以外的订单始终在此门店出单;市内订单仍在各自门店打印。</div>
             <select id="feie-ooc" aria-label="Which printer prints out-of-city orders · 市外订单的打印门店" style="margin-bottom:14px">
               <option value="">— Use each order's own store · 按订单所属门店 —</option>
             </select>
             <div class="pin-foot" style="display:flex;gap:10px;flex-wrap:wrap">
-              <button class="btn" onclick="_savePrinter()">💾 Save all · 全部保存</button>
+              <button class="btn" onclick="_savePrinter()">Save all · 全部保存</button>
+            </div>
+          </div>
+
+          <!-- ── Label printing (this computer) — auto-print the JD waybill label the
+               moment a waybill is created. Per-MACHINE (localStorage), so it lives
+               here, set once on the label-printer PC — it used to sit on every order
+               drawer, which read as order-specific when it wasn't. ── -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>Label printing · 面单打印</h3></div>
+              <div class="muted card-lead">Auto-print the JD waybill label on this computer as soon as a waybill is created. · 生成京东运单时,在本机自动打印面单。</div>
+            </div>
+
+            <div class="field" style="margin: 0;">
+              <label class="stacked">This computer · 本机</label>
+              <label class="fc-switch">
+                <input type="checkbox" id="dlv-jd-autoprint" onchange="setJdAutoPrint(this.checked)">
+                <span class="fc-switch-track"></span>
+                <span id="dlv-jd-autoprint-status-label" style="font-size: 12px;">Off · 关闭</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- ── Box label — opt-in order-drawer sticker printing (70×45mm parcel
+               stickers on a local label printer). Off by default: most stores ship
+               with the JD waybill label and never print their own stickers. ── -->
+          <div class="group-card" id="dlv-card-boxlabel">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>Box label · 箱贴打印</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">When on, the order page shows the Box-label controls. · 开启后订单页显示箱贴按钮。</div>
+              <div class="card-help" hidden><p>When off, they're hidden — the tool stays available but out of the way. · 关闭后隐藏,不占据界面。</p></div>
+            </div>
+
+            <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Status · 状态</label>
+                <label class="fc-switch">
+                  <input type="checkbox" id="dlv-box-label">
+                  <span class="fc-switch-track"></span>
+                  <span id="dlv-box-label-status-label" style="font-size: 12px;">Off · 关闭</span>
+                </label>
+              </div>
+              <!-- §279: saves itself when flipped. -->
+              <div data-as-foot="delivery.boxlabel"></div>
             </div>
           </div>
         </div>
+
+        <!-- ────── FEATURES ────── (§494, 2026-10-21 — every switch that
+             turns a whole feature on or off. The three hosts below are where
+             mountFeatureControls() (05-marketing.js, FEATURE_HOMES) injects a
+             switch; the card after them lists the features whose switch lives
+             on their own page (paintFeatureLinks), with a door to each — one
+             switch per feature, never two. -->
+        <div class="sub-panel" id="sub-features">
+          <h2>Features · 功能开关</h2>
+
+          <!-- ── Waste (损耗) — §32 addendum ── -->
+          <!-- mountFeatureControls() (05-marketing.js) injects the .feat-bar as
+               this host's FIRST child; the card below it is the "what is this"
+               the bar's own descOn/descOff cannot be, because they say what
+               STATE it is in.
+               THE CARD IS NOT DECORATION — IT IS HOW THE SWITCH IS FOUND.
+               Settings search is built by indexCards() (02-settings-ops.js)
+               from `.group-card-head h3` and the `.muted` text beside it. This
+               host shipped EMPTY, so neither was there and the switch was in no
+               search result at all. That bites hardest in the one state where
+               it matters: with Waste off, gatedOff() drops the rail row from
+               the index too, so "waste" / "损耗" found nothing whatsoever —
+               including the only control that turns it back on.
+               NO data-feat ON THIS HOST, deliberately, and that is the
+               difference from #mat-settings-home below: a card that vanishes
+               when the feature is off cannot be what an operator reads to
+               decide to turn it back on. The injected "off" card stays hidden
+               by the default `.feat-off { display: none }`.
+               THE SWITCH LIVES HERE AND NOT ON THE WASTE PAGE, which is the
+               reason retail-admin.css hides the Waste rail row when the feature
+               is off instead of dimming it: a dimmed row leads to a page that
+               still works wearing a badge saying it does not. -->
+          <div id="waste-settings-home">
+            <div class="group-card">
+              <div class="group-card-head">
+                <div class="gch-row"><h3>Waste · 损耗</h3></div>
+                <div class="muted card-lead">Recording waste moves stock: the on-hand count goes down and the sales channels are told. · 登记损耗会变动库存:库存数量相应减少,并同步至各销售渠道。</div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── Materials (物料) ── -->
+          <!-- The on/off switch (.feat-bar) and the "off" card are injected at
+               the top of #mat-settings-home by mountFeatureControls()
+               (05-marketing.js), driven by FEATURE_CATALOG/FEATURE_HOMES.
+               Everything below is the "on" content. data-feat="production" —
+               §28: one switch, shared with Recipes, not a materials-only key. -->
+          <div id="mat-settings-home" data-feat="production">
+            <div class="group-card">
+              <div class="group-card-head">
+                <div class="gch-row"><h3>Materials · 物料</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+                <div class="muted card-lead">The list of everything you buy and hold but don't sell — ingredients, packaging, equipment, supplies. · 你采购并库存但不出售的物品清单 —— 原料、包装、设备、耗材。</div>
+                <div class="card-help" hidden><p>Each one records what you pay per pack, and the cost per unit is worked out from that, so recipes and purchase orders price themselves. Turn this off if you don't stock anything: the Materials tab disappears from the sidebar. · 每条记录整包价格,并据此折算单位成本,配方与采购单即可自动计价。若你无需库存,可关闭此功能:侧边栏中的“物料”将不再显示。</p></div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── Low-stock suggestions (此门店库存偏低) — §178 ── -->
+          <!-- Same shape as the Waste host above, for the same reason: the card
+               carries the heading and the `.muted` line indexCards() reads, so
+               the switch is reachable from Settings search. This one has no
+               rail row of its own at all, so before the card it could not be
+               found by searching for anything.
+               "An empty host is correct" is what the comment here used to say.
+               It was wrong: a control nobody can find is not a control. NO
+               data-feat, so the card reads the same whichever way the switch is
+               set. -->
+          <div id="lowstock-settings-home">
+            <div class="group-card">
+              <div class="group-card-head">
+                <div class="gch-row"><h3>Running low here · 此门店库存偏低</h3></div>
+                <div class="muted card-lead">Suggestions at the top of a purchase order: the products that store is running low on, each with an Add button. · 采购单顶部的推荐:该门店库存偏低的商品,可直接添加。</div>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="group-card" id="feat-links-card">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>Other features · 其他功能</h3></div>
+              <div class="muted card-lead">Each of these is switched on or off on its own page. · 这些功能在各自的页面上开启或关闭。</div>
+            </div>
+
+            <div id="feat-links" data-no-i18n></div>
+          </div>
+        </div>
+
+        <!-- ────── ADVANCED ────── (§494, 2026-10-21 — what a tenant
+             changes once, if ever: map geocoding (from Operations) and the SKU
+             numbering rules (their own panel until now). -->
+        <div class="sub-panel" id="sub-advanced">
+          <h2>Advanced · 高级</h2>
+
+          <!-- ── Order routing: Maps geocoding ── -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>Order routing · 派单 — Maps geocoding · 地图定位</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">Turns store and customer addresses into map points, so a paid order goes to the store that is nearest by real distance, not by district name.</span><span data-lang-block="cn">地址保存时自动转经纬度,按 GPS 距离选最近门店。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">The map key is set on the server by whoever hosts Tacet. Without one, distances fall back to district centres and can be several km off.</span><span data-lang-block="cn">地图密钥在服务器上配置。无可用密钥时退回到区中心点,距离会偏差数公里。</span></p><p><strong>Refresh status</strong> only re-counts — it does not geocode. Use <strong>Geocode all</strong> to actually fetch coordinates. New addresses + stores also geocode automatically on save. · 刷新状态仅刷新计数,不定位;全部定位才会真正获取坐标。新地址保存时自动定位。</p></div>
+            </div>
+
+            <div id="integrations-status" class="muted" style="font-size:13px;padding:14px 16px;background:var(--bg-elev-1);border-radius:8px;margin-bottom:14px">Loading status…</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn" onclick="loadIntegrationsStatus()">Refresh status · 刷新状态</button>
+              <button class="btn" onclick="_geocodeBackfill()">Geocode all stores &amp; addresses now · 立即定位所有门店与地址</button>
+            </div>
+          </div>
+
 
         <!-- ── SKU codes · 编码规则 ─────────────────────────────────────────
              Automatic SKUs for the Materials catalogue: the tenant says how a
@@ -11879,14 +11919,22 @@
              baked by cuT(), the same way the Materials screens work. The rules
              live in the tenant's own database (sku_rules / sku_counters), so
              this is not a Roots screen with Roots' letters in it. -->
-        <!-- ────── CHANGE HISTORY ────── -->
+          <div id="sku-root" data-no-i18n data-cap="materials:view"></div>
+        </div>
+
+        <!-- ────── HISTORY ────── -->
+        <!-- §494: the three records — who changed what, what was sent, and
+             what was deleted — in one panel. All three read fresh on open. -->
         <div class="sub-panel" id="sub-history">
-          <h2>Change history · 修改记录</h2>
+          <h2>History · 记录</h2>
+          <h2 class="settings-section">Change history · 修改记录</h2>
           <div class="group-card">
             <div class="group-card-head">
-              <h3>Who changed what · 谁改了什么</h3>
-              <div class="muted">Every edit anyone on your team makes to products, orders, stock, purchases and settings, newest first. Read-only — nothing here can be altered, which is what makes it worth having. · 团队成员对商品、订单、库存、采购与设置所做的每一次修改,最新在前。只读,不可更改。</div>
+              <div class="gch-row"><h3>Who changed what · 谁改了什么</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">Every edit anyone on your team makes to products, orders, stock, purchases and settings, newest first. · 团队成员对商品、订单、库存、采购与设置所做的每一次修改,最新在前。</div>
+              <div class="card-help" hidden><p>Read-only — nothing here can be altered, which is what makes it worth having. · 只读,不可更改。</p></div>
             </div>
+
             <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">
               <select id="ch-who" onchange="chLoad()" aria-label="Filter by person"><option value="">Everyone · 全部人员</option></select>
               <select id="ch-what" onchange="chLoad()" aria-label="Filter by record type"><option value="">Everything · 全部类型</option></select>
@@ -11916,16 +11964,14 @@
               <button class="btn btn-sm" type="button" id="ch-more" hidden onclick="chMore()">Show more · 显示更多</button>
             </div>
           </div>
-        </div>
 
-        <!-- ────── WHAT WAS SENT ────── -->
-        <div class="sub-panel" id="sub-sent">
-          <h2>What was sent · 发送记录</h2>
+          <h2 class="settings-section">What was sent · 发送记录</h2>
           <div class="group-card">
             <div class="group-card-head">
-              <h3>Every message the system tried to deliver · 系统尝试发送的每条消息</h3>
-              <div class="muted">Pushes to your team's phones, sign-in codes, texts to customers, delivery reminders — what went out, to whom, and whether it landed. Read-only. · 团队手机推送、登录验证码、顾客短信、配送提醒 —— 发了什么、发给谁、是否送达。只读。</div>
+              <div class="gch-row"><h3>Every message the system tried to deliver · 系统尝试发送的每条消息</h3></div>
+              <div class="muted card-lead">Pushes to your team's phones, sign-in codes, texts to customers, delivery reminders — what went out, to whom, and whether it landed. Read-only. · 团队手机推送、登录验证码、顾客短信、配送提醒 —— 发了什么、发给谁、是否送达。只读。</div>
             </div>
+
             <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">
               <select id="nl-channel" onchange="nlLoad()" aria-label="Filter by how it was sent · 按发送方式筛选"><option value="">Every way · 全部方式</option></select>
               <select id="nl-kind" onchange="nlLoad()" aria-label="Filter by what it was about · 按内容筛选"><option value="">Everything · 全部内容</option></select>
@@ -11956,10 +12002,24 @@
               <button class="btn btn-sm" type="button" id="nl-more" hidden onclick="nlMore()">Show more · 显示更多</button>
             </div>
           </div>
-        </div>
 
-        <div class="sub-panel" id="sub-sku">
-          <div id="sku-root" data-no-i18n></div>
+          <h2 class="settings-section">Recently deleted · 最近删除</h2>
+          <!-- Recently deleted (audit E-07). Products had version history and
+               nothing else in the admin had anything. It lives here rather than
+               on each screen it covers: somebody looking for something they
+               deleted usually cannot remember which screen they deleted it
+               from, and four half-lists in four places is four things to find
+               instead of one. -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>Recently deleted · 最近删除</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead">Coupons, delivery zones, ledger rows and draft purchase orders removed in the last 60 days can be put back. · 最近 60 天内删除的优惠券、配送区、账目行与采购单草稿可以恢复。</div>
+              <div class="card-help" hidden><p>A restored purchase order keeps its own date, so it still lands in the month it was placed. · 恢复的采购单保留原有日期，仍计入原来的月份。</p></div>
+            </div>
+
+            <div id="ops-recycle-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
+          </div>
+
         </div>
 
 
@@ -12384,7 +12444,7 @@
        (/product-editor) loaded in-page as iframe tab sections. Lazy-loaded on
        first open (no src until then) so the two big editor apps don't download
        until used. They self-auth exactly as the standalone pages did. -->
-  <!-- Quick Stock lives in Settings → Operations (#qs-home), not as a top-level tab. -->
+  <!-- Quick Stock lives in Settings → Store (#qs-home), not as a top-level tab. -->
 
   <!-- ── Sales — channel overview ──
        Landing page for the Sales group: a daily SUMMARY strip across all

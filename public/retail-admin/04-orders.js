@@ -2995,7 +2995,7 @@ function ordNotifyChannelText(c) {
 const ORD_NOTIFY_WHY = {
   no_consent:              ['they have not agreed to be messaged in the mini app', '顾客未在小程序中同意接收通知'],
   no_openid:               ['this customer has no linked mini-app account', '该顾客未绑定小程序账号'],
-  no_template_id:          ['no message template is set up yet — Settings → Push notifications', '尚未配置消息模板 — 设置 → 推送通知'],
+  no_template_id:          ['no message template is set up yet — Settings → Notifications', '尚未配置消息模板 — 设置 → 通知'],
   no_access_token:         ['the WeChat connection is not working', '微信连接异常'],
   dev_mode_nothing_sent:   ['this shop is in test mode, so nothing was actually sent', '本店处于测试模式,消息未真正发送'],
   aliyun_sms_not_configured: ['text messaging is not set up yet', '短信服务尚未配置'],

@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.344 · 2026-10-21 · §494 SETTINGS REGROUPED INTO NINE GROUPS, WITH A "?" ON EVERY CARD — 11 STRINGS COMPOSED BY CLAUDE (`配送与自提`, `功能开关`, `发给顾客`, `发给团队`, `每日库存偏低清单`, `其他功能`, `这些功能在各自的页面上开启或关闭。`, `没有其他可开关的功能。`, `两个值都来自企业微信客服后台,绑定小程序 AppID 之后即可查看。`, `刷新状态仅刷新计数,不定位;全部定位才会真正获取坐标。`, AND THE TWO GEOCODE NOTES), EACH BUILT FROM LIVE FRAGMENTS; THE OTHER GROUP NAMES, THE PILLS AND THE 43 CARD LEADS ARE LIVE TEXT UNCHANGED.** See *Settings → nine groups and the "?" (§494)*.
+
 **v1.343 · 2026-10-21 · §494 SETTINGS → PAYMENTS & TAX, AND THE GEOCODING CARD — 2 STRINGS COMPOSED BY CLAUDE (`收款与税费`, `地图密钥在服务器上配置`), EACH BUILT FROM LIVE FRAGMENTS; THE PILLS `On · 已启用`, `Off · 未启用`, `Map key set · 已配置密钥`, `No map key · 缺少密钥` REUSE THE LIVE CHINESE; THE KEY-MISSING TOAST `服务器缺少地图密钥,未定位。` IS COMPOSED TOO (3 IN ALL).** See *Settings → Payments & tax (§494)*.
 
 **v1.342 · 2026-10-21 · SAYING A STOCK CHANGE (§493) — 14 STRINGS COMPOSED BY CLAUDE (`说出或输入库存变动`, `正在听…`, `此浏览器不支持语音，请输入。`, `无法识别，请重试或输入。`, `请说数量，或“售罄”。`, `这里只能加库存，不能设置数量。`, `哪个商品？`, `请先完成未保存的改动。`, `加 N 件`, `售罄 — 设为 0`, `设为 N`, `现有 N`, `语音`, AND THE EXAMPLE LINE `例如：“做了 12 X”，或“SKU 售罄 STORE”` / `例如：“SKU 售罄 STORE”，或“X 剩 7”`), EACH BUILT FROM LIVE FRAGMENTS OF THIS SCREEN; `Cancel · 取消`, `Next · 下一步`, `Back · 返回`, `Confirm · 确认` AND `No products match · 没有匹配的商品` COPIED WHOLE.** See *Saying a stock change (§493)*.
@@ -14412,3 +14414,44 @@ server. Asked by Ash: *"do all as you recommend"*.
 - `支付与税费` for the panel: `支付` is live only as the name of a payment *method* (`微信支付`, `支付宝`); the panel is about what the shop *collects*, which every live string on it calls `收款`.
 - `付款方式` — the customer's side of the same act; this panel is the operator's.
 - `请联系管理员配置地图密钥` for the geocoding line: an instruction, and §494 rule 4 is that the screen reports a state, not a task the tenant cannot do.
+## Settings → nine groups and the "?" (§494)
+
+**Composed by Claude, 2026-10-21, under the 2026-09-06 amendment.** Operator
+register. The Settings tab's left list, its section titles, the Features
+panel, and three hints that the design pass rewrote (`public/retail-admin.html`
+`#tab-config`, `02-settings-ops.js`, `05-marketing.js`). Asked by Ash: *"do
+all as you recommend"*. **The 43 card leads are not composed**: each is the
+first sentence of the card's existing paragraph, cut at its own `。` or `;`,
+in both languages, with a `;` at the cut closed as `。`.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Delivery & pickup` / `配送与自提` | left list | `配送` is the live panel name; `自提` is the live `到店自提`; joined with `与` as the live `费用与起送`. |
+| `Features` / `功能开关` | left list | `功能` is live (`关闭此功能`); `开关` is the phone's live word for these switches (`与电脑端是同一组开关`). |
+| `To customers` / `发给顾客` | Notifications, section | `发给` is the live column head in What was sent (`To · 发给`) and the live `发给员工`; `顾客` is live everywhere. |
+| `To your team` / `发给团队` | Notifications, section | as above; `团队` is live in the same panel (`发送给团队中…`). |
+| `Daily low-stock list` / `每日库存偏低清单` | Notifications, card title | the live switch label `每天发送库存偏低清单` with the live `每日` (`每日新鲜`) in place of `每天发送`, because a title names the thing, not the act. |
+| `Other features` / `其他功能` | Features, card title | `其他` is the live `其他地区`; `功能` as above. |
+| `Each of these is switched on or off on its own page.` / `这些功能在各自的页面上开启或关闭。` | Features, the card's lead | `开启` / `关闭` are the live switch words; `页面` is live (`“我的”页面`). |
+| `Nothing else to switch.` / `没有其他可开关的功能。` | Features, when the list is empty | `没有` + `其他` + `开关` + `功能`, all live. |
+| `Both values come from your WeCom customer-service admin page, once the mini-program AppID is bound there.` / `两个值都来自企业微信客服后台,绑定小程序 AppID 之后即可查看。` | Online shop › Customer service › WeCom credentials | The old hint had no Chinese and carried `客服` inside its English. `企业微信客服` is the live mode name (v1.333); `后台` is the live `开发者后台`; `绑定` is the live `绑定打印机`; `小程序` is live. |
+| `Refresh status only re-counts — it does not geocode. Use Geocode all to actually fetch coordinates.` / `刷新状态仅刷新计数,不定位;全部定位才会真正获取坐标。` | Advanced › geocoding | the old sentence with its two glyphs (`↻`, `🗺`) replaced by the buttons' own live names, `刷新状态` and `定位`. |
+| `Daily quota exhausted on {provider} ({code}: {message}). Coordinates cannot be fetched until the quota resets or the key is changed for a verified, higher-quota one.` / `{provider} 当日配额已用尽({code}:{message}),需等待重置或更换已实名/更高配额的密钥。` | Advanced › geocoding, the Brick note | the old banner's own Chinese, with `key` written as the live `密钥` and no glyph. |
+| `Last geocode error ({provider}): {code} {message}` / `最近定位错误({provider}):{code} {message}` | Advanced › geocoding, the Amber note | the old banner's own Chinese, no glyph. |
+
+### Copied whole
+
+- `Store · 门店`, `Online shop · 线上商城`, `Notifications · 通知`, `Printing · 打印`, `Advanced · 高级`, `History · 记录` — live pairs (`线上商城` from the open/closed card, `通知` from `仅通知`, `打印` from `云打印出单`, `高级` from Delivery's *Advanced*, `记录` from `修改记录`).
+- `Shop tab · 商城页`, `Product page · 产品页`, `Customer service · 客户服务`, `Change history · 修改记录`, `What was sent · 发送记录`, `Recently deleted · 最近删除` — the old panel and card titles, now section titles.
+- The pills: `On · 已启用`, `Not set up · 未配置`, `Not set · 未配置`, `Waiting for a JD account · 待开通京东账号`, `Connected · 已连接`, `Signed out · 已退出登录`, `Sync service offline · 同步服务离线`, `Not set up · 未开通` — the old chips' own Chinese, English brought to sentence case (§1.16). `On · 已开启` / `Off · 已关闭` on the feature list are the live switch words.
+- `What this does · 说明` (the "?"'s screen-reader name): `说明` is live (`一段简短的说明`). `Close · 关闭`, `Open · 打开` — live.
+- `On · 开启` / `Off · 关闭` — the delivery switches' labels, sentence case.
+
+### Rejected
+
+- `配送和自提` — the live joiner on this screen is `与` (`费用与起送`).
+- `功能` alone for the Features panel — says what, not that it is a switchboard; `开关` is what the phone already calls these.
+- `顾客通知` / `团队通知` for the two sections — reads as two kinds of notification rather than two recipients; `发给` is the column the record already uses.
+- `其它功能` — `其他` is the live spelling (`其他地区`).

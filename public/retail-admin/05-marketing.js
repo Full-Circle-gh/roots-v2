@@ -1431,6 +1431,35 @@ const FEATURE_HOMES = {
   lowStockHints: '#lowstock-settings-home',
 };
 let _cfgCache = {};
+// §494 — Settings → Features lists the features whose switch lives on their
+// own page, with its state and a door to that page. ONE switch per feature
+// (the FEATURE_HOMES rule above): this paints a state and a link, never a
+// second switch. Repainted when the panel opens, when a switch flips
+// (syncFeatureToggles) and on a language change.
+const FEATURE_PAGE = { membership: 'membership', affiliate: 'affiliate', reviews: 'reviews',
+  feedback: 'feedback', socialProof: 'social', faq: 'faq' };
+function paintFeatureLinks() {
+  const host = document.getElementById('feat-links');
+  if (!host) return;
+  const rows = FEATURE_CATALOG.filter(f => FEATURE_PAGE[f.key] && ENTITLEMENTS[f.key] !== false
+    && (typeof canTab !== 'function' || canTab(FEATURE_PAGE[f.key])));
+  const line = (name, on, go) => '<div class="feat-link-row">'
+    + '<span class="feat-link-name">' + escapeHtml(name) + '</span>'
+    + '<span class="td-pill ' + (on ? 'td-pill-sage' : 'td-pill-quiet') + '">' + escapeHtml(on ? cuT('On', '已开启') : cuT('Off', '已关闭')) + '</span>'
+    + '<button type="button" class="btn btn-sm" onclick="' + go + '">' + escapeHtml(cuT('Open', '打开')) + '</button>'
+    + '</div>';
+  const out = rows.map(f => line(cuT(f.en, f.cn), document.body.classList.contains('feat-' + f.key), "goTab('" + FEATURE_PAGE[f.key] + "')"));
+  // Fresh batches is switched on Delivery & pickup (#batch-enabled, painted at
+  // boot by loadDeliveryZones) and is not a FEATURE_CATALOG entry; it is listed
+  // here by hand so the list is the whole answer to "what can I switch off".
+  if (document.getElementById('batch-enabled') && (typeof can !== 'function' || can('delivery:view'))) {
+    out.push(line(cuT('Fresh batches', '新鲜现做'), !!document.getElementById('batch-enabled').checked, "settingsOpen('delivery', 'fresh')"));
+  }
+  if (!out.length) { host.innerHTML = '<div class="muted">' + escapeHtml(cuT('Nothing else to switch.', '没有其他可开关的功能。')) + '</div>'; return; }
+  host.innerHTML = out.join('');
+}
+window.paintFeatureLinks = paintFeatureLinks;
+if (typeof onLangChange === 'function') onLangChange(paintFeatureLinks);
 // Inject an on/off bar + an "off / enable" card at the top of each feature's home
 // section. Built from FEATURE_CATALOG so the bilingual copy lives in one place.
 // Idempotent (guarded) so a re-run never duplicates.
@@ -1470,6 +1499,7 @@ function mountFeatureControls() {
 }
 // Reflect the live on/off state (body.feat-<key>) onto every feature switch + label.
 function syncFeatureToggles() {
+  paintFeatureLinks();
   for (const f of FEATURE_CATALOG) {
     const on = document.body.classList.contains('feat-' + f.key);
     // A4: the consequence follows the state. Features without descOn/descOff
@@ -1567,8 +1597,10 @@ function taxCardSync() {
   const mode = $('#cfg-tax-mode')?.value === 'inclusive' ? 'inclusive' : 'exclusive';
   if (chip) {
     chip.textContent = on && micro ? (micro / 10000) + '%' : cuT('Off', '关闭');
-    chip.style.cssText = 'padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;'
-      + (on && micro ? 'background:var(--accent);color:var(--accent-ink)' : 'background:var(--line);color:var(--text-3)');
+    // §494 rule 6 — the shared pill: Sage with the rate when tax is charged,
+    // quiet when it is off.
+    chip.className = 'td-pill ' + (on && micro ? 'td-pill-sage' : 'td-pill-quiet');
+    chip.style.cssText = 'margin-left:8px;vertical-align:middle';
   }
   const pv = $('#tax-preview');
   if (!pv) return;
@@ -1636,7 +1668,7 @@ async function saveTaxSettings() {
   if (status) status.textContent = cuT('Saving…', '保存中…');
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
-    if (status) { status.textContent = cuT('Saved ✓', '已保存 ✓'); setTimeout(() => { if (status) status.textContent = ''; }, 2500); }
+    if (status) { status.textContent = cuT('Saved', '已保存'); setTimeout(() => { if (status) status.textContent = ''; }, 2500); }
     toast(cuT('Tax settings saved', '税费设置已保存'), 'ok');
   } catch (e) {
     if (status) status.textContent = '';
@@ -1843,9 +1875,8 @@ async function loadWecomApp() {
       ? (w.secret_masked + ' · leave blank to keep · 留空保持不变')
       : 'paste app Secret · 粘贴应用 Secret';
     const chip = $('#wecom-app-chip');
-    if (chip) chip.innerHTML = w.enabled
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
-      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED · 未配置</span>';
+    // §494 rule 6 — the shared pill, one language, sentence case.
+    if (chip) chip.innerHTML = w.enabled ? '<span class="td-pill td-pill-sage">' + escapeHtml(cuT('On', '已启用')) + '</span>' : '<span class="td-pill td-pill-quiet">' + escapeHtml(cuT('Not set up', '未配置')) + '</span>';
   } catch (e) { console.warn('[wecom app] load failed', e.message); }
 }
 
@@ -1865,7 +1896,7 @@ async function saveWecomApp() {
     status.textContent = '✅ Saved · 已保存';
     loadWecomApp();
   } catch (e) {
-    status.textContent = '⚠ ' + (e.message || 'save failed');
+    status.textContent = (e.message || 'save failed');
   }
 }
 
@@ -1880,7 +1911,7 @@ async function testWecomWebhook() {
     await api('/api/retail-admin/wecom/test', { method: 'POST', body: { webhook: url } });
     status.textContent = '✅ Sent — check your WeCom · 已发送,请查看企业微信';
   } catch (e) {
-    status.textContent = '⚠ ' + (e.code === 'no_valid_webhook'
+    status.textContent = (e.code === 'no_valid_webhook'
       ? 'Set up the app above, or paste a qyapi.weixin.qq.com URL · 请先配置上方 App 或填入正确地址'
       : (e.message || 'failed'));
   }
@@ -1909,10 +1940,10 @@ async function saveKitchenPrep() {
       webhook: $('#kprep-webhook').value.trim(),
       time: $('#kprep-time').value.trim(),
     } });
-    status.textContent = '✅ ' + cuT('Saved', '已保存');
+    status.textContent = cuT('Saved', '已保存');
     loadKitchenPrep();
   } catch (e) {
-    status.textContent = '⚠ ' + (e.code === 'invalid_webhook'
+    status.textContent = (e.code === 'invalid_webhook'
       ? cuT('Only qyapi.weixin.qq.com URLs are accepted', '仅接受 qyapi.weixin.qq.com 地址')
       : e.code === 'invalid_time'
         ? cuT('Enter a time between 12:00 and 23:59', '请输入 12:00–23:59 之间的时间')
@@ -1926,9 +1957,9 @@ async function testKitchenPrep() {
   status.textContent = cuT('Sending…', '发送中…');
   try {
     await api('/api/retail-admin/kitchen-prep-message/test', { method: 'POST', body: { webhook: $('#kprep-webhook').value.trim() } });
-    status.textContent = '✅ ' + cuT('Sent — check your WeCom', '已发送,请查看企业微信');
+    status.textContent = cuT('Sent — check your WeCom', '已发送,请查看企业微信');
   } catch (e) {
-    status.textContent = '⚠ ' + (e.code === 'no_valid_webhook'
+    status.textContent = (e.code === 'no_valid_webhook'
       ? cuT('Only qyapi.weixin.qq.com URLs are accepted', '仅接受 qyapi.weixin.qq.com 地址')
       : (e.message || 'failed'));
   }
@@ -1952,9 +1983,7 @@ async function loadAliyunSms() {
       ? (a.ak_secret_masked + ' · leave blank to keep · 留空保持不变')
       : 'paste AccessKey Secret · 粘贴 AccessKey Secret';
     const chip = $('#aliyun_sms-chip');
-    if (chip) chip.innerHTML = a.enabled
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
-      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED · 未配置</span>';
+    if (chip) chip.innerHTML = a.enabled ? '<span class="td-pill td-pill-sage">' + escapeHtml(cuT('On', '已启用')) + '</span>' : '<span class="td-pill td-pill-quiet">' + escapeHtml(cuT('Not set up', '未配置')) + '</span>';
   } catch (e) { console.warn('[aliyun sms] load failed', e.message); }
 }
 
@@ -1983,7 +2012,7 @@ async function _saveAliyunSms() {
   const status = $('#aliyun_sms-test-status');
   status.textContent = 'Saving… · 保存中…';
   try { await saveAliyunSms_(); status.textContent = '✅ Saved · 已保存'; loadAliyunSms(); }
-  catch (e) { status.textContent = '⚠ ' + (e.message || 'save failed'); }
+  catch (e) { status.textContent = (e.message || 'save failed'); }
 }
 
 // Save first, then send a REAL delivered SMS to the typed number so the operator
@@ -2010,10 +2039,10 @@ async function _testAliyunSms() {
       const m = j.error === 'not_configured' ? 'Fill in all four fields first · 请先填写四项'
               : j.error === 'bad_phone'      ? 'Bad phone number · 手机号无效'
               : (j.error || 'failed');
-      status.textContent = '⚠ ' + m;
+      status.textContent = m;
     }
     loadAliyunSms();
-  } catch (e) { status.textContent = '⚠ ' + (e.message || 'failed'); }
+  } catch (e) { status.textContent = (e.message || 'failed'); }
 }
 
 // System Alerts — fire a test message to the typed (or saved) WeCom webhook so the
@@ -2031,10 +2060,10 @@ async function _testSystemAlert() {
     const j = await r.json().catch(() => ({}));
     if (st) st.textContent = j.success
       ? '✅ Sent — check the group · 已发送,请查看该群'
-      : '⚠ ' + (j.error === 'domain_not_allowed' ? 'Only qyapi.weixin.qq.com URLs · 仅接受 qyapi 地址'
+      : (j.error === 'domain_not_allowed' ? 'Only qyapi.weixin.qq.com URLs · 仅接受 qyapi 地址'
               : j.error === 'no_webhook' ? 'Paste a webhook first · 请先填入 Webhook'
               : (j.error || 'failed'));
-  } catch (e) { if (st) st.textContent = '⚠ ' + e.message; }
+  } catch (e) { if (st) st.textContent = e.message; }
 }
 
 // §279 — the shared Save bar now serves ONE panel: Notifications. It holds the
@@ -2101,7 +2130,7 @@ const CS_TEXT = ['corp_id', 'url', 'label_en', 'label_cn', 'hours_en', 'hours_cn
 const CS_SHOW = ['show_me', 'show_home', 'show_product', 'show_checkout', 'show_order'];
 const CS_PICK = ['mode', 'fab_size', 'fab_shape', 'fab_color', 'fab_icon', 'fab_side'];
 const CS_CARD = autosaveCard({
-  card: 'customer_service', root: '#sub-cs',
+  card: 'customer_service', root: '#cs-cards',
   read: () => ({
     'customer_service.mode':         $('#cfg-cs-mode').value,
     'customer_service.corp_id':      $('#cfg-cs-corp_id').value.trim(),

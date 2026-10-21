@@ -6,20 +6,19 @@
    script blocks still in the HTML, hence the eslint no-undef opt-out.
    Contents: Operations panel (stores, shipping integrations, printers, geocode), command palette (Ctrl+K), visual preview painters, account menu (acct*) */
 // ═══════════════════════════════════════════════════════════════════════
-// OPERATIONS PANEL (Settings → Operations)
-// Integrations moved here from the kitchen app 2026-06-09. The data layer was
-// already on /api/retail-admin/*; these functions just drive the UI now. They
-// were adapted to this app's theme tokens (--text-1/3, --line, --bg-elev-1).
+// THE OLD OPERATIONS PANEL — now Settings → Store, Printing, Advanced and
+// History (§494). Integrations moved here from the kitchen app 2026-06-09. The
+// data layer was already on /api/retail-admin/*; these functions just drive
+// the UI now. They were adapted to this app's theme tokens (--text-1/3,
+// --line, --bg-elev-1). Each panel's loader is called by the switcher in
+// 01-core.js when that panel opens: loadStorePanel() here; loadPrinterPrefs
+// (Printing); loadIntegrationsStatus + skuLoad (Advanced); chLoad, nlLoad and
+// loadRecycle (History); loadShippingIntegrations with the Delivery hub; and
+// loadAlipayManual with Payments & tax.
 // ═══════════════════════════════════════════════════════════════════════
-function loadOpsPanel() {
+function loadStorePanel() {
   loadOpenClose();
   loadOpsStores();
-  loadRecycle();
-  loadIntegrationsStatus();
-  loadShippingIntegrations();
-  loadPrinterPrefs();
-  // The manual-Alipay card moved to Settings → Payments & tax (§494); the
-  // switcher reads it when THAT panel opens.
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -989,11 +988,14 @@ async function loadShippingIntegrations() {
     if (kCb) { kCb.value = k.callback || ''; kCb.readOnly = !!k.callback_built; }
     if (kSec) kSec.placeholder       = k.secret_masked ? `${k.secret_masked} · leave blank to keep · 留空则保持不变` : 'random string — do not rotate · 随机字符串,请勿更换';
     const kChip = document.getElementById('kd100-chip');
+    // §494 rule 6: the shared pill, one language, sentence case (§1.10, §1.16).
+    // Sage when it is on; a quiet pill when it is simply not set — nothing
+    // needs attention about a carrier the shop has not chosen to use.
     if (kChip) kChip.innerHTML = k.enabled
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
-      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED · 未配置</span>';
+      ? '<span class="td-pill td-pill-sage">' + escapeHtml(cuT('On', '已启用')) + '</span>'
+      : '<span class="td-pill td-pill-quiet">' + escapeHtml(cuT('Not set up', '未配置')) + '</span>';
     const kDot = document.getElementById('kd100-dot');
-    if (kDot) kDot.style.background = k.enabled ? '#10b981' : 'var(--text-3)';
+    if (kDot) kDot.style.background = k.enabled ? 'var(--td-sage)' : 'var(--text-3)';
 
     const jAk = document.getElementById('jd-app_key');
     const jAs = document.getElementById('jd-app_secret');
@@ -1011,10 +1013,10 @@ async function loadShippingIntegrations() {
     if (jEv) jEv.value = d.env || 'production';
     const jChip = document.getElementById('jd-chip');
     if (jChip) jChip.innerHTML = d.enabled
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
-      : '<span style="background:#fef3c7;color:#92400e;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">⏳ PENDING JD ACCOUNT · 待开通京东账号</span>';
+      ? '<span class="td-pill td-pill-sage">' + escapeHtml(cuT('On', '已启用')) + '</span>'
+      : '<span class="td-pill td-pill-amber">' + escapeHtml(cuT('Waiting for a JD account', '待开通京东账号')) + '</span>';
     const jDot = document.getElementById('jd-dot');
-    if (jDot) jDot.style.background = d.enabled ? '#10b981' : '#f59e0b';
+    if (jDot) jDot.style.background = d.enabled ? 'var(--td-sage)' : 'var(--td-amber)';
 
     // Stash the carrier states for the Delivery hub cards (06-delivery.js).
     window._shipStatus = { kd100: !!k.enabled, jd: !!d.enabled, jdKeys: !!d.app_key };
@@ -1038,13 +1040,13 @@ async function loadShippingIntegrations() {
       : cuT('paste APPSECRET from dev console', '从开发者后台粘贴 APPSECRET');
     const spChip = document.getElementById('spyun-chip');
     if (spChip) spChip.innerHTML = sp.enabled
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
-      : '<span style="background:#e5e7eb;color:#4b5563;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">— NOT SET · 未配置</span>';
+      ? '<span class="td-pill td-pill-sage">' + escapeHtml(cuT('On', '已启用')) + '</span>'
+      : '<span class="td-pill td-pill-quiet">' + escapeHtml(cuT('Not set', '未配置')) + '</span>';
 
     const fChip = document.getElementById('feie-chip');
     if (fChip) fChip.innerHTML = f.enabled
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
-      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED · 未配置</span>';
+      ? '<span class="td-pill td-pill-sage">' + escapeHtml(cuT('On', '已启用')) + '</span>'
+      : '<span class="td-pill td-pill-quiet">' + escapeHtml(cuT('Not set up', '未配置')) + '</span>';
     loadQingyunStores();  // same-city (Qingyun) per-store status + tab dot
   } catch (e) { console.warn('[integrations] load failed', e); }
 }
@@ -1072,7 +1074,7 @@ async function loadQingyunStores() {
     const j = await r.json();
     const stores = j.data || [];
     const qDot = document.getElementById('qy-dot');
-    if (qDot) qDot.style.background = stores.some(s => s.connected) ? '#10b981' : 'var(--text-3)';
+    if (qDot) qDot.style.background = stores.some(s => s.connected) ? 'var(--td-sage)' : 'var(--text-3)';
     // Auto-push toggle — only meaningful (shown) once at least one store is connected.
     const apRow = document.getElementById('qy-autopush-row');
     const apBox = document.getElementById('qy-autopush');
@@ -1089,14 +1091,15 @@ async function loadQingyunStores() {
       // _qingyunStoreStatus). A store Qingyun had signed out read "Not set up"
       // here and offered Request setup, which is the wrong fix for a login.
       const state = s.state || (s.connected ? 'connected' : 'not_set_up');
-      const pillCss = 'padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700';
+      // The shared pill (§494 rule 6): Sage connected, Amber for the two states
+      // somebody has to act on, quiet for a store that has not been set up.
       const pill = state === 'connected'
-        ? `<span style="background:#d1fae5;color:#065f46;${pillCss}">✓ Connected · 已连接</span>`
+        ? '<span class="td-pill td-pill-sage">' + escapeHtml(cuT('Connected', '已连接')) + '</span>'
         : state === 'signed_out'
-          ? `<span style="background:#fef3c7;color:#92400e;${pillCss}">⚠ Signed out · 已退出登录</span>`
+          ? '<span class="td-pill td-pill-amber">' + escapeHtml(cuT('Signed out', '已退出登录')) + '</span>'
           : state === 'offline'
-            ? `<span style="background:#fef3c7;color:#92400e;${pillCss}">⚠ Sync service offline · 同步服务离线</span>`
-            : `<span style="background:#fee2e2;color:#991b1b;${pillCss}">✗ Not set up · 未开通</span>`;
+            ? '<span class="td-pill td-pill-amber">' + escapeHtml(cuT('Sync service offline', '同步服务离线')) + '</span>'
+            : '<span class="td-pill td-pill-quiet">' + escapeHtml(cuT('Not set up', '未开通')) + '</span>';
       // §484 — a signed-out store is signed back in from a picture of its
       // Qingyun browser; the server checks the permission again either way.
       const btn = state === 'not_set_up'
@@ -1241,28 +1244,28 @@ async function loadPrinterPrefs() {
           const opts = _FEIE_TEMPLATES.map(t => `<option value="${t.id}" ${s.template===t.id?'selected':''}>${t.label}</option>`).join('');
           return `
           <div data-store="${s.id}" id="ppanel-${s.id}" style="display:${i === 0 ? 'block' : 'none'};border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg-elev-1)">
-            <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:var(--text-1)">🏪 ${primary}${secondary ? ` <span style="font-weight:600;font-size:12px;color:var(--text-3)">${secondary}</span>` : ''}${codeTag}</div>
+            <div style="font-weight:500;font-size:15px;margin-bottom:10px;color:var(--text-1)">${primary}${secondary ? ` <span style="font-weight:400;font-size:12px;color:var(--text-3)">${secondary}</span>` : ''}${codeTag}</div>
             <div style="display:grid;grid-template-columns:1.6fr 1fr 1.2fr 0.7fr;gap:10px;align-items:end">
               <div>
-                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Printer SN · 编号</label>
+                <label class="field-label">Printer SN · 编号</label>
                 <input type="text" class="feie-store-sn" value="${escapeHtml(s.sn)}" style="width:100%;font-family:monospace;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)" placeholder="e.g. 550540977">
               </div>
               <div>
-                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Brand · 品牌</label>
+                <label class="field-label">Brand · 品牌</label>
                 <select class="feie-store-vendor" style="width:100%;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)">${_vendorOptions(s.vendor || 'feie')}</select>
               </div>
               <div>
-                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Template · 模板</label>
+                <label class="field-label">Template · 模板</label>
                 <select class="feie-store-tpl" onchange="_previewStore(${s.id})" style="width:100%;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)">${opts}</select>
               </div>
               <div>
-                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Copies · 份数</label>
+                <label class="field-label">Copies · 份数</label>
                 <input type="number" class="feie-store-copies" min="1" max="5" value="${Number(s.copies)||1}" style="width:100%;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)">
               </div>
             </div>
             <div style="margin-top:10px;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
               <div style="flex:0 0 auto">
-                <div style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);margin-bottom:5px">Print preview · 打印预览</div>
+                <div class="field-label">Print preview · 打印预览</div>
                 <div id="feie-prev-${s.id}" class="feie-prev"><div style="color:var(--text-3);font-size:12px">Loading preview…</div></div>
               </div>
               <div style="flex:1 1 160px;min-width:140px">
@@ -1363,7 +1366,7 @@ async function _savePrinter() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     toast('✅ Printer settings saved · 已保存', 'success');
     loadPrinterPrefs();
-    loadShippingIntegrations();   // repaints each brand's LIVE / NOT SET chip
+    loadShippingIntegrations();   // repaints each brand's On / Not set pill
   } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
 }
 
@@ -1587,9 +1590,10 @@ async function loadIntegrationsStatus() {
     const le = d.last_error;
     let errBox = '';
     if (le && le.quota) {
-      errBox = `<div style="margin-top:10px;padding:8px 12px;background:#fee2e2;color:#991b1b;border-radius:6px;font-size:12px">🚫 <strong>Daily quota exhausted</strong> on ${escapeHtml(provLabel)} (${escapeHtml(String(le.code))}: ${escapeHtml(le.message || '')}). Coordinates can't be fetched until quota resets or you switch to a real-name-verified / higher-quota key. · 当日配额已用尽,需等待重置或更换已实名/更高配额的 key。</div>`;
+      // §1.12: an inline banner in the tint for its weight — Brick for a stop, Amber for a note. One language (cuT), no glyph.
+      errBox = '<div class="td-note td-note-brick">' + escapeHtml(cuT('Daily quota exhausted on ' + provLabel + ' (' + String(le.code) + ': ' + (le.message || '') + '). Coordinates cannot be fetched until the quota resets or the key is changed for a verified, higher-quota one.', provLabel + ' 当日配额已用尽(' + String(le.code) + ':' + (le.message || '') + '),需等待重置或更换已实名/更高配额的密钥。')) + '</div>';
     } else if (le) {
-      errBox = `<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Last geocode error · 最近定位错误 (${escapeHtml(provLabel)}): ${escapeHtml(String(le.code))} ${escapeHtml(le.message || '')}</div>`;
+      errBox = '<div class="td-note td-note-amber">' + escapeHtml(cuT('Last geocode error (' + provLabel + '): ' + String(le.code) + ' ' + (le.message || ''), '最近定位错误(' + provLabel + '):' + String(le.code) + ' ' + (le.message || ''))) + '</div>';
     }
     box.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
@@ -1650,7 +1654,15 @@ async function loadIntegrationsStatus() {
     'delivery':    'shipping holiday batch fresh zones same-day district cutoff lead time 配送 节假日 现做 区域 当天',
     'brand':       'logo colour color theme accent font palette dark light wordmark 品牌 主题 颜色 字体 标志',
     'shop':        'category grid sort filter 商店 分类',
+    'online shop': 'layout product page customer service support button 商城 产品页 客服',
     'push':        'notification alert message subscribe 推送 通知',
+    'notifications': 'push alert message subscribe webhook sms wecom 推送 通知 短信 企业微信',
+    'store':       'stores locations hours open closed low stock staff phone 门店 营业 库存',
+    'payments':    'currency tax alipay money price 货币 税费 支付宝 收款',
+    'printing':    'printer receipt label box sticker feie 打印 小票 面单 箱贴',
+    'features':    'switch on off enable disable waste materials production 功能 开关 损耗 物料',
+    'advanced':    'geocode map key sku codes numbering 高级 定位 编码',
+    'history':     'log changed sent deleted restore 记录 修改 发送 删除 恢复',
     'social proof': 'bought count viewers recent buyers ticker 社交 人气 销量',
     'customer service': 'cs contact whatsapp wechat hours support chat 客服 联系',
     'legal':       'terms privacy policy refund 条款 隐私 政策',
@@ -1776,7 +1788,9 @@ async function loadIntegrationsStatus() {
   function cardKeywords(card) {
     if (!card) return '';
     const bits = [];
-    card.querySelectorAll('.muted, label').forEach(n => {
+    // .card-help p: the explanation folded behind the card's "?" (§494) — hidden,
+    // but what somebody searching for a setting is most likely to type.
+    card.querySelectorAll('.muted, label, .card-help p').forEach(n => {
       const t = n.textContent.replace(/\s+/g, ' ').trim();
       if (t && t.length < 200) bits.push(t);
     });

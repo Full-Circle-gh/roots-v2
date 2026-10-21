@@ -115,12 +115,12 @@ const CASES = [
       const v = html.lastIndexOf('class="dlv-view"', at);
       return { at, sub: (html.slice(p, p + 60).match(/id="(sub-[a-z]+)"/) || [])[1], dlv: v > p ? (html.slice(v, v + 80).match(/data-dlv="([a-z]+)"/) || [])[1] : null };
     };
-    is(panelOf('onclick="testWecomWebhook()"').sub, 'sub-push', 'the WeCom test sits in Settings → Push');
-    is(panelOf('onclick="_testAliyunSms()"').sub, 'sub-push', 'the SMS test sits in Settings → Push');
-    is(panelOf('onclick="_testSystemAlert()"').sub, 'sub-push', 'the system-alert test sits in Settings → Push');
+    is(panelOf('onclick="testWecomWebhook()"').sub, 'sub-push', 'the WeCom test sits in Settings → Notifications');
+    is(panelOf('onclick="_testAliyunSms()"').sub, 'sub-push', 'the SMS test sits in Settings → Notifications');
+    is(panelOf('onclick="_testSystemAlert()"').sub, 'sub-push', 'the system-alert test sits in Settings → Notifications');
     is(panelOf('onclick="_testKd100()"').sub, 'sub-delivery', 'the kd100 test sits on the Delivery panel');
     is(panelOf('onclick="_testJd()"').sub, 'sub-delivery', 'the JD test sits on the Delivery panel');
-    is(panelOf('id="feie-stores"').sub, 'sub-ops', 'the printer test is drawn into the printer card, Settings → Operations');
+    is(panelOf('id="feie-stores"').sub, 'sub-printing', 'the printer test is drawn into the printer card, Settings → Printing (§494)');
     ok(/data-sub="delivery" data-cap="delivery:view"/.test(html), 'the Delivery panel opens on delivery:view');
     const files = [];
     const walk = (d) => { for (const e of fs.readdirSync(path.join(ROOT, d), { withFileTypes: true })) {

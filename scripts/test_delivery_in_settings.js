@@ -103,13 +103,14 @@ section('2 · every panel still has a nav button, Delivery included');
     'unpaired: ' + unpaired.join(', '));
 
   // Where it sits is a judgement, and it is recorded here so a reshuffle is a
-  // decision rather than a drift: with the three panels that are about what the
-  // customer meets, above the ones about how the shop is run.
-  const iCs  = MARKUP.indexOf('<button data-sub="cs"');
+  // decision rather than a drift. §494 (2026-10-21): the list is sorted by the
+  // question the tenant asks — Store, Online shop, Payments & tax, then
+  // Delivery & pickup, then Notifications.
+  const iPay = MARKUP.indexOf('<button data-sub="payments"');
   const iDlv = MARKUP.indexOf('<button data-sub="delivery"');
-  const iOps = MARKUP.indexOf('<button data-sub="ops"');
-  yes(iCs < iDlv && iDlv < iOps,
-    'and it sits between Customer service and Operations');
+  const iPush = MARKUP.indexOf('<button data-sub="push"');
+  yes(iPay < iDlv && iDlv < iPush,
+    'and it sits between Payments & tax and Notifications');
 }
 
 section('3 · the capability came with the page');

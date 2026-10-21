@@ -149,7 +149,7 @@ const restoredAt = (id) => db.prepare('SELECT restored_at FROM deleted_records W
     const html = read('public/retail-admin.html');
     const btn = html.indexOf('onclick="_geocodeBackfill()"');
     const panel = html.lastIndexOf('class="sub-panel', btn);
-    ok(btn > 0 && /id="sub-ops"/.test(html.slice(panel, panel + 60)), '…and it sits in Settings → Operations');
+    ok(btn > 0 && /id="sub-advanced"/.test(html.slice(panel, panel + 60)), '…and it sits in Settings → Advanced (§494)');
     /* §325 X2 brought the button to the phone's Operations screen, behind the
        desktop's quota confirm and drawn for the phone Settings screen's keys
        (opsxCan → ROUTE_CAP.settings). It is the only phone caller, and every
