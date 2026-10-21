@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.576
+# Tacet shared-core consolidation — decisions record, v4.577
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-22 · v4.577 — **§495 AMENDED · THE SAME MICROPHONE ON THE COMPUTER — DECIDED BY ASH:** *"do all those … The same mic on the computer"*. Rule 13 added: the back office's top bar carries the mic beside Search (`public/retail-admin/32-assistant.js`), the same two routes, the same rows, the same approval; it hides itself unless the module is on and the role carries `assistant:use`, and the plan route holds the real locks. No new string: every pair is the phone's, copied whole, and `scripts/test_desktop_assistant.js` holds it to that. No schema, no new route. No change to `.gitignore` or CI. See §495 rule 13.
 
 2026-10-22 · v4.576 — **§495 AMENDED · A SLIP IS REPRINTED BY VOICE — DECIDED BY ASH:** *"do all those … Reprint a slip"*. Rule 12 added: a fifth shape, `reprint`, resolved against the last two days' orders in the catalogue plus any order number the sentence names (looked up directly, however the recogniser wrote it), run through the order's own print route; a printer not set up is a failed row with its reason. No schema, no new route. One string composed, declared in `docs/tacet-delivery-vocabulary.md` v1.347. No change to `.gitignore` or CI. See §495 rule 12.
 
@@ -33175,6 +33177,23 @@ today\", answered without an approve step"*.
     failed row with that reason, which is why the phone reads `ok` on every
     row's reply.
 
+**Amended 2026-10-22 (v4.577), by Ash:** *"The same mic on the computer"*.
+
+13. **The same microphone on the computer.** The back office's top bar
+    carries the mic beside Search. `public/retail-admin/32-assistant.js` is
+    the phone's sheet in the desktop's own chrome (the command palette's
+    overlay and rows), calling the same two routes and running the same rows
+    through the same existing routes under the operator's own login. The
+    button hides itself unless `body.feat-assistant` (the module held and
+    on) and `can('assistant:use')` both hold; it carries no `data-cap` tag,
+    because the tagged-controls rule (audit K-01) is for the seven
+    consequential controls and this button's gate is the module's own. The
+    recogniser's language chip shares the phone's device key, so one device
+    keeps one choice. No new string: every pair is the phone's, and the
+    desktop test refuses a Chinese string the phone does not ship. Ash's
+    one address for staff stays the back office at `store.`: the mic is now
+    on both of its faces.
+
 **Not in this round.** The same microphone on the desktop top bar; read-only
 questions without an approve step; reprinting a slip; folding §493's Quick
 Stock microphone into this one (the stock action already exists here; the
@@ -33202,5 +33221,7 @@ rather than softened: the switch table is read through a new
 `scripts/test_tenant_roles.js` now counts 120 capabilities. Rule 11 adds
 `answerOne` / `answerAll` / `mayAsk` to `lib/assistant.js` and 23 checks to
 `scripts/test_assistant_plan.js`. Rule 12 adds `orderNoKey` / `orderNosIn`
-and the orders in `catalogue()`, with 12 checks. No change to `.gitignore`
-or CI.
+and the orders in `catalogue()`, with 12 checks. Rule 13 adds
+`public/retail-admin/32-assistant.js`, the mic in `retail-admin.html`'s top
+bar, its styles in `retail-admin.css`, and `scripts/test_desktop_assistant.js`.
+No change to `.gitignore` or CI.

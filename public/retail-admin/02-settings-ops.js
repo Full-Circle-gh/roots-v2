@@ -2390,6 +2390,7 @@ let ENTITLEMENTS = {};
     // DARK in Phase 0/1: owner/admin/staff resolve to the full set and an older
     // session sends caps:null (treated as all-allowed), so nothing hides yet.
     setCaps(u.caps);
+    if (typeof asstSync === 'function') asstSync();   // the voice assistant's mic follows the caps (§495 rule 13)
     // HOME BOARD — the dashboard this role lands on (see 03-dashboard.js
     // dashPos*). body.pos-* drives the CSS that removes the money blocks.
     //

@@ -799,6 +799,7 @@
 <link rel="preload" href="/assets/retail-admin/09-products.js" as="script">
 <link rel="preload" href="/assets/retail-admin/10-extras.js" as="script">
 <link rel="preload" href="/assets/retail-admin/31-product-page.js" as="script">
+<link rel="preload" href="/assets/retail-admin/32-assistant.js" as="script">
 <style>
   /* Anti-FOUC for the language layer: the raw markup carries BOTH languages
      ("EN · 中文") and the app JS hides one at boot, stamping data-ui-lang on
@@ -1137,6 +1138,13 @@
        a caret: it opens the ⌘K command palette (openCmdSearch). The keyboard hint
        is platform-aware — ⌘K on Mac, Ctrl K on Windows, never both — set by JS on
        load (see 01-core). -->
+  <!-- The voice assistant (§495 rule 13): the phone's microphone, in the
+       top bar beside Search. Hidden until retail-admin/32-assistant.js finds
+       the module on (body.feat-assistant) and the role carrying assistant:use;
+       the plan route holds the real locks. -->
+  <button class="gsearch-trigger asst-mic" id="asst-mic" type="button" hidden title="Voice assistant · 语音助手" aria-label="Voice assistant · 语音助手">
+    <svg class="gsearch-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+  </button>
   <button class="gsearch-trigger" id="gsearch-trigger" type="button" onclick="openCmdSearch()" title="Search" aria-label="Search">
     <svg class="gsearch-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     <span class="gsearch-label">Search</span>
@@ -14648,6 +14656,7 @@
 <script src="/assets/retail-admin/29-channel-sync.js"></script>
 <script src="/assets/retail-admin/30-install.js"></script>
 <script src="/assets/retail-admin/31-product-page.js"></script>
+<script src="/assets/retail-admin/32-assistant.js"></script>
 <script src="/assets/retail-admin/27-keyboard.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
