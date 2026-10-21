@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.342 · 2026-10-21 · SAYING A STOCK CHANGE (§493) — 14 STRINGS COMPOSED BY CLAUDE (`说出或输入库存变动`, `正在听…`, `此浏览器不支持语音，请输入。`, `无法识别，请重试或输入。`, `请说数量，或“售罄”。`, `这里只能加库存，不能设置数量。`, `哪个商品？`, `请先完成未保存的改动。`, `加 N 件`, `售罄 — 设为 0`, `设为 N`, `现有 N`, `语音`, AND THE EXAMPLE LINE `例如：“做了 12 X”，或“SKU 售罄 STORE”` / `例如：“SKU 售罄 STORE”，或“X 剩 7”`), EACH BUILT FROM LIVE FRAGMENTS OF THIS SCREEN; `Cancel · 取消`, `Next · 下一步`, `Back · 返回`, `Confirm · 确认` AND `No products match · 没有匹配的商品` COPIED WHOLE.** See *Saying a stock change (§493)*.
+
 **v1.341 · 2026-10-18 · SIGNING QINGYUN BACK IN FROM A PICTURE (§484) — 6 STRINGS COMPOSED BY CLAUDE (`请用青云 App 扫码登录`, `青云聚信未显示二维码，需要有人在服务器上处理。`, `青云聚信要求人工验证，需要有人在服务器上处理。`, `无法连接该门店的青云同步服务。`, `刷新二维码`, and the sign-in title's `青云聚信`), EACH BUILT FROM LIVE FRAGMENTS; `重新登录成功，配送跟踪继续` LIFTED FROM THE QINGYUN DAEMON'S OWN ALERT; THE REST COPIED FROM `public/channel-signin.html`.** See *Signing Qingyun back in from a picture*.
 
 **v1.340 · 2026-10-18 · A QINGYUN STORE THAT IS SIGNED OUT SAYS SO — 1 STRING COMPOSED BY CLAUDE (`同步服务离线`), CUT FROM THE LIVE `美团同步服务离线`; `Signed out · 已退出登录` AND `青云 已退出登录` COPIED FROM THE LIVE SIGNED-OUT PAIR AND HOME'S `${name} 已退出登录`.** See *A Qingyun store that is signed out*.
@@ -14335,4 +14337,48 @@ picture of the store's Qingyun browser over a remote screen.
 - `扫描二维码` — correct, but `扫码` is what every live string says.
 - `浏览器` for the thing Tacet cannot reach — accurate, and nowhere else on a screen; staff know it as the sync service.
 - `重新获取二维码` for *Show a new code* — also live-built, but twice the length of `刷新二维码` on a button that sits beside *Close*.
+
+## Saying a stock change (§493)
+
+Quick Stock's microphone: one sheet, one field, one card to confirm. Register:
+OPERATOR (Rule 1). Everything here is on the phone, said to kitchen staff and
+shop clerks, so each string is cut from what this screen already says to them.
+
+### Composed — declared, by Claude Fable 5.1, under Rule 4's 2026-09-06 delegation
+
+| where | EN | CN | built from |
+|---|---|---|---|
+| the sheet's title, and the mic button's label | Say or type a change | 说出或输入库存变动 | `输入` is the live verb in `请输入在架数量`; `库存` is live everywhere on this screen; `变动` is the plain noun for a stock movement. `说出` is the one new word, and there is no live string for *say*. |
+| the status line while the recogniser runs | Listening… | 正在听… | `正在 + verb + …` is this screen's own shape (`正在加 N 件…`, `正在打开…`). |
+| no recogniser, or the browser refused the microphone | Voice isn’t available in this browser. Type it instead. | 此浏览器不支持语音，请输入。 | `不支持` is live (`此数据库不支持。`); `语音` is live in the printer settings; `请输入` is live. |
+| the recogniser heard nothing it could use | Could not make that out — try again, or type it. | 无法识别，请重试或输入。 | the live `仍无法识别 · 请重试或人工核对` with *type it* in place of *verify manually*. |
+| the card, when the sentence named a product but no amount | Say how many, or “sold out”. | 请说数量，或“售罄”。 | `数量` and `售罄` are live. |
+| the card, when a kitchen without the recount grant said a count | Here you can add stock, not set the count. | 这里只能加库存，不能设置数量。 | `加库存` and `设置数量` are this screen's own two titles. |
+| the pick list when two products match equally | Which product? | 哪个商品？ | the live `哪家门店？` with the live `商品`. |
+| Confirm, when the sentence named another store while something on this one is unsaved | Finish what is unsaved first. | 请先完成未保存的改动。 | `未保存` is live (`Didn’t save · 未保存`); `改动` is live in Settings. |
+| the card's sentence, for an add | Add N | 加 N 件 | the live `已加 N 件` before it has happened. |
+| the card's sentence, for sold out | Sold out — set to 0 | 售罄 — 设为 0 | the live `售罄` and the live `已设为 N` before it has happened. |
+| the card's sentence, for a count | Set count to N | 设为 N | the live `已设为 N` before it has happened. |
+| after the count, what the shelf says now | now N | 现有 N | `现有` is live in Purchasing. |
+| the mic button's accessible name | Voice | 语音 | live, printer settings. |
+| the example under the title | For example: “made 12 X”, or “SKU sold out at STORE” · For example: “SKU sold out at STORE”, or “X 7 left” | 例如：“做了 12 X”，或“SKU 售罄 STORE” · 例如：“SKU 售罄 STORE”，或“X 剩 7” | `例如` is live; `做了`, `售罄` and `剩` are the words the parser itself listens for, so the example teaches the vocabulary it accepts. X, SKU and STORE are the screen's first product, its sku and the store on screen — never an invented name. |
+
+### Copied whole
+
+- `Cancel` / `取消`, `Next` / `下一步`, `Back` / `返回`, `Confirm` / `确认`, `No
+  products match` / `没有匹配的商品`, `Working…` / `处理中…` (while the model
+  reads, §493 rule 8) — `public/m.html`, unchanged. The language chips carry
+  `English` and `中文`, each in its own language on both sides: no string.
+
+### Rejected
+
+- **`语音输入` for the title.** Names the microphone and not the typed path,
+  which is the one every browser has.
+- **`正在聆听…` for Listening.** Correct and more literary; `听` is the word a
+  kitchen uses.
+- **`请说出数量` for the no-amount line.** `请说` already carries *say*; the
+  shorter line fits the card.
+- **`没听清` for the recogniser's failure.** Natural speech, but the sentence
+  also covers a network or permission failure, which `无法识别` does and
+  `没听清` does not.
 

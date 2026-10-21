@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.570
+# Tacet shared-core consolidation — decisions record, v4.572
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-21 · v4.572 — **§493 AMENDED · THE MICROPHONE HEARS EITHER LANGUAGE, THE MODEL READS WHAT THE PHONE CANNOT, AND EACH PERSON'S MISHEARINGS ARE LEARNED — DECIDED BY ASH:** *"mic should recognize English and Chinese language · it should be ai involved the learn the person talking voice so less and lees mistakes sccure · I'm going to sleep , build the best version you can possible can merge and deploy it after"*. Rules 7–9 added to §493: a language chip on the sheet (English / 中文), remembered per device; a confirmed card records what was heard for the product under that operator (`quick_stock_heard`, one new tenant table), and the phone reads that phrase alone next time; a sentence the phone cannot read goes to the model through `lib/model-gateway` (`lib/stock-command-ai.js`, `POST /api/retail-admin/quick-stock/understand`), with the person's learned phrases as hints, and its answer is the card — still confirmed, never written from. The phone's recogniser cannot itself be trained; the learning is of its mistakes, which is what repeats. Schema: one new table. Two new routes. No new string composed; `Working…` copied whole. No change to `.gitignore` or CI. Merged and deployed on Ash's instruction. See §493 rules 7–9.
+
+2026-10-21 · v4.571 — **§493 · A STOCK CHANGE CAN BE SAID, AND IS WRITTEN ONLY AFTER A CARD IS CONFIRMED — DECIDED BY ASH:** *"I was thinking about creating a microphone feature where you can say an sku or a product name and give a command like 1-50 out of stock at yuexiu location . and system will deduct automatic from yuexiu the stock"*, then *"staff use the phone browser, go ahead and build it"*. Quick Stock (`/stock`, which is Tacet Mobile's Add stock / Quick stock screen) gains a microphone beside its search. The phone's own speech recogniser turns the sentence into text, or the operator types it; a parser in `public/m.html` reads it against the products and stores the screen already holds; the result is a card — product, store, what will be written — and nothing moves until the operator confirms it. The write then goes through the screen's existing doors (`qsCountEntered`, `qsFlush`), so the kitchen's add-only contract, §46's fork on a lowered count and §325's recount questions hold for a spoken change as for a tapped one. Version v4.571 and §493 follow main's v4.570 / §492; the open PR #1232 holds v4.563–v4.568 and §485–§490. No schema, no new route, no model call. Fourteen strings composed, declared in `docs/tacet-delivery-vocabulary.md` v1.342. No change to `.gitignore` or CI. See §493.
 
 2026-10-21 · v4.570 — **§492 · ONE ANSWER CAN BE SWITCHED OFF AT ONE SHOP — DECIDED BY ASH:** *"go"*, then *"I need a switch for yuexiu location that can turn off the crackers option from variant of product that under \"made here\""*. The till's Sold out mode gains a chip per answer under each made-here item; an answer switched off greys on that shop's QR menu and till and is refused at their submit. Other shops, the web shop and the mini app are untouched. §120 rule 1's *"only a stock-LINKED choice can be sold out at all"* is amended for made-here items at a shop. Version v4.570 and §492 follow main's v4.569 / §491; the open PR #1232 holds v4.563–v4.568 and §485–§490. Schema: one new table, `shop_option_choices_off`. One new route. No new string, EN or CN. No change to `.gitignore` or CI. See §492.
 
@@ -32676,3 +32680,129 @@ databases by `initTenantSchema`. One new route, `PUT
 /api/retail-admin/shops/:id/listings/:lid/choices/:cid/off`. No new string, EN or
 CN: the chip prints the answer's own label and the existing *Sold out · 售罄*
 pair. No change to `.gitignore` or CI.
+
+## §493 — A STOCK CHANGE CAN BE SAID, AND IS WRITTEN ONLY AFTER A CARD IS CONFIRMED
+
+**Decided by Ash, 2026-10-21:** *"I was thinking about creating a microphone
+feature where you can say an sku or a product name and give a command like 1-50
+out of stock at yuexiu location . and system will deduct automatic from yuexiu
+the stock"*. Asked why only Quick Stock: *"why onlt in quick stock ?"* — the
+answer being that it need not be, and that the parser is one piece whichever
+screen carries the button. Then: *"staff use the phone browser, go ahead and
+build it"*.
+
+**The gap.** A count on the shop floor is a walk along the shelf with one hand
+free. Quick Stock already keeps the search pinned so the next product is one
+lookup away, but every change is still find the card, tap the number, type,
+confirm. Saying *"1-50 sold out"* is faster than any of that, and the phone's
+browser can already hear it.
+
+**The rule.**
+
+1. **A change can be said or typed, in one box.** A microphone sits beside
+   Quick Stock's search. It opens a sheet with one field; the mic fills the
+   field through the browser's speech recogniser (`SpeechRecognition`, in the
+   app's current language), and the operator can type into the same field
+   instead. The typed path is the one that works everywhere; WeChat's built-in
+   browser has no recogniser, and the sheet says so rather than showing a dead
+   button. Ash: staff use the phone's own browser.
+2. **The sentence is read against what the screen already holds.** The
+   parser (`qsCmdParse` in `public/m.html`) matches a sku — glued back together
+   when the recogniser writes *"1 - 50"* or *"150"* — or a product name in
+   English or Chinese, a store by its English name, Chinese name or code, and a
+   quantity as digits, English words or Chinese numerals. *Sold out* in either
+   language means set to 0 whatever else is said; an add word adds; a set word
+   sets; a bare number means what the screen means by a number — what was made
+   on the kitchen's screen, what is on the shelf on a clerk's. No model is
+   called and nothing leaves the phone: the lists are the ones the screen has
+   already fetched.
+3. **Nothing is written from the transcript.** The result is a card — the
+   product's name and sku, the store, and one sentence saying what will be
+   written — and only Confirm writes it. A recogniser hears *"150"* for *"1-50"*
+   and a name said over a mixer as its neighbour; a change applied straight
+   from the transcript zeroes the wrong product at the wrong shop and nobody
+   finds out until a customer orders it. The card costs one tap and removes
+   that class of mistake. Two products that match equally are offered as a
+   choice, never guessed between.
+4. **The write goes through the screen's own doors.** A count goes through
+   `qsCountEntered` and an add through `qsFlush` — the functions the card's
+   keys already call — so every rule they carry holds for a spoken change: the
+   kitchen's add-only contract (a kitchen without `quickstock:recount` is told
+   *"Here you can add stock, not set the count."* on the card), §46's fork
+   when a count goes down, §325's recount questions, and the lock on switching
+   store while anything is unsaved. On a clerk's screen *"add 5"* is the shelf
+   plus five, written as a count, because that screen writes the shelf.
+5. **A store that was named is the store written to.** The sheet switches the
+   screen to it, waits for its shelf, and then writes — through that shelf's
+   own card, where *Saving…*, a refusal and Retry already land. The search is
+   set to the product so that card is the one on screen.
+6. **Other screens can carry the same button.** The parser takes lists and
+   returns a plan; the desktop's Ctrl K search and the products list are the
+   next places for it, as separate PRs. Nothing in this one is Quick Stock
+   specific except where the button sits.
+
+**Amended 2026-10-21 (v4.572), by Ash:** *"mic should recognize English and
+Chinese language · it should be ai involved the learn the person talking voice
+so less and lees mistakes sccure"*. Three rules added.
+
+7. **Each person's mishearings are learned.** A phone's recogniser cannot be
+   trained, but it mishears the same person the same way every time —
+   *"homeless"* for hummus, 哈姆斯 for the same word in Chinese — and that is
+   what can be learned. A confirmed card whose product was not said by its sku
+   records what WAS said for it (the sentence with the store, the numbers and
+   the verbs taken out, normalised) against the product, under that operator:
+   `quick_stock_heard`, one row per phrase per operator, `POST
+   /api/retail-admin/quick-stock/heard`. The phrases come back with the Quick
+   Stock context, and the parser reads this person's phrase as it reads a sku
+   and a colleague's as a strong hint, because two phones in one kitchen
+   mishear alike. A sku said plainly teaches nothing and is never overridden
+   by memory. The memory is per tenant and per operator, and nothing in it is
+   audio: the text the recogniser wrote, and a product id.
+8. **What the phone cannot read goes to the model.** When the product was not
+   said by its sku or by a learned phrase, or no amount was found, and the
+   shop has a model key, the sentence goes to `POST
+   /api/retail-admin/quick-stock/understand`. `lib/stock-command-ai.js` asks
+   the model through `lib/model-gateway` with the tenant's catalogue as the
+   cached system text, the operator's stores, what a bare number means on
+   their screen, and their learned phrases as hints, through one forced tool;
+   `coerceAnswer` keeps only ids the catalogue and the operator hold. The
+   answer replaces the phone's reading where it is not null and becomes the
+   card. **It is still a card**: rule 3 holds, nothing is written from the
+   model. When no model is configured or the call fails, the phone's own
+   reading stands, as before. Once the card is confirmed, rule 7 learns the
+   phrase, so the same mishearing never needs the model again.
+9. **The recogniser's language is a chip.** The recogniser hears one language
+   at a time and the app's language is not always the sentence's: a Chinese
+   screen, an English product name. The sheet carries English / 中文, defaulting
+   to the app's language, remembered on the device, and switching while
+   listening starts again in the other language. The parser and the model read
+   either language, mixed, whatever the recogniser was set to.
+
+**What this does not do.** It does not record waste: *"sold out"* from a
+kitchen operator meets the same fork as a typed zero, and a real loss still
+goes to whoever records waste (§46). It does not take a store the operator
+does not hold — such a name is simply not recognised and the screen's own
+store stands. It does not auto-confirm, even on an exact sku match; that can
+come later as a setting once the matching has been trusted for a while.
+
+**Where it lives.** `public/m.html`: `qsCmdParse` and its helpers (pure, no
+state), `sheetQsCmd` and the `qsCmd*` commands, a `cmd` / `cmdPending` /
+`heard` triple under `state.qs`, one line in `loadQsItems` that runs a
+confirmed change once the named store's shelf has loaded, and the mic button
+in `screenStockAdd`. `lib/stock-command-ai.js` is the model call (rule 8) and
+`scripts/test_stock_command_ai.js` locks what its answer may say.
+`routes/retail-inventory.js` carries the two new routes and `quickStockStores`,
+the store question lifted out of the context route so all three answer it
+alike; `database.js` the `quick_stock_heard` table.
+`scripts/test_quick_stock_command.js` slices the parser out of the shipped
+file and locks sixty-two readings, among them that *"150 sold out"* is 1-50
+and not a quantity of 150, that *"made 12 pita bread"* is twelve pita and not
+the product whose sku is 12, and that *"三文鱼卖完了"* is the salmon sold out
+and not three of anything. `scripts/test_mobile_stock_command.js` drives the
+sheet in Chromium: the card, the withheld Confirm, the fork, the store switch
+and what reaches the wire. It is a browser suite and is named in
+`scripts/run-suites.js`'s slow list, which is the one line in the test
+runner this change touches; the fast gate is otherwise unchanged. No schema,
+no new route, no model call. No change to `.gitignore` or CI. Strings:
+fourteen composed and declared in `docs/tacet-delivery-vocabulary.md` v1.342;
+the rest copied whole from this screen.
