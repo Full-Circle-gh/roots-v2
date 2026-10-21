@@ -51,8 +51,9 @@ const P_PLAIN   = 9533;   // no questions at all — the common case, unchanged
 const A_OAT     = 9534;   // paid extra, ON the shelf
 const A_ALMOND  = 9535;   // paid extra, at ZERO
 const A_HONEY   = 9536;   // the tea's only answer, at ZERO
+const P_BOX     = 9537;   // own price ZERO, its choices carry the money
 
-const IDS = [P_LATTE, P_TEA, P_PLAIN, A_OAT, A_ALMOND, A_HONEY];
+const IDS = [P_LATTE, P_TEA, P_PLAIN, A_OAT, A_ALMOND, A_HONEY, P_BOX];
 const OPT = {};           // question name → id
 const CH  = {};           // answer name  → id
 
@@ -99,6 +100,7 @@ function seed() {
   prod.run(A_OAT,    'Fixture oat',    '测试燕麦奶', '__O-64', 3,  'Drinks');
   prod.run(A_ALMOND, 'Fixture almond', '测试杏仁奶', '__O-65', 4,  'Drinks');
   prod.run(A_HONEY,  'Fixture honey',  '测试蜂蜜',   '__O-66', 2,  'Drinks');
+  prod.run(P_BOX,    'Fixture box',    '测试盒子',   '__O-67', 0,  'Drinks');
 
   const shopId = db.prepare(
     'INSERT INTO shops (location_id, public_code, is_active) VALUES (?,?,1)'
@@ -114,6 +116,7 @@ function seed() {
   add.run(shopId, P_LATTE, 20, 'made_here', 0);
   add.run(shopId, P_TEA,   18, 'made_here', 1);
   add.run(shopId, P_PLAIN, 5,  'made_here', 2);
+  add.run(shopId, P_BOX,   0,  'made_here', 3);
 
   const shelf = db.prepare(
     `INSERT INTO retail_store_stock (store_id, product_id, physical_qty, safety_buffer) VALUES (?,?,?,0)`
@@ -149,6 +152,11 @@ function seed() {
   // The tea: ONE required question, and its only answer has run out.
   OPT.sweet = mkOpt.run(P_TEA, 'Sweeten with', '加甜', 'single', 1, 0).lastInsertRowid;
   CH.honey  = mkCh.run(OPT.sweet, 'Honey', '蜂蜜', 2, 1, A_HONEY, 0).lastInsertRowid;
+
+  // The box: priced only by what goes in it, like a selection of small bites.
+  OPT.size  = mkOpt.run(P_BOX, 'How many', '数量', 'single', 1, 0).lastInsertRowid;
+  CH.four   = mkCh.run(OPT.size, 'Four', '四个', 48, 0, null, 0).lastInsertRowid;
+  CH.six    = mkCh.run(OPT.size, 'Six',  '六个', 68, 0, null, 1).lastInsertRowid;
 }
 
 // ── Harness ────────────────────────────────────────────────────────────────
@@ -203,6 +211,24 @@ function optsOnCard(body, pid) {
     assert.ok(/data-add="9533"/.test(body), 'the plain product lost its add button');
     assert.ok(!/data-add="9533"[^>]*data-ask/.test(body), 'a product with no questions grew a picker');
     assert.strictEqual(optsOnCard(body, P_PLAIN), null, 'a product with no questions grew a template');
+  });
+
+  // The card's printed price — what sits in .pr just before its own + .
+  const priceOnCard = (body, pid) => {
+    const m = body.match(new RegExp(`<div class="pr">([\\s\\S]*?)</div><button type="button" class="add" data-add="${pid}"`));
+    return m ? m[1] : null;
+  };
+
+  await check('a box priced only by its choices prints NO price, not ¥0.00', async () => {
+    const { body } = await get(`/s/${CODE}`);
+    assert.ok(new RegExp(`data-add="${P_BOX}"[^>]*data-ask="1"`).test(body), 'the box lost its data-ask flag');
+    assert.strictEqual(priceOnCard(body, P_BOX), '', `the box printed a price: ${JSON.stringify(priceOnCard(body, P_BOX))}`);
+  });
+
+  await check('...and a product with questions AND a price still prints it', async () => {
+    const { body } = await get(`/s/${CODE}`);
+    const pr = priceOnCard(body, P_LATTE);
+    assert.ok(pr && /20/.test(pr), `the latte lost its price: ${JSON.stringify(pr)}`);
   });
 
   await check('a `text` question is not rendered — unsupported on every other client too', async () => {

@@ -309,7 +309,7 @@
         <view class="qty-val f-gothic">{{qty}}</view>
         <view class="qty-btn" bindtap="incQty">+</view>
       </view>
-      <button class="add-btn f-toni {{soldOut ? 'sold-out' : ''}} {{(!soldOut && hasVariants) ? 'no-price' : ''}}" bindtap="addToCart" disabled="{{soldOut}}">
+      <button class="add-btn f-toni {{soldOut ? 'sold-out' : ''}} {{(!soldOut && (hasVariants || zeroAsk)) ? 'no-price' : ''}}" bindtap="addToCart" disabled="{{soldOut}}">
         <!-- §170's arrival and §195's window both take a line UNDER the word
              rather than sharing one with it. The joined form does not fit
              beside this page's widest price at any readable size — the
@@ -323,7 +323,7 @@
           <text class="add-qual">{{addBtnQual}}</text>
         </view>
         <text wx:else class="add-label">{{addBtnLabel}}</text>
-        <view wx:if="{{!soldOut && !hasVariants}}" class="add-prices">
+        <view wx:if="{{!soldOut && !hasVariants && !zeroAsk}}" class="add-prices">
           <view wx:if="{{priceWas}}" class="add-was-row">
             <text class="add-was f-aleo">{{priceWas}}</text>
             <text wx:if="{{saveLabel}}" class="add-save f-toni">{{saveLabel}}</text>

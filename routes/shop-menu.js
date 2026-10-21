@@ -2335,9 +2335,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      price line is left as it was. */
   `var vo=!vb&&card.querySelector('.add[data-ask]');` +
   `if(addA)addA.hidden=!!(vb||vo);if(addS)addS.hidden=!vb;if(addO)addO.hidden=!vo;` +
-  `pr.hidden=!!vb;` +
+  /* AND NO ¥0.00 BESIDE IT when the choices carry the whole price — the card
+     printed none either. Read off the same button's data-p, the price the
+     basket would add at, so the page and the grid cannot disagree. */
+  `var np=!!vb||(!!vo&&!(parseFloat(vo.getAttribute('data-p'))>0));` +
+  `pr.hidden=np;` +
   // classList, not className: the same lesson the language toggle had to learn.
-  `if(add.parentElement)add.parentElement.classList.toggle('solo',!!vb);` +
+  `if(add.parentElement)add.parentElement.classList.toggle('solo',np);` +
   `if(!pushed){try{history.pushState({dt:1},'');pushed=true}` +
   `catch(e){pushed=false/* file:// and some locked-down web views refuse pushState; the page then opens and closes by its own close button, which is how it worked before Back was wired up */}}` +
   `shOpen(sh);body.scrollTop=0};` +
@@ -3906,6 +3910,10 @@ router.get('/s/:shopCode', (req, res) => {
       `</nav>`
     : '';
 
+  // A product priced only by its choices: its own price is zero and it asks.
+  // A sized card is never one — its price is the smallest size's.
+  const zeroAsk = (it) => !(it.variants && it.variants.length > 1) &&
+    !!it.options && !(Number(it.price) > 0);
   const card = (it) => {
     const src = `/s/${esc(code)}/i/${it.store_product_id}` +
       `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}`;
@@ -3996,7 +4004,12 @@ router.get('/s/:shopCode', (req, res) => {
       // word order as each language reads it.
       `<div class="pf"><div class="pr">` +
       (it.price_from ? `<span class="pfx l-en">from </span>` : '') +
-      esc(money(it.price, cur)) +
+      // NO PRICE RATHER THAN ¥0.00 when the product's own price is zero and its
+      // choices carry the money — a selection box priced by what goes in it.
+      // ¥0.00 there reads as free or broken. Reported by Ash from the live
+      // menu. A zero-price product that asks nothing still shows its ¥0.00:
+      // that one is a pricing mistake worth seeing, not a way of selling.
+      (zeroAsk(it) ? '' : esc(money(it.price, cur))) +
       (it.price_from ? `<span class="pfx l-cn">起</span>` : '') +
       `</div>${add}</div>` +
       `</div>`;
