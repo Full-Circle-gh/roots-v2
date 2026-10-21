@@ -206,6 +206,8 @@ function browser({ url = 'https://saas.cyanclouds.com/aggregator/saas/order', ca
       document: { getElementById: (id) => (id === 'qy-stores' ? box : null) },
       fetch: async () => ({ ok: true, json: async () => ({ success: true, data, anyConnected: true, autoPush: true }) }),
       window: {},
+      // §494: the pills are one language at a time, built with cuT and escaped.
+      cuT: (en) => en, escapeHtml: (x) => String(x == null ? '' : x),
     };
     vm.createContext(ctx);
     new vm.Script(`${slice(SETTINGS, 'async function loadQingyunStores()')}\n_p = loadQingyunStores();`).runInContext(ctx);
@@ -218,7 +220,7 @@ function browser({ url = 'https://saas.cyanclouds.com/aggregator/saas/order', ca
       { code: 'tianhe', name_en: 'Tianhe', connected: true, state: 'connected' },
       { code: 'yuexiu', name_en: 'Yuexiu', connected: false, state: 'signed_out' },
     ]);
-    assert.ok(html.includes('Signed out · 已退出登录'), 'the signed-out pill is missing');
+    assert.ok(/td-pill td-pill-amber">Signed out</.test(html), 'the signed-out pill is missing');
     assert.ok(!html.includes('Not set up') && !html.includes('_requestQingyun'), 'a signed-out store is offered setup');
   });
 
@@ -228,7 +230,7 @@ function browser({ url = 'https://saas.cyanclouds.com/aggregator/saas/order', ca
       { code: 'new', name_en: 'New', connected: false, state: 'not_set_up' },
       { code: 'old', name_en: 'Old', connected: false },
     ]);
-    assert.ok(html.includes('Sync service offline · 同步服务离线'));
+    assert.ok(/td-pill td-pill-amber">Sync service offline</.test(html));
     assert.strictEqual((html.match(/_requestQingyun/g) || []).length, 2, 'Request setup is for the two never set up');
   });
 

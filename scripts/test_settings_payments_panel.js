@@ -48,11 +48,11 @@ function panelOf(needle) {
   return m ? m[1] : null;
 }
 
-section('1 · Payments & tax is a panel, between Customer service and Delivery');
+section('1 · Payments & tax is a panel, third in the list (§494: Store, Online shop, then the money)');
 {
   const navs = [...CFG.matchAll(/<button data-sub="([a-z-]+)"/g)].map((m) => m[1]);
-  is(navs, ['shop', 'push', 'cs', 'payments', 'delivery', 'ops', 'history', 'sent', 'sku'],
-    'the left list, in order');
+  is(navs, ['store', 'shop', 'payments', 'delivery', 'push', 'printing', 'features', 'advanced', 'history'],
+    'the left list, in order (§494)');
   const row = CFG.match(/<button data-sub="payments"([^>]*)>/);
   yes(row && /data-cap="settings:payments"/.test(row[1]),
     'the row opens on settings:payments, the key the server asks of its writes');
@@ -72,8 +72,8 @@ section('2 · the three money cards live there, and nowhere else');
   is((pay.match(/class="group-card"/g) || []).length, 3, 'and they are the whole panel');
   yes((pay.match(/data-cap="settings:payments"/g) || []).length === 3,
     'each card still carries its own settings:payments gate (§412.2)');
-  const push = CFG.slice(CFG.indexOf('id="sub-push"'), CFG.indexOf('id="sub-cs"'));
-  yes(!/cfg-currency|cfg-tax-|alipay-manual/.test(push), 'Push notifications holds no money card');
+  const push = CFG.slice(CFG.indexOf('id="sub-push"'), CFG.indexOf('id="sub-printing"'));
+  yes(!/cfg-currency|cfg-tax-|alipay-manual/.test(push), 'Notifications holds no money card');
 }
 
 section('3 · the card reads fresh when its panel opens, and the setup guide points there');
@@ -81,8 +81,8 @@ section('3 · the card reads fresh when its panel opens, and the setup guide poi
   const sw = CORE.slice(CORE.indexOf('// ── Settings sub-nav switcher ──'), CORE.indexOf('// ── Live push (SSE)'));
   yes(/sub === 'payments'[^\n]*loadAlipayManual\(\)/.test(sw),
     'opening Payments & tax reads the Alipay card (§325 D1: never save a form that did not load)');
-  const opsLoad = OPS.slice(OPS.indexOf('function loadOpsPanel()'), OPS.indexOf('function _cfgCards()'));
-  yes(!/loadAlipayManual\(\)/.test(opsLoad), 'and Operations no longer reads it for a card it does not show');
+  const storeLoad = OPS.slice(OPS.indexOf('function loadStorePanel()'), OPS.indexOf('function _cfgCards()'));
+  yes(!/loadAlipayManual\(\)/.test(storeLoad), 'and Store (the old Operations loader) does not read it for a card it does not show');
   const pay = SETUP.slice(SETUP.indexOf('function suPayWechat()'), SETUP.indexOf('function suScrollTo('));
   yes(/data-sub="payments"/.test(pay) && !/data-sub="ops"/.test(pay),
     'the setup guide\'s "choose how customers pay" opens Payments & tax');
@@ -105,13 +105,16 @@ section('4 · money keeps its button; the rest of Push saves itself');
     'all three start once loadConfig has filled their fields (§279: nothing is sent before start)');
   yes(/qyapi\.weixin\.qq\.com/.test(MKT.slice(MKT.indexOf('function _wecomHookHold'), MKT.indexOf('const NOTIF_TEMPLATE_CARD'))),
     'a webhook on any other host is held with a sentence, not sent for the server to refuse');
-  yes(!/Save settings/.test(CFG.slice(CFG.indexOf('id="sub-push"'), CFG.indexOf('id="sub-cs"'))),
-    'no Push card tells the reader to use a main Save button');
+  yes(!/Save settings/.test(CFG.slice(CFG.indexOf('id="sub-push"'), CFG.indexOf('id="sub-printing"'))),
+    'no Notifications card tells the reader to use a main Save button');
 }
 
-section('5 · Operations: no banner without a control, no server file on a tenant screen');
+section('5 · no banner without a control, no server file on a tenant screen');
 {
-  const ops = CFG.slice(CFG.indexOf('id="sub-ops"'), CFG.indexOf('id="sub-history"'));
+  // The geocoding card is on Advanced since §494's regroup; the Ownership card
+  // is gone from everywhere.
+  const ops = CFG.slice(CFG.indexOf('id="sub-advanced"'), CFG.indexOf('id="sub-history"'));
+  yes(!/Ownership · 归属/.test(CFG), 'no panel carries the Ownership card');
   yes(!/Ownership · 归属/.test(ops) && !/Self-managed/.test(ops), 'the Ownership card is gone');
   yes(!/\.env/.test(ops) && !/AMAP_MAPS_KEY|TENCENT_MAPS_KEY|pm2/.test(ops), 'the geocoding card names no file, variable or process');
   yes(/地图密钥在服务器上配置/.test(ops), 'it says the key is the server\'s, in both languages');

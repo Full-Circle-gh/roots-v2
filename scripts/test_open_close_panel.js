@@ -41,14 +41,14 @@ const HTML = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.html'), 'ut
 section('1 · the screen the endpoints never had');
 
 yes(HTML.includes('id="oc-body"') && HTML.includes('id="oc-master-pill"'),
-  'the Operations page has somewhere to put it');
+  'the Store page has somewhere to put it');
 yes(/function loadOpenClose\(/.test(OPS), 'and something to fill it');
 
 {
   // The panel is USELESS if nothing loads it — which was the whole finding, and
   // is exactly the mistake that would be easiest to make again.
-  const panel = OPS.slice(OPS.indexOf('function loadOpsPanel('), OPS.indexOf('function loadOpsPanel(') + 400);
-  yes(/loadOpenClose\(\)/.test(panel), 'opening Settings → Operations loads it');
+  const panel = OPS.slice(OPS.indexOf('function loadStorePanel('), OPS.indexOf('function loadStorePanel(') + 400);
+  yes(/loadOpenClose\(\)/.test(panel), 'opening Settings → Store loads it (§494)');
   // A shop added on this page is a row in the panel above it.
   yes(OPS.split('loadOpenClose()').length - 1 >= 3,
     'and adding a shop refreshes it', 'loadOpenClose() is called in fewer than 3 places');

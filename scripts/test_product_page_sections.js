@@ -277,11 +277,11 @@ it('the autosave handler is a named function and both the dock and the page list
   assert.ok(!/stage\.addEventListener\('input',\s*\(?e\)?\s*=>\s*\{[\s\S]*pdScheduleAutosave/.test(PPG), 'the page must not re-implement the autosave rules');
 });
 
-console.log('\nSettings › Operations › Product page');
-it('the card sits in Operations and is painted from config on every load', () => {
-  const ops = HTML.indexOf('id="sub-ops"'), next = HTML.indexOf('id="sub-history"');
+console.log('\nSettings › Online shop › Product page');
+it('the card sits in Online shop (§494) and is painted from config on every load', () => {
+  const ops = HTML.indexOf('id="sub-shop"'), next = HTML.indexOf('id="sub-payments"');
   const card = HTML.indexOf('id="ppg-settings-card"');
-  assert.ok(card > ops && card < next, 'the card is not inside the Operations panel');
+  assert.ok(card > ops && card < next, 'the card is not inside the Online shop panel');
   assert.ok(codeOnly(MKT).includes('ppgSettingsRender(c)'), 'loadConfig does not paint the card');
   assert.ok(codeOnly(PPG).includes("'product_page.sections'"), 'the save does not write the config key');
 });

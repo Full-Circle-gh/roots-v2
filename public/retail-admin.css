@@ -8159,22 +8159,106 @@
   .sub-panel.active { display: block; }
   .sub-panel > h2:first-child { margin-top: 0; }
 
-  /* ── Operations panel (Settings → Operations). Integrations moved here from
-     the kitchen app 2026-06-09; self-contained styles so it themes natively. ── */
-  #sub-ops input[type=password] {
+  /* ── The forms that were the Operations panel — now Store, Printing and
+     Advanced (§494). Integrations moved here from the kitchen app 2026-06-09;
+     self-contained styles so they theme natively. ── */
+  #sub-store input[type=password], #sub-printing input[type=password], #sub-advanced input[type=password] {
     font: 13px var(--f-sans); padding: 8px 10px; background: var(--bg-input);
     border: 1px solid var(--line); color: var(--text-1); border-radius: var(--r-md);
     outline: none; min-width: 0;
   }
-  #sub-ops input[type=password]:focus { border-color: var(--accent); }
-  #sub-ops input[type=text], #sub-ops input[type=password],
-  #sub-ops select, #sub-ops textarea { width: 100%; }
-  #sub-ops .field-label {   /* the shared field label: 13px/500, sentence case (§1.6, §5) */
+  #sub-store input[type=password]:focus, #sub-printing input[type=password]:focus, #sub-advanced input[type=password]:focus { border-color: var(--accent); }
+  #sub-store input[type=text], #sub-store input[type=password], #sub-store select, #sub-store textarea,
+  #sub-printing input[type=text], #sub-printing input[type=password], #sub-printing select, #sub-printing textarea,
+  #sub-advanced input[type=text], #sub-advanced input[type=password], #sub-advanced select, #sub-advanced textarea { width: 100%; }
+  #sub-store .field-label, #sub-printing .field-label, #sub-advanced .field-label {   /* the shared field label: 13px/500, sentence case (§1.6, §5) */
     font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none;
     color: var(--td-text); display: block; margin-bottom: 4px;
   }
-  #sub-ops .ops-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-  #sub-ops code { background: var(--bg-elev-1); padding: 1px 5px; border-radius: 4px; }
+  #sub-store .ops-grid, #sub-printing .ops-grid, #sub-advanced .ops-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  #sub-store code, #sub-printing code, #sub-advanced code { background: var(--bg-elev-1); padding: 1px 5px; border-radius: 4px; }
+  /* §494 — a section title inside a panel (Online shop › Customer service,
+     Notifications › To your team): the Title step of the type scale, 18px
+     Inter 500, with the room above it that separates one group from the next. */
+  .sub-panel > h2.settings-section {
+    font-size: 18px; font-weight: 500; letter-spacing: 0; color: var(--td-text);
+    margin: var(--s6) 0 var(--s3);
+  }
+  .sub-panel > h2 + h2.settings-section { margin-top: var(--s3); }
+  /* ── §494: the card's one visible line, and the "?" that opens the rest ── */
+  .gch-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .gch-row h3 { margin: 0; }
+  .help-q {
+    flex: none; width: 20px; height: 20px; padding: 0; border-radius: 50%;
+    border: 1px solid var(--line); background: transparent; color: var(--text-2);
+    font: 500 12px/1 var(--f-sans); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .help-q:hover, .help-q[aria-expanded="true"] { color: var(--td-text); border-color: var(--td-text2); }
+  .help-q:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+  .group-card-head .card-lead { margin-top: 4px; }
+  .card-help[hidden] { display: none; }
+  /* The popover: one element for the whole screen, under the "?" on the
+     desktop and a bottom sheet on the phone. Paper surface, one ambient
+     shadow (§3), settles in 200ms (§4). */
+  .help-pop {
+    position: fixed; z-index: 9000; left: 0; top: 0;
+    width: min(440px, calc(100vw - 24px)); max-height: min(60vh, 520px); overflow: auto;
+    background: var(--bg-pane); color: var(--td-text);
+    border: 1px solid var(--line); border-radius: 14px; padding: 16px 40px 16px 18px;
+    box-shadow: 0 4px 16px rgba(17, 26, 43, .04);
+    font-size: 13px; line-height: 1.55;
+    opacity: 0; transform: translateY(6px); pointer-events: none;
+    transition: opacity .2s cubic-bezier(.16, 1, .3, 1), transform .2s cubic-bezier(.16, 1, .3, 1);
+  }
+  .help-pop:focus { outline: none; }
+  .help-pop.on { opacity: 1; transform: none; pointer-events: auto; }
+  .help-pop-t { font: 500 14px/1.4 var(--f-sans); color: var(--td-text); margin: 0 0 8px; }
+  .help-pop-body p { margin: 0 0 10px; color: var(--text-2); }
+  .help-pop-body p:last-child { margin-bottom: 0; }
+  .help-pop-body .hl { display: block; font-weight: 500; color: var(--td-text); margin-bottom: 2px; }
+  .help-pop-body code { background: var(--bg-elev-1); padding: 1px 5px; border-radius: 4px; }
+  .help-pop-body a { color: var(--td-text); }
+  .help-pop-x {
+    position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; padding: 0;
+    border: 0; border-radius: 8px; background: transparent; color: var(--text-2); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .help-pop-x svg { width: 16px; height: 16px; }
+  .help-pop-x:hover { background: var(--bg-elev-1); color: var(--td-text); }
+  @media (max-width: 820px) {
+    .help-pop {
+      left: 0 !important; right: 0; top: auto !important; bottom: 0;
+      width: auto; max-height: 70vh; border-radius: 14px 14px 0 0; border-bottom: 0;
+      padding: 18px 44px calc(18px + env(safe-area-inset-bottom)) 18px;
+      transform: translateY(12px);
+    }
+    /* The left list becomes one scrolling row of chips; the search stays above it. */
+    .settings-nav { position: static; }
+    .settings-nav-rows {
+      display: flex; flex-direction: row; gap: 4px; overflow-x: auto; padding: 2px 0;
+      -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    }
+    .settings-nav-rows::-webkit-scrollbar { display: none; }
+    .settings-nav-rows button, .settings-nav-rows a { flex: none; width: auto; white-space: nowrap; }
+    .settings-nav-rows a[href] { border-top: 0; margin-top: 0; padding-top: 9px; border-left: 1px solid var(--line-soft); border-radius: 0 var(--r-md) var(--r-md) 0; }
+    .settings-nav-sep { height: auto; width: 1px; margin: 4px 2px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .help-pop, .help-q { transition: none; } }
+  .settings-nav-rows { display: flex; flex-direction: column; gap: 2px; }
+  /* An inline note under a status (§1.12 error / attention), in the tint for
+     its weight. Never a toast; it stays until the next read. */
+  .td-note { margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; }
+  .td-note-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  .td-note-brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+  /* The divider in the left list, before Advanced and History. */
+  .settings-nav-sep { height: 1px; background: var(--line-soft); margin: 6px 8px; }
+  /* Settings › Features — the features switched on their own pages. */
+  .feat-link-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line-soft); }
+  .feat-link-row:first-child { border-top: 0; padding-top: 0; }
+  .feat-link-name { flex: 1; font-size: 13.5px; color: var(--td-text); }
+  .td-pill-quiet { background: var(--bg-elev-1); color: var(--text-2); border: 1px solid var(--line); }
   /* Faux 58mm thermal-paper receipt preview (always paper-white in both themes). */
   .feie-prev { display: inline-block; }
   .thermal {
@@ -16340,7 +16424,7 @@ html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
 #tab-materials-record .mat-rechead.pin-head { --pin-x: var(--s6); padding-top: 12px; padding-bottom: 12px; margin-top: -12px; margin-bottom: 10px; }
 #tab-voting .vot-ed-head.pin-head { --pin-top: 56px; padding-top: 12px; padding-bottom: 12px; }
 #dlv-fresh .fb-save.pin-foot,
-#sub-ops .group-card > .pin-foot { --pin-x: 20px; }
+#sub-printing .group-card > .pin-foot { --pin-x: 20px; }
 #tab-broadcasts .bx-sendbar.pin-foot { --pin-x: 28px; --pin-bg: var(--bg-pane); }
 #prod-view-purchasing .pin-foot { --pin-x: 28px; }
 /* The receive screen's actions sit on the page itself, not in a card. */

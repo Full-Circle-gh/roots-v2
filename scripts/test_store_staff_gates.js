@@ -142,15 +142,15 @@ const row = (id) => db.prepare('SELECT is_active, password FROM tenant_users WHE
     } };
     walk('public');
     const callers = files.filter((f) => /stores\/\$\{storeId\}\/staff|backend\/stores\/'\s*\+[^;\n]*'\/staff|\/staff'/.test(read(f)) && /backend\/stores/.test(read(f)));
-    ok(callers.includes('public/retail-admin/02-settings-ops.js'), 'the desktop Operations → Stores panel calls them');
+    ok(callers.includes('public/retail-admin/02-settings-ops.js'), 'the desktop Store panel (02-settings-ops.js) calls them');
     ok(callers.every((f) => ['public/retail-admin/02-settings-ops.js', 'public/m.html'].includes(f)),
       'and nothing else but the phone does', callers.join(', '));
     const OPS = read('public/retail-admin/02-settings-ops.js');
     ok(/<button class="btn" onclick="_opsStoreStaff\(\$\{s\.id\}\)">/.test(OPS), 'its "Stock staff" button carries no gate of its own');
     const html = read('public/retail-admin.html');
     const at = html.indexOf('id="ops-store-staff"');
-    ok(at > 0 && /id="sub-ops"/.test(html.slice(html.lastIndexOf('class="sub-panel', at), html.lastIndexOf('class="sub-panel', at) + 60)),
-      '…and sits in Settings → Operations, which opens on the Settings keys');
+    ok(at > 0 && /id="sub-store"/.test(html.slice(html.lastIndexOf('class="sub-panel', at), html.lastIndexOf('class="sub-panel', at) + 60)),
+      '…and sits in Settings → Store (§494), which opens on the Settings keys');
     const M = read('public/m.html');
     if (/backend\/stores/.test(M) && /\/staff/.test(M)) {
       /* The phone gates the screen by its route key (ROUTE_CAP + canRoute,

@@ -178,7 +178,7 @@ async function loadDeliveryZones() {
     if ($('#dlv-holiday-mode')) {
       $('#dlv-holiday-mode').checked = hMode;
       const lbl = $('#dlv-holiday-status-label');
-      if (lbl) lbl.textContent = hMode ? 'ON · 开启' : 'OFF · 关闭';
+      if (lbl) lbl.textContent = hMode ? 'On · 开启' : 'Off · 关闭';
     }
     if ($('#dlv-holiday-msg-en')) $('#dlv-holiday-msg-en').value = hMsg.en || '';
     if ($('#dlv-holiday-msg-cn')) $('#dlv-holiday-msg-cn').value = hMsg.cn || '';
@@ -192,7 +192,7 @@ async function loadDeliveryZones() {
       cb._wired = true;
       cb.addEventListener('change', () => {
         const lbl = $('#dlv-holiday-status-label');
-        if (lbl) lbl.textContent = cb.checked ? 'ON · 开启' : 'OFF · 关闭';
+        if (lbl) lbl.textContent = cb.checked ? 'On · 开启' : 'Off · 关闭';
       });
     }
     // Bulk attach tracking — opt-in Orders toolbar button (delivery.bulkTracking).
@@ -200,14 +200,14 @@ async function loadDeliveryZones() {
       const on = !!dlv.bulkTracking;
       $('#dlv-bulk-trk').checked = on;
       const blbl = $('#dlv-bulk-trk-status-label');
-      if (blbl) blbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+      if (blbl) blbl.textContent = on ? 'On · 开启' : 'Off · 关闭';
     }
     const btcb = $('#dlv-bulk-trk');
     if (btcb && !btcb._wired) {
       btcb._wired = true;
       btcb.addEventListener('change', () => {
         const blbl = $('#dlv-bulk-trk-status-label');
-        if (blbl) blbl.textContent = btcb.checked ? 'ON · 开启' : 'OFF · 关闭';
+        if (blbl) blbl.textContent = btcb.checked ? 'On · 开启' : 'Off · 关闭';
       });
     }
     // Box label — opt-in order-drawer sticker printing (delivery.boxLabel).
@@ -215,14 +215,14 @@ async function loadDeliveryZones() {
       const on = !!dlv.boxLabel;
       $('#dlv-box-label').checked = on;
       const xlbl = $('#dlv-box-label-status-label');
-      if (xlbl) xlbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+      if (xlbl) xlbl.textContent = on ? 'On · 开启' : 'Off · 关闭';
     }
     const xcb = $('#dlv-box-label');
     if (xcb && !xcb._wired) {
       xcb._wired = true;
       xcb.addEventListener('change', () => {
         const xlbl = $('#dlv-box-label-status-label');
-        if (xlbl) xlbl.textContent = xcb.checked ? 'ON · 开启' : 'OFF · 关闭';
+        if (xlbl) xlbl.textContent = xcb.checked ? 'On · 开启' : 'Off · 关闭';
       });
     }
     // Label printing — per-MACHINE JD waybill auto-print (localStorage, via
@@ -232,14 +232,14 @@ async function loadDeliveryZones() {
       const on = jdAutoPrintOn();
       $('#dlv-jd-autoprint').checked = on;
       const jlbl = $('#dlv-jd-autoprint-status-label');
-      if (jlbl) jlbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+      if (jlbl) jlbl.textContent = on ? 'On · 开启' : 'Off · 关闭';
     }
     const jcb = $('#dlv-jd-autoprint');
     if (jcb && !jcb._wired) {
       jcb._wired = true;
       jcb.addEventListener('change', () => {
         const jlbl = $('#dlv-jd-autoprint-status-label');
-        if (jlbl) jlbl.textContent = jcb.checked ? 'ON · 开启' : 'OFF · 关闭';
+        if (jlbl) jlbl.textContent = jcb.checked ? 'On · 开启' : 'Off · 关闭';
       });
     }
     // Fresh batch schedule
@@ -345,7 +345,7 @@ async function loadDeliveryZones() {
       const on = !!dz.enabled;
       $('#dlv-default-enabled').checked = on;
       const dlbl = $('#dlv-default-status-label');
-      if (dlbl) dlbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+      if (dlbl) dlbl.textContent = on ? 'On · 开启' : 'Off · 关闭';
     }
     if ($('#dlv-default-fee'))      $('#dlv-default-fee').value      = dz.base_fee != null ? dz.base_fee : 25;
     if ($('#dlv-default-free'))     $('#dlv-default-free').value     = dz.free_threshold != null ? dz.free_threshold : '';
@@ -357,7 +357,7 @@ async function loadDeliveryZones() {
       dcb._wired = true;
       dcb.addEventListener('change', () => {
         const dlbl = $('#dlv-default-status-label');
-        if (dlbl) dlbl.textContent = dcb.checked ? 'ON · 开启' : 'OFF · 关闭';
+        if (dlbl) dlbl.textContent = dcb.checked ? 'On · 开启' : 'Off · 关闭';
       });
     }
     // §279 — every field above is filled from the server, so the cards may now
@@ -377,7 +377,7 @@ async function loadDeliveryZones() {
 // history. Switch labels are painted by the loader's own change listeners.
 const dlvSwitch = (id, on) => {
   const el = $('#' + id); if (el) el.checked = !!on;
-  const lbl = $('#' + id + '-status-label'); if (lbl) lbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+  const lbl = $('#' + id + '-status-label'); if (lbl) lbl.textContent = on ? 'On · 开启' : 'Off · 关闭';
 };
 const dlvVal = (sel) => ((($(sel) && $(sel).value) || '')).trim();
 const dlvSet = (sel, v) => { const el = $(sel); if (el) el.value = v == null ? '' : v; };

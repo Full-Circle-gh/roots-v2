@@ -118,7 +118,8 @@ for (const [k, sel] of Object.entries(HOMES)) {
   const markup = hostMarkup(sel);
   ok(!!markup && /<h3[^>]*>[^<]/.test(markup),
      `${k} → ${sel} carries a heading, so Settings search can reach the switch`);
-  ok(!!markup && /class="muted"/.test(markup),
+  // §494: the line is the card's lead now (class="muted card-lead"), still .muted.
+  ok(!!markup && /class="muted(?: [^"]*)?"/.test(markup),
      `and a description line, so it matches more than its own title`);
 }
 
