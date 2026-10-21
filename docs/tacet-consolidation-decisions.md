@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.572
+# Tacet shared-core consolidation — decisions record, v4.573
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-22 · v4.573 — **§493 AMENDED · EVERY SENTENCE SAID TO THE MICROPHONE IS LOGGED WITH WHAT CAME OF IT — DECIDED BY ASH:** *"build step 2 , the sentence log"*, on Claude's recommendation that a week of real sentences should decide whether the weak half is the hearing or the reading before anything bigger is built. Rule 10 added: one new tenant table `quick_stock_said`, three routes (`POST /api/retail-admin/quick-stock/said`, `PATCH …/said/:id`, `GET …/said` and `…/said.csv` for full access), pruned to 90 days. A log, not a memory; nothing reads it on the way in. No new string. No change to `.gitignore` or CI. See §493 rule 10.
 
 2026-10-21 · v4.572 — **§493 AMENDED · THE MICROPHONE HEARS EITHER LANGUAGE, THE MODEL READS WHAT THE PHONE CANNOT, AND EACH PERSON'S MISHEARINGS ARE LEARNED — DECIDED BY ASH:** *"mic should recognize English and Chinese language · it should be ai involved the learn the person talking voice so less and lees mistakes sccure · I'm going to sleep , build the best version you can possible can merge and deploy it after"*. Rules 7–9 added to §493: a language chip on the sheet (English / 中文), remembered per device; a confirmed card records what was heard for the product under that operator (`quick_stock_heard`, one new tenant table), and the phone reads that phrase alone next time; a sentence the phone cannot read goes to the model through `lib/model-gateway` (`lib/stock-command-ai.js`, `POST /api/retail-admin/quick-stock/understand`), with the person's learned phrases as hints, and its answer is the card — still confirmed, never written from. The phone's recogniser cannot itself be trained; the learning is of its mistakes, which is what repeats. Schema: one new table. Two new routes. No new string composed; `Working…` copied whole. No change to `.gitignore` or CI. Merged and deployed on Ash's instruction. See §493 rules 7–9.
 
@@ -32778,6 +32780,26 @@ so less and lees mistakes sccure"*. Three rules added.
    listening starts again in the other language. The parser and the model read
    either language, mixed, whatever the recogniser was set to.
 
+**Amended 2026-10-22 (v4.573), by Ash:** *"build step 2 , the sentence log"*.
+
+10. **Every sentence is logged with what came of it.** When the card (or its
+    refusal) is shown, the phone writes the sentence as heard or typed,
+    whether it came by voice and in which language, who read it (the phone,
+    the model, or nobody could), and the card: product, candidates, store,
+    action, quantity. When the sheet is left it writes the outcome —
+    confirmed, back, cancelled — and the product picked when the card
+    offered a choice. `quick_stock_said`, one row per sentence, 90 days.
+    Full access reads the whole tenant's week at
+    `GET /api/retail-admin/quick-stock/said` (a summary and the rows) or
+    `…/said.csv` (the rows, for Excel). **It is a log, not a memory:** nothing
+    reads it on the way in; rule 7's `quick_stock_heard` is the memory. It
+    exists so that one week in, the reading decides the next step: a sentence
+    that found nothing, or was confirmed only after picking another product,
+    with text that is plainly wrong, is the HEARING; the same with text that
+    is right is the READING. The first argues for a speech service with hot
+    words; the second for a better reader. Neither is built before the log
+    says which.
+
 **What this does not do.** It does not record waste: *"sold out"* from a
 kitchen operator meets the same fork as a typed zero, and a real loss still
 goes to whoever records waste (§46). It does not take a store the operator
@@ -32793,7 +32815,11 @@ in `screenStockAdd`. `lib/stock-command-ai.js` is the model call (rule 8) and
 `scripts/test_stock_command_ai.js` locks what its answer may say.
 `routes/retail-inventory.js` carries the two new routes and `quickStockStores`,
 the store question lifted out of the context route so all three answer it
-alike; `database.js` the `quick_stock_heard` table.
+alike; `database.js` the `quick_stock_heard` table. Rule 10: `lib/quick-stock-said.js`
+(the shaping, the SQL, the summary and the CSV, locked by
+`scripts/test_quick_stock_said.js` against an in-memory SQLite), the three
+`…/quick-stock/said` routes, and `qsCmdSaid` / `qsCmdSaidOutcome` in
+`public/m.html`.
 `scripts/test_quick_stock_command.js` slices the parser out of the shipped
 file and locks sixty-two readings, among them that *"150 sold out"* is 1-50
 and not a quantity of 150, that *"made 12 pita bread"* is twelve pita and not

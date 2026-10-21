@@ -92,6 +92,7 @@ function requireInventoryRead(req, res, next) {
 // for why the decision moved from the job title onto the capability.
 const { quickStockMode, mayRecount, mayLogProduction, addOnlyOperator, RECOUNT_MISCOUNT, RECOUNT_CLEARS_DEBT } = require('../lib/quick-stock-grant');
 const stockAi = require('../lib/stock-command-ai');
+const said = require('../lib/quick-stock-said');
 
 /* WHICH STORES THIS OPERATOR MAY WRITE TO (§493 moved it out of the context
    route so the sentence endpoints below answer the same question the same
@@ -1120,5 +1121,62 @@ router.post('/api/retail-admin/quick-stock/understand', requireInventoryRead, ex
     res.status(502).json({ success: false, error: 'model_failed' });
   }
 });
+
+/* ── THE SENTENCE LOG (§493 rule 10) ───────────────────────────────────────
+   What was said, what was made of it, what the operator did. Written by the
+   phone twice per sentence — once when the card (or its refusal) is shown,
+   once with the outcome — and read by whoever decides what to build next. */
+
+// POST /api/retail-admin/quick-stock/said  → { id }
+router.post('/api/retail-admin/quick-stock/said', requireInventoryRead, express.json({ limit: '4kb' }), (req, res) => {
+  const me = heardUserKey(req);
+  if (!me) return res.status(403).json({ success: false, error: 'no_operator' });
+  const row = said.shapeNew(req.body, me);
+  if (!row) return res.status(400).json({ success: false, error: 'said_required' });
+  const t = tdb();
+  const info = t.prepare(said.SQL.insert).run(row);
+  try { t.prepare(said.SQL.prune).run(); } catch (e) { /* the log is never worth a failed write */ }
+  res.json({ success: true, data: { id: Number(info.lastInsertRowid) } });
+});
+
+// PATCH /api/retail-admin/quick-stock/said/:id  { outcome, picked_product_id }
+router.patch('/api/retail-admin/quick-stock/said/:id', requireInventoryRead, express.json({ limit: '2kb' }), (req, res) => {
+  const me = heardUserKey(req);
+  if (!me) return res.status(403).json({ success: false, error: 'no_operator' });
+  const id = parseInt(req.params.id, 10);
+  const patch = said.shapeOutcome(req.body);
+  if (!Number.isInteger(id) || !patch) return res.status(400).json({ success: false, error: 'nothing_to_change' });
+  const info = tdb().prepare(said.SQL.outcome).run({ id, user_key: me, outcome: patch.outcome || null, picked_product_id: patch.picked_product_id || null });
+  res.json({ success: true, data: { changed: info.changes } });
+});
+
+// GET /api/retail-admin/quick-stock/said?days=7      → { summary, rows }
+// GET /api/retail-admin/quick-stock/said.csv?days=7  → the same rows, for Excel
+// The whole tenant's log, so full access only: a store clerk reads nothing here.
+function listSaid(req, res, asCsv) {
+  const { fullAccess } = quickStockStores(req);
+  if (!fullAccess) return res.status(403).json({ success: false, error: 'full_access_required' });
+  const days = Math.min(said.KEEP_DAYS, Math.max(1, parseInt(req.query.days, 10) || 7));
+  const limit = Math.min(5000, Math.max(1, parseInt(req.query.limit, 10) || 2000));
+  const rows = tdb().prepare(said.SQL.list).all({ days, limit });
+  // Operators' names, from the control plane, so the sheet reads as people.
+  const names = {};
+  for (const r of rows) {
+    if (names[r.user_key] !== undefined) continue;
+    const m = /^b:(\d+)$/.exec(r.user_key);
+    let u = null;
+    try { u = m ? db.prepare('SELECT display_name, username FROM tenant_users WHERE id = ?').get(parseInt(m[1], 10)) : null; } catch (e) { u = null; }
+    names[r.user_key] = u ? (u.display_name || u.username || r.user_key) : r.user_key;
+  }
+  for (const r of rows) { r.user_name = names[r.user_key]; r.candidates = r.candidate_ids; }
+  if (asCsv) {
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', `attachment; filename="quick-stock-said-${days}d.csv"`);
+    return res.send(said.toCsv(rows));
+  }
+  res.json({ success: true, data: { days, summary: said.summarise(rows), rows } });
+}
+router.get('/api/retail-admin/quick-stock/said', requireInventoryRead, (req, res) => listSaid(req, res, false));
+router.get('/api/retail-admin/quick-stock/said.csv', requireInventoryRead, (req, res) => listSaid(req, res, true));
 
 module.exports = router;
