@@ -2042,27 +2042,42 @@ async function _testSystemAlert() {
 // and, through saveAlipayManualInline, the manual-Alipay payment card — keys
 // and money, which keep their button (rule 2). The Shop and Customer-service
 // panels it used to save as well now save themselves (SHOP_CARD, CS_CARD).
-async function saveConfig() {
-  const status = $('#cfg-status');
-  status.textContent = 'Saving…';
-  const body = {
-    'notifications.order_status_template_id': $('#cfg-notifications-order_status_template_id').value.trim(),
-    'notifications.wecom_order_webhook': $('#cfg-notifications-wecom_order_webhook').value.trim(),
-    'system_alerts.enabled':         $('#cfg-system_alerts-enabled').checked,
-    'system_alerts.wecom_webhook':   $('#cfg-system_alerts-wecom_webhook').value.trim(),
-  };
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body });
-    // The manual-Alipay 收款码 card shares this Save bar now (it no longer has
-    // its own button). Save it too; it throws a friendly message on failure.
-    if (typeof saveAlipayManualInline === 'function') await saveAlipayManualInline();
-    status.innerHTML = '<span class="ok">Saved ✓</span>';
-    toast('Settings saved · 设置已保存');
-  } catch (e) {
-    status.innerHTML = '<span class="err">' + cuT('Failed', '失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
-    toast('Save failed · 保存失败: ' + e.message, 'err');
-  }
+// §279, amended §494 — the three Notifications cards that used to ride the
+// shared "Save settings" bar save themselves like every other card: the
+// order-status template id, the group-bot webhook and System alerts. None is
+// money or a secret (the WeCom app, SMS and kitchen cards hold secrets and keep
+// their own Save beside their Send-test). A webhook that is not a
+// qyapi.weixin.qq.com address is HELD, not sent: the server would refuse it
+// and the foot says why instead.
+function _wecomHookHold(url) {
+  if (!url) return '';
+  let host = '';
+  try { host = new URL(url).hostname; } catch (_) { host = ''; }
+  return host === 'qyapi.weixin.qq.com' ? '' : cuT('Only qyapi.weixin.qq.com URLs are accepted', '仅接受 qyapi.weixin.qq.com 地址');
 }
+const NOTIF_TEMPLATE_CARD = autosaveCard({
+  card: 'notifications.order_status', root: '#notif-template-card',
+  read: () => ({ 'notifications.order_status_template_id': $('#cfg-notifications-order_status_template_id').value.trim() }),
+  apply: (b) => { $('#cfg-notifications-order_status_template_id').value = b['notifications.order_status_template_id'] || ''; },
+});
+const NOTIF_WEBHOOK_CARD = autosaveCard({
+  card: 'notifications.group_bot', root: '#notif-webhook-card',
+  read: () => ({ 'notifications.wecom_order_webhook': $('#cfg-notifications-wecom_order_webhook').value.trim() }),
+  apply: (b) => { $('#cfg-notifications-wecom_order_webhook').value = b['notifications.wecom_order_webhook'] || ''; },
+  hold: (b) => _wecomHookHold(b['notifications.wecom_order_webhook']),
+});
+const SYSALERT_CARD = autosaveCard({
+  card: 'system_alerts', root: '#sysalert-card',
+  read: () => ({
+    'system_alerts.enabled':       $('#cfg-system_alerts-enabled').checked,
+    'system_alerts.wecom_webhook': $('#cfg-system_alerts-wecom_webhook').value.trim(),
+  }),
+  apply: (b) => {
+    $('#cfg-system_alerts-enabled').checked = !!b['system_alerts.enabled'];
+    $('#cfg-system_alerts-wecom_webhook').value = b['system_alerts.wecom_webhook'] || '';
+  },
+  hold: (b) => _wecomHookHold(b['system_alerts.wecom_webhook']),
+});
 
 // §279 — Shop layout & filters, and Customer service, save themselves.
 const SHOP_KEYS = [['layout', 'value'], ['defaultSort', 'value'], ['showSort', 'checked'], ['showDietary', 'checked'],
@@ -2242,7 +2257,7 @@ const LEGAL_CARD = autosaveCard({
 });
 // The cards loadConfig fills. A function, so it is read when called — by then
 // every card below has been made.
-function CFG_CARDS() { return [LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD, SHOP_CARD, CS_CARD, PICKUP_CARD]; }
+function CFG_CARDS() { return [LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD, SHOP_CARD, CS_CARD, PICKUP_CARD, NOTIF_TEMPLATE_CARD, NOTIF_WEBHOOK_CARD, SYSALERT_CARD]; }
 const SOCIAL_CARD = autosaveCard({
   card: 'social_proof', root: '#tab-social',
   read: () => ({ 'social_proof': buildSocialProof() }),

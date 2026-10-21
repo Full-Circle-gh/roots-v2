@@ -3497,25 +3497,17 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   $$('#settings-nav button').forEach(b => b.classList.toggle('active', b === btn));
   const sub = btn.dataset.sub;
   $$('.sub-panel').forEach(p => p.classList.toggle('active', p.id === 'sub-' + sub));
-  // The shared "Save settings" bar drives saveConfig() (Shop/Push/CS only). The
-  // Operations panel has its own per-card saves, so hide the shared bar there.
-  // SKU codes is on that list for the same reason Operations is: every rule
-  // saves itself, so a shared "Save settings" button there would either do
-  // nothing or claim to have saved something it never touched.
-  const _saveBar = document.querySelector('.settings-body > .save-bar');
-  // Change history is on that list too, and more absolutely: it is read-only.
-  // A "Save settings" button over a record of what people did would be an
-  // offer to edit the audit trail.
-  // Delivery is on that list for the first reason: every sub-view on it saves
-  // itself (saveDeliveryZones, saveHolidayMode, the carrier forms), so a shared
-  // "Save settings" over them would either do nothing or claim to have saved
-  // something it never touched.
-  // §279: the Shop and Customer-service panels save themselves now, so the
-  // shared bar belongs to Notifications alone (template id, webhooks, the
-  // manual-Alipay card) — keys and money, which keep their button.
-  if (_saveBar) _saveBar.style.display = sub === 'push' ? '' : 'none';
+  // §494 — there is no shared Save bar any more. Every panel's cards save
+  // themselves (§279) or carry their own Save pinned to the card (money and
+  // keys: tax, manual Alipay, the credential forms). A bar at the foot that
+  // saved some cards and not others was the one thing on this screen the
+  // help text had to explain.
   // Lazy-load the Operations panel's live data each time it is opened.
   if (sub === 'ops') loadOpsPanel();
+  // Payments & tax (§494): the manual-Alipay card replaces its whole record on
+  // save, so it is read fresh each time the panel opens (§325 D1) — never
+  // saved from a form that did not load. Currency and tax are loadConfig's.
+  if (sub === 'payments' && typeof loadAlipayManual === 'function') loadAlipayManual();
   // Delivery opens on its hub with fresh status lines, never on whichever
   // sub-view the last visit left behind (§79). This is what the rail button's
   // own click handler did before the page moved into Settings.

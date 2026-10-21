@@ -230,17 +230,18 @@ const run = (src) => vm.runInContext(src, sandbox);
     const DV = read('public/retail-admin/06-delivery.js');
     const CORE2 = read('public/retail-admin/01-core.js');
     const H = read('public/retail-admin.html');
-    const sc = MK.slice(MK.indexOf('async function saveConfig() {'), MK.indexOf('// §279 — Shop layout & filters, and Customer service, save themselves.'));
-    yes(!/'shop\./.test(sc) && !/'customer_service\./.test(sc), 'the shared Save no longer sends the shop or customer-service keys');
-    yes(/'notifications\.order_status_template_id'/.test(sc) && /saveAlipayManualInline/.test(sc) && /'system_alerts\.wecom_webhook'/.test(sc),
-      'it keeps the template id, the webhooks and the manual-Alipay card — keys and money');
-    yes(/_saveBar\.style\.display = sub === 'push' \? '' : 'none'/.test(CORE2) && /<div class="save-bar" style="display: none;">/.test(H),
-      'the bar shows on Notifications only, and starts hidden (Shop is the panel open on arrival)');
-    for (const c of ['shop.display', 'customer_service', 'pickup']) {
+    // §494 (2026-10-21): the shared Save bar is gone. The three Notifications
+    // cards it saved — template id, group-bot webhook, System alerts — save
+    // themselves; the manual-Alipay card keeps its own Save (money and a key).
+    yes(!/async function saveConfig\(/.test(MK), 'the shared Save function is gone');
+    yes(!/_saveBar/.test(CORE2) && !/class="save-bar"/.test(H.slice(H.indexOf('<section id="tab-config">'), H.indexOf('</section>', H.indexOf('<section id="tab-config">')))),
+      'and so is the bar — no panel shows one');
+    yes(/onclick="_saveAlipayManual\(this\)"/.test(H), 'the manual-Alipay card has its own Save, pinned to the card');
+    for (const c of ['shop.display', 'customer_service', 'pickup', 'notifications.order_status', 'notifications.group_bot', 'system_alerts']) {
       yes(H.includes('data-as-foot="' + c + '"') && MK.includes("card: '" + c + "'"), c + ' saves itself');
     }
-    yes(/function CFG_CARDS\(\) \{ return \[LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD, SHOP_CARD, CS_CARD, PICKUP_CARD\]; \}/.test(MK),
-      'and all three start only when loadConfig has filled them');
+    yes(/function CFG_CARDS\(\) \{ return \[LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD, SHOP_CARD, CS_CARD, PICKUP_CARD, NOTIF_TEMPLATE_CARD, NOTIF_WEBHOOK_CARD, SYSALERT_CARD\]; \}/.test(MK),
+      'and all six start only when loadConfig has filled them');
     const df = DV.slice(DV.indexOf('async function saveDeliveryFees() {'), DV.indexOf('\n}\n', DV.indexOf('async function saveDeliveryFees() {')));
     yes(!/pickup\.window|pickup\.leadMinutes/.test(df) && /fees\.pickupPackingFee/.test(df), 'the fees Save sends money only — the pickup hours left it');
     yes(/CS_CARD\.touch\(\)/.test(MK), 'a customer-service QR upload or clear counts as an edit');

@@ -18,7 +18,8 @@ function loadOpsPanel() {
   loadIntegrationsStatus();
   loadShippingIntegrations();
   loadPrinterPrefs();
-  loadAlipayManual();
+  // The manual-Alipay card moved to Settings → Payments & tax (§494); the
+  // switcher reads it when THAT panel opens.
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -265,9 +266,11 @@ function _alipayManualLoadFailed() {
 function _alipayManualChip(enabled) {
   const el = document.getElementById('alipay-manual-chip');
   if (!el) return;
+  // One language at a time (§1.11) and sentence case (§1.16); the shared pill,
+  // Sage for on and Amber for off — off is a state to notice, not an error.
   el.innerHTML = enabled
-    ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
-    : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ OFF · 未启用</span>';
+    ? '<span class="td-pill td-pill-sage">' + escapeHtml(cuT('On', '已启用')) + '</span>'
+    : '<span class="td-pill td-pill-amber">' + escapeHtml(cuT('Off', '未启用')) + '</span>';
 }
 
 async function loadAlipayManual() {
@@ -370,19 +373,19 @@ function _alipayManualPickFile(event) {
   reader.readAsDataURL(file);
 }
 
-// Persist the manual-Alipay card. Throws Error(friendlyMessage) on failure so
-// the shared "Save settings" bar (saveConfig) can surface it — this card no
-// longer has its own Save button. Updates the card's chip/status on success and
-// emits no toast of its own (the caller toasts once for the whole settings save).
+// Persist the manual-Alipay card. Throws Error(friendlyMessage) on failure.
+// §494: the card has its own Save again (money and a key, §279 rule 2) —
+// _saveAlipayManual below is the button; this is the write, kept apart so
+// the setup guide's Alipay step can call it without a toast of its own.
 async function saveAlipayManualInline() {
-  // Card absent from this build → nothing to save (keeps saveConfig generic).
-  if (!document.getElementById('alipay-manual-enabled')) return;
+  // Returns true when it wrote, false when it (rightly) sent nothing.
+  // Card absent from this build → nothing to save.
+  if (!document.getElementById('alipay-manual-enabled')) return false;
   // §325 D1 — never send a card that was not read: it would replace the stored
   // record with a blank one. The card already says so where it sits.
-  if (!_alipayManualLoaded) return;
-  // §412.2 — the card is settings:payments alone (data-cap hides it); the
-  // shared Save bar it rides on is not, so it must not send the hidden card.
-  if (typeof can === 'function' && !can('settings:payments')) return;
+  if (!_alipayManualLoaded) return false;
+  // §412.2 — the card is settings:payments alone (data-cap hides it).
+  if (typeof can === 'function' && !can('settings:payments')) return false;
   const val = (id) => ((document.getElementById(id) || {}).value || '').trim();
   const chk = (id) => !!(document.getElementById(id) || {}).checked;
   const status = document.getElementById('alipay-manual-status');
@@ -422,15 +425,20 @@ async function saveAlipayManualInline() {
     if (status) status.textContent = '';
     throw new Error(msg);
   }
-  if (status) status.textContent = 'Saved ✓ · 已保存';
+  if (status) status.textContent = cuT('Saved', '已保存');
   _alipayManualQr = null;
   _alipayManualChip(body.enabled);
+  return true;
 }
 
-// Backward-compat shim for any direct caller — saves just this card and toasts.
-async function _saveAlipayManual() {
-  try { await saveAlipayManualInline(); toast('Saved · 已保存', 'success'); }
-  catch (e) { toast(e.message || 'Save failed · 保存失败', 'error'); }
+// The card's Save button. The button disables while it writes (§1.12 in flight).
+// A card that did not load sends nothing and says nothing here: its own status
+// line already says it could not load, with a retry (§325 D1).
+async function _saveAlipayManual(btn) {
+  if (btn) btn.disabled = true;
+  try { if (await saveAlipayManualInline()) toast(cuT('Saved', '已保存'), 'success'); }
+  catch (e) { toast(e.message || cuT('Save failed', '保存失败'), 'error'); }
+  finally { if (btn) btn.disabled = false; }
 }
 
 // ── Stores · 门店 — list + add/edit, online-store self-managed ──
@@ -1469,7 +1477,7 @@ async function _geocodeBackfill() {
     if (!r.ok || j.success === false) {
       const err = j.error || ('HTTP ' + r.status);
       toast((err === 'tencent_maps_key_missing' || err === 'maps_key_missing')
-        ? 'Set AMAP_MAPS_KEY or TENCENT_MAPS_KEY in /root/roots-v2/.env first · 请先在 /root/roots-v2/.env 配置地图 key'
+        ? cuT('No map key on the server, so nothing was geocoded.', '服务器缺少地图密钥,未定位。')
         : 'Failed: ' + err, 'error');
       return;
     }
@@ -1569,9 +1577,11 @@ async function loadIntegrationsStatus() {
     const s = d.stores || { total: 0, missing: 0, geocoded: 0 };
     const a = d.addresses || { total: 0, missing: 0, geocoded: 0 };
     const provLabel = d.provider === 'amap' ? '高德 / Amap' : d.provider === 'tencent' ? '腾讯 / Tencent' : 'Maps';
+    // §494 — a status pill, not a paragraph telling a tenant to edit a file on
+    // the server. The key is the host's to set; the screen only says whether it is.
     const keyChip = cfg
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ KEY CONFIGURED · 已配置密钥</span>'
-      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ KEY MISSING · 缺少密钥</span>';
+      ? '<span class="td-pill td-pill-sage">' + escapeHtml(cuT('Map key set', '已配置密钥')) + '</span>'
+      : '<span class="td-pill td-pill-amber">' + escapeHtml(cuT('No map key', '缺少密钥')) + '</span>';
     const pct = (got, tot) => tot === 0 ? '—' : `${got}/${tot}`;
     // Surface the real provider error (esp. quota) so 0/41 isn't a mystery.
     const le = d.last_error;
@@ -1592,7 +1602,6 @@ async function loadIntegrationsStatus() {
         <span style="color:var(--text-3)">Addresses geocoded · 地址已定位</span>
         <span><strong>${pct(a.geocoded, a.total)}</strong>${a.missing ? ` · <span style="color:#b85c00">${a.missing} 个未定位 (missing GPS)</span>` : ''}</span>
       </div>
-      ${!cfg ? '<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Add <code>AMAP_MAPS_KEY=...</code> (or <code>TENCENT_MAPS_KEY=...</code>) to <code>/root/roots-v2/.env</code> and restart pm2 to enable geocoding. · 在 .env 中添加密钥并重启 pm2 以启用定位。</div>' : ''}
       ${errBox}
     `;
   } catch (e) {
@@ -1880,6 +1889,10 @@ async function loadIntegrationsStatus() {
     // 3) Settings panels (+ deep cards within each panel)
     document.querySelectorAll('#settings-nav button[data-sub]').forEach(btn => {
       if (gatedOff(btn)) return;
+      // A panel applyCapGates hid (Payments & tax on settings:payments, Delivery
+      // on delivery:view) is not a place to send somebody: the result would open
+      // a panel whose cards are hidden too. Same answer as _cfgCards().
+      if (btn.style.display === 'none') return;
       const sub = btn.dataset.sub;
       const title = cleanLabel(btn);
       const it = { type: 'setting', title, crumb: 'Settings', tab: 'config', sub,
