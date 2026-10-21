@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.347 · 2026-10-22 · §495 RULE 12, A SLIP REPRINTED BY VOICE — 1 STRING COMPOSED BY CLAUDE (`重新打印{store}订单 {no} 的小票`), BUILT FROM THE LIVE `重新打印` AND `小票`.** See *The voice assistant (§495)*, *Answers*.
+
 **v1.346 · 2026-10-22 · §495 RULE 11, A QUESTION ANSWERED FROM THE RECORDS — 11 STRINGS COMPOSED BY CLAUDE (`{store}今天 N 单`, `今天共 N 单`, `今天还没有订单`, `{store}库存偏低：a、b（另有 N 项）`, `没有库存偏低的商品。`, `{store}的{product}：N`, `{product}：{store} N、…`, `{store}营业中`, `{store}已关闭`, `网店营业中`, `网店已关闭`), EACH BUILT FROM LIVE FRAGMENTS; THE REFUSAL `你没有此操作的权限` COPIED WHOLE.** See *The voice assistant (§495)*, *Answers*.
 
 **v1.345 · 2026-10-22 · §495 THE VOICE ASSISTANT, A PAID MODULE — 23 STRINGS COMPOSED BY CLAUDE (`语音助手`, `使用语音助手`, `说出你的需求。例如：“吐司的全麦面包售罄了”，或“关店”。`, `建议同时`, `批准`, `都不是`, `这个我做不了，请换种说法。`, `已完成 N 项`, `N 项失败`, `语音助手需要在服务器上配置模型密钥。`, `当前套餐不包含语音助手。`, `本账户已关闭语音助手。`, THE FEATURE CARD'S THREE LINES, AND THE SEVEN ROW TEMPLATES `在{shop}关闭{item}的{answer}` / `在{shop}恢复{item}的{answer}` / `将{store}的{product}设为售罄` / `将{store}的{product}设为 N` / `在{store}为{product}加 N 件` / `关闭{store}` · `开启{store}` / `全部关闭` · `全部开启` / `关闭网店` · `开启网店`), EACH BUILT FROM LIVE FRAGMENTS; `Working…`, `Listening…`, `Next`, `Back`, `Cancel`, `Close`, `Done`, `Failed`, `Voice` AND §493'S TWO RECOGNISER LINES COPIED WHOLE.** See *The voice assistant (§495)*.
@@ -14518,6 +14520,7 @@ records, in both languages, and the phone shows the one its language asks for.
 | the shelf, every store | {product}: Tianhe 12, Yuexiu 3 | {product}：天河 12、越秀 3 | names and numbers, `、` as the live list joiner. |
 | open | {store} is open · the online store is open | {store}营业中 · 网店营业中 | `营业中` is live (the open/close panel). |
 | closed | {store} is closed · the online store is closed | {store}已关闭 · 网店已关闭 | `已关闭` is live. |
+| a row: a slip printed again (rule 12, v1.347) | Reprint the slip for order {no} at {store} | 重新打印{store}订单 {no} 的小票 | `重新打印` is the live reprint verb (the order drawer); `小票` is live (`自动在门店打印小票`). |
 
 ### Rejected
 

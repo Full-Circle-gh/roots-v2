@@ -26,7 +26,10 @@
  *   • a question is answered from the records at plan time, by the rules the
  *     screens use (the order-date rule on the shop's clock, the low-stock
  *     rule, the shelf), only to an operator whose capabilities would let them
- *     open that screen, and a plan of only answers has no rows to approve.
+ *     open that screen, and a plan of only answers has no rows to approve;
+ *   • a slip is reprinted for an order the recent list holds, or one the
+ *     sentence names by number however the recogniser wrote it, through the
+ *     order's own print route; an order it cannot find is dropped.
  */
 'use strict';
 
@@ -242,6 +245,29 @@ console.log('\nQuestions, answered from the records');
   eq(plan.actions.length, 0, 'questions are not rows');
   eq(plan.answers.length, 2, 'they are answers');
   eq(plan.answers[0].text_en, '3 orders today at Yuexiu', 'in order');
+}
+
+console.log('\nReprinting a slip');
+{
+  db.prepare("INSERT INTO retail_orders (id,order_no,status,store_id,placed_at,paid_at) VALUES (7,'TC001423','delivered',2,datetime('now','-40 days'),datetime('now','-40 days'))").run();
+  let cat3 = A.catalogue(db);
+  ok(cat3.orders.length >= 4 && !cat3.orders.some(o => o.id === 7), 'the catalogue carries the last two days\' orders, not a forty-day-old one');
+  eq(cat3.orders[0].id, 5, 'newest first — four were placed this minute, and the tie breaks on the highest id');
+  cat3 = A.catalogue(db, { text: 'reprint the slip for tc 001423 please' });
+  ok(cat3.orders.some(o => o.id === 7), 'an order number said aloud is looked up, spaces and case and all');
+  eq(A.orderNoKey('tc-001 423'), 'TC001423', 'the number as the order carries it');
+  eq(A.orderNosIn('print R2026 0516 01234 and TC001423 again').join(','), 'R2026051601234,TC001423', 'every number in a sentence');
+  eq(A.orderNosIn('close yuexiu at 5').length, 0, 'a bare number is not an order');
+  ok(A.dynamicText({ cat: cat3, names: [], answers: {}, lang: 'en' }).indexOf('7 | TC001423 | 2 | delivered') > -1, 'the prompt lists it with its store and status');
+  const p = A.coercePlan({ say: 'ok', actions: [{ type: 'reprint', order_id: 7 }, { type: 'reprint', order_id: 999 }, { type: 'reprint' }], question: null, unknown_names: [] }, cat3);
+  eq(p.actions.length, 1, 'an order the catalogue does not hold is dropped');
+  const d = A.describe(p.actions[0], cat3);
+  eq(d.en + ' · ' + d.zh, 'Reprint the slip for order TC001423 at Yuexiu · 重新打印越秀订单 TC001423 的小票', 'the row names the order and its store');
+  const c = A.toCmd(p.actions[0], cat3);
+  eq(c.method + ' ' + c.path, 'POST /api/retail-admin/orders/7/print', 'through the order\'s own print route');
+  const plan = A.buildPlan(p, cat3, 'en', []);
+  eq(plan.actions.length, 1, 'one row');
+  eq(plan.actions[0].type, 'reprint', 'a reprint');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
