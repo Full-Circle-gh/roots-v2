@@ -32971,3 +32971,44 @@ Seven suites that pinned a card to its old panel were re-pinned
 `test_send_test_gates`, `test_delivery_in_settings`,
 `test_settings_payments_panel`); `test_feature_switches_mount` accepts the
 lead's class. Schema: none. No new route. No change to `.gitignore` or CI.
+
+### §494 — PR 3 shipped: the phone (2026-10-21)
+
+**The phone's Settings is the same nine groups**, in the desktop's order and
+words, then the two that are the phone's own (Preferences, App). A group
+whose doors the role cannot open is left out rather than shown empty.
+*Store* holds Operations (the phone's jobs menu), Team, Brand and Billing;
+*Online shop* the Shop tab and Customer service doors; *Payments & tax* says
+"on desktop", as Store profile always has — the phone has no money screen
+and does not pretend to; *Delivery & pickup* the delivery settings and the
+three carrier doors; *Notifications* this phone's own alerts, then the
+shop's; *Printing* the Receipt printing door and Auto-print's door to
+Operations (one switch, one place — the §353 reason stands); *Features* the
+switches; *Advanced* Routing and SKU codes; *History* the two records. The
+"Automation" group is gone. Receipt printing comes back to Settings now.
+
+**The "?" (rule 2), on the phone.** `x7Help`, the one helper every x7 card's
+explanation goes through, keeps the first sentence of the one-language text
+it is given and puts a "?" after it; the "?" opens a bottom sheet
+(`sheetHelp`) with the whole text and a Close. A one-sentence hint gets no
+"?". Nothing composed: the sheet's title is the live `What this does · 说明`.
+
+**Rule 3 on the phone.** The order-status template, the group-bot webhook and
+System alerts save themselves through the shared engine, as the desktop's
+three cards do and under the same three history names, so a version written
+on the phone reads on the desktop. The one Save those four keys shared is
+gone; each card has a foot (saved, saving, held, or why it failed, with
+Undo) that repaints in place so typing is never interrupted. A pending edit
+is sent on the way out of the screen and when the phone goes into a pocket.
+The WeCom app and SMS cards hold secrets and keep their Save beside their
+test (§279 rule 2).
+
+**Rule 6 on the phone.** The x7 pills read On, Not set up, Not set, Waiting
+for a JD account — the desktop's words — Sage, quiet or Amber for the same
+reasons.
+
+Tests: `scripts/test_mobile_settings_groups.js` (fast shard: the list, where
+each door went, the "?" driven in a sandbox, the pills, the self-saving
+cards); `scripts/test_mobile_settings_keys.js` §5 drives the three engines
+through the shared module instead of the Save. No new string, EN or CN.
+Schema: none. No new route. No change to `.gitignore` or CI.

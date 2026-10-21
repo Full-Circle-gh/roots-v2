@@ -66,6 +66,8 @@ const plain = (v) => JSON.parse(JSON.stringify(v));
 const keysOf = (src) => [...('{' + src).matchAll(/[{,]\s*'?([a-z_.]+)'?\s*:/g)].map((m) => m[1]);
 
 const SRC = [
+  // §494: the three Notifications cards save themselves through the shared engine.
+  read('public/tacet-autosave.js'),
   line(M, 'function E(en, zh)'),
   line(M, 'function tmOneLang(m)'),
   slice(M, 'const PILL = {', 'const KIND2PILL'),
@@ -129,7 +131,7 @@ function mk(opts = {}) {
     }),
     document: { getElementById: () => null }, location: { href: '' },
     setTimeout: () => 0, clearTimeout: () => {},
-    Object, Promise, Math, Number, String, Array, JSON, Error, Set, Map, Date, RegExp, encodeURIComponent, isNaN, parseInt, parseFloat,
+    Object, Promise, Math, Number, String, Array, JSON, Error, Set, Map, Date, RegExp, URL, encodeURIComponent, isNaN, parseInt, parseFloat,
   };
   ctx.T = (en, zh) => (ctx.LANG === 'en' ? en : (zh || en));
   vm.createContext(ctx);
@@ -196,13 +198,14 @@ section('1 · who reaches them');
     assert.ok(block(M, 'function screenDelivery(){').includes('${x7DeliveryDoors()'));
     const st = block(M, 'function screenSettings(){');
     assert.ok(/canRoute\('pushcfg'\)\?\[\{label:T\('Push notifications','推送通知'\)/.test(st));
-    assert.ok(st.includes("{h:T('Delivery','配送'),rows:x7DeliveryRows()}"));
+    // §494: the three courier doors sit under Delivery & pickup, after the delivery settings door.
+    assert.ok(st.includes("{h:T('Delivery & pickup','配送与自提'),rows:[") && /\.\.\.x7DeliveryRows\(\)\]\}/.test(st));
   });
   it('without the keys, no command writes', async () => {
     const h = mk({ caps: ['orders:view'] });
     h.s.prnD = fn(h, 'x7PrnSeed')(PRN); h.s.prn = plain(PRN); h.s.qy = { stores: [{ code: 'th', connected: false }], any: true, autoPush: false };
     h.s.d = { 'cfg.template': '', 'cfg.webhook': '', 'cfg.alerts_on': false, 'cfg.alerts_webhook': 'x', 'sms.testphone': '13800138000' };
-    for (const c of ['x7PrnSave', 'x7CfgSave', 'x7WecomSave', 'x7WecomTest', 'x7SmsSave', 'x7SmsTest', 'x7AlertTest', 'x7QyAuto']) h.CMD[c]();
+    for (const c of ['x7PrnSave', 'x7WecomSave', 'x7WecomTest', 'x7SmsSave', 'x7SmsTest', 'x7AlertTest', 'x7QyAuto']) h.CMD[c]();
     h.CMD.x7PrnTest(3); h.CMD.x7SvcSave('kd100'); h.CMD.x7SvcTest('jd'); h.CMD.x7QyAsk('th');
     await tick();
     assert.strictEqual(h.calls.writes.length, 0);
@@ -220,7 +223,7 @@ section('2 · receipt printing');
     assert.ok(h.calls.api.some((c) => c.p === '/printer/preview?store_id=3&template=receipt'));
     await answer(h, '/printer/preview?store_id=3&template=receipt', { ok: true, content: '<CB>Roots</CB>\nOrder 1', sample: true });
     const t = h.text(h.ctx.SUBS.printers.render());
-    for (const w of ['Feie', 'LIVE', 'Shangpeng', 'NOT SET', 'Auto-print every paid order at its store', 'Receipt header',
+    for (const w of ['Feie', 'On', 'Shangpeng', 'Not set', 'Auto-print every paid order at its store', 'Receipt header',
       'Printers by store', 'Tianhe', 'Yuexiu', 'Printer SN', 'Template', 'Copies', 'Print preview', 'Roots', 'Order 1', 'Sample data',
       'Save & test this store', 'Kitchen printer', 'Stock requests', 'Out-of-Guangzhou orders', 'Save all']) assert.ok(t.includes(w), w);
     assert.ok(h.ctx.SUBS.printers.render().includes('uk•••• — leave blank to keep'), 'a saved key shows only its mask');
@@ -318,7 +321,7 @@ section('3 · Kuaidi100 and JD keys');
   it('Kuaidi100: the desktop body, the blank key and secret kept, then Save & test', async () => {
     const h = await open('kd100cfg');
     const t = h.text(h.ctx.SUBS.kd100cfg.render());
-    assert.ok(t.includes('Kuaidi100 tracking push') && t.includes('LIVE') && t.includes('Callback secret'));
+    assert.ok(t.includes('Kuaidi100 tracking push') && t.includes('On') && t.includes('Callback secret'));
     h.CMD.x7In('kd100.customer', ' C2 ');
     h.CMD.x7SvcTest('kd100');
     const w = W(h, 0);
@@ -337,7 +340,7 @@ section('3 · Kuaidi100 and JD keys');
     const h = mk(); h.ctx.SUBS.kd100cfg.render();
     await answer(h, '/integrations', Object.assign(plain(INTEG), { kd100: { enabled: false } }));
     assert.strictEqual(h.s.d['kd100.callback'], '');
-    assert.ok(h.text(h.ctx.SUBS.kd100cfg.render()).includes('NOT CONFIGURED'));
+    assert.ok(h.text(h.ctx.SUBS.kd100cfg.render()).includes('Not set up'));
     const HTML = read('public/retail-admin.html');
     assert.ok(/id="kd100-callback"[^>]*value=""/.test(HTML), 'the desktop field has no default either');
     assert.ok(!/rootskitchenchina\.com\/api\/retail\/tracking\/kd100/.test(HTML + M + OPS), 'the Roots address is on neither surface');
@@ -355,7 +358,7 @@ section('3 · Kuaidi100 and JD keys');
   });
   it('JD: the desktop body, env kept, a typed secret sent, Save & ping', async () => {
     const h = await open('jdcfg');
-    assert.ok(h.text(h.ctx.SUBS.jdcfg.render()).includes('PENDING JD ACCOUNT'));
+    assert.ok(h.text(h.ctx.SUBS.jdcfg.render()).includes('Waiting for a JD account'));
     h.CMD.x7In('jd.access_token', 'TOK'); h.CMD.x7In('jd.customer_code', ' 0201 ');
     h.CMD.x7SvcTest('jd');
     const w = W(h, 0);
@@ -454,26 +457,51 @@ section('5 · Push notifications');
   it('opens on the stored values and the keys\' state', async () => {
     const h = await open('pushcfg', { cfg: plain(CFG) });
     const t = h.text(h.ctx.SUBS.pushcfg.render());
-    for (const w of ['New-order alert to your phone', 'LIVE', 'SMS when delivered (out-of-Guangzhou orders)', 'NOT CONFIGURED',
-      'Order-status subscribe-message template', 'Alternative: group-bot webhook', 'System Alerts', 'Enable system alerts', 'Save settings']) assert.ok(t.includes(w), w);
+    // §494 rule 6: the pills read On / Not set up, sentence case, as on the desktop.
+    for (const w of ['New-order alert to your phone', 'On', 'SMS when delivered (out-of-Guangzhou orders)', 'Not set up',
+      'Order-status subscribe-message template', 'Alternative: group-bot webhook', 'System alerts', 'Enable system alerts', 'All changes saved']) assert.ok(t.includes(w), w);
+    assert.ok(!t.includes('Save settings') && !t.includes('LIVE'), 'no shared Save, no shouting pill');
     assert.strictEqual(h.s.d['cfg.template'], 'TPL');
   });
-  it('Save settings sends saveConfig\'s four keys, and only those', async () => {
+  // §494 rule 3 — the four keys save themselves, through the desktop's three
+  // history cards, so a version written on the phone reads on the desktop.
+  it('an edit saves itself: three cards, the desktop\'s keys and history names, nothing else', async () => {
     const h = await open('pushcfg', { cfg: plain(CFG) });
+    assert.ok(h.s.cfgAuto && h.s.cfgAuto.template && h.s.cfgAuto.webhook && h.s.cfgAuto.alerts, 'three engines start once the config is read');
+    assert.strictEqual(h.calls.writes.length, 0, 'nothing is sent before an edit');
     h.CMD.x7In('cfg.template', ' TPL2 '); h.CMD.x7In('cfg.webhook', ' https://qyapi.weixin.qq.com/x ');
     h.CMD.x7Flip('cfg.alerts_on'); h.CMD.x7In('cfg.alerts_webhook', 'https://qyapi.weixin.qq.com/y');
-    h.CMD.x7CfgSave();
-    const w = W(h, 0);
-    assert.strictEqual(w.p, '/config'); assert.strictEqual(w.method, 'PUT');
-    assert.deepStrictEqual(Object.keys(w.body), DESK_CFG_KEYS);
-    assert.deepStrictEqual(w.body, { 'notifications.order_status_template_id': 'TPL2', 'notifications.wecom_order_webhook': 'https://qyapi.weixin.qq.com/x',
-      'system_alerts.enabled': true, 'system_alerts.wecom_webhook': 'https://qyapi.weixin.qq.com/y' });
-    w.res({ success: true }); await tick();
-    assert.deepStrictEqual(h.calls.toasts, ['Settings saved']);
+    assert.strictEqual(h.s.cfgAuto.template.state, 'pending');
+    // The engines' writes settle only when the server answers, so the flush is
+    // awaited after the three answers, not before.
+    const flushed = fn(h, 'x7CfgFlush')();
+    await tick();
+    assert.strictEqual(h.calls.writes.length, 3, 'one write per card');
+    const bodies = {}; const keys = [];
+    for (let i = 0; i < 3; i++) { const w = W(h, i); assert.strictEqual(w.method, 'PUT'); bodies[w.p] = w.body; keys.push(...Object.keys(w.body)); w.res({ success: true }); }
+    await flushed; await tick();
+    assert.deepStrictEqual(keys, DESK_CFG_KEYS, 'the desktop\'s keys, in the desktop\'s order');
+    assert.deepStrictEqual(bodies['/config?history=notifications.order_status'], { 'notifications.order_status_template_id': 'TPL2' });
+    assert.deepStrictEqual(bodies['/config?history=notifications.group_bot'], { 'notifications.wecom_order_webhook': 'https://qyapi.weixin.qq.com/x' });
+    assert.deepStrictEqual(bodies['/config?history=system_alerts'], { 'system_alerts.enabled': true, 'system_alerts.wecom_webhook': 'https://qyapi.weixin.qq.com/y' });
+    assert.strictEqual(h.s.cfgAuto.template.state, 'saved');
+    assert.deepStrictEqual(h.calls.toasts, [], 'saving itself is not announced');
   });
-  it('a refused Save stays on the screen', async () => {
+  it('a webhook off qyapi.weixin.qq.com is held with a sentence, never sent', async () => {
     const h = await open('pushcfg', { cfg: plain(CFG) });
-    h.CMD.x7CfgSave(); W(h, 0).rej(REFUSED()); await tick();
+    h.CMD.x7In('cfg.webhook', 'https://example.com/hook');
+    await fn(h, 'x7CfgFlush')();
+    assert.strictEqual(h.calls.writes.length, 0);
+    assert.strictEqual(h.s.cfgAuto.webhook.state, 'hold');
+    assert.ok(h.text(h.ctx.SUBS.pushcfg.render()).includes('Only qyapi.weixin.qq.com URLs are accepted'));
+  });
+  it('a refused save says so on the card, in the server\'s words', async () => {
+    const h = await open('pushcfg', { cfg: plain(CFG) });
+    h.CMD.x7In('cfg.template', 'TPL3');
+    const p = fn(h, 'x7CfgFlush')();
+    await tick();
+    W(h, 0).rej(REFUSED()); await p; await tick();
+    assert.strictEqual(h.s.cfgAuto.template.state, 'error');
     assert.ok(h.text(h.ctx.SUBS.pushcfg.render()).includes('You don’t have permission for this'));
     assert.deepStrictEqual(h.calls.toasts, []);
   });
@@ -541,7 +569,7 @@ section('6 · in Chinese');
     assert.ok(j.text(j.ctx.SUBS.jdcfg.render()).includes('待开通京东账号'));
     const u = await open('pushcfg', { lang: 'zh', cfg: {} });
     const ut = u.text(u.ctx.SUBS.pushcfg.render());
-    for (const w of ['新订单手机提醒', '送达短信(广州市外订单)', '订单状态订阅消息模板', '系统告警', '开启系统告警', '保存设置']) assert.ok(ut.includes(w), w);
+    for (const w of ['新订单手机提醒', '送达短信(广州市外订单)', '订单状态订阅消息模板', '系统告警', '开启系统告警', '已自动保存']) assert.ok(ut.includes(w), w);
   });
 }
 

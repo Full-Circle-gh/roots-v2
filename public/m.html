@@ -155,6 +155,9 @@
 @font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;
   src:url(/assets/fonts/inter-5.3.0-latin-ext.woff2) format('woff2');
   unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+  /* §494 — the "?" on a settings card: a small ring beside the one visible line. */
+  .helpq{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;margin-left:4px;vertical-align:middle;border-radius:50%;border:1px solid var(--border-default);background:transparent;color:var(--text-secondary);font:500 11px/1 inherit;cursor:pointer}
+  .helpq:active{color:var(--text-primary);border-color:var(--text-secondary)}
 </style>
 <!-- THE ICONS ARE SERVED FROM HERE, NOT FROM unpkg. Every icon in this app is
      drawn by ic() out of window.lucide, and when unpkg.com did not answer from
@@ -1038,7 +1041,7 @@ const state = {
      answers, and null FOREVER for a role whose owner never opened that
      field. null means no override, exactly as on the desktop. */
   dashCards:null,
-  overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
+  overflow:false, help:null, search:false, detailId:null, detailActions:false, productSku:null,
   /* The out-of-stock policy picker, over the product sheet — the SKU it is
      answering for, or null. Keyed by sku the way productSku is, so the picker
      and the sheet under it can never end up addressing two different products. */
@@ -1837,6 +1840,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
    already fired. */
 function pop(){
   const top=state.stack.length?state.stack[state.stack.length-1].route:null;
+  if(top==='pushcfg'&&typeof x7CfgFlush==='function') x7CfgFlush();   // §494 — a pending edit is sent on the way out
   /* A recipe being edited asks before it is dropped, and only when it cannot
      be saved (§300 R2, rcpMayLeave). */
   if(top==='recipeone'&&!rcpMayLeave()) return;
@@ -35087,8 +35091,10 @@ function x7Note(card){
   if(ok) return `<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.5;overflow-wrap:anywhere">${escAttr(String(ok))}</div>`;
   return '';
 }
-const X7_PILL={live:['LIVE','已启用','success'], off:['NOT CONFIGURED','未配置','danger'], unset:['NOT SET','未配置','muted'],
-  jdwait:['PENDING JD ACCOUNT','待开通京东账号','warning'], conn:['Connected','已连接','success'], noconn:['Not set up','未开通','danger'],
+/* §494 rule 6 — the desktop's words: sentence case, Sage for on or connected,
+   Amber for what somebody has to act on, quiet for what is simply not set. */
+const X7_PILL={live:['On','已启用','success'], off:['Not set up','未配置','muted'], unset:['Not set','未配置','muted'],
+  jdwait:['Waiting for a JD account','待开通京东账号','warning'], conn:['Connected','已连接','success'], noconn:['Not set up','未开通','muted'],
   signedout:['Signed out','已退出登录','warning'], qyoffline:['Sync service offline','同步服务离线','warning']};
 function x7Pill(k){ const [en,zh,tone]=X7_PILL[k]; const [bg,fg]=PILL[tone]||PILL.muted;
   return `<span class="pill" style="background:${bg};color:${fg};flex:none">${T(en,zh)}</span>`; }
@@ -35105,15 +35111,45 @@ function x7Sel(k,label,opts,o){
   return `<label style="display:block">${x7Lbl(label,o.hint)}<select style="width:100%" onchange="APP.cmd('x7Pick','${k}',this.value)">${opts.map(([v,en,zh])=>
     `<option value="${escAttr(v)}"${String(v)===x7d(k)?' selected':''}>${escAttr(zh==null?en:T(en,zh))}</option>`).join('')}</select></label>`;
 }
-reg('x7In', (k,v)=>{ const d=x7().d; if(!(k in d)) return; d[k]=String(v==null?'':v); });
+reg('x7In', (k,v)=>{ const d=x7().d; if(!(k in d)) return; d[k]=String(v==null?'':v); x7CfgTouch(k); });
 reg('x7Pick', (k,v)=>{ const d=x7().d; if(!(k in d)) return; d[k]=String(v==null?'':v); render(); });
-reg('x7Flip', k=>{ const d=x7().d; if(!(k in d)) return; d[k]=!d[k]; render(); });
+reg('x7Flip', k=>{ const d=x7().d; if(!(k in d)) return; d[k]=!d[k]; x7CfgTouch(k); render(); });
 const x7Btn=(cmd,label,busyKey,o)=>{ o=o||{}; const s=x7(), b=s.busy===busyKey;
   return `<button class="${o.primary?'cta':'btn2'}" style="${o.primary?'width:100%':'width:auto;padding:0 14px'}" ${s.busy?'disabled':''} onclick="APP.cmd('${cmd}'${o.arg!=null?`,'${escAttr(o.arg)}'`:''})">${b?(o.busyLabel||T('Saving…','保存中…')):label}</button>`; };
 const x7Card=(head,inner)=>`<div><div style="display:flex;align-items:center;gap:10px;padding:0 4px 8px">${head}</div><div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">${inner}</div></div>`;
 const x7Head=(t,pill)=>`<span style="flex:1;min-width:0;font-size:15px;font-weight:500">${t}</span>${pill||''}`;
-const x7Help=t=>`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.55">${t}</span>`;
+/* §494 rule 2 — one line stays visible; the rest opens from a "?" as a
+   bottom sheet (helpOpen). The text is already one language (T()), so the
+   first sentence is found by that language's own full stop. A text with one
+   sentence has no "?". */
+function helpCut(t){
+  const str=String(t==null?'':t);
+  const cjk=/[\u4e00-\u9fff]/.test(str);
+  const m=cjk?/[。！？;；]/.exec(str):/[.!?](?=\s+[A-Z"“(])/.exec(str);
+  if(!m) return 0;
+  const cut=m.index+1;
+  if(!cjk&&/(?:\b(?:e\.g|i\.e|vs|approx|No|qq|com|cn)|\d)\.$/.test(str.slice(0,cut))) return 0;
+  if(str.slice(cut).trim().length<(cjk?4:12)) return 0;
+  return cut;
+}
+const x7Help=t=>{
+  const str=String(t==null?'':t), cut=helpCut(str);
+  if(!cut) return `<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.55">${str}</span>`;
+  let lead=str.slice(0,cut).trim(); if(/[;；]$/.test(lead)) lead=lead.slice(0,-1)+'。';
+  return `<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.55">${lead} <button type="button" class="helpq" aria-label="${escAttr(T('What this does','说明'))}" data-t="${escAttr(str)}" onclick="APP.cmd('helpOpen',this.dataset.t)">?</button></span>`;
+};
 function x7Begin(card){ const s=x7(); s.err[card]=null; s.ok[card]=null; }
+reg('helpOpen', t=>{ state.help={text:String(t==null?'':t)}; render(); });
+reg('closeHelp', ()=>{ state.help=null; render(); });
+/* The sheet behind a card's "?": the whole explanation, nothing to act on. */
+function sheetHelp(){
+  const h=state.help; if(!h) return '';
+  return `<div class="scrim" style="z-index:40;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('closeHelp')"></div>
+   <div class="sheet" style="z-index:41;padding:8px 20px calc(env(safe-area-inset-bottom,0px) + 24px)"><div class="grabber"></div>
+     <div style="padding:4px 0 8px;font-size:15px;font-weight:500">${T('What this does','说明')}</div>
+     <div style="font-size:14.5px;line-height:1.6;color:var(--text-primary);overflow-wrap:anywhere;max-height:60vh;overflow:auto">${escAttr(h.text)}</div>
+     <button class="btn2" style="margin-top:16px" onclick="APP.cmd('closeHelp')">${T('Close','关闭')}</button></div>`;
+}
 
 /* ── The saved keys (GET /integrations), re-read on every entry ─────────── */
 /* §412.6 — the kd100 callback field opens on the address the server says is
@@ -35315,7 +35351,7 @@ function screenPrinters(){
     ${x7Note('printer')}
     ${x7Btn('x7PrnSave',T('Save all','全部保存'),'printer',{primary:true})}</div>`;
 }
-SUBS.printers={title:['Receipt printing','云打印出单'],backLabel:()=>T('Operations','运营'),render:()=>screenPrinters()};
+SUBS.printers={title:['Receipt printing','云打印出单'],backLabel:()=>T('Settings','设置'),render:()=>screenPrinters()};
 function x7PrinterDoor(){
   return canRoute('printers')?settingsGroupCard([{label:T('Receipt printing','云打印出单'),cmd:"APP.cmd('push','printers')",chev:true}]):'';
 }
@@ -35466,21 +35502,90 @@ function x7LoadCfg(){
     const n=(state.cfg.notifications)||{}, a=(state.cfg.system_alerts)||{}, d=s.d;
     d['cfg.template']=n.order_status_template_id||''; d['cfg.webhook']=n.wecom_order_webhook||'';
     d['cfg.alerts_on']=!!a.enabled; d['cfg.alerts_webhook']=a.wecom_webhook||'';
+    x7CfgAutoStart();
     render();
   }).catch(e=>{ if(String(e&&e.message)==='auth') return; s.cfgErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
 }
-/* saveConfig's four keys. The manual-Alipay card that shares the desktop's
-   Save bar is a money setting with its own screen (X10), so it is not here. */
-reg('x7CfgSave', ()=>{
-  const s=x7(); if(s.busy||!canRoute('pushcfg')||!('cfg.template' in s.d)) return;
-  x7Begin('cfg'); s.busy='cfg'; render();
-  apiWrite('/config',{'notifications.order_status_template_id':x7d('cfg.template').trim(),
-    'notifications.wecom_order_webhook':x7d('cfg.webhook').trim(),
-    'system_alerts.enabled':!!s.d['cfg.alerts_on'],
-    'system_alerts.wecom_webhook':x7d('cfg.alerts_webhook').trim()},'PUT').then(()=>{
-    s.busy=null; showToast(T('Settings saved','设置已保存')); render();
-  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.cfg=x6Words(e,'Save failed','保存失败'); render(); });
-});
+/* §494 rule 3 — the template id, the group-bot webhook and System alerts save
+   themselves, as the desktop's three cards do (the same three history cards,
+   so a version written here reads there). Nothing is sent before the draft is
+   filled from the server (§279's start() rule). A webhook off
+   qyapi.weixin.qq.com is held with a sentence, not sent. The WeCom app and SMS
+   cards hold secrets and keep their Save beside their test. */
+const X7_CFG_CARDS={
+  template:{card:'notifications.order_status', keys:['cfg.template'],
+    read:d=>({'notifications.order_status_template_id':String(d['cfg.template']||'').trim()}),
+    apply:(d,b)=>{ d['cfg.template']=b['notifications.order_status_template_id']||''; }},
+  webhook:{card:'notifications.group_bot', keys:['cfg.webhook'],
+    read:d=>({'notifications.wecom_order_webhook':String(d['cfg.webhook']||'').trim()}),
+    apply:(d,b)=>{ d['cfg.webhook']=b['notifications.wecom_order_webhook']||''; },
+    hold:b=>x7HookHold(b['notifications.wecom_order_webhook'])},
+  alerts:{card:'system_alerts', keys:['cfg.alerts_on','cfg.alerts_webhook'],
+    read:d=>({'system_alerts.enabled':!!d['cfg.alerts_on'],'system_alerts.wecom_webhook':String(d['cfg.alerts_webhook']||'').trim()}),
+    apply:(d,b)=>{ d['cfg.alerts_on']=!!b['system_alerts.enabled']; d['cfg.alerts_webhook']=b['system_alerts.wecom_webhook']||''; },
+    hold:b=>x7HookHold(b['system_alerts.wecom_webhook'])},
+};
+function x7HookHold(url){
+  if(!url) return '';
+  let host=''; try{ host=new URL(url).hostname; }catch(_){ host=''; }
+  return host==='qyapi.weixin.qq.com'?'':T('Only qyapi.weixin.qq.com URLs are accepted','仅接受 qyapi.weixin.qq.com 地址');
+}
+function x7CfgPut(card,body,note){
+  return apiWrite('/config?history='+encodeURIComponent(card)+(note?'&note='+encodeURIComponent(note):''),body,'PUT')
+    .then(j=>{ if(j&&j.success===false) throw new Error(j.error||'save failed'); if(typeof cfgMerge==='function') cfgMerge(body); return j; })
+    .catch(e=>{ if(String(e&&e.message)==='auth') throw e; throw new Error(x6Words(e,'Save failed','保存失败')); });
+}
+function x7CfgAutoStart(){
+  const s=x7(); if(typeof TacetAutosave==='undefined') return;
+  s.cfgAuto=s.cfgAuto||{};
+  for(const k of Object.keys(X7_CFG_CARDS)){
+    const def=X7_CFG_CARDS[k];
+    if(s.cfgAuto[k]) s.cfgAuto[k].stop();
+    const a=TacetAutosave.create({
+      read:()=>def.read(s.d),
+      hold:def.hold||null,
+      send:(b,note)=>x7CfgPut(def.card,b,note),
+      onChange:()=>x7CfgFootRepaint(k),
+    });
+    a.start();
+    s.cfgAuto[k]=a;
+  }
+}
+/* A typed key touches its own card's engine; the rest of x7 is untouched. */
+function x7CfgTouch(key){
+  const s=x7(); if(!s.cfgAuto) return;
+  for(const k of Object.keys(X7_CFG_CARDS)) if(X7_CFG_CARDS[k].keys.includes(key)&&s.cfgAuto[k]) s.cfgAuto[k].touch();
+}
+function x7CfgFlush(){
+  const s=x7(); if(!s.cfgAuto) return Promise.resolve();
+  return Promise.all(Object.keys(s.cfgAuto).map(k=>(s.cfgAuto[k].dirty()||s.cfgAuto[k].busy())?s.cfgAuto[k].flush():Promise.resolve()));
+}
+if(typeof document!=='undefined'&&document.addEventListener) document.addEventListener('visibilitychange',()=>{ if(document.hidden) x7CfgFlush(); });
+/* The foot of a self-saving card: its state, and Undo when there is something
+   to take back. Repainted in place on every engine change — never a full
+   render, which would take the focus out of the box somebody is typing in. */
+function x7CfgFootText(k){
+  const a=x7().cfgAuto&&x7().cfgAuto[k]; if(!a) return '';
+  const st=a.state;
+  return st==='saving'||st==='pending'?T('Saving…','保存中…')
+    : st==='hold'?a.message
+    : st==='error'?T('Save failed: ','保存失败:')+(a.message||'')
+    : T('All changes saved','已自动保存');
+}
+function x7CfgFoot(k){
+  const a=x7().cfgAuto&&x7().cfgAuto[k];
+  return `<div id="x7foot-${k}" style="display:flex;align-items:center;gap:10px;min-height:28px">${x7CfgFootInner(k)}</div>`;
+}
+function x7CfgFootInner(k){
+  const a=x7().cfgAuto&&x7().cfgAuto[k]; if(!a) return '';
+  const bad=a.state==='error', held=a.state==='hold';
+  return `<span style="flex:1;font-size:12.5px;color:${bad?'var(--brick-ink)':held?'var(--amber-ink)':'var(--text-secondary)'}">${escAttr(x7CfgFootText(k))}</span>${
+    a.canUndo()?`<button class="btn2" style="width:auto;padding:0 12px;min-height:32px;font-size:13px" onclick="APP.cmd('x7CfgUndo','${k}')">${T('Undo','撤销')}</button>`:''}`;
+}
+function x7CfgFootRepaint(k){ const el=document.getElementById('x7foot-'+k); if(el) el.innerHTML=x7CfgFootInner(k); }
+reg('x7CfgUndo', k=>{ const s=x7(), a=s.cfgAuto&&s.cfgAuto[k]; if(!a) return; a.undo(b=>X7_CFG_CARDS[k].apply(s.d,b)); render(); });
+/* The one Save these four keys shared is gone (§494 rule 3): each card saves
+   itself through X7_CFG_CARDS above. */
 reg('x7WecomSave', ()=>{
   const s=x7(); if(s.busy||!canRoute('pushcfg')) return;
   x7Begin('wecom'); s.busy='wecom'; render();
@@ -35583,20 +35688,21 @@ function screenPushCfg(){
     ${x7Card(x7Head(T('Order-status subscribe-message template','订单状态订阅消息模板'),''),
       x7Help(T('WeChat doesn\'t allow free push — instead, each customer opts in to one notification per submission. We use that slot to send "Order paid", "Preparing", "Dispatched", and "Delivered" updates.',
         '微信不允许免费推送 —— 顾客每次提交只能订阅一条通知。我们用这个名额发送“已付款”“备货中”“已发货”“已送达”等更新。'))+
-      x7In('cfg.template',T('Template ID','模板 ID'),{mono:true,ph:'e.g. WrA_C5n8KuQ0vWBg…'}))}
+      x7In('cfg.template',T('Template ID','模板 ID'),{mono:true,ph:'e.g. WrA_C5n8KuQ0vWBg…'})+
+      x7CfgFoot('template'))}
     ${x7Card(x7Head(T('Alternative: group-bot webhook','备选:群机器人 Webhook'),''),
       x7Help(T('Only if you use mainland 企业微信 with an internal (company-only) group. Paste the group robot\'s webhook and the card posts there instead. Leave blank if you\'re using the app above.',
         '仅当你使用国内企业微信且有内部群时。填入群机器人的 Webhook,卡片会发到群里。若用上面的 App 方式,请留空。'))+
-      x7In('cfg.webhook',T('Group-bot webhook URL','群机器人 Webhook 地址'),{mono:true,ph:'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…'}))}
-    ${x7Card(x7Head(T('System Alerts','系统告警'),''),
+      x7In('cfg.webhook',T('Group-bot webhook URL','群机器人 Webhook 地址'),{mono:true,ph:'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…'})+
+      x7CfgFoot('webhook'))}
+    ${x7Card(x7Head(T('System alerts','系统告警'),''),
       x7Help(T('Sends operational alerts — a channel (Meituan/闪购) disconnecting, the proxy going down, or the storefront not responding — to a dedicated WeCom group. Keep this separate from your order group so ops noise doesn\'t bury orders.',
         '把运营告警(渠道掉线、代理中断、店铺无响应等)发到一个专用企业微信群,与订单群分开,避免淹没订单。'))+
       `<div style="display:flex;align-items:center;gap:14px;min-height:44px"><span style="flex:1;font-size:14.5px">${T('Enable system alerts','开启系统告警')}</span>${toggle(!!s.d['cfg.alerts_on'],"APP.cmd('x7Flip','cfg.alerts_on')")}</div>`+
       x7In('cfg.alerts_webhook',T('Group-bot webhook URL','群机器人 Webhook 地址'),{mono:true,ph:'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…'})+
       x7Note('alert')+
-      btns(x7Btn('x7AlertTest',T('Send test','发送测试'),'alert',{busyLabel:T('Sending…','发送中…')})))}
-    ${x7Note('cfg')}
-    ${x7Btn('x7CfgSave',T('Save settings','保存设置'),'cfg',{primary:true})}</div>`;
+      btns(x7Btn('x7AlertTest',T('Send test','发送测试'),'alert',{busyLabel:T('Sending…','发送中…')}))+
+      x7CfgFoot('alerts'))}</div>`;
 }
 SUBS.pushcfg={title:['Push notifications','推送通知'],render:()=>screenPushCfg()};
 /* §325 X7 ends */
@@ -37986,39 +38092,43 @@ function sheetBillCheckout(){
 }
 /* §325 X13 ends */
 function screenSettings(){
+  /* §494 (2026-10-21) — the desktop's nine groups, in the desktop's order and
+     words, then the two that are this phone's own (Preferences, App). A
+     group whose doors the role cannot open is left out rather than shown
+     empty. What the phone has no screen for (the store profile, Payments &
+     tax) says so in a word, the way Store profile always has. */
   const groups=[
-    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true},
-      /* §325 X1 — the desktop's two read-only records, beside the team whose work they record. */
-      ...(canRoute('changes')?[{label:T('Change history','修改记录'),cmd:"APP.cmd('push','changes')",chev:true}]:[]),
-      ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[]),
-      /* §325 X4 — the desktop's Brand page, from the same nav it sits in there. */
+    {h:T('Store','门店'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true},
       ...(canRoute('brand')?[{label:T('Brand','品牌'),cmd:"APP.cmd('push','brand')",chev:true}]:[]),
-      /* §325 X13 — the desktop's Billing link, beside Brand as it is there. */
-      ...(mCanKnown('billing:view')?[{label:T('Billing','账单'),cmd:"APP.cmd('push','billing')",chev:true}]:[]),
-      /* §325 X5 — the desktop's Shop tab and Customer service panels. */
+      ...(mCanKnown('billing:view')?[{label:T('Billing','账单'),cmd:"APP.cmd('push','billing')",chev:true}]:[])]},
+    {h:T('Online shop','线上商城'),rows:[
       ...(canRoute('shopdisplay')?[{label:T('Shop tab','商城页'),cmd:"APP.cmd('push','shopdisplay')",chev:true}]:[]),
-      ...(canRoute('custservice')?[{label:T('Customer service','客户服务'),cmd:"APP.cmd('push','custservice')",chev:true}]:[]),
-      /* §325 X7 — the desktop's Push notifications panel: the shop's own alerts and keys. */
-      ...(canRoute('pushcfg')?[{label:T('Push notifications','推送通知'),cmd:"APP.cmd('push','pushcfg')",chev:true}]:[]),
-      /* §325 PD15 — the desktop's Settings → SKU codes. */
-      ...(canRoute('skucodes')?[{label:T('SKU codes','编码规则'),cmd:"APP.cmd('push','skucodes')",chev:true}]:[])]},
-    /* §325 X7 — the couriers' keys and Qingyun, the desktop Delivery hub's three cards. */
-    ...(x7DeliveryRows().length?[{h:T('Delivery','配送'),rows:x7DeliveryRows()}]:[]),
-    {h:T('Notifications','通知'),rows:NOTIFICATION_ROWS()},
-    {h:T('Features','功能'),rows:FEATURE_ROWS()},
-    // No Auto-print row here. It used to sit in this group, in Operations, AND
-    // in Delivery — one switch in three places, two of them a tap away from the
-    // third, so flipping it in one left the other two looking stale until the
-    // next render. Operations owns it, the way the desktop's printer settings do.
-    {h:T('Automation','自动化'),rows:[
+      ...(canRoute('custservice')?[{label:T('Customer service','客户服务'),cmd:"APP.cmd('push','custservice')",chev:true}]:[])]},
+    {h:T('Payments & tax','收款与税费'),rows:[{label:T('Payments & tax','收款与税费'),value:T('on desktop','在电脑端')}]},
+    {h:T('Delivery & pickup','配送与自提'),rows:[
+      ...(canRoute('delivery')?[{label:T('Delivery settings','配送设置'),cmd:"APP.cmd('push','delivery')",chev:true}]:[]),
+      ...x7DeliveryRows()]},
+    /* This phone's own alerts first, then the shop's: the keys and webhooks
+       the desktop's Notifications panel holds. */
+    {h:T('Notifications','通知'),rows:[...NOTIFICATION_ROWS(),
+      ...(canRoute('pushcfg')?[{label:T('Push notifications','推送通知'),cmd:"APP.cmd('push','pushcfg')",chev:true}]:[])]},
+    /* Auto-print stays Operations' switch (one switch, one place); this is
+       its door. */
+    {h:T('Printing','打印'),rows:[
+      ...(canRoute('printers')?[{label:T('Receipt printing','云打印出单'),cmd:"APP.cmd('push','printers')",chev:true}]:[]),
+      {label:T('Auto-print receipts','自动打印小票'),value:T('in Operations','在运营中'),cmd:"APP.cmd('push','operations')",chev:true}]},
+    {h:T('Features','功能开关'),rows:FEATURE_ROWS()},
+    {h:T('Advanced','高级'),rows:[
       // Routing is behaviour, not a setting: every order already goes to the
       // nearest store and there is nothing to switch. Saying so beats a toggle
       // that writes nowhere.
       {label:T('Routing','派单'),value:T('Nearest store','最近门店')},
-      {label:T('Printing','打印'),value:T('in Operations','在运营中'),cmd:"APP.cmd('push','operations')",chev:true},
-    ]},
+      ...(canRoute('skucodes')?[{label:T('SKU codes','编码规则'),cmd:"APP.cmd('push','skucodes')",chev:true}]:[])]},
+    {h:T('History','记录'),rows:[
+      ...(canRoute('changes')?[{label:T('Change history','修改记录'),cmd:"APP.cmd('push','changes')",chev:true}]:[]),
+      ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[])]},
     {h:T('Preferences','偏好'),rows:[{label:T('Language','语言'),value:state.lang==='en'?'English':'中文',cmd:"APP.cmd('toggleLang')",chev:true},{label:T('Theme','主题'),value:state.theme==='light'?T('Light','浅色'):T('Dark','深色'),cmd:"APP.cmd('toggleTheme')",chev:true}]},
-  ];
+  ].filter(g=>g.rows.length);
   /* The permanent home for Install, so dismissing the strip at the bottom of
      the screen only silences the ASKING — the offer itself stays somewhere an
      operator can find it. When the app is already installed the row says so
@@ -49728,6 +49838,7 @@ function render(){
     + `<div class="dock" id="mDock">${installStrip()}${tabbar()}</div>`
     + (state.quickFab ? layer('dial', fabHtml()) : fabHtml());
   if(state.installSheet) html += layer('install', sheetInstall());
+  if(state.help) html += layer('help', sheetHelp());
   if(state.overflow) html += layer('overflow', sheetOverflow());
   if(state.ask) html += layer('ask:'+state.ask.title, sheetAsk());
   if(state.qs.cmd) html += layer('qscmd', sheetQsCmd());
