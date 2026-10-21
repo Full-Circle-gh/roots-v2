@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.569
+# Tacet shared-core consolidation — decisions record, v4.570
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-21 · v4.570 — **§492 · ONE ANSWER CAN BE SWITCHED OFF AT ONE SHOP — DECIDED BY ASH:** *"go"*, then *"I need a switch for yuexiu location that can turn off the crackers option from variant of product that under \"made here\""*. The till's Sold out mode gains a chip per answer under each made-here item; an answer switched off greys on that shop's QR menu and till and is refused at their submit. Other shops, the web shop and the mini app are untouched. §120 rule 1's *"only a stock-LINKED choice can be sold out at all"* is amended for made-here items at a shop. Version v4.570 and §492 follow main's v4.569 / §491; the open PR #1232 holds v4.563–v4.568 and §485–§490. Schema: one new table, `shop_option_choices_off`. One new route. No new string, EN or CN. No change to `.gitignore` or CI. See §492.
 
 2026-10-20 · v4.569 — **§491 · A MADE-HERE ITEM SOLD AT THE COUNTER TAKES NOTHING OFF THE SHELF, EVEN WHEN A STRAY SHELF ROW EXISTS — DECIDED BY ASH:** *"yes build it"*, after asking *"how can it go below zero it's made here . on the spot"* about the 09:10 alert on 越秀 order TC001423 (美式咖啡 剩余 -2). §43 already says selling a made-here item decrements nothing; the till and the paid QR order did not check the listing, so a shelf row the Americano should never have had went below zero. Version v4.569 and §491 skip past v4.563–v4.568 and §485–§490, which the open PR #1232 claims. `lib/inventory.js` becomes the first order path admitted to read `shop_listings`, by name, in `scripts/test_shop_listings.js`'s containment check. No schema, no string, no change to `.gitignore` or CI. See §491.
 
@@ -32590,3 +32592,87 @@ cover the fix fail on the old code). `scripts/test_fresh_stock_deferral.js` and
 database, so each now also copies the live `madeHereProductIds` and has the two
 empty tables it reads. Schema: none. No new route. No string, EN or CN. No change to
 `.gitignore` or CI.
+
+## §492 — ONE ANSWER CAN BE SWITCHED OFF AT ONE SHOP
+
+**Decided by Ash, 2026-10-21:** *"go"*, on a proposal for a sold-out switch on
+each answer. Then, asked whether it should apply at every shop or one: *"right
+now I'm referring only to the qr code menu shop at yuexiu that prepare on spit
+some dishes … it's not the retail bags crackers . it the same crackers buy
+kitchen send it in big container … I need a switch for yuexiu location that can
+turn off the crackers option from variant of product that under "made here""*.
+
+**The gap.** The Hummus Platter asks "Choose 2 crunchy sides": Whole wheat
+crackers, Tortilla corn chips, Veggie sticks. At 越秀 the crackers come out of a
+kitchen container. When it is empty nobody could say so. §120 rule 1 greys an
+answer only when it is linked to a counted shelf product (`stock_product_id`),
+and these crackers are not one. The workaround (link the answer to a product and
+count it to zero) takes stock on every order, copies that product's price onto a
+free answer, and shows the answer sold out forever wherever the product has no
+shelf row. It is not a switch.
+
+**The rule.**
+
+1. **One answer of a made-here item can be switched off at one shop.** From the
+   till's Sold out mode (§287), which now shows each made-here item's answers as
+   chips under the tiles. Tap to switch off, tap again to switch back on. Same
+   permission as the item switch: `till:use` or `stores:edit`, and a cashier
+   scoped to stores can switch only their own.
+2. **Off means the answer is greyed, exactly as a sold-out extra is.** On that
+   shop's QR menu and its till sheet the answer shows sold out and cannot be
+   picked. A "choose 2" floor counts only the answers still on (§153's clamp),
+   and a required question with every answer off makes the item sold out
+   (§120 rule 1A).
+3. **Off is refused at submit.** A pick that arrives anyway (a page loaded before
+   the switch) is refused. The QR menu answers with the 409 it already sends for
+   a sold-out extra, naming the item, so the customer's basket drops that item
+   and they choose again. The till's order path and the staff New order form
+   refuse it for the selling store as `bad_choice`.
+4. **One shop only.** The switch is stored against the shop. Another shop selling
+   the same platter is untouched, and so are the web shop and the mini app: the
+   counter's crackers are not the retail bags.
+5. **Made-here listings only.** A stocked item's answers come off a counted shelf
+   when they come off anything, which is what §120 already handles. The route
+   refuses a stocked listing.
+6. **It never turns itself back on**, for the reason §287 gives the item switch:
+   an ingredient can be out for days.
+7. **Removing the item from the shop's menu clears its switches**, so putting it
+   back later does not bring back an "off" nobody remembers setting.
+
+**How it is stored, and the one way it can be lost.** One row per switched-off
+answer in `shop_option_choices_off` (shop, product, label). It is keyed by the
+answer's LABEL, not its choice id, because every product save deletes and
+re-creates the choices with new ids (`writeProductOptions` in
+`routes/retail.js`); a switch keyed on the id would turn itself back on at the
+next edit. The label is `label_en`, or `label_cn` when there is no English. So:
+- **Renaming the answer ends the switch.** The renamed answer is on.
+- **The same answer asked in two questions of one item is one switch.** It is
+  the same crackers from the same container.
+
+**§120 rule 1 is amended, not replaced.** *"Only a stock-LINKED choice can be
+sold out at all"* still holds for every surface except a made-here item at a
+shop that has switched the answer off. Stock-linked answers keep their shelf
+rule unchanged, and a switched-off linked answer is off whatever its shelf says.
+
+**Where it lives.** `lib/option-switch.js` is the only reader and writer of the
+table. `lib/product-options.js` takes the verdict as a caller-supplied predicate
+(`isChoiceSwitchedOff`), beside the shelf predicate it already took, so the
+module still queries no availability itself. Callers: the QR menu's page and
+submit (`routes/shop-menu.js`), the till's catalogue and switch route
+(`routes/retail-shops.js`), and the till's order path and the staff product list
+with a store (`routes/retail.js`). The table does not join `shop_listings`, so
+none of those order paths enters that table's containment guard
+(`scripts/test_shop_listings.js`).
+
+**Not changed.** The product editors (desktop, phone, wizard) and the save path.
+The web shop's and mini app's product page and checkout. The office Shops page.
+The kitchen ticket.
+
+Tests: `scripts/test_option_switch.js` (fast shard, 25 checks; the 5 that cover
+the greying, the refusal, the floor and the survival of a product save fail
+against the old `lib/product-options.js`). Schema: one new table,
+`shop_option_choices_off`, created in `database.js` and copied to tenant
+databases by `initTenantSchema`. One new route, `PUT
+/api/retail-admin/shops/:id/listings/:lid/choices/:cid/off`. No new string, EN or
+CN: the chip prints the answer's own label and the existing *Sold out · 售罄*
+pair. No change to `.gitignore` or CI.

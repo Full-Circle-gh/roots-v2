@@ -76,6 +76,7 @@ const inventory = require('../lib/inventory');
 // rather than being copied; the module header says why. lib/option-limits is
 // no longer required here because the one caller that used it went with them.
 const productOptions = require('../lib/product-options');
+const optionSwitch = require('../lib/option-switch');
 const { choicePhotoVersions } = require('../lib/choice-photo');
 // resolveProductImage and normalizeCurrency are retail.js's, exported for this
 // file so the photo fallback and the money format cannot drift from the
@@ -398,7 +399,10 @@ function attachOptions(shop, listings) {
     return !a || a.available <= 0;
   };
 
-  const byProduct = productOptions.questionsForProducts(tdb(), pids, { isChoiceSoldOut });
+  // §492 — an answer this shop has switched off ("out of crackers") greys
+  // exactly as a sold-out extra does, linked to a shelf or not.
+  const isChoiceSwitchedOff = optionSwitch.switchedOffAt(tdb(), shop.location_id);
+  const byProduct = productOptions.questionsForProducts(tdb(), pids, { isChoiceSoldOut, isChoiceSwitchedOff });
   if (!byProduct.size) return;
 
   // A PICTURE BESIDE EACH CHOICE (lib/choice-photo.js) — the linked product's
@@ -4464,8 +4468,19 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
 
   const answers = productOptions.resolveAnswers(
     tdb(), rows.map(r => ({ product_id: r.pid, qty: r.qty, choices: r.choices })),
-    { isChoiceSoldOut }
+    { isChoiceSoldOut, isChoiceSwitchedOff: optionSwitch.switchedOffAt(tdb(), shop.location_id) }
   );
+  // §492 — AN ANSWER SWITCHED OFF SINCE THE PAGE LOADED is answered the way a
+  // sold-out extra is below: a 409 naming the menu product, which the page
+  // answers by clearing that product's lines so the customer picks again and
+  // finds the answer greyed. A bare 400 would only say "Please try again".
+  if (answers.error && answers.choice_off && byId.get(answers.product_id)) {
+    const l = byId.get(answers.product_id);
+    return res.status(409).json({
+      success: false, error: 'unavailable',
+      items: [{ store_product_id: answers.product_id, name_en: l.name_en, name_cn: l.name_cn }],
+    });
+  }
   if (answers.error) {
     return res.status(400).json({
       success: false, error: answers.error, store_product_id: answers.product_id || null,

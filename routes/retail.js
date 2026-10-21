@@ -28,6 +28,7 @@ const optionLimits = require('../lib/option-limits');
 // with routes/shop-menu.js so a counter sale and a QR sale are priced by one
 // piece of code; see the module header.
 const productOptions = require('../lib/product-options');
+const optionSwitch = require('../lib/option-switch');
 // One answer for what a product page signs itself with, read here by BOTH the
 // operator route the editor asks and the public config the mini app asks (§156).
 const brandSignature = require('../lib/brand-signature');
@@ -22350,9 +22351,12 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   // location-scoped. `options` is absent on a product with no questions.
   if (req.query.with_options === '1' && rows.length) {
     const optStore = parseInt(req.query.store_id, 10) || null;
+    // §492 — and an answer that store's shop has switched off is `out` too,
+    // because the create route refuses it for that store.
     const byProduct = productOptions.questionsForProducts(
       tdb(), rows.map(r => r.id),
-      optStore ? { isChoiceSoldOut: manualOrderAddonSoldOut(optStore) } : {}
+      optStore ? { isChoiceSoldOut: manualOrderAddonSoldOut(optStore),
+                   isChoiceSwitchedOff: optionSwitch.switchedOffAt(tdb(), optStore) } : {}
     );
     for (const r of rows) {
       const qs = byProduct.get(r.id);
@@ -22854,7 +22858,10 @@ function resolveManualOrderLines(items, { storeId = null, heldTaken = null } = {
     tdb(),
     list.map(it => ({ product_id: parseInt(it.product_id, 10), qty: Number(it.qty),
                       choices: it.choices })),
-    storeId ? { isChoiceSoldOut: manualOrderAddonSoldOut(storeId, heldTaken) } : {}
+    // §492 — the selling store's shop may have switched an answer off ("out
+    // of crackers"); its till greys it, and this refuses it if it arrives.
+    storeId ? { isChoiceSoldOut: manualOrderAddonSoldOut(storeId, heldTaken),
+                isChoiceSwitchedOff: optionSwitch.switchedOffAt(tdb(), storeId) } : {}
   );
   if (answers.error) return { error: answers.error, product_id: answers.product_id || null };
 

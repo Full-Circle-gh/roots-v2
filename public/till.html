@@ -337,6 +337,29 @@ button{font:inherit;color:inherit;margin:0}
 /* §287 — while marking sold out, a switched-off tile is still tappable (it is
    how it comes back), so it keeps the dashed look without the disabled one. */
 .tile.so-busy{opacity:.5}
+/* §492 — A MADE-HERE ITEM'S ANSWERS, under the tiles while marking sold out.
+   One row per item that asks something, one chip per answer; a chip is the
+   same switch as a tile, for "out of crackers" rather than "out of hummus".
+   The rows grow with their chips, so only in this mode may a grid row be
+   taller than its tile. */
+.grid.so{grid-auto-rows:minmax(100px,auto)}
+.grid.so.pics{grid-auto-rows:minmax(180px,auto)}
+.so-opts{grid-column:1/-1;display:flex;flex-direction:column;gap:8px;padding-top:4px}
+.so-oh{font-size:14px;font-weight:500}
+.so-oh .vl{font-style:normal;font-weight:400;color:var(--td-text2);margin-left:6px}
+.so-oc{display:flex;flex-wrap:wrap;gap:8px}
+.so-c{
+  display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:8px 14px;
+  border-radius:var(--r-card);border:1px solid var(--td-border);background:var(--td-surface);
+  font-size:14px;text-align:left;
+}
+.so-c:active{background:var(--td-raised)}
+.so-c.out{background:var(--td-raised);border-style:dashed;color:var(--td-text2)}
+.so-c .lo{
+  font-size:12px;font-weight:500;border-radius:var(--r-pill);padding:2px 8px;white-space:nowrap;
+  color:var(--td-brick-ink);background:var(--td-brick-tint);
+}
+.so-c.so-busy{opacity:.5}
 /* §289 — THE PHOTO. Across the top of the tile, because a picture is read
    before a word is: two products with the same name are told apart by what
    they look like. Across the top rather than beside the name, because the
@@ -2371,6 +2394,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // catalogue rather than on what the search left: rows that changed height
     // while the cashier typed would move every tile under their thumb.
     $('grid').classList.toggle('pics', S.products.some(function (p) { return p.image && !S.imgBad[p.id]; }));
+    $('grid').classList.toggle('so', !!S.soMode);
     if (!list.length) { $('grid').innerHTML = '<div class="gempty">' + esc(T('noItems')) + '</div>'; return; }
     var h = '';
     if (S.soMode) {
@@ -2391,6 +2415,25 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
                   : (p.sku ? '<span class="sku">' + esc(p.sku) + '</span>' : '')
                     + '<span class="pr">' + money(p.price) + '</span>')
            + '</span></button>';
+      });
+      /* §492 — AND EACH ITEM'S ANSWERS, so "out of crackers" is one tap and
+         not the whole Hummus Platter. The chip's word is its state, as on a
+         tile. Off at this shop only: the QR menu and this till grey it, and
+         nothing else does. */
+      list.forEach(function (p) {
+        var ch = soChoices(p);
+        if (!ch.length) return;
+        h += '<div class="so-opts"><div class="so-oh">' + esc(pname(p))
+           + (vlabel(p) ? '<i class="vl">' + esc(vlabel(p)) + '</i>' : '') + '</div><div class="so-oc">';
+        ch.forEach(function (c) {
+          var busy = !!S.soBusy[p.id + ':' + c.id];
+          h += '<button class="so-c' + (c.off ? ' out' : '') + (busy ? ' so-busy' : '') + '" type="button"'
+             + ' data-so-c="' + c.id + '" data-so-p="' + p.id + '"' + (busy ? ' disabled' : '') + '>'
+             + '<span class="ol">' + esc(cuT(c.en, c.cn)) + '</span>'
+             + (c.off ? '<span class="lo">' + esc(T('soldOut')) + '</span>' : '')
+             + '</button>';
+        });
+        h += '</div></div>';
       });
       $('grid').innerHTML = h;
       return;
@@ -3781,6 +3824,58 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     });
   }
 
+  /* §492 — the answers a made-here item's Sold out row offers: every answer to
+     every question it asks, once per name. The switch is stored by name, so
+     "Whole wheat crackers" asked in two questions is one chip and one switch. */
+  function soChoices(p) {
+    if (!canSoldOut(p) || !p.options) return [];
+    var seen = {}, out = [];
+    p.options.forEach(function (o) {
+      (o.choices || []).forEach(function (c) {
+        if (!c.en || seen[c.en]) return;
+        seen[c.en] = 1; out.push(c);
+      });
+    });
+    return out;
+  }
+
+  /* §492 — SWITCH ONE ANSWER OFF, OR BACK ON, at this shop. Same promise as
+     toggleSoldOut: the chip moves only when the server says yes. The catalogue
+     is then re-read, because whether the item itself can still be made (a
+     required question with every answer off) is the server's call. */
+  function toggleChoiceOff(pid, cid) {
+    var p = null;
+    S.products.forEach(function (x) { if (x.id === pid) p = x; });
+    if (!canSoldOut(p) || !S.shopId || !p.options) return;
+    var c = null;
+    soChoices(p).forEach(function (x) { if (x.id === cid) c = x; });
+    var key = pid + ':' + cid;
+    if (!c || S.soBusy[key]) return;
+    var want = !c.off;
+    S.soBusy[key] = true; S.err = ''; render();
+    api('/api/retail-admin/shops/' + S.shopId + '/listings/' + p.listing_id + '/choices/' + cid + '/off', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ off: want })
+    }).then(function (j) {
+      delete S.soBusy[key];
+      if (!j || !j.success) { S.err = T('didNotSave'); render(); return; }
+      // Every question's copy of this answer, until the re-read lands.
+      p.options.forEach(function (o) {
+        (o.choices || []).forEach(function (x) {
+          if (x.en !== c.en) return;
+          if (want) { x.off = 1; x.out = 1; }
+          else { delete x.off; if (!x.stock_product_id) x.out = 0; }
+        });
+      });
+      render();
+      loadCatalogue().then(render).catch(function () { /* the next poll catches up */ });
+    }).catch(function (e) {
+      delete S.soBusy[key];
+      S.err = e && e.auth ? T('noPermission') : T('didNotSave');
+      render();
+    });
+  }
+
   function addLine(id) {
     // Belt to renderLines' braces. The product grid is behind the other pane
     // while a recall is open, but a stray tap must not be able to put a walk-in
@@ -4677,7 +4772,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (S.holdOpen && ev.target.id === 'holdpick') return closeHoldAsk();
       // §474 — tapping away from the discount sheet is not giving one.
       if (S.discOpen && ev.target.id === 'discpick') return closeDiscAsk();
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-hold],[data-held],[data-disc],[data-disc-pct],[data-disc-why],[data-disc-mgr]');
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-so-c],[data-hold],[data-held],[data-disc],[data-disc-pct],[data-disc-why],[data-disc-mgr]');
       if (!t) return;
       // §183 — the question sheet. Answered before anything else on the screen:
       // while it is up it is the only thing the cashier is being asked.
@@ -4741,6 +4836,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (t.hasAttribute('data-pick'))  return switchStore(t.getAttribute('data-pick'));
       if (t.hasAttribute('data-somode')) { S.soMode = !S.soMode; S.err = ''; return render(); }
       if (t.hasAttribute('data-so'))    return toggleSoldOut(Number(t.getAttribute('data-so')));
+      if (t.hasAttribute('data-so-c'))  return toggleChoiceOff(Number(t.getAttribute('data-so-p')), Number(t.getAttribute('data-so-c')));
       if (t.hasAttribute('data-add'))   return addLine(Number(t.getAttribute('data-add')));
       if (t.hasAttribute('data-cat'))   { S.cat = t.getAttribute('data-cat'); return render(); }
       if (t.hasAttribute('data-line'))  { var i = Number(t.getAttribute('data-line')); S.sel = (S.sel === i ? null : i); return render(); }

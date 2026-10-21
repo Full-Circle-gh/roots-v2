@@ -8066,6 +8066,36 @@ db.exec(`
 `);
 
 // ─────────────────────────────────────────────────────────────────────────
+// ONE ANSWER SWITCHED OFF AT ONE SHOP — docs/tacet-consolidation-decisions.md
+// §492 (2026-10-21). "Whole wheat crackers" in the Hummus Platter's "Choose 2
+// crunchy sides" comes out of a kitchen container at 越秀, not off a counted
+// shelf, so §120's stock link cannot say it has run out. A row here says it
+// has: that answer is greyed on this shop's QR menu and till, and refused at
+// their submit, until someone switches it back on. It never resets by itself,
+// for the reason §287 gives the made-here switch.
+//
+// KEYED BY THE ANSWER'S LABEL, NOT ITS ID. Every product save deletes and
+// re-inserts its choices (routes/retail.js writeProductOptions), so a choice id
+// lives only until the next edit and a switch keyed on it would quietly turn
+// itself back on. `label` is the choice's label_en, or label_cn when it has no
+// English. Renaming the answer is the one edit that ends the switch.
+//
+// NOT JOINED TO shop_listings, so the order paths that read it stay outside
+// that table's containment guard (scripts/test_shop_listings.js).
+// ─────────────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shop_option_choices_off (
+    shop_id           INTEGER NOT NULL,
+    store_product_id  INTEGER NOT NULL,
+    label             TEXT    NOT NULL,
+    switched_off_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    switched_off_by   INTEGER,
+    PRIMARY KEY (shop_id, store_product_id, label),
+    FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
+  );
+`);
+
+// ─────────────────────────────────────────────────────────────────────────
 // THE KITCHEN QUEUE SPLIT — docs/tacet-consolidation-decisions.md §61
 // (2026-09-07). A kitchen request used to move as one block: one status on
 // restock_orders, every line forced to start and finish together. Each
