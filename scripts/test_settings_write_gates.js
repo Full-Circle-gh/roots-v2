@@ -453,7 +453,20 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         'the phone\'s points rules write the desktop\'s seven keys (§325 M11)');
       ok(list(route('pointsrules')).every((k) => has(configKeyCap('points.earnRate'), k)), 'phone How points work may write points.*');
       ok(list(route('tiersedit')).every((k) => has(configKeyCap('roots_club.tiers'), k)), 'phone tiers editor may write roots_club.tiers');
-      const famSites = sites.filter((i) => !dlvSites.includes(i) && i !== prSite);
+      /* §494 rule 3 — the phone's three Notifications cards save through ONE
+         helper, x7CfgPut, whose site names no family itself (the body comes
+         from X7_CFG_CARDS). Set apart like the Delivery helper, and its keys
+         pinned to the desktop's three cards' keys. */
+      const x7Site = M.indexOf('function x7CfgPut(');
+      const x7Sites = sites.filter((i) => i > x7Site && i < M.indexOf('\n}\n', x7Site));
+      is(x7Sites.length, 1, 'the Notifications cards write through one site');
+      const x7Block = M.slice(M.indexOf('const X7_CFG_CARDS={'), M.indexOf('\n};', M.indexOf('const X7_CFG_CARDS={')));
+      is([...new Set((x7Block.match(/(?<!card:)'(notifications\.[a-z_]+|system_alerts\.[a-z_]+)'/g) || []).map((k) => k.slice(1, -1)))].sort(),
+        ['notifications.order_status_template_id', 'notifications.wecom_order_webhook', 'system_alerts.enabled', 'system_alerts.wecom_webhook'],
+        'the phone\'s three cards write the desktop\'s four keys, under the desktop\'s history names (§494)');
+      ok(/card:'notifications\.order_status'/.test(x7Block) && /card:'notifications\.group_bot'/.test(x7Block) && /card:'system_alerts'/.test(x7Block),
+        '…notifications.order_status, notifications.group_bot, system_alerts');
+      const famSites = sites.filter((i) => !dlvSites.includes(i) && i !== prSite && !x7Sites.includes(i));
       // §325 X2/X3: the phone's Operations screen adds four families —
       // inventory.lowStockThreshold, inventory.lowStockDigest, support.hidden
       // (the open one) and product_page.sections — each its own write site.
@@ -469,8 +482,9 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       // §325 M10 adds the Reviews screen's two Set up saves — the reward and
       // auto top-up — each its own site, as the desktop's saveReviewReward /
       // saveReviewTopup; the review tags are a cfgCard below.
+      // §494: the Push Save (one site, two families) is gone; those two
+      // families write through the x7CfgPut site set apart above.
       const SITE_FAMS = FAMS.filter((f) => f !== 'notifications.order_status_template_id' && f !== 'system_alerts.')
-        .concat(['notifications.order_status_template_id|system_alerts.'])
         // §325 M12 — popups.list has TWO phone sites: the list's switch and the
         // pop-up editor's puPut. Both send the list's version (§337), pinned below.
         .concat(['popups.list']).sort();
@@ -507,7 +521,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         ok(own.includes("put:(b,note)=>apiWrite('" + url + "'+cfgHistQ('" + card + "',note),b,'PUT')"), 'the ' + card + ' card writes its own route, ' + url + ', not /config');
       }
       is(famSites.filter((i) => i !== CARD_SITE).map((i) => famAt(i).join('|')).sort(),
-        SITE_FAMS, 'the phone writes seventeen families at seventeen write sites, each asserted in section 2 (support.hidden as the open one)');
+        SITE_FAMS, 'the phone writes sixteen families at sixteen write sites, each asserted in section 2 (support.hidden as the open one)');
       /* §325 O4 — the phone's Delivery settings write through one helper
          (dlvCfgPut), so their keys are read from where they are named: the
          live cards' `keys`, the two switches' `key`, and the three sheets'
