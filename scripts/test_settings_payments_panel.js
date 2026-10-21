@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * test_settings_payments_panel.js — the money cards have a room of their own,
- * and three things left Settings (decisions §493, 2026-10-21).
+ * and three things left Settings (decisions §494, 2026-10-21).
  *
  *   node scripts/test_settings_payments_panel.js
  *
@@ -121,7 +121,7 @@ section('5 · Operations: no banner without a control, no server file on a tenan
     'the key is a Sage or Amber pill (§1.10), not an inline-styled green or red one');
   // Scoped to the two painters this decision touched: the shipping-integration
   // chips further down the module still shout, and PR 2's design pass is where
-  // they stop (§493 rule 6).
+  // they stop (§494 rule 6).
   const chip = OPS.slice(OPS.indexOf('function _alipayManualChip('), OPS.indexOf('async function loadAlipayManual()'));
   yes(!/KEY CONFIGURED|KEY MISSING|LIVE · |OFF · /.test(status + chip), 'no shouting pills on the two cards this changed (§1.16)');
   yes(/\.td-pill-sage\s*\{[^}]*--td-sage-tint/.test(CSS), 'the Sage pill exists beside the Amber one');

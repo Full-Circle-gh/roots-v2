@@ -3497,14 +3497,14 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   $$('#settings-nav button').forEach(b => b.classList.toggle('active', b === btn));
   const sub = btn.dataset.sub;
   $$('.sub-panel').forEach(p => p.classList.toggle('active', p.id === 'sub-' + sub));
-  // §493 — there is no shared Save bar any more. Every panel's cards save
+  // §494 — there is no shared Save bar any more. Every panel's cards save
   // themselves (§279) or carry their own Save pinned to the card (money and
   // keys: tax, manual Alipay, the credential forms). A bar at the foot that
   // saved some cards and not others was the one thing on this screen the
   // help text had to explain.
   // Lazy-load the Operations panel's live data each time it is opened.
   if (sub === 'ops') loadOpsPanel();
-  // Payments & tax (§493): the manual-Alipay card replaces its whole record on
+  // Payments & tax (§494): the manual-Alipay card replaces its whole record on
   // save, so it is read fresh each time the panel opens (§325 D1) — never
   // saved from a form that did not load. Currency and tax are loadConfig's.
   if (sub === 'payments' && typeof loadAlipayManual === 'function') loadAlipayManual();

@@ -18,7 +18,7 @@ function loadOpsPanel() {
   loadIntegrationsStatus();
   loadShippingIntegrations();
   loadPrinterPrefs();
-  // The manual-Alipay card moved to Settings → Payments & tax (§493); the
+  // The manual-Alipay card moved to Settings → Payments & tax (§494); the
   // switcher reads it when THAT panel opens.
 }
 
@@ -374,7 +374,7 @@ function _alipayManualPickFile(event) {
 }
 
 // Persist the manual-Alipay card. Throws Error(friendlyMessage) on failure.
-// §493: the card has its own Save again (money and a key, §279 rule 2) —
+// §494: the card has its own Save again (money and a key, §279 rule 2) —
 // _saveAlipayManual below is the button; this is the write, kept apart so
 // the setup guide's Alipay step can call it without a toast of its own.
 async function saveAlipayManualInline() {
@@ -1577,7 +1577,7 @@ async function loadIntegrationsStatus() {
     const s = d.stores || { total: 0, missing: 0, geocoded: 0 };
     const a = d.addresses || { total: 0, missing: 0, geocoded: 0 };
     const provLabel = d.provider === 'amap' ? '高德 / Amap' : d.provider === 'tencent' ? '腾讯 / Tencent' : 'Maps';
-    // §493 — a status pill, not a paragraph telling a tenant to edit a file on
+    // §494 — a status pill, not a paragraph telling a tenant to edit a file on
     // the server. The key is the host's to set; the screen only says whether it is.
     const keyChip = cfg
       ? '<span class="td-pill td-pill-sage">' + escapeHtml(cuT('Map key set', '已配置密钥')) + '</span>'

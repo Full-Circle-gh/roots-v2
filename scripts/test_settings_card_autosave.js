@@ -230,7 +230,7 @@ const run = (src) => vm.runInContext(src, sandbox);
     const DV = read('public/retail-admin/06-delivery.js');
     const CORE2 = read('public/retail-admin/01-core.js');
     const H = read('public/retail-admin.html');
-    // §493 (2026-10-21): the shared Save bar is gone. The three Notifications
+    // §494 (2026-10-21): the shared Save bar is gone. The three Notifications
     // cards it saved — template id, group-bot webhook, System alerts — save
     // themselves; the manual-Alipay card keeps its own Save (money and a key).
     yes(!/async function saveConfig\(/.test(MK), 'the shared Save function is gone');

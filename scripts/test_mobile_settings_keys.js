@@ -157,7 +157,7 @@ async function open(route, opts) {
 
 // The desktop's bodies, read out of its source.
 const DESK_PRN_KEYS = keysOf(block(OPS, 'async function _savePrinter()').split('const body = {')[1].split('};')[0]);
-// §493: the desktop's three Notifications cards save themselves; their read()
+// §494: the desktop's three Notifications cards save themselves; their read()
 // bodies, in source order, are the keys the phone's one Save still sends.
 const DESK_CFG_KEYS = keysOf(slice(MKT, 'const NOTIF_TEMPLATE_CARD', 'const SHOP_CARD')).filter((k) => k.includes('.'));
 const svcKeys = (svc) => keysOf(slice(OPS, 'async function _saveIntegration(', 'async function _testKd100').split(`payload.${svc} = {`)[1].split('};')[0]);

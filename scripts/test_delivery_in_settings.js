@@ -182,7 +182,7 @@ section('6 · a search that finds a delivery card can actually show it');
 
 section('7 · there is no shared Save bar for Delivery to be kept off');
 {
-  // §493 (2026-10-21): the shared "Save settings" bar is gone from Settings
+  // §494 (2026-10-21): the shared "Save settings" bar is gone from Settings
   // altogether. Every Delivery sub-view saves itself or carries its own Save
   // (the carrier forms, the fees), so the old assertion — that Delivery was on
   // the switcher's no-shared-Save list — has nothing left to guard. What is

@@ -2042,7 +2042,7 @@ async function _testSystemAlert() {
 // and, through saveAlipayManualInline, the manual-Alipay payment card — keys
 // and money, which keep their button (rule 2). The Shop and Customer-service
 // panels it used to save as well now save themselves (SHOP_CARD, CS_CARD).
-// §279, amended §493 — the three Notifications cards that used to ride the
+// §279, amended §494 — the three Notifications cards that used to ride the
 // shared "Save settings" bar save themselves like every other card: the
 // order-status template id, the group-bot webhook and System alerts. None is
 // money or a secret (the WeCom app, SMS and kitchen cards hold secrets and keep

@@ -6,7 +6,7 @@
  *
  * Settings → Payments & tax's manual-Alipay card (public/retail-admin/02-settings-ops.js)
  * is saved by its own Save button (_saveAlipayManual → saveAlipayManualInline;
- * §493 — it rode the shared "Save settings" bar until 2026-10-21), and PUT
+ * §494 — it rode the shared "Save settings" bar until 2026-10-21), and PUT
  * /alipay-manual replaces the whole record from what it is sent. When the read
  * failed, loadAlipayManual returned quietly and left the card blank, so the
  * next Save switched manual Alipay off and wiped its account and OCR settings.

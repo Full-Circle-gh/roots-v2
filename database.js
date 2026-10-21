@@ -8096,6 +8096,31 @@ db.exec(`
 `);
 
 // ─────────────────────────────────────────────────────────────────────────
+// WHAT A PERSON'S RECOGNISER WRITES FOR A PRODUCT — decisions §493 (rule 7).
+// Quick Stock's microphone turns a sentence into text through the phone's
+// speech recogniser, and a recogniser mishears the same person the same way
+// every time: "homeless" for hummus, 哈姆斯 for the same word in Chinese. Each
+// confirmed card records the phrase that was heard against the product that
+// was meant, per operator, so the next time that phrase arrives the phone
+// reads it without a model and without a mistake. `heard` is the phrase with
+// the quantity, the store and the action words taken out, normalised the way
+// the phone normalises it (letters, digits and Chinese only). `user_key` is
+// the backend operator ('b:<tenant_users.id>'); other operators' rows are read
+// as a weaker hint, because two phones in one kitchen mishear alike.
+// Tenant data: copied to tenant databases by lib/tenant-db.js initTenantSchema.
+// ─────────────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS quick_stock_heard (
+    user_key    TEXT    NOT NULL,
+    heard       TEXT    NOT NULL,
+    product_id  INTEGER NOT NULL,
+    hits        INTEGER NOT NULL DEFAULT 1,
+    last_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_key, heard)
+  );
+`);
+
+// ─────────────────────────────────────────────────────────────────────────
 // THE KITCHEN QUEUE SPLIT — docs/tacet-consolidation-decisions.md §61
 // (2026-09-07). A kitchen request used to move as one block: one status on
 // restock_orders, every line forced to start and finish together. Each
