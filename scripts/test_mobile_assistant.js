@@ -30,7 +30,11 @@
  *   • when the browser will not listen, the sheet says why in words with the
  *     browser's own code in brackets — a refused microphone, an unreachable
  *     speech service, nothing heard — instead of going quiet (the bug Ash
- *     reported from his phone).
+ *     reported from his phone);
+ *   • a browser whose recogniser ends before the microphone ever opened — Chrome
+ *     on a phone without Google's speech engine, Ash's — is named as such,
+ *     remembered for a week on the device, and from then on the mic hands the
+ *     person to the keyboard's own voice input inside the tap.
  *
  * Drives Chromium through scripts/lib/m-probe, so it belongs in the slow
  * shard and is listed there by name in scripts/run-suites.js.
@@ -40,7 +44,7 @@
 const { run } = require('./lib/m-probe');
 
 const NO_SR = 'window.SpeechRecognition=undefined; window.webkitSpeechRecognition=undefined;';
-const FAKE_SR = `window.__sr=[]; window.SpeechRecognition=function(){ var me=this; me.start=function(){ window.__sr.push({lang:me.lang,ev:'start'}); };
+const FAKE_SR = `try{localStorage.removeItem('roots_voice_engine_bad')}catch(e){} window.__sr=[]; window.SpeechRecognition=function(){ var me=this; me.start=function(){ window.__sr.push({lang:me.lang,ev:'start'}); };
   me.stop=function(){ window.__sr.push({ev:'stop'}); if(me.onend) me.onend(); }; me.abort=function(){ window.__sr.push({ev:'abort'}); }; };
   window.webkitSpeechRecognition=undefined;`;
 const OWNER = "state.caps=null; state.cfg={features:{assistant:true}}; state.tab='home'; state.stack=[]; render();";
@@ -88,11 +92,12 @@ run('the voice assistant', [
   ['and for a role carrying assistant:use', WITH_CAP + NO_SR, [['there', `!!${MIC}`]]],
   ['not for a role without it', NO_CAP + NO_SR, [['absent', `!${MIC}`]]],
   ['not when the tenant switched the module off', OFF + NO_SR, [['absent', `!${MIC}`]]],
-  ['opening without a recogniser gives the field, the note and no chip', OWNER + NO_SR + "APP.cmd('asstOpen');", [
+  ['opening without a recogniser hands over to the keyboard: the field, the mic, the hint, no chip', OWNER + NO_SR + "APP.cmd('asstOpen');", [
     ['the sheet', `${otext}.indexOf('Voice assistant')>-1`],
     ['the field has the keyboard', "document.activeElement&&document.activeElement.id==='mAsst'"],
+    ['the mic is still there', "!!document.getElementById('mAsstMic')"],
     ['no chip', "!document.querySelector('.overlay .chip')"],
-    ['the note', `${otext}.indexOf('Voice isn’t available in this browser')>-1`],
+    ['the keyboard hint', `${otext}.indexOf('Tap the microphone on your keyboard and speak.')>-1`],
     ['an example to copy', `${otext}.indexOf('For example')>-1`],
   ]],
   ['opening with a recogniser listens at once, with the chips', OWNER + FAKE_SR + "try{localStorage.removeItem('roots_qs_voice_lang')}catch(e){} APP.cmd('asstOpen');", [
@@ -104,19 +109,50 @@ run('the voice assistant', [
     ['restarted in Chinese', "window.__sr[window.__sr.length-1].lang==='zh-CN'"],
     ['remembered', "localStorage.getItem('roots_qs_voice_lang')==='zh'"],
   ]],
-  ['a speech service the phone cannot reach is said, with the code',
+  ['a speech service the phone cannot reach is said, with the code, and remembered',
     OWNER + FAKE_SR + "APP.cmd('asstOpen'); var r=state.asst.rec; r.onerror({error:'network'}); r.onend();", [
-      ['the words', `${otext}.indexOf('The speech service could not be reached')>-1`],
+      ['the words', `${otext}.indexOf('This browser can’t listen here. Use the microphone on your keyboard instead.')>-1`],
       ['and the code', `${otext}.indexOf('(network)')>-1`],
       ['not listening any more', "!document.getElementById('mAsstMic').classList.contains('on')"],
       ['the field stays for typing', "!!document.getElementById('mAsst')"],
+      ['the device remembers', "!!localStorage.getItem('roots_voice_engine_bad')"],
+    ]],
+  ['a recogniser that ends before the microphone ever opened is a browser that cannot listen (Ash\'s phone)',
+    OWNER + FAKE_SR + "APP.cmd('asstOpen'); state.asst.rec.onend();", [
+      ['said so, not "heard nothing"', `${otext}.indexOf('This browser can’t listen here')>-1 && ${otext}.indexOf('Heard nothing')===-1`],
+      ['with its code', `${otext}.indexOf('(no-engine)')>-1`],
+      ['remembered', "!!localStorage.getItem('roots_voice_engine_bad')"],
+    ]],
+  ['then the mic hands over to the keyboard, inside the tap',
+    OWNER + FAKE_SR + "APP.cmd('asstOpen'); state.asst.rec.onend(); APP.cmd('asstMic');", [
+      ['no second recogniser', "window.__sr.filter(function(e){return e.ev==='start'}).length===1"],
+      ['the field has the keyboard', "document.activeElement&&document.activeElement.id==='mAsst'"],
+      ['the hint replaces the error', `${otext}.indexOf('Tap the microphone on your keyboard and speak.')>-1 && ${otext}.indexOf('can’t listen here')===-1`],
+    ]],
+  ['a device already marked opens straight onto the keyboard, without trying the browser',
+    OWNER + FAKE_SR + "localStorage.setItem('roots_voice_engine_bad',String(Date.now())); APP.cmd('asstOpen');", [
+      ['nothing started', 'window.__sr.length===0'],
+      ['the field has the keyboard', "document.activeElement&&document.activeElement.id==='mAsst'"],
+      ['the hint', `${otext}.indexOf('Tap the microphone on your keyboard and speak.')>-1`],
+      ['no chip', "!document.querySelector('.overlay .chip')"],
+    ]],
+  ['a mark older than a week is tried again, and a sentence heard clears it',
+    OWNER + FAKE_SR + FETCH(PLAN) + "localStorage.setItem('roots_voice_engine_bad',String(Date.now()-8*24*3600*1000)); APP.cmd('asstOpen'); var r=state.asst.rec; r.onaudiostart(); r.onresult({results:[[{transcript:'close yuexiu'}]]}); r.onend();", [
+      ['the browser was tried', "window.__sr.length===1"],
+      ['the mark is gone', "!localStorage.getItem('roots_voice_engine_bad')"],
     ]],
   ['a microphone the browser refuses is said', OWNER + FAKE_SR + "APP.cmd('asstOpen'); var r=state.asst.rec; r.onerror({error:'not-allowed'}); r.onend();", [
     ['the words', `${otext}.indexOf('The microphone is blocked for this site')>-1 && ${otext}.indexOf('(not-allowed)')>-1`],
   ]],
-  ['a recogniser that ends having heard nothing says so', OWNER + FAKE_SR + "APP.cmd('asstOpen'); state.asst.rec.onend();", [
+  ['a recogniser whose microphone opened and heard nothing says so, and marks nothing', OWNER + FAKE_SR + "APP.cmd('asstOpen'); var r=state.asst.rec; r.onaudiostart(); r.onend();", [
     ['heard nothing', `${otext}.indexOf('Heard nothing')>-1`],
     ['no plan asked for', 'typeof window.__sent==="undefined" || window.__sent.length===0'],
+    ['not marked', "!localStorage.getItem('roots_voice_engine_bad')"],
+  ]],
+  ['a stop the person asked for says nothing', OWNER + FAKE_SR + "APP.cmd('asstOpen'); APP.cmd('asstMic');", [
+    ['stopped', "window.__sr.some(function(e){return e.ev==='stop'})"],
+    ['no error', `${otext}.indexOf('can’t listen')===-1 && ${otext}.indexOf('Heard nothing')===-1`],
+    ['not marked', "!localStorage.getItem('roots_voice_engine_bad')"],
   ]],
   ['one that heard a sentence goes straight on', OWNER + FAKE_SR + FETCH(PLAN) + "APP.cmd('asstOpen'); var r=state.asst.rec; r.onresult({results:[[{transcript:'close yuexiu'}]]}); r.onend();", [
     ['the plan was asked for, by voice', `${sent('/assistant/plan')}.length===1 && JSON.parse(${sent('/assistant/plan')}[0].b).via==='voice'`],

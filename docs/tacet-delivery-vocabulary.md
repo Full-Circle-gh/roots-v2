@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.350 · 2026-10-22 · WHEN THE BROWSER HAS NO SPEECH ENGINE, THE KEYBOARD'S MICROPHONE TAKES OVER (§495 fix 2) — 2 STRINGS COMPOSED BY CLAUDE (`此浏览器无法识别语音，请改用键盘上的麦克风。`, `请点击键盘上的麦克风说话。`), BUILT FROM LIVE FRAGMENTS; 2 RETIRED (`语音识别服务无法连接，请输入。` FROM v1.349, AND §493'S `此浏览器不支持语音，请输入。`), EACH NOW SAID BY THE FIRST NEW STRING OR THE SECOND.** See *The voice assistant (§495)*, *When the browser will not listen*.
+
 **v1.349 · 2026-10-22 · THE MICROPHONE SAYS WHY THE BROWSER WOULD NOT LISTEN (§495 fix) — 4 STRINGS COMPOSED BY CLAUDE (`浏览器已禁止本站使用麦克风。请在浏览器的网站设置中允许，然后重试。`, `语音识别服务无法连接，请输入。`, `没有听到声音，请点击麦克风再说一次。`, `未找到麦克风。`), EACH BUILT FROM LIVE FRAGMENTS, SHOWN ON PHONE AND COMPUTER ALIKE WITH THE BROWSER'S OWN CODE IN BRACKETS.** See *The voice assistant (§495)*, *When the browser will not listen*.
 
 **v1.348 · 2026-10-22 · §493 FOLDED INTO §495 — NOTHING COMPOSED; 8 STRINGS RETIRED WITH THE QUICK STOCK SHEET (`说出或输入库存变动`, `请说数量，或“售罄”。`, `这里只能加库存，不能设置数量。`, `哪个商品？`, `请先完成未保存的改动。`, `售罄 — 设为 0`, `现有 N`, AND THE SHEET'S EXAMPLE LINE); `正在听…`, THE TWO RECOGNISER LINES, `加 N 件` AND `设为 N` LIVE ON IN §495.** See *Saying a stock change (§493)*.
@@ -14543,6 +14545,19 @@ four say it, with the browser's own code in brackets so a report can name it.
 | the speech service cannot be reached | The speech service could not be reached. Type it instead. | 语音识别服务无法连接，请输入。 | `无法连接` is live (`无法连接该门店的青云同步服务。`); `请输入` is live. Says nothing about why a phone cannot reach it. |
 | the recogniser ended having heard nothing | Heard nothing — tap the mic and speak. | 没有听到声音，请点击麦克风再说一次。 | `没有听到` is plain; `请点击` is live; `再说一次` is the plain "say it again". |
 | no microphone on the device | No microphone was found. | 未找到麦克风。 | `未找到` is live. |
+
+**v1.350.** Ash, on the next try: *"same problem can't press it or tap it"*.
+The recogniser was ending before the microphone ever opened — Chrome on a phone
+sold in China has no speech engine of its own. That case, and `network` with
+it, now hands the person to the keyboard's voice input, and the `network` line
+above is **retired** for the first line below; §493's *"Voice isn’t available
+in this browser. Type it instead."* · `此浏览器不支持语音，请输入。` is retired
+for the second.
+
+| when | EN | CN | built from |
+|---|---|---|---|
+| the browser cannot listen here (no engine, unreachable service) | This browser can’t listen here. Use the microphone on your keyboard instead. | 此浏览器无法识别语音，请改用键盘上的麦克风。 | `无法识别` is live (`仍无法识别`); `改用` is live (`将改用上一层规则编号`); `键盘` and `麦克风` are live. |
+| the keyboard's microphone is the way in | Tap the microphone on your keyboard and speak. | 请点击键盘上的麦克风说话。 | `请点击` is live; `说话` is the plain verb. Not `语音输入`: the keyboard labels its own button. |
 
 ### Rejected
 

@@ -23453,32 +23453,68 @@ function voiceSR(){ return (typeof window!=='undefined'&&(window.SpeechRecogniti
    codes are the Web Speech API's: a refused microphone, a speech service that
    could not be reached (Chrome's goes through Google, which a phone in China
    reaches only through a VPN), nothing heard, no microphone at all. */
+/* A BROWSER THAT CANNOT LISTEN HERE (Ash, 2026-10-22, on his phone: "same
+   problem can't press it or tap it"). Chrome on Android has no speech engine of
+   its own: it borrows Google's, which a phone sold in China does not carry and
+   cannot reach without a VPN. The recogniser then ends before it ever opens the
+   microphone, with no error or with one of these codes, and every retry ends
+   the same way. So the first time it happens on a device it is remembered for a
+   week, and from then on the microphone on this sheet opens the field instead,
+   for the KEYBOARD's own voice input — Sogou, iFlytek, Baidu, Gboard: the one
+   every phone in China already has, which hears Chinese and English well and
+   learns its owner's voice. A later success clears the mark. */
+const VOICE_BAD_KEY='roots_voice_engine_bad';
+const VOICE_BAD_MS=7*24*3600*1000;
+const VOICE_NO_ENGINE=new Set(['no-engine','network','service-not-allowed','language-not-supported']);
+function voiceEngineOk(){
+  if(!voiceSR()) return false;
+  let t=0; try{ t=parseInt(localStorage.getItem(VOICE_BAD_KEY)||'0',10)||0; }catch(e){ t=0; }
+  return !(t&&Date.now()-t<VOICE_BAD_MS);
+}
+function voiceMarkBad(){ try{ localStorage.setItem(VOICE_BAD_KEY,String(Date.now())); }catch(e){ /* no storage: the next tap simply tries the browser again */ } }
+function voiceMarkGood(){ try{ localStorage.removeItem(VOICE_BAD_KEY); }catch(e){ /* no storage: nothing was marked */ } }
+function voiceKeyboardHint(){ return T('Tap the microphone on your keyboard and speak.','请点击键盘上的麦克风说话。'); }
 function voiceErrText(k){
-  if(k==='not-allowed'||k==='service-not-allowed') return T('The microphone is blocked for this site. Allow it in the browser’s site settings, then try again.','浏览器已禁止本站使用麦克风。请在浏览器的网站设置中允许，然后重试。')+' ('+k+')';
-  if(k==='network') return T('The speech service could not be reached. Type it instead.','语音识别服务无法连接，请输入。')+' (network)';
+  if(VOICE_NO_ENGINE.has(k)) return T('This browser can’t listen here. Use the microphone on your keyboard instead.','此浏览器无法识别语音，请改用键盘上的麦克风。')+' ('+k+')';
+  if(k==='not-allowed') return T('The microphone is blocked for this site. Allow it in the browser’s site settings, then try again.','浏览器已禁止本站使用麦克风。请在浏览器的网站设置中允许，然后重试。')+' ('+k+')';
   if(k==='no-speech') return T('Heard nothing — tap the mic and speak.','没有听到声音，请点击麦克风再说一次。');
   if(k==='audio-capture') return T('No microphone was found.','未找到麦克风。')+' (audio-capture)';
   if(k==='aborted') return null;
   return voiceMisheard()+(k?' ('+k+')':'');
 }
+/* Hand the person to the keyboard's microphone: focus the field (inside the
+   tap, so the keyboard opens) and say where the microphone is. */
+function voiceToKeyboard(c, h){
+  c.kb=true; c.err=null;
+  const el=document.getElementById(h.fieldId); if(el) el.focus();
+  h.repaint();
+}
 function voiceListen(c, h){
-  if(c.rec){ try{ c.rec.stop(); }catch(e){} return; }
+  if(c.rec){ c.stopping=true; try{ c.rec.stop(); }catch(e){} return; }
+  if(!voiceEngineOk()){ voiceToKeyboard(c,h); return; }
   const SR=voiceSR();
-  if(!SR){ c.err=h.unavailable; h.repaint(); return; }
   const r=new SR();
   r.lang=c.lang==='en'?'en-US':'zh-CN';   // the chip on the sheet, remembered per device
   r.interimResults=true; r.continuous=false; r.maxAlternatives=1;
-  c.rec=r; c.listening=true; c.err=null; c.heardAny=false;
+  c.rec=r; c.listening=true; c.err=null; c.heardAny=false; c.audioOn=false; c.stopping=false; c.kb=false;
+  // The microphone actually opened. Without this event the engine never ran.
+  r.onaudiostart=()=>{ c.audioOn=true; };
   r.onresult=e=>{
     let t=''; for(let i=0;i<e.results.length;i++) t+=e.results[i][0].transcript;
     c.text=t; c.via='voice'; c.heardAny=true; const el=document.getElementById(h.fieldId); if(el) el.value=t;
   };
-  r.onerror=e=>{ c.err=voiceErrText(e&&e.error); };
+  r.onerror=e=>{ const k=e&&e.error; if(VOICE_NO_ENGINE.has(k)) voiceMarkBad(); c.err=voiceErrText(k); };
   r.onend=()=>{
     c.rec=null; c.listening=false;
-    // Ended with nothing said and nothing wrong: say so, rather than go quiet —
-    // a mic that lit and went out with no word is what reads as broken.
-    if(!c.err&&!c.heardAny&&!c.text.trim()) c.err=voiceErrText('no-speech');
+    if(c.heardAny) voiceMarkGood();
+    /* Ended with nothing said and nothing wrong. If the microphone never
+       opened, the browser has no engine here; if it did, nobody spoke. A stop
+       the person asked for says nothing. */
+    if(!c.err&&!c.heardAny&&!c.text.trim()&&!c.stopping){
+      if(!c.audioOn){ voiceMarkBad(); c.err=voiceErrText('no-engine'); }
+      else c.err=voiceErrText('no-speech');
+    }
+    c.stopping=false;
     h.repaint();
     // Said and heard: go straight on. The confirm is still a tap away.
     if(c.text.trim()&&!c.err) h.onEnd();
@@ -23500,7 +23536,6 @@ function voiceLangDefault(){
   let v=null; try{ v=localStorage.getItem(VOICE_LANG_KEY); }catch(e){}
   return v==='en'||v==='zh' ? v : (LANG==='en'?'en':'zh');
 }
-function voiceUnavailable(){ return T('Voice isn’t available in this browser. Type it instead.','此浏览器不支持语音，请输入。'); }
 function voiceMisheard(){ return T('Could not make that out — try again, or type it.','无法识别，请重试或输入。'); }
 
 /* ── THE VOICE ASSISTANT (§495) ───────────────────────────────────────────
@@ -23529,8 +23564,9 @@ function asstOpen(from){
   state.asst={text:'', via:'typed', lang:voiceLangDefault(), listening:false, rec:null, err:null,
     busy:false, plan:null, logId:null, stage:'say', ticks:{}, results:{}, running:null, answers:{}, learn:null, context};
   render();
-  if(voiceSR()) asstMic();
-  else { const el=document.getElementById('mAsst'); if(el) el.focus(); }
+  // Listening at once where the browser can; the keyboard's microphone where it
+  // cannot (voiceEngineOk). Either way it happens inside the tap that opened it.
+  asstMic();
 }
 function asstClose(){
   const a=state.asst; if(!a) return;
@@ -23543,11 +23579,11 @@ function asstRepaint(){
   const mic=document.getElementById('mAsstMic');
   if(mic){ mic.classList.toggle('on',!!a.listening); mic.setAttribute('aria-pressed',a.listening?'true':'false'); }
   const st=document.getElementById('mAsstStat');
-  if(st){ st.textContent=a.listening?T('Listening…','正在听…'):(a.err?String(a.err):''); st.style.color=a.err&&!a.listening?'var(--brick-ink)':'var(--text-secondary)'; }
+  if(st){ st.textContent=a.listening?T('Listening…','正在听…'):(a.err?String(a.err):(a.kb?voiceKeyboardHint():'')); st.style.color=a.err&&!a.listening?'var(--brick-ink)':'var(--text-secondary)'; }
 }
 function asstMic(){
   const a=state.asst; if(!a) return;
-  voiceListen(a,{fieldId:'mAsst', repaint:asstRepaint, onEnd:asstPlan, unavailable:voiceUnavailable(), misheard:voiceMisheard()});
+  voiceListen(a,{fieldId:'mAsst', repaint:asstRepaint, onEnd:asstPlan});
 }
 function asstLang(l){
   const a=state.asst; if(!a||(l!=='en'&&l!=='zh')||a.lang===l) return;
@@ -23625,7 +23661,7 @@ async function asstRun(){
 }
 function sheetAssistant(){
   const a=state.asst; if(!a) return '';
-  const hasSR=!!voiceSR();
+  const hasSR=voiceEngineOk();   // the browser itself can listen; otherwise the mic means the keyboard's
   const head=`<div style="flex:none;padding:calc(env(safe-area-inset-top,0px) + 16px) 10px 12px 20px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border-default)">
       <div style="flex:1;font-size:18px;font-weight:500">${T('Voice assistant','语音助手')}</div>
       <button onclick="APP.cmd('asstClose')" style="background:transparent;border:none;color:var(--text-secondary);font-size:15px;font-weight:500;cursor:pointer;padding:8px 6px;font-family:inherit;flex:none">${a.stage==='done'?T('Close','关闭'):T('Cancel','取消')}</button></div>`;
@@ -23640,9 +23676,9 @@ function sheetAssistant(){
       <div style="display:flex;gap:8px;align-items:center">
         <input id="mAsst" value="${escAttr(a.text)}" enterkeyhint="go" autocomplete="off" style="flex:1;min-width:0"
           oninput="APP.cmd('asstText',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('asstPlan')}">
-        ${hasSR?`<button id="mAsstMic" class="stepbtn${a.listening?' on':''}" style="width:52px;height:52px" aria-pressed="${a.listening?'true':'false'}" aria-label="${T('Voice','语音')}" onclick="APP.cmd('asstMic')">${ic('mic',24)}</button>`:''}
+        <button id="mAsstMic" class="stepbtn${a.listening?' on':''}" style="width:52px;height:52px" aria-pressed="${a.listening?'true':'false'}" aria-label="${T('Voice','语音')}" onmousedown="event.preventDefault()" onclick="APP.cmd('asstMic')">${ic('mic',24)}</button>
       </div>
-      <div id="mAsstStat" style="font-size:13px;min-height:18px;color:${a.err?'var(--brick-ink)':'var(--text-secondary)'}">${a.listening?T('Listening…','正在听…'):escAttr(a.err||(hasSR?'':voiceUnavailable()))}</div>
+      <div id="mAsstStat" style="font-size:13px;min-height:18px;color:${a.err?'var(--brick-ink)':'var(--text-secondary)'}">${a.listening?T('Listening…','正在听…'):escAttr(a.err||(a.kb||!hasSR?voiceKeyboardHint():''))}</div>
       <button class="btn2" style="width:100%" onclick="APP.cmd('asstPlan')">${T('Next','下一步')}</button>
     </div>`;
   } else if(a.stage==='plan'&&a.plan&&a.plan.question){
