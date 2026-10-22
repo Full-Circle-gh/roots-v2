@@ -43,34 +43,54 @@
     let v = null; try { v = localStorage.getItem(VOICE_LANG_KEY); } catch (e) { /* no storage in a private window: the app's language stands */ }
     return v === 'en' || v === 'zh' ? v : (lang() === 'cn' ? 'zh' : 'en');
   }
-  const unavailable = () => T('Voice isn’t available in this browser. Type it instead.', '此浏览器不支持语音，请输入。');
   const misheard = () => T('Could not make that out — try again, or type it.', '无法识别，请重试或输入。');
+  const kbHint = () => T('Tap the microphone on your keyboard and speak.', '请点击键盘上的麦克风说话。');
+  /* A browser that cannot listen here — the phone's voiceEngineOk, on the same
+     device key: Chrome borrows Google's engine, which a computer in China
+     reaches only through a VPN. Once seen it is remembered for a week and the
+     mic opens the field for the keyboard's or the system's voice typing. */
+  const BAD_KEY = 'roots_voice_engine_bad';
+  const BAD_MS = 7 * 24 * 3600 * 1000;
+  const NO_ENGINE = new Set(['no-engine', 'network', 'service-not-allowed', 'language-not-supported']);
+  function engineOk() {
+    if (!SR()) return false;
+    let t = 0; try { t = parseInt(localStorage.getItem(BAD_KEY) || '0', 10) || 0; } catch (e) { t = 0; }
+    return !(t && Date.now() - t < BAD_MS);
+  }
+  function markBad() { try { localStorage.setItem(BAD_KEY, String(Date.now())); } catch (e) { /* no storage: the next click simply tries the browser again */ } }
+  function markGood() { try { localStorage.removeItem(BAD_KEY); } catch (e) { /* no storage: nothing was marked */ } }
+  function toKeyboard() { S.kb = true; S.err = null; const el = $('#asst-field'); if (el) el.focus(); repaint(); }
   // The browser's own reason it would not listen, in words, with its code in
   // brackets so a report can name it — the phone's voiceErrText, copied whole.
   function errWords(k) {
-    if (k === 'not-allowed' || k === 'service-not-allowed') return T('The microphone is blocked for this site. Allow it in the browser’s site settings, then try again.', '浏览器已禁止本站使用麦克风。请在浏览器的网站设置中允许，然后重试。') + ' (' + k + ')';
-    if (k === 'network') return T('The speech service could not be reached. Type it instead.', '语音识别服务无法连接，请输入。') + ' (network)';
+    if (NO_ENGINE.has(k)) return T('This browser can’t listen here. Use the microphone on your keyboard instead.', '此浏览器无法识别语音，请改用键盘上的麦克风。') + ' (' + k + ')';
+    if (k === 'not-allowed') return T('The microphone is blocked for this site. Allow it in the browser’s site settings, then try again.', '浏览器已禁止本站使用麦克风。请在浏览器的网站设置中允许，然后重试。') + ' (' + k + ')';
     if (k === 'no-speech') return T('Heard nothing — tap the mic and speak.', '没有听到声音，请点击麦克风再说一次。');
     if (k === 'audio-capture') return T('No microphone was found.', '未找到麦克风。') + ' (audio-capture)';
     if (k === 'aborted') return null;
     return misheard() + (k ? ' (' + k + ')' : '');
   }
   function listen() {
-    if (S.rec) { try { S.rec.stop(); } catch (e) { /* stopping a recogniser already stopped is nothing */ } return; }
+    if (S.rec) { S.stopping = true; try { S.rec.stop(); } catch (e) { /* stopping a recogniser already stopped is nothing */ } return; }
+    if (!engineOk()) { toKeyboard(); return; }
     const R = SR();
-    if (!R) { S.err = unavailable(); repaint(); return; }
     const r = new R();
     r.lang = S.lang === 'en' ? 'en-US' : 'zh-CN';
     r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
-    S.rec = r; S.listening = true; S.err = null; S.heardAny = false;
+    S.rec = r; S.listening = true; S.err = null; S.heardAny = false; S.audioOn = false; S.stopping = false; S.kb = false;
+    r.onaudiostart = () => { S.audioOn = true; };
     r.onresult = (e) => {
       let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
       S.text = t; S.via = 'voice'; S.heardAny = true; const el = $('#asst-field'); if (el) el.value = t;
     };
-    r.onerror = (e) => { S.err = errWords(e && e.error); };
+    r.onerror = (e) => { const k = e && e.error; if (NO_ENGINE.has(k)) markBad(); S.err = errWords(k); };
     r.onend = () => {
       S.rec = null; S.listening = false;
-      if (!S.err && !S.heardAny && !S.text.trim()) S.err = errWords('no-speech');
+      if (S.heardAny) markGood();
+      if (!S.err && !S.heardAny && !S.text.trim() && !S.stopping) {
+        if (!S.audioOn) { markBad(); S.err = errWords('no-engine'); } else S.err = errWords('no-speech');
+      }
+      S.stopping = false;
       repaint();
       if (S.text.trim() && !S.err) plan();
     };
@@ -91,7 +111,7 @@
       busy: false, plan: null, logId: null, stage: 'say', ticks: {}, results: {}, running: null, answers: {}, learn: null });
     render();
     $('#asst-overlay').hidden = false;
-    if (SR()) listen(); else { const el = $('#asst-field'); if (el) el.focus(); }
+    listen();   // the browser listens where it can; the field takes the keyboard where it cannot
   }
   function close() {
     if (!S.open) return;
@@ -181,14 +201,14 @@
     const mic = $('#asst-mic-btn');
     if (mic) { mic.classList.toggle('on', !!S.listening); mic.setAttribute('aria-pressed', S.listening ? 'true' : 'false'); }
     const st = $('#asst-stat');
-    if (st) { st.textContent = S.listening ? T('Listening…', '正在听…') : (S.err ? String(S.err) : ''); st.classList.toggle('err', !!(S.err && !S.listening)); }
+    if (st) { st.textContent = S.listening ? T('Listening…', '正在听…') : (S.err ? String(S.err) : (S.kb ? kbHint() : '')); st.classList.toggle('err', !!(S.err && !S.listening)); }
   }
   const MIC_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>';
   const CHECK_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
   const label = (r) => esc(lang() === 'cn' ? (r.label_cn || r.label_en) : r.label_en);
   function render() {
     const box = $('#asst-body'); if (!box) return;
-    const hasSR = !!SR();
+    const hasSR = engineOk();   // the browser itself can listen; otherwise the mic means the keyboard's
     const head = '<div class="asst-head"><div class="asst-title">' + bi('Voice assistant', '语音助手') + '</div>' +
       (S.stage === 'say' && hasSR ? '<div class="asst-chips">' +
         ['en', 'zh'].map((l) => '<button type="button" class="asst-chip' + (S.lang === l ? ' on' : '') + '" data-asst-lang="' + l + '">' + (l === 'en' ? 'English' : '中文') + '</button>').join('') + '</div>' : '') +
@@ -199,8 +219,8 @@
     } else if (S.stage === 'say') {
       body = '<div class="asst-muted">' + bi('Say what you need. For example: “whole wheat bread on the toast is sold out”, or “close the shop”.', '说出你的需求。例如：“吐司的全麦面包售罄了”，或“关店”。') + '</div>' +
         '<div class="gsearch-inputrow asst-inputrow"><input id="asst-field" type="text" autocomplete="off" spellcheck="false" value="' + esc(S.text) + '" aria-label="' + esc(T('Say what you need', '说出你的需求')) + '">' +
-        (hasSR ? '<button type="button" id="asst-mic-btn" class="asst-micbtn' + (S.listening ? ' on' : '') + '" data-asst="mic" aria-pressed="' + (S.listening ? 'true' : 'false') + '" aria-label="' + esc(T('Voice', '语音')) + '">' + MIC_SVG + '</button>' : '') + '</div>' +
-        '<div id="asst-stat" class="asst-stat' + (S.err ? ' err' : '') + '">' + (S.listening ? esc(T('Listening…', '正在听…')) : esc(S.err || (hasSR ? '' : unavailable()))) + '</div>' +
+        '<button type="button" id="asst-mic-btn" class="asst-micbtn' + (S.listening ? ' on' : '') + '" data-asst="mic" aria-pressed="' + (S.listening ? 'true' : 'false') + '" aria-label="' + esc(T('Voice', '语音')) + '">' + MIC_SVG + '</button></div>' +
+        '<div id="asst-stat" class="asst-stat' + (S.err ? ' err' : '') + '">' + (S.listening ? esc(T('Listening…', '正在听…')) : esc(S.err || (S.kb || !hasSR ? kbHint() : ''))) + '</div>' +
         '<div class="asst-foot"><button type="button" class="btn btn-primary" data-asst="plan">' + bi('Next', '下一步') + '</button></div>';
     } else if (S.stage === 'plan' && S.plan && S.plan.question) {
       const q = S.plan.question;
