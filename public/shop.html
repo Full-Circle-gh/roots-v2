@@ -5626,8 +5626,10 @@ function slRenderMain(){
   main.innerHTML=html;
   main.scrollTop=0;
   main.onclick=e=>{
+    // The + opens the product page like the rest of the card, so a shopper
+    // sees the product before buying it. Adding happens from that page.
     const plus=e.target.closest('[data-add]');
-    if(plus){e.stopPropagation();slAdd(Number(plus.dataset.add),plus);return;}
+    if(plus){e.stopPropagation();location.hash='#/product/'+plus.dataset.add;return;}
     const node=e.target.closest('[data-id]');
     if(node)location.hash='#/product/'+node.dataset.id;
   };
