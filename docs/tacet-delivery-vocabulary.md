@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.349 · 2026-10-22 · THE MICROPHONE SAYS WHY THE BROWSER WOULD NOT LISTEN (§495 fix) — 4 STRINGS COMPOSED BY CLAUDE (`浏览器已禁止本站使用麦克风。请在浏览器的网站设置中允许，然后重试。`, `语音识别服务无法连接，请输入。`, `没有听到声音，请点击麦克风再说一次。`, `未找到麦克风。`), EACH BUILT FROM LIVE FRAGMENTS, SHOWN ON PHONE AND COMPUTER ALIKE WITH THE BROWSER'S OWN CODE IN BRACKETS.** See *The voice assistant (§495)*, *When the browser will not listen*.
+
 **v1.348 · 2026-10-22 · §493 FOLDED INTO §495 — NOTHING COMPOSED; 8 STRINGS RETIRED WITH THE QUICK STOCK SHEET (`说出或输入库存变动`, `请说数量，或“售罄”。`, `这里只能加库存，不能设置数量。`, `哪个商品？`, `请先完成未保存的改动。`, `售罄 — 设为 0`, `现有 N`, AND THE SHEET'S EXAMPLE LINE); `正在听…`, THE TWO RECOGNISER LINES, `加 N 件` AND `设为 N` LIVE ON IN §495.** See *Saying a stock change (§493)*.
 
 **v1.347 · 2026-10-22 · §495 RULE 12, A SLIP REPRINTED BY VOICE — 1 STRING COMPOSED BY CLAUDE (`重新打印{store}订单 {no} 的小票`), BUILT FROM THE LIVE `重新打印` AND `小票`.** See *The voice assistant (§495)*, *Answers*.
@@ -14528,6 +14530,19 @@ records, in both languages, and the phone shows the one its language asks for.
 | open | {store} is open · the online store is open | {store}营业中 · 网店营业中 | `营业中` is live (the open/close panel). |
 | closed | {store} is closed · the online store is closed | {store}已关闭 · 网店已关闭 | `已关闭` is live. |
 | a row: a slip printed again (rule 12, v1.347) | Reprint the slip for order {no} at {store} | 重新打印{store}订单 {no} 的小票 | `重新打印` is the live reprint verb (the order drawer); `小票` is live (`自动在门店打印小票`). |
+
+### When the browser will not listen (v1.349)
+
+Ash, from his phone: *"Clicking on the microphone, it doesn't let me record."*
+The sheet had gone quiet instead of saying what the browser refused. These
+four say it, with the browser's own code in brackets so a report can name it.
+
+| when | EN | CN | built from |
+|---|---|---|---|
+| the microphone is refused for the site | The microphone is blocked for this site. Allow it in the browser’s site settings, then try again. | 浏览器已禁止本站使用麦克风。请在浏览器的网站设置中允许，然后重试。 | `浏览器` and `设置` are live; `麦克风` is §495's; `然后重试` is the live retry tail. |
+| the speech service cannot be reached | The speech service could not be reached. Type it instead. | 语音识别服务无法连接，请输入。 | `无法连接` is live (`无法连接该门店的青云同步服务。`); `请输入` is live. Says nothing about why a phone cannot reach it. |
+| the recogniser ended having heard nothing | Heard nothing — tap the mic and speak. | 没有听到声音，请点击麦克风再说一次。 | `没有听到` is plain; `请点击` is live; `再说一次` is the plain "say it again". |
+| no microphone on the device | No microphone was found. | 未找到麦克风。 | `未找到` is live. |
 
 ### Rejected
 

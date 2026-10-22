@@ -23448,6 +23448,19 @@ function qsWriteFailed(id,n,msg){
    Two sheets, one recogniser, so they cannot drift on what a browser without
    one is told. */
 function voiceSR(){ return (typeof window!=='undefined'&&(window.SpeechRecognition||window.webkitSpeechRecognition))||null; }
+/* WHAT THE BROWSER SAID WHEN IT WOULD NOT LISTEN, in words the person can act
+   on, with the browser's own code in brackets so a report can name it. The
+   codes are the Web Speech API's: a refused microphone, a speech service that
+   could not be reached (Chrome's goes through Google, which a phone in China
+   reaches only through a VPN), nothing heard, no microphone at all. */
+function voiceErrText(k){
+  if(k==='not-allowed'||k==='service-not-allowed') return T('The microphone is blocked for this site. Allow it in the browser’s site settings, then try again.','浏览器已禁止本站使用麦克风。请在浏览器的网站设置中允许，然后重试。')+' ('+k+')';
+  if(k==='network') return T('The speech service could not be reached. Type it instead.','语音识别服务无法连接，请输入。')+' (network)';
+  if(k==='no-speech') return T('Heard nothing — tap the mic and speak.','没有听到声音，请点击麦克风再说一次。');
+  if(k==='audio-capture') return T('No microphone was found.','未找到麦克风。')+' (audio-capture)';
+  if(k==='aborted') return null;
+  return voiceMisheard()+(k?' ('+k+')':'');
+}
 function voiceListen(c, h){
   if(c.rec){ try{ c.rec.stop(); }catch(e){} return; }
   const SR=voiceSR();
@@ -23455,22 +23468,31 @@ function voiceListen(c, h){
   const r=new SR();
   r.lang=c.lang==='en'?'en-US':'zh-CN';   // the chip on the sheet, remembered per device
   r.interimResults=true; r.continuous=false; r.maxAlternatives=1;
-  c.rec=r; c.listening=true; c.err=null;
+  c.rec=r; c.listening=true; c.err=null; c.heardAny=false;
   r.onresult=e=>{
     let t=''; for(let i=0;i<e.results.length;i++) t+=e.results[i][0].transcript;
-    c.text=t; c.via='voice'; const el=document.getElementById(h.fieldId); if(el) el.value=t;
+    c.text=t; c.via='voice'; c.heardAny=true; const el=document.getElementById(h.fieldId); if(el) el.value=t;
   };
-  r.onerror=e=>{
-    const k=e&&e.error;
-    c.err = k==='not-allowed'||k==='service-not-allowed' ? h.unavailable : k==='aborted' ? null : h.misheard;
-  };
+  r.onerror=e=>{ c.err=voiceErrText(e&&e.error); };
   r.onend=()=>{
-    c.rec=null; c.listening=false; h.repaint();
+    c.rec=null; c.listening=false;
+    // Ended with nothing said and nothing wrong: say so, rather than go quiet —
+    // a mic that lit and went out with no word is what reads as broken.
+    if(!c.err&&!c.heardAny&&!c.text.trim()) c.err=voiceErrText('no-speech');
+    h.repaint();
     // Said and heard: go straight on. The confirm is still a tap away.
     if(c.text.trim()&&!c.err) h.onEnd();
   };
-  try{ r.start(); }catch(e){ c.rec=null; c.listening=false; c.err=h.misheard; }
+  try{ r.start(); }catch(e){ c.rec=null; c.listening=false; c.err=voiceMisheard()+' ('+((e&&e.name)||'start')+')'; }
   h.repaint();
+  /* A microphone the browser has already refused for this site never prompts
+     again; the recogniser just ends. Ask the permission API, where there is
+     one, so the refusal is said before the person wonders. */
+  try{
+    if(navigator.permissions&&navigator.permissions.query){
+      navigator.permissions.query({name:'microphone'}).then(p=>{ if(p&&p.state==='denied'&&c.rec===r){ c.err=voiceErrText('not-allowed'); h.repaint(); } }).catch(()=>{});
+    }
+  }catch(e){}
 }
 function voiceAbort(c){ if(c&&c.rec){ const r=c.rec; c.rec=null; c.listening=false; r.onend=null; try{ r.abort(); }catch(e){} } }
 const VOICE_LANG_KEY='roots_qs_voice_lang';
