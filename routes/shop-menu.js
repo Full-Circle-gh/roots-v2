@@ -2108,6 +2108,17 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
   text-transform:uppercase;color:var(--olive);overflow-wrap:anywhere}
 .cnt{font-family:var(--f-bear);font-size:18px;letter-spacing:.04em;color:var(--olive);
   font-variant-numeric:tabular-nums}
+/* TWO WAYS OF SAYING "THIS CARD OPENS". Customers did not know a card could be
+   tapped to read about the product, and the + beside the price reads as the
+   only thing on it that responds. The label sits under the name of the cards
+   that have a sheet, and the line above the menu says it once for the page.
+   Neither is a control of its own: a tap on them lands on the card, which is
+   what opens the sheet. */
+.dt-l{margin-top:5px;font-family:var(--f-bear);font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--olive);text-decoration:underline;
+  text-underline-offset:2px}
+.dt-tip{padding:12px 14px 0;font-family:var(--f-bear);font-size:11px;letter-spacing:.08em;
+  color:var(--olive)}
 /* ── the product card: public/shop.html's .sl-* grid card, verbatim ──
    THE WEBSITE IS THE RIGHT SOURCE FOR THIS PAGE, not the mini app's wxss. Both
    are the same design by the same house, but the website's half is already
@@ -4000,6 +4011,8 @@ router.get('/s/:shopCode', (req, res) => {
       (it.sold_out ? `<div class="sold">${bi('Sold out', '售罄')}</div>` : '') +
       `</div>` +
       `<div class="t">${bi(it.name_en, it.name_cn)}</div>` +
+      // `Details · 详情`, a live pair. Only where there is a sheet to open.
+      (detail ? `<div class="dt-l">${bi('Details', '详情')}</div>` : '') +
       // "from 29" / "29起" — the mini app's own live pair (shop.js _toRows),
       // word order as each language reads it.
       `<div class="pf"><div class="pr">` +
@@ -4172,15 +4185,19 @@ router.get('/s/:shopCode', (req, res) => {
     `</div>`
   ) : '';
 
+  const paneHtml = groups.map(c => `<section class="cat" id="${c.id}">` +
+    c.sections.map(sec => `<div class="sec-h">` +
+        `<div class="kick">${bi(sec.en, sec.cn)}</div>` +
+        `<div class="cnt">${pad2(sec.items.length)}</div>` +
+      `</div><div class="grid">${sec.items.map(card).join('')}</div>`).join('') +
+    `</section>`).join('');
+  // The line above the menu is for a menu where at least one card opens.
+  // The Chinese is composed (vocabulary v1.351).
+  const dtTip = paneHtml.includes(' has-dt')
+    ? `<div class="dt-tip">${bi('Tap any product to see its details.', '点击商品查看详情。')}</div>`
+    : '';
   const body = groups.length
-    ? `<div class="wrap">${rail}<div class="pane">` +
-      groups.map(c => `<section class="cat" id="${c.id}">` +
-        c.sections.map(sec => `<div class="sec-h">` +
-            `<div class="kick">${bi(sec.en, sec.cn)}</div>` +
-            `<div class="cnt">${pad2(sec.items.length)}</div>` +
-          `</div><div class="grid">${sec.items.map(card).join('')}</div>`).join('') +
-        `</section>`).join('') +
-      `</div></div>` + cartUi
+    ? `<div class="wrap">${rail}<div class="pane">${dtTip}${paneHtml}</div></div>` + cartUi
     : `<div class="empty"><div class="t">${bi('No products yet.', '暂无商品')}</div>` +
       `<div class="s">${bi('Check back soon.', '请稍后再来')}</div></div>`;
 
