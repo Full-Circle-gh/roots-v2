@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.578
+# Tacet shared-core consolidation — decisions record, v4.579
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-22 · v4.579 — **§495 FIX · THE MICROPHONE SAYS WHY THE BROWSER WOULD NOT LISTEN.** Ash, from his phone: *"Clicking on the microphone, it doesn't let me record. There is a bug with the button."* The sheet started the recogniser and, when the browser ended it at once — a microphone refused for the site, a speech service it could not reach, nothing heard — went quiet, which reads as a dead button. Now the recogniser's own error is said in words with its code in brackets, an end with nothing heard says so, and the permission API is asked so a refused microphone is named before the person wonders. Phone and computer alike. Four strings composed, declared in `docs/tacet-delivery-vocabulary.md` v1.349. No rule changes. No change to `.gitignore` or CI.
 
 2026-10-22 · v4.578 — **§493 FOLDED INTO §495 · ONE MICROPHONE — DECIDED BY ASH:** *"The Quick Stock mic joins this one, so there is only one mic"*. §495 rule 14: Quick Stock's mic button opens the voice assistant with the screen's store and its meaning for a bare number; §493's own sheet, parser, three write routes (`understand`, `heard`, `said` POST/PATCH) and `lib/stock-command-ai.js` are deleted; the phrases it learned carry into `assistant_names` by migration; its sentence log stays readable (`GET …/quick-stock/said`) for its ninety days. §493 rules 1–9 are superseded; rule 10's reader stands. Voice now needs the model key on every screen, which Ash chose. Strings of the retired sheet marked retired in `docs/tacet-delivery-vocabulary.md` v1.348. Two suites and one lib removed; no change to `.gitignore` or CI. See §495 rule 14.
 

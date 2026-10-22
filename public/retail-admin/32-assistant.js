@@ -45,6 +45,16 @@
   }
   const unavailable = () => T('Voice isn’t available in this browser. Type it instead.', '此浏览器不支持语音，请输入。');
   const misheard = () => T('Could not make that out — try again, or type it.', '无法识别，请重试或输入。');
+  // The browser's own reason it would not listen, in words, with its code in
+  // brackets so a report can name it — the phone's voiceErrText, copied whole.
+  function errWords(k) {
+    if (k === 'not-allowed' || k === 'service-not-allowed') return T('The microphone is blocked for this site. Allow it in the browser’s site settings, then try again.', '浏览器已禁止本站使用麦克风。请在浏览器的网站设置中允许，然后重试。') + ' (' + k + ')';
+    if (k === 'network') return T('The speech service could not be reached. Type it instead.', '语音识别服务无法连接，请输入。') + ' (network)';
+    if (k === 'no-speech') return T('Heard nothing — tap the mic and speak.', '没有听到声音，请点击麦克风再说一次。');
+    if (k === 'audio-capture') return T('No microphone was found.', '未找到麦克风。') + ' (audio-capture)';
+    if (k === 'aborted') return null;
+    return misheard() + (k ? ' (' + k + ')' : '');
+  }
   function listen() {
     if (S.rec) { try { S.rec.stop(); } catch (e) { /* stopping a recogniser already stopped is nothing */ } return; }
     const R = SR();
@@ -52,18 +62,25 @@
     const r = new R();
     r.lang = S.lang === 'en' ? 'en-US' : 'zh-CN';
     r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
-    S.rec = r; S.listening = true; S.err = null;
+    S.rec = r; S.listening = true; S.err = null; S.heardAny = false;
     r.onresult = (e) => {
       let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
-      S.text = t; S.via = 'voice'; const el = $('#asst-field'); if (el) el.value = t;
+      S.text = t; S.via = 'voice'; S.heardAny = true; const el = $('#asst-field'); if (el) el.value = t;
     };
-    r.onerror = (e) => {
-      const k = e && e.error;
-      S.err = k === 'not-allowed' || k === 'service-not-allowed' ? unavailable() : k === 'aborted' ? null : misheard();
+    r.onerror = (e) => { S.err = errWords(e && e.error); };
+    r.onend = () => {
+      S.rec = null; S.listening = false;
+      if (!S.err && !S.heardAny && !S.text.trim()) S.err = errWords('no-speech');
+      repaint();
+      if (S.text.trim() && !S.err) plan();
     };
-    r.onend = () => { S.rec = null; S.listening = false; repaint(); if (S.text.trim() && !S.err) plan(); };
-    try { r.start(); } catch (e) { S.rec = null; S.listening = false; S.err = misheard(); }
+    try { r.start(); } catch (e) { S.rec = null; S.listening = false; S.err = misheard() + ' (' + ((e && e.name) || 'start') + ')'; }
     repaint();
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions.query({ name: 'microphone' }).then((p) => { if (p && p.state === 'denied' && S.rec === r) { S.err = errWords('not-allowed'); repaint(); } }).catch(() => { /* a browser without the microphone query answers nothing, and the recogniser's own error still speaks */ });
+      }
+    } catch (e) { /* same: the permission API is a courtesy, the recogniser's own error is the word */ }
   }
   function abortRec() { if (S.rec) { const r = S.rec; S.rec = null; S.listening = false; r.onend = null; try { r.abort(); } catch (e) { /* aborting a recogniser already gone is nothing */ } } }
 

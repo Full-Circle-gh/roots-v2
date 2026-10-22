@@ -26,7 +26,11 @@
  *     failed row with that reason;
  *   • Quick Stock's microphone is this one (§495 rule 14): it opens the same
  *     sheet with the screen's store and its meaning for a bare number, and is
- *     drawn only for an operator the assistant is open to.
+ *     drawn only for an operator the assistant is open to;
+ *   • when the browser will not listen, the sheet says why in words with the
+ *     browser's own code in brackets — a refused microphone, an unreachable
+ *     speech service, nothing heard — instead of going quiet (the bug Ash
+ *     reported from his phone).
  *
  * Drives Chromium through scripts/lib/m-probe, so it belongs in the slow
  * shard and is listed there by name in scripts/run-suites.js.
@@ -99,6 +103,24 @@ run('the voice assistant', [
   ['the chip restarts the recogniser in Chinese and the device remembers', OWNER + FAKE_SR + "APP.cmd('asstOpen'); APP.cmd('asstLang','zh');", [
     ['restarted in Chinese', "window.__sr[window.__sr.length-1].lang==='zh-CN'"],
     ['remembered', "localStorage.getItem('roots_qs_voice_lang')==='zh'"],
+  ]],
+  ['a speech service the phone cannot reach is said, with the code',
+    OWNER + FAKE_SR + "APP.cmd('asstOpen'); var r=state.asst.rec; r.onerror({error:'network'}); r.onend();", [
+      ['the words', `${otext}.indexOf('The speech service could not be reached')>-1`],
+      ['and the code', `${otext}.indexOf('(network)')>-1`],
+      ['not listening any more', "!document.getElementById('mAsstMic').classList.contains('on')"],
+      ['the field stays for typing', "!!document.getElementById('mAsst')"],
+    ]],
+  ['a microphone the browser refuses is said', OWNER + FAKE_SR + "APP.cmd('asstOpen'); var r=state.asst.rec; r.onerror({error:'not-allowed'}); r.onend();", [
+    ['the words', `${otext}.indexOf('The microphone is blocked for this site')>-1 && ${otext}.indexOf('(not-allowed)')>-1`],
+  ]],
+  ['a recogniser that ends having heard nothing says so', OWNER + FAKE_SR + "APP.cmd('asstOpen'); state.asst.rec.onend();", [
+    ['heard nothing', `${otext}.indexOf('Heard nothing')>-1`],
+    ['no plan asked for', 'typeof window.__sent==="undefined" || window.__sent.length===0'],
+  ]],
+  ['one that heard a sentence goes straight on', OWNER + FAKE_SR + FETCH(PLAN) + "APP.cmd('asstOpen'); var r=state.asst.rec; r.onresult({results:[[{transcript:'close yuexiu'}]]}); r.onend();", [
+    ['the plan was asked for, by voice', `${sent('/assistant/plan')}.length===1 && JSON.parse(${sent('/assistant/plan')}[0].b).via==='voice'`],
+    ['no error', `${otext}.indexOf('Heard nothing')===-1`],
   ]],
   ['Cancel from the field closes without telling the log', OWNER + NO_SR + FETCH(PLAN) + "APP.cmd('asstOpen'); APP.cmd('asstClose');", [
     ['closed', `!${overlay()}`],
