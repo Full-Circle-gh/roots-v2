@@ -11926,13 +11926,41 @@ function formatLocalEta(hhmm) {
   };
 }
 
+/* THE LINES BETWEEN SHIPPING AND TOTAL. checkout's total is
+   subtotal + shipping + packing − coupon (+ tax) − points − wallet, but the
+   order page drew only subtotal, shipping and total, so any order that used a
+   coupon, points, wallet credit or a packing fee showed figures that did not add
+   up (¥227 + ¥25 = ¥213). One entry per non-zero line, signed, labelled in both
+   languages here so there is a single definition. The same-day surcharge is not
+   a line of its own: it is already inside shipping_fee. Tax keeps its own row. */
+function customerMoneyLines(o) {
+  const n = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  const lines = [];
+  const add = (key, label_en, label_cn, amount) => {
+    if (amount !== 0) lines.push({ key, label_en, label_cn, amount });
+  };
+  add('packing', 'Packing fee', '包装费', n(o.packing_fee));
+  if (n(o.voucher_amount) > 0) add('coupon', 'Coupon', '优惠券', -n(o.voucher_amount));
+  if (n(o.points_amount) > 0) {
+    const pts = Number(o.points_used) || 0;
+    lines.push({
+      key: 'points',
+      label_en: pts ? `Points · ${pts} pts` : 'Points',
+      label_cn: pts ? `积分抵扣 · ${pts} 积分` : '积分抵扣',
+      amount: -n(o.points_amount),
+    });
+  }
+  if (n(o.balance_used) > 0) lines.push({ key: 'wallet', label_en: 'Wallet', label_cn: '钱包', amount: -n(o.balance_used) });
+  return lines;
+}
+
 function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
   const o = tdb().prepare(
     `SELECT id, order_no, status, payment_method,
             recipient_name, recipient_phone, address_full, address_json,
             subtotal, shipping_fee, packing_fee, delivery_mode, delivery_zone_id,
             voucher_code, voucher_amount,
-            points_used, points_amount, points_earned, total,
+            points_used, points_amount, points_earned, balance_used, total,
             tax_amount, tax_rate_micro, tax_mode,
             customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
             invoice_type, invoice_email,
@@ -12078,6 +12106,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
   o.fulfillment = buildCustomerFulfillment(orderId, o.items);
   o.waiting_items = customerWaitingItems(o, o.items);
   delete o.awaiting_restock_pids;
+  o.money_lines = customerMoneyLines(o);
   o.timeline = orderTimeline(o);
   // Phase-1 self-service reschedule: can the customer still change the
   // delivery/pickup time? scheduled_for is left raw (not in GZ_LOCAL_TS_FIELDS)
