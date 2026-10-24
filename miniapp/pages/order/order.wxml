@@ -32,6 +32,16 @@
       </view>
     </view>
 
+    <!-- Parked on a restock — a paid order nothing is happening to yet. Says what
+         it waits on and that the whole order ships together. -->
+    <view wx:if="{{waitingNote}}" class="waiting-banner">
+      <view class="air-delay-icon">⏳</view>
+      <view class="air-delay-body">
+        <view class="air-delay-line f-bear">{{waitingNote.line}}</view>
+        <view class="air-delay-sub">{{waitingNote.sub}}</view>
+      </view>
+    </view>
+
     <!-- Late air shipment — a fresh/perishable parcel that arrived a day-plus
          late and may no longer be safe. Food-safety warning, shown above all
          other banners because it's the most urgent thing on the order. -->

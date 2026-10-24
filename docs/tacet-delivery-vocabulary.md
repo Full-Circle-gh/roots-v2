@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.352 · 2026-10-24 · A PARKED ORDER SAYS SO WHEN IT IS PAID, AND WHAT IT WAITS ON — 3 STRINGS COMPOSED BY CLAUDE (`已付款，等待补货。`, `暂时缺货：{items}`, `到货后整单一并发出。`), EACH BUILT FROM LIVE FRAGMENTS; THE TIMELINE STEP `等待补货` COPIED WHOLE FROM THE LOCKED `awaiting_restock` ROW.** A Chengdu shopper paid for a sold-out frozen loaf and the order parked on a restock without her being asked (a sold-out `backorder_gz` line, no modal). She saw `Order placed. We're on it.`, then `Paid` highlighted in the timeline, and never learned it was waiting. See *A parked order says so (customer)* below. Composed on the customer success screen and the order page: headline `已付款，等待补货。` (`已付款` is this register's locked word for `paid`, `等待补货` the locked word for `awaiting_restock`); line `暂时缺货：{items}`, items joined with `、` (`暂时缺货` is live at checkout, the fallback sheet's `…暂时缺货`); sentence `到货后整单一并发出。` (`到货后` live in the checkout slot-conflict modal, `整单` live in `取消整单订单`, `一并发出` live in this document). Rejected: `已支付，等待补货。` (`已支付` is the server timeline's word and the register's is `已付款`; the headline sits in the register, so it follows the register); `到货后整单一起发出。` (`一起发` is live nowhere, `一并发出` is); `缺货：{items}` without `暂时` (reads as discontinued, and the item will come back). EN: `Paid. Waiting for stock.` · `Out of stock for now: {items}` · `We'll ship your whole order together once it's back.` · timeline step `Waiting for stock`. The EN `Awaiting stock` on the order page header is left as it was.
+
 **v1.351 · 2026-10-22 · THE QR MENU SAYS ITS CARDS OPEN — 1 STRING COMPOSED BY CLAUDE (`点击商品查看详情。`), BUILT FROM LIVE FRAGMENTS; `Details · 详情` COPIED WHOLE.** Ash: customers do not know they can tap a product to see its information. Two cues, no change to what the + does. (1) Under the name of each menu card that has a product sheet, the live pair `Details · 详情` (the desktop editor's own row name, as §419 already uses it). (2) One line at the top of the menu, shown only when at least one card has a sheet: `Tap any product to see its details. · 点击商品查看详情。`. The Chinese is COMPOSED, by Claude, under the standing delegation, from `点击` (live: `Tap link · 点击跳转`), `商品` (live: `暂无商品`), `查看` and `详情` (live: `Details · 详情`). Rejected live candidates: `点击跳转` (says the tap leaves the page; this one opens a sheet over it), `点按` (live only in the operator's hide/show pair, which is a toggle). Rejected composed candidate: `点击商品了解配料和过敏原。` (promises ingredients and allergens, which a product with only a description does not show). Nothing is retired. Rules 1 to 7 unchanged.
 
 **v1.350 · 2026-10-22 · WHEN THE BROWSER HAS NO SPEECH ENGINE, THE KEYBOARD'S MICROPHONE TAKES OVER (§495 fix 2) — 2 STRINGS COMPOSED BY CLAUDE (`此浏览器无法识别语音，请改用键盘上的麦克风。`, `请点击键盘上的麦克风说话。`), BUILT FROM LIVE FRAGMENTS; 2 RETIRED (`语音识别服务无法连接，请输入。` FROM v1.349, AND §493'S `此浏览器不支持语音，请输入。`), EACH NOW SAID BY THE FIRST NEW STRING OR THE SECOND.** See *The voice assistant (§495)*, *When the browser will not listen*.
@@ -14573,3 +14575,15 @@ for the second.
   failures; this is a limit of the list, not a failure, and the second half
   tells the person what to try.
 
+## A parked order says so (customer)
+
+An order in `awaiting_restock` is PAID and held. It reaches that state two ways: the shopper's own `Wait for restock` answer (Guangzhou same-day), and a sold-out `backorder_gz` line, which parks the order with no question asked. The second shopper has chosen nothing, so the screens have to do the telling.
+
+| Where | EN | CN |
+|---|---|---|
+| Success screen headline | Paid. Waiting for stock. | 已付款，等待补货。 |
+| Success screen and order page, the line | Out of stock for now: {items} | 暂时缺货：{items} |
+| Success screen sub, order page sub | We'll ship your whole order together once it's back. | 到货后整单一并发出。 |
+| Order timeline step (after Paid) | Waiting for stock | 等待补货 |
+
+`{items}` is the held lines only, names from `waiting_items` on `GET /api/retail/orders/:id` and `GET /api/retail/payment/status/:id`. It is empty, and nothing here shows, for any order that is not parked right now. Locked by `scripts/test_parked_order_says_why.js`.

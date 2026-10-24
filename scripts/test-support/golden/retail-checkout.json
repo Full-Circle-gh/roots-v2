@@ -4115,6 +4115,7 @@
           }
         ],
         "fulfillment": null,
+        "waiting_items": [],
         "timeline": [
           {
             "key": "placed",
@@ -4275,6 +4276,7 @@
           }
         ],
         "fulfillment": null,
+        "waiting_items": [],
         "timeline": [
           {
             "key": "placed",
@@ -4375,6 +4377,7 @@
         "pickup_store_name_en": "Roots Kitchen — Tianhe",
         "pickup_store_name_cn": "Roots 厨房 · 天河店",
         "pickup_store_address": "广州市天河区 (Roots Kitchen)",
+        "waiting_items": [],
         "delivery_slot_display": "Pickup Today 2:00 PM"
       }
     }
@@ -4624,6 +4627,7 @@
           }
         ],
         "fulfillment": null,
+        "waiting_items": [],
         "timeline": [
           {
             "key": "placed",
@@ -5150,6 +5154,7 @@
           }
         ],
         "fulfillment": null,
+        "waiting_items": [],
         "timeline": [
           {
             "key": "placed",
@@ -5311,6 +5316,7 @@
           }
         ],
         "fulfillment": null,
+        "waiting_items": [],
         "timeline": [
           {
             "key": "placed",

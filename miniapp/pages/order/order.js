@@ -52,6 +52,7 @@ Page({
     etaLabel: '',                // local (same-city) delivery arrival time, e.g. "2:50 PM"
     partialShip: null,           // {line, sub} when some-but-not-all parcels shipped
     airDelay: null,              // {line, sub} when a late air parcel may be unsafe to eat
+    waitingNote: null,           // {line, sub} when the order is parked on a restock
     careNotes: [],               // the tenant's add-to-cart notices for the items in this order
     trackingEvents: [],
     trackingEventsVisible: [],   // computed: 1 latest by default, all when expanded
@@ -372,7 +373,8 @@ Page({
         label_display: L === 'cn' ? step.cn : step.label,
         // Pending shares its timestamp with Preparing (same transition);
         // hide it to avoid duplicate times rendering one after the other.
-        at_short: (step.at && step.key !== 'pending') ? step.at.slice(0, 16) : '',
+        // Same for the parked step, which carries the paid time.
+        at_short: (step.at && step.key !== 'pending' && step.key !== 'awaiting_stock') ? step.at.slice(0, 16) : '',
         done:   !!step.at,
       }));
       // Mark the most-recent COMPLETED step as "active" — that's where the
@@ -514,6 +516,15 @@ Page({
       // more than a day late. Surfaced as a persistent food-safety banner so it
       // can't be missed (the in-app notification + push are easy to scroll past).
       // Inform + apologise only; staff handle compensation off-app.
+      // Parked on a restock: name what it is waiting on and say the whole order
+      // ships together, so "Paid" in the timeline is never the whole story.
+      const waitNames = (data.waiting_items || []).map(w => lang.pick(w.name_en, w.name_cn, L));
+      const waitingNote = (data.status === 'awaiting_restock' && waitNames.length)
+        ? {
+            line: L === 'cn' ? '暂时缺货：' + waitNames.join('、') : 'Out of stock for now: ' + waitNames.join(', '),
+            sub:  L === 'cn' ? '到货后整单一并发出。' : "We'll ship your whole order together once it's back.",
+          }
+        : null;
       const airDelay = data.air_delayed
         ? (L === 'cn'
             ? { line: '配送延误送达',
@@ -596,6 +607,7 @@ Page({
         etaLabel,
         partialShip,
         airDelay,
+        waitingNote,
         careNotes,
         trackingEvents,
         trackingEventsVisible,

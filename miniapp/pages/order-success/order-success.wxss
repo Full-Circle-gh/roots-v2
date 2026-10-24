@@ -29,6 +29,17 @@
   line-height: 1.4;
 }
 
+.waiting-banner {
+  background: rgba(178, 207, 237, 0.2);
+  border: 2rpx solid rgba(178, 207, 237, 0.5);
+  border-radius: 16rpx;
+  padding: 24rpx 28rpx;
+  margin-bottom: 32rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  color: #2456a3;
+  line-height: 1.4;
+  text-align: center;
+}
 .pickup-banner {
   background: rgba(123, 189, 59, 0.14);
   border: 2rpx solid rgba(123, 189, 59, 0.35);
