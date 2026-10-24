@@ -58,6 +58,7 @@ Page({
     trackingEventsVisible: [],   // computed: 1 latest by default, all when expanded
     trackingEventsExpanded: false,
     subtotal: '',
+    moneyLines: [],              // packing / coupon / points / wallet, between shipping and total
     shipping: '',
     total: '',
     statusLabel: '',
@@ -623,6 +624,11 @@ Page({
         pickupPhone,
         pickupTime,
         subtotal: '¥' + Number(data.subtotal || 0).toFixed(2),
+        moneyLines: (data.money_lines || []).map(m => ({
+          key: m.key,
+          label: L === 'cn' ? m.label_cn : m.label_en,
+          amount: (m.amount < 0 ? '−¥' : '¥') + Math.abs(m.amount).toFixed(2),
+        })),
         shipping: Number(data.shipping_fee || 0) > 0
           ? '¥' + Number(data.shipping_fee || 0).toFixed(2)
           : (L === 'cn' ? '免费' : 'FREE'),

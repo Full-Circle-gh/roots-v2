@@ -22,6 +22,7 @@
         "points_used": 0,
         "points_amount": 0,
         "points_earned": 0,
+        "balance_used": 0,
         "total": 28,
         "tax_amount": null,
         "tax_rate_micro": null,
@@ -109,6 +110,7 @@
         ],
         "fulfillment": null,
         "waiting_items": [],
+        "money_lines": [],
         "timeline": [
           {
             "key": "placed",
@@ -183,6 +185,7 @@
         "points_used": 0,
         "points_amount": 0,
         "points_earned": 0,
+        "balance_used": 0,
         "total": 28,
         "tax_amount": null,
         "tax_rate_micro": null,
@@ -270,6 +273,7 @@
         ],
         "fulfillment": null,
         "waiting_items": [],
+        "money_lines": [],
         "timeline": [
           {
             "key": "placed",
@@ -641,6 +645,7 @@
         "points_used": 0,
         "points_amount": 0,
         "points_earned": 0,
+        "balance_used": 0,
         "total": 56,
         "tax_amount": null,
         "tax_rate_micro": null,
@@ -728,6 +733,7 @@
         ],
         "fulfillment": null,
         "waiting_items": [],
+        "money_lines": [],
         "timeline": [
           {
             "key": "placed",
@@ -815,6 +821,7 @@
         "points_used": 0,
         "points_amount": 0,
         "points_earned": 0,
+        "balance_used": 0,
         "total": 84,
         "tax_amount": null,
         "tax_rate_micro": null,
@@ -902,6 +909,7 @@
         ],
         "fulfillment": null,
         "waiting_items": [],
+        "money_lines": [],
         "timeline": [
           {
             "key": "placed",

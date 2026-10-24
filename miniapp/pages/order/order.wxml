@@ -270,6 +270,10 @@
         <view>{{copy.shippingLabel}}</view>
         <view class="f-bear">{{shipping}}</view>
       </view>
+      <view wx:for="{{moneyLines}}" wx:key="key" class="money-row">
+        <view>{{item.label}}</view>
+        <view class="f-bear">{{item.amount}}</view>
+      </view>
       <view wx:if="{{tax}}" class="money-row">
         <view>{{taxIncluded ? copy.taxIncludedLabel : copy.taxLabel}}</view>
         <view class="f-bear">{{tax}}</view>
