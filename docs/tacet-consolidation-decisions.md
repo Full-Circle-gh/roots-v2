@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.581
+# Tacet shared-core consolidation — decisions record, v4.582
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-24 · v4.582 — **§496 AMENDED · THE QR MENU GETS ITS FILED ADDRESS FIRST, THROUGH A PASS-THROUGH — DECIDED BY ASH.** Ash: *"the most important thing right now is the payment setup for the qr code menu"*, then *"do it, write the nginx settings and the redirect"*. Rule 7 added: `shop.tacetapp.cn` is served by a pass-through on the mainland server to the existing app, ahead of the full move; the old shop host's printed QR menus redirect to it behind `SHOP_MENU_REDIRECT_TO`. Adds `lib/shop-menu-redirect.js`, `scripts/test_shop_menu_redirect.js`, `ops/china-proxy/shop.tacetapp.cn.conf`. No change to `.gitignore` or CI.
 
 2026-10-24 · v4.581 — **§496 · THE SYSTEM MOVES TO tacetapp.cn, ON A MAINLAND SERVER, ALONGSIDE THE OLD DOMAIN — DECIDED BY ASH.** Ash: *"tacetapp.cn now has icp. need to move our system to this domain"*. The four hosts move name for name, the old domain's pages redirect, the old domain's `/api` and `/assets` stay up until the new mini-app has rolled out, and the QR-menu WeChat payment is switched on at cutover (it was off only for want of a filing). Docs only; no code, `.gitignore` or CI changed.
 
@@ -33282,6 +33284,8 @@ This is the existing four-host layout moved to a new name. It is NOT the restruc
 5. **The system moves to a mainland server, in this order, and the Hong Kong server stays untouched for rollback.** (a) Stand the app up on the new server with a COPY of the data and no customers. (b) Test it fully on the new domain. (c) In a quiet hour, copy the live data across and move DNS. (d) Leave the Hong Kong server running, unchanged, for some weeks. Data and domain are never moved on the same night as an untested server. The deploy target (`.github/workflows/deploy.yml` and the scripts that name `47.239.89.63`) is made configurable rather than re-pointed by hand; that change touches CI configuration and says so in its commit message and PR.
 
 6. **The code takes every host and callback URL from one place.** The hard-coded hosts in `server.js`, `routes/store-admin.js`, `lib/public-origin.js`, `lib/payment-gateways.js` and `lib/billing-providers.js` become defaults read from configuration, so a later move is a setting and not a search.
+
+7. **AMENDED 2026-10-24 — the QR menu gets its filed address first, through a pass-through.** Because menu payment is the urgent part, `shop.tacetapp.cn` is served by an nginx on the mainland server that forwards only `/s/` and `/assets/` (plus WeChat's verification file) to the existing app on the Hong Kong server. No data moves, and orders and payments are written exactly where they are today. This is a stepping stone; rule 5 still governs the full move. Printed QR menus on `shop.rootskitchenchina.com` go to `shop.tacetapp.cn` by a 302 on GET/HEAD `/s/...` only (a page opened before the switch must still be able to POST its order), and the redirect does nothing until `SHOP_MENU_REDIRECT_TO` is set, because a push to main deploys and a redirect to a host that does not answer yet would break every printed QR. Turn it on only after the pass-through answers and a ¥0.01 order has been paid on it. New QR codes take their address from the business's active domain in `tenant_domains`, so `shop.tacetapp.cn` is added there, as the primary domain, through the System back office when the pass-through is live. Roots' own menu needs no registration to find its data. The nginx file is `ops/china-proxy/shop.tacetapp.cn.conf`; it is not deployed from the repo.
 
 ### Open — NOT decided, and each must be answered before the step that depends on it
 
