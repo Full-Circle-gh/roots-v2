@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.580
+# Tacet shared-core consolidation — decisions record, v4.581
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-24 · v4.581 — **§496 · THE SYSTEM MOVES TO tacetapp.cn, ON A MAINLAND SERVER, ALONGSIDE THE OLD DOMAIN — DECIDED BY ASH.** Ash: *"tacetapp.cn now has icp. need to move our system to this domain"*. The four hosts move name for name, the old domain's pages redirect, the old domain's `/api` and `/assets` stay up until the new mini-app has rolled out, and the QR-menu WeChat payment is switched on at cutover (it was off only for want of a filing). Docs only; no code, `.gitignore` or CI changed.
 
 2026-10-22 · v4.580 — **§495 FIX 2 · WHEN THE BROWSER HAS NO SPEECH ENGINE, THE KEYBOARD'S MICROPHONE TAKES OVER.** Ash, on his phone after v4.579: *"same problem can't press it or tap it"*, with the sheet reading *"Heard nothing"*. The recogniser was ending before the microphone ever opened: Chrome on Android borrows Google's speech engine, which a phone sold in China does not carry and cannot reach without a VPN, so every tap ended the same way. Claude's API takes text, images and documents but not audio, so the model key cannot stand in for it. Now: a recogniser that ends without ever opening the microphone (`onaudiostart` never fired), or fails with `network`, `service-not-allowed` or `language-not-supported`, is named in words and remembered on the device for a week; from then on the mic focuses the field inside the tap, so the phone's own keyboard opens with its voice input (Sogou, iFlytek, Baidu, Gboard), which every phone in China carries, hears Chinese and English, and learns its owner's voice. A sentence heard by the browser clears the mark; a stop the person asked for says nothing. Same on the computer, same device key. Two strings composed and two retired, `docs/tacet-delivery-vocabulary.md` v1.350. No rule changes, no schema, no route. **Open, for Ash:** a hold-to-talk microphone that records in the page and sends the clip to a Chinese speech service (Alibaba Cloud, Tencent Cloud or iFlytek) with the catalogue as hot words, which would need no keyboard step and work inside WeChat; it needs an account and a key, and is not built. No change to `.gitignore` or CI.
 
@@ -33259,3 +33261,33 @@ Rule 14 removes `scripts/test_quick_stock_command.js`,
 `scripts/test_mobile_stock_command.js`, `scripts/test_stock_command_ai.js`
 and `lib/stock-command-ai.js`, and adds the `fold_quick_stock_heard_into_assistant_names_v1`
 migration in `database.js`. No change to `.gitignore` or CI.
+
+
+## §496 — THE SYSTEM MOVES TO tacetapp.cn, ON A MAINLAND SERVER, ALONGSIDE THE OLD DOMAIN
+
+**2026-10-24 · DECIDED BY ASH.** Ash: *"tacetapp.cn now has icp. need to move our system to this domain"*. Asked whether the hosts keep their names: *"ok"* (yes, same names). Asked what the bare domain does: *"it should replace completly the old domain + be able to use payment directly in the menu qr code domain . right now there is no payment method connected because we don't have icp for the current domain"*. Asked about the server: *"it's server in china"*. Asked whether the mini-app may switch in its next release with the old address kept alive for a while: *"ok"*.
+
+This is the existing four-host layout moved to a new name. It is NOT the restructure in §0.1 (`app.tacet.com` and paths); that stays a separate, undecided piece of work.
+
+### Rules
+
+1. **The hosts keep their names under the new domain.** `shop.`, `store.`, `system.` and `food.` under `tacetapp.cn`, doing exactly what their `rootskitchenchina.com` namesakes do. The bare `tacetapp.cn` takes the bare old domain's role: the host the WeChat/Alipay callbacks, the mini-app's `/api` and its brand fonts under `/assets` are pinned to, and the host that sends human page requests to `food.`.
+
+2. **The old domain's pages redirect; its machine traffic does not, yet.** Page requests on the old hosts go to the matching new host. `/api/`, `/assets/`, `/track` and `/.well-known/` on the old bare domain keep being served as they are, because mini-app versions already on customers' phones call the old address and cannot follow a redirect. Switching the old domain off completely is a LATER decision, made by Ash once most customers have the new mini-app. Until then nothing in this rule is to be undone.
+
+3. **The mini-app moves to the new domain in its next release.** `miniapp/utils/api.js` `BASE` and the font URLs in `miniapp/app.wxss` change, and `tacetapp.cn` is added to the request, downloadFile and uploadFile legal domains in the WeChat console BEFORE that release is submitted for review.
+
+4. **The QR-menu WeChat payment is switched on at cutover, not before.** The rail in `routes/shop-menu.js` (§50) was switched off on 2026-09-08 only because `shop.rootskitchenchina.com` had no ICP filing. It stays behind `SHOP_QR_WECHAT_PAY`, and that flag is set to `1` on the new server only once all three of these are done: `shop.tacetapp.cn` is a registered payment directory in the WeChat Pay merchant console; it is the web-authorization domain on the Official Account, with WeChat's verification file served from its root; and a real ¥0.01 order has been paid end to end on it.
+
+5. **The system moves to a mainland server, in this order, and the Hong Kong server stays untouched for rollback.** (a) Stand the app up on the new server with a COPY of the data and no customers. (b) Test it fully on the new domain. (c) In a quiet hour, copy the live data across and move DNS. (d) Leave the Hong Kong server running, unchanged, for some weeks. Data and domain are never moved on the same night as an untested server. The deploy target (`.github/workflows/deploy.yml` and the scripts that name `47.239.89.63`) is made configurable rather than re-pointed by hand; that change touches CI configuration and says so in its commit message and PR.
+
+6. **The code takes every host and callback URL from one place.** The hard-coded hosts in `server.js`, `routes/store-admin.js`, `lib/public-origin.js`, `lib/payment-gateways.js` and `lib/billing-providers.js` become defaults read from configuration, so a later move is a setting and not a search.
+
+### Open — NOT decided, and each must be answered before the step that depends on it
+
+- **Does the merchant company on the WeChat Pay account match the company on the tacetapp.cn filing?** If they differ WeChat may refuse the payment directory, and rule 4 cannot be met. Ash to check first.
+- **The AI features on a mainland server.** `lib/model-gateway.js`, `routes/ai.js` and `lib/alipay-ocr.js` call foreign services that a mainland server may not reach. Ash: *"not day to day but need them"*. A plan (a relay, or a mainland-reachable provider) is needed before the move, not after.
+- **The Meituan session tunnel** (`scripts/meituan-login.js`) runs through the Hong Kong server's address; whether it works from a new address is untested.
+- **Values stored in the database** that may hold the old domain (tenants' saved KD100 callback URLs, QR codes already printed) are to be surveyed before cutover.
+- **When the old domain's `/api` and `/assets` are switched off** (rule 2).
+- **The provider and size of the mainland server**, and how deploy access to it is given.
