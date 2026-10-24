@@ -1983,6 +1983,25 @@ function orderWaitingPids(order) {
   return new Set(pids.map((n) => parseInt(n, 10)).filter(Boolean));
 }
 
+/* WHAT THE SHOPPER IS TOLD THEIR ORDER IS WAITING ON. The same set as above,
+   named by the lines they bought, so the success screen and the order page can
+   say "the buckwheat bread" instead of leaving a paid order to read as fine.
+   Empty for every order that is not parked right now (orderWaitingPids gates on
+   the live status), so no other order's payload changes. */
+function customerWaitingItems(order, items) {
+  const pids = orderWaitingPids(order);
+  if (!pids.size) return [];
+  const byPid = new Map();
+  for (const it of items || []) {
+    const pid = Number(it.product_id);
+    if (!pids.has(pid)) continue;
+    const cur = byPid.get(pid);
+    if (cur) cur.qty += Number(it.qty) || 0;
+    else byPid.set(pid, { name_en: it.name_en, name_cn: it.name_cn, qty: Number(it.qty) || 0 });
+  }
+  return [...byPid.values()];
+}
+
 /* THE "SHIPPING STORE IS SHORT" WARNING, AS IT STANDS NOW. `fulfillment_short_pids`
    is written once, at checkout, and nothing ever rewrote it — so the chip on the
    list, the PC badge and the drawer strip kept warning after the shop restocked,
@@ -5572,7 +5591,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
 // Alipay-QR confirmation, or as a sanity check after wx.requestPayment.
 router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req, res) => {
   const orderId = parseInt(req.params.orderId, 10);
-  const sel = 'SELECT id, order_no, status, paid_at, total, payment_method, fulfillment_type, scheduled_for, delivery_slot_label, address_json FROM retail_orders WHERE id = ? AND customer_id = ?';
+  const sel = 'SELECT id, order_no, status, paid_at, total, payment_method, fulfillment_type, scheduled_for, delivery_slot_label, address_json, awaiting_restock_pids FROM retail_orders WHERE id = ? AND customer_id = ?';
   let order = tdb().prepare(sel).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
 
@@ -5625,6 +5644,12 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
     } catch (_) { /* ignore malformed json */ }
   }
   delete order.address_json;
+  // A parked order says what it is waiting on, so the success screen can tell
+  // the shopper at the moment they pay. [] for every order that is not parked.
+  order.waiting_items = customerWaitingItems(order, tdb().prepare(
+    'SELECT product_id, name_en, name_cn, qty FROM retail_order_items WHERE order_id = ?'
+  ).all(orderId));
+  delete order.awaiting_restock_pids;
   localizeOrderTimes(order);
   attachSlotDisplay(order, undefined, viewerLang(req), deliveryTz());
   res.json({ success: true, data: order });
@@ -11923,7 +11948,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
             promised_ship_date, promised_delivery_date,
             tracking_carrier, tracking_number, tracking_status,
             tracking_events_json, tracking_synced_at,
-            tracking_scenario, tracking_scenario_data_json,
+            tracking_scenario, tracking_scenario_data_json, awaiting_restock_pids,
             placed_at, paid_at, preparing_at, dispatched_at, delivered_at, cancelled_at, updated_at
        FROM retail_orders WHERE id = ? AND customer_id = ?`
   ).get(orderId, customerId);
@@ -12051,6 +12076,8 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
     });
   }
   o.fulfillment = buildCustomerFulfillment(orderId, o.items);
+  o.waiting_items = customerWaitingItems(o, o.items);
+  delete o.awaiting_restock_pids;
   o.timeline = orderTimeline(o);
   // Phase-1 self-service reschedule: can the customer still change the
   // delivery/pickup time? scheduled_for is left raw (not in GZ_LOCAL_TS_FIELDS)
@@ -12401,6 +12428,14 @@ function orderTimeline(o) {
       { key: 'completed', label: 'Completed', cn: '已完成', at: o.delivered_at || o.paid_at },
     ];
   }
+  // A paid order parked on a restock. It has paid but nothing has started, so
+  // without a step of its own the highlighted dot reads "Paid" — which is what
+  // a shopper whose order was parked without being asked (a sold-out
+  // pre-order line) took to mean "all fine". Only a parked order carries it;
+  // once it releases, the status moves on and the step is gone.
+  const restockStep = o.status === 'awaiting_restock'
+    ? [{ key: 'awaiting_stock', label: 'Waiting for stock', cn: '等待补货', at: o.paid_at }]
+    : [];
   // Pickup orders never dispatch a courier — the same status columns are
   // reused but mean "ready at counter" (dispatched_at) and "collected"
   // (delivered_at). Relabel so the customer reads a collection journey
@@ -12409,6 +12444,7 @@ function orderTimeline(o) {
     return [
       { key: 'placed',    label: 'Placed',          cn: '已下单', at: o.placed_at },
       { key: 'paid',      label: 'Paid',            cn: '已支付', at: o.paid_at },
+      ...restockStep,
       { key: 'pending',   label: 'Pending',         cn: '待确认', at: o.preparing_at },
       { key: 'preparing', label: 'Preparing',       cn: '准备中', at: o.preparing_at },
       { key: 'ready',     label: 'Ready to collect', cn: '可取货', at: o.dispatched_at },
@@ -12418,6 +12454,7 @@ function orderTimeline(o) {
   return [
     { key: 'placed',     label: 'Placed',          cn: '已下单',     at: o.placed_at },
     { key: 'paid',       label: 'Paid',            cn: '已支付',     at: o.paid_at },
+    ...restockStep,
     { key: 'pending',    label: 'Pending',         cn: '待确认',     at: o.preparing_at },
     { key: 'preparing',  label: 'Preparing',       cn: '准备中',     at: o.preparing_at },
     { key: 'dispatched', label: 'Out for delivery', cn: '配送中',    at: o.dispatched_at },

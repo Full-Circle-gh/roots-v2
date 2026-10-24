@@ -13,6 +13,7 @@ Page({
     status: 'paid',
     isPickup: false,
     pickupLine: '',   // "Collect at <store> · <time>" — pickup orders only
+    waitingLine: '',  // "Out of stock for now: …" — only an order parked on a restock
     lang: 'en',
     copy: {
       headline: 'Order placed.',
@@ -72,6 +73,22 @@ Page({
         patch.copy = Object.assign({}, this.data.copy, {
           sub: cn ? '感谢，备好后我们会通知您。' : "Thanks! We'll let you know when it's ready.",
         });
+      }
+      // A paid order parked on a restock. Say so here, at the moment of paying:
+      // "Order placed. We're on it." is false for an order nothing is happening to.
+      const waiting = Array.isArray(data.waiting_items) ? data.waiting_items : [];
+      if (data.status === 'awaiting_restock') {
+        const cn = app.globalData.lang === 'cn';
+        patch.copy = Object.assign({}, patch.copy || this.data.copy, {
+          headline: cn ? '已付款，等待补货。' : 'Paid. Waiting for stock.',
+          sub: cn ? '到货后整单一并发出。' : "We'll ship your whole order together once it's back.",
+        });
+        const names = waiting.map(w => lang.pick(w.name_en, w.name_cn, app.globalData.lang));
+        if (names.length) {
+          patch.waitingLine = cn
+            ? '暂时缺货：' + names.join('、')
+            : 'Out of stock for now: ' + names.join(', ');
+        }
       }
       this.setData(patch);
     } catch (e) {
