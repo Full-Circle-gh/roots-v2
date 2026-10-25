@@ -254,7 +254,8 @@
          slots" copy below, which is what made an OPEN store look closed when
          the customer skipped the area picker. -->
     <block wx:elif="{{!scheduling}}">
-      <view class="muted slot-empty">{{quoting ? copy.loadingTimes : copy.areaNeededForTimes}}</view>
+      <view wx:if="{{quoteFailed && !quoting}}" class="muted slot-empty" bindtap="refreshQuote">{{copy.quoteFailed}}</view>
+      <view wx:else class="muted slot-empty">{{quoting ? copy.loadingTimes : copy.areaNeededForTimes}}</view>
     </block>
 
     <block wx:else>

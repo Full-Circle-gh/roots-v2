@@ -6,6 +6,7 @@
 const api    = require('../../utils/api');
 const cart   = require('../../utils/cart');
 const config = require('../../utils/config');
+const diag   = require('../../utils/diag');
 
 /* ── Tax, normalised (audit I-03) ────────────────────────────────────────────
    TWO SOURCES, ONE SHAPE. The shop's settings arrive on every delivery quote
@@ -157,6 +158,7 @@ Page({
     useBalance: false,           // toggle: apply available balance on this order
     // Delivery scheduling — populated by the /quote response.
     scheduling: null,            // full scheduling object from server (slots, surcharge, hours)
+    quoteFailed: false,          // true when the last /quote errored (not "no address"); the When section offers a retry
     batchNotice: null,           // { ship_date, delivery_date, kind, kicker/title/message_en/cn, items[] } when a batch-made item ships rather than instant-delivers
     batchNoticeItems: [],         // [{ id, name, image }] — the fresh items, matched to the cart for thumbnails
     batchNoticePopup: false,      // true → the "Made fresh for you" modal is open
@@ -337,6 +339,7 @@ Page({
       regionRequired: 'Please choose your delivery area',
       areaNeededForTimes: 'Choose your delivery area above to see delivery times',
       loadingTimes: 'Loading delivery times…',
+      quoteFailed: "Couldn't load delivery times — tap to retry",
       wechatOpt: 'WeChat Pay',
       alipayOpt: 'Alipay',
       comingSoon: 'Coming soon',
@@ -1443,6 +1446,7 @@ Page({
         regionRequired: '请选择配送区域',
         areaNeededForTimes: '请先在上方选择配送区域,即可查看可配送时间',
         loadingTimes: '正在加载配送时间…',
+        quoteFailed: '无法加载配送时间，请点击重试',
         wechatOpt: '微信支付',
         alipayOpt: '支付宝',
         comingSoon: '即将推出',
@@ -1580,7 +1584,7 @@ Page({
     if (hasSaved) body.address_id = a.id;
     else          body.address    = { city: a.city, district: a.district };
 
-    this.setData({ quoting: true });
+    this.setData({ quoting: true, quoteFailed: false });
     // Returning the chain so callers (e.g. the stock-race recovery in
     // submitOrder) can `await this.refreshQuote()` before inspecting
     // this.data.needsFallback / fallbackGate.
@@ -1869,7 +1873,15 @@ Page({
           // Network / unknown — keep the user able to place an order; the
           // server-side /orders endpoint will refuse on its own if invalid.
           console.warn('[checkout] /quote failed:', code);
-          this.applyQuoteFallback(subtotal);
+          // Leave a trail on the server: the customer's phone is the only place
+          // this reason ever lived. A throw inside the .then above lands here
+          // too, so `code` is then the JS error message and `stack` says where.
+          diag.reportError('checkout_quote_failed: ' + code, err && err.stack, {
+            status: (err && err.status) || null,
+            delivery_mode: this.data.deliveryMethod || null,
+            has_saved_address: hasSaved,
+          });
+          this.applyQuoteFallback(subtotal, true);
         }
       });
   },
@@ -2322,11 +2334,14 @@ Page({
 
   // Used when we can't quote (no address yet, or transient error). Keeps the
   // totals readable by just showing subtotal − voucher.
-  applyQuoteFallback(subtotal) {
+  // `failed` is true only when a quote was sent and errored, so the When section
+  // says "tap to retry" rather than asking for an area the customer already gave.
+  applyQuoteFallback(subtotal, failed) {
     const voucherDiscount = this.effectiveVoucher().discount;  // best of {manual, auto-apply}
     this.setData({
       zone: null,
       zoneError: '',
+      quoteFailed: !!failed,
       // No resolvable address yet → no zone → no real slots. NULL the
       // scheduling so the When section shows the "choose your area" prompt
       // instead of falling through to the false "closed / no slots" copy
