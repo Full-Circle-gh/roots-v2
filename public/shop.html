@@ -4842,8 +4842,30 @@ async function renderLegal(doc){
   document.title=(isTerms?(cn?'服务条款':'Terms'):(cn?'隐私政策':'Privacy'))+' · '+state.brand;
   const legal=(state.config&&state.config.legal)||{};
   const key=isTerms?'terms':'privacy';
-  const bodyTxt=pick(legal[key+'_en'],legal[key+'_cn'])||legal[key]||'';
-  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'条款':'LEGAL',isTerms?(cn?'服务条款':'Terms of service'):(cn?'隐私政策':'Privacy policy'),'')}<div class="sp-pad" style="font-family:var(--f-aleo);font-size:14px;line-height:1.7;color:var(--ink)">${bodyTxt?esc(bodyTxt).replace(/\n/g,'<br>'):(cn?'暂无内容。':'No content published yet.')}</div></div>`;
+  // The config carries legal.<doc>.body_en / body_cn (the shape the mini app's
+  // pages/legal reads, and what Settings saves). This read legal.<doc>_en and
+  // fell back to legal.<doc> itself — the OBJECT — so the page printed
+  // "[object Object]" (found 2026-10-26, preparing the H5 payment application,
+  // whose reviewers read this page). The flat keys stay as a fallback.
+  const d=legal[key];
+  const bodyTxt=(d&&typeof d==='object')
+    ?(pick(d.body_en,d.body_cn)||'')
+    :(pick(legal[key+'_en'],legal[key+'_cn'])||(typeof d==='string'?d:''));
+  // The text is written with plain marks — "# " / "## " headings, "- " list
+  // lines, "---" a rule — and printed them literally. Each line is escaped
+  // first; only these four shapes become markup, so nothing in the text can.
+  const legalHtml=(t)=>{ const out=[]; let ul=false;
+    t.split('\n').forEach(raw=>{ const l=raw.trim(), li=/^- /.test(l);
+      if(ul&&!li){ out.push('</ul>'); ul=false; }
+      if(!l) return;
+      if(/^#{1,3} /.test(l)){ const h1=/^# /.test(l); out.push(`<div style="font-family:var(--f-bear);font-size:${h1?19:16}px;line-height:1.3;margin:${h1?'0 0 6px':'20px 0 6px'}">${esc(l.replace(/^#{1,3} /,''))}</div>`); return; }
+      if(l==='---'){ out.push('<hr style="border:0;border-top:1px solid var(--ink);opacity:.25;margin:18px 0">'); return; }
+      if(li){ if(!ul){ out.push('<ul style="margin:4px 0 8px;padding-left:20px">'); ul=true; } out.push(`<li>${esc(l.slice(2))}</li>`); return; }
+      out.push(`<p style="margin:4px 0 8px">${esc(l)}</p>`);
+    });
+    if(ul) out.push('</ul>');
+    return out.join(''); };
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'条款':'LEGAL',isTerms?(cn?'服务条款':'Terms of service'):(cn?'隐私政策':'Privacy policy'),'')}<div class="sp-pad" style="font-family:var(--f-aleo);font-size:14px;line-height:1.7;color:var(--ink);padding:4px 22px 40px">${bodyTxt?legalHtml(bodyTxt):(cn?'暂无内容。':'No content published yet.')}</div></div>`;
 }
 
 /* ════════════ ROUTER ════════════ */
