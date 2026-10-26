@@ -193,6 +193,21 @@ function bi(en, cn) {
   return `<span class="l-en">${esc(e)}</span><span class="l-cn">${esc(c)}</span>`;
 }
 
+// WeChat's two-bubble mark beside the WeChat Pay choice (Ash, 2026-10-26: "i
+// want next to wechat option to have the wechat logo"). Drawn in the house icon
+// recipe (24×24, line, currentColor), not the green brand bitmap, so it takes
+// the button's ink like every other icon here. Decorative: the label beside it
+// already says WeChat Pay in both languages, so screen readers skip it.
+const WECHAT_MARK =
+  '<svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"' +
+  ' stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M16.6 8.2A7.3 6 0 1 0 6.9 14.9l-1.7 2.4 3.3-1.5c.4.1.8.1 1.2.1"/>' +
+  '<path d="M21.5 14.6A5.9 4.9 0 1 0 19.4 18.3l1.6 1.9-.4-2.6c.6-.8.9-1.9.9-3z"/>' +
+  '<g fill="currentColor" stroke="none">' +
+  '<circle cx="7" cy="7.8" r="1.15"/><circle cx="11.8" cy="7.8" r="1.15"/>' +
+  '<circle cx="13.5" cy="13.6" r=".95"/><circle cx="17.7" cy="13.6" r=".95"/></g>' +
+  '</svg>';
+
 // Reported on the rail: a Chinese category name carrying "&" ("鲜食 & 熟食")
 // wrapped at the rail's own narrow width with "&" stranded alone on the
 // first line ("鲜食 &" / "熟食") — CJK text breaks between any two
@@ -1863,8 +1878,10 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
 .pw[hidden]{display:none}
 .pw button{flex:1;border:2px solid var(--ink);background:rgba(255,255,255,.72);
   color:var(--ink);padding:11px 8px;font:inherit;font-family:var(--f-bear);font-size:14px;
-  cursor:pointer;-webkit-tap-highlight-color:transparent}
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+  display:flex;align-items:center;justify-content:center;gap:7px}
 .pw button.on{background:var(--lime)}
+.pw-ico{width:20px;height:20px;flex:none}
 
 /* ── THE PLACED ORDER, WHEREVER IT IS DRAWN ──
    Three surfaces render this block and they are one screen: the sheet that
@@ -4163,7 +4180,7 @@ router.get('/s/:shopCode', (req, res) => {
           // expecting to do something.
           (wxPay
             ? `<div class="pw" id="cPw">` +
-                `<button type="button" data-pm="wechat" class="on">${bi('WeChat Pay', '微信支付')}</button>` +
+                `<button type="button" data-pm="wechat" class="on">${WECHAT_MARK}${bi('WeChat Pay', '微信支付')}</button>` +
                 `<button type="button" data-pm="counter">${bi('Pay at the counter', '收银台付款')}</button>` +
               `</div>`
             : '') +
