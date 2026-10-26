@@ -1315,8 +1315,29 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.ok(/role="dialog"/.test(pop) && /aria-modal="true"/.test(pop), 'the pop-up is not announced as a dialog');
         assert.ok(r.body.indexOf('id="payQ"') > r.body.indexOf('id="oAdd"'),
           'the pop-up is nested inside the basket sheet, where its transform would clip it');
-        assert.ok(/pq\.hidden=false/.test(r.body) && /pick\(b\.getAttribute\('data-pq'\)\);pqClose\(\);place\.click\(\)/.test(r.body),
+        assert.ok(/pq\.hidden=false/.test(r.body) && /pqClose\(\);if\(needWx\(v\)\)return;pick\(v\);place\.click\(\)/.test(r.body),
           'the pop-up is not opened by Place, or answering it does not place the order');
+      });
+
+      // OUTSIDE WECHAT, WECHAT PAY EXPLAINS ITSELF (Ash, 2026-10-26). WeChat's
+      // payment window only exists inside WeChat; in Chrome the order used to go
+      // through and silently become a counter order. Now the tap opens a message
+      // and places nothing. The page bytes must still be the same for every
+      // browser (§47, checked above): the choice is made in the phone's script.
+      await checkAsync('OUTSIDE WECHAT, tapping WeChat Pay opens a message and places nothing', async () => {
+        const r = await get(`/s/${LIVE}`);
+        const msg = (r.body.match(/<div class="pq" id="payW" hidden>[\s\S]*?<\/div><\/div><\/div>/) || [''])[0];
+        assert.ok(msg, 'the outside-WeChat message is not on the page, or is not hidden until asked');
+        assert.ok(/微信扫码支付/.test(msg) && /Scan with WeChat to pay/.test(msg), 'the message title lost a language');
+        assert.ok(/用微信扫一扫扫码进入。/.test(msg), 'the instruction is missing');
+        assert.ok(/data-pqw="back"/.test(msg) && /data-pqw="counter"/.test(msg), 'the message does not offer Back and the counter');
+        assert.ok(!/data-pqw="wechat"|data-pq="wechat"/.test(msg), 'the message offers WeChat Pay, the thing it explains is unavailable');
+        assert.ok(/var inWx=\/MicroMessenger\/i\.test\(navigator\.userAgent\|\|''\)/.test(r.body),
+          'the script no longer tells WeChat from other browsers the way the payment page does');
+        assert.ok(/var v=b\.getAttribute\('data-pm'\);if\(needWx\(v\)\)return;pick\(v\)/.test(r.body),
+          'tapping WeChat Pay in the row outside WeChat still chooses it');
+        assert.ok(/if\(b\.getAttribute\('data-pqw'\)==='counter'\)\{pick\('counter'\);place\.click\(\)\}/.test(r.body),
+          'Pay at the counter in the message does not place a counter order');
       });
 
       await checkAsync('the user agent still moves nothing — §47 holds with the rail on', async () => {
