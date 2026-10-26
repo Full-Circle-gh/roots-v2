@@ -6480,6 +6480,8 @@ Ruling (Ash, 2026-09-06): **there is no second app.** `/stock` — the Quick Sto
 
 Docs only; no code yet.
 
+**AMENDED 2026-10-26 by Ash — nothing is pre-chosen.** *"at checkout, wechat is choosen by defult, its not good. user need to choose the payment method by themself, if they didnt choose it the sytem need to ask them to choose the payment method, same for anything else they forgot to choose/fill up"*. The basket's WeChat Pay / Pay at the counter row now starts with neither lit, under the heading "Pay with" / "支付方式" (copied from `public/shop.html`'s checkout section title). Place order refuses an unchosen payment while the row is showing, with "Please choose how to pay" / "请选择 支付方式": the 中文 is the options picker's own refusal "请选择 " with that heading appended, the way §120 appends a question's text, so nothing is composed. A voucher still hides the row and sends the order to the counter (§426), so a customer with a voucher is not asked. "Anything else" was surveyed: required product options already block with the named refusal (§120, nothing pre-ticked), the phone is optional (§426) and no name is asked (§454), so payment was the only pre-chosen answer on the menu. The order endpoint still treats a missing `pay_method` as the counter, for pages loaded before this change.
+
 ## 51. A kitchen request prints on paper when it reaches the queue; one kitchen printer, and the tenant says when it prints
 
 A warehouse→kitchen request has announced itself since #261: it fans out by

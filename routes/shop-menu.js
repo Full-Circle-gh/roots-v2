@@ -1882,6 +1882,18 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
   display:flex;align-items:center;justify-content:center;gap:7px}
 .pw button.on{background:var(--lime)}
 .pw-ico{width:20px;height:20px;flex:none}
+/* The row's heading (2026-10-26), now that nothing in it is pre-lit: an
+   unlit pair of buttons with no question over it reads as decoration. Set
+   like the phone field's label above it, so the two read as one form. */
+.pw-h{margin-top:12px;font-size:12px;line-height:1.2;letter-spacing:.04em;
+  color:var(--olive);text-transform:uppercase}
+.pw-h+.pw{margin-top:6px}
+/* Place order was pressed with nothing chosen: the row is what is missing,
+   so it is the row that is marked — a heavier frame round both buttons,
+   cleared the moment one is tapped. Ink, not a new colour: the refusal text
+   above already carries the message. */
+#cPw.need .pw button{border-width:3px}
+#cPw.need .pw-h{color:var(--ink);font-weight:700}
 
 /* ── THE PLACED ORDER, WHEREVER IT IS DRAWN ──
    Three surfaces render this block and they are one screen: the sheet that
@@ -2548,6 +2560,10 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `L_OUT=${JSON.stringify(bi('Sold out', '售罄'))},` +
   `L_PICK_EN=${JSON.stringify('Please choose: ')},` +
   `L_PICK_CN=${JSON.stringify('请选择 ')},` +
+  // The basket's refusal when no payment is chosen (2026-10-26). 支付方式 is
+  // the row's own heading, public/shop.html's live pair "Pay with" / "支付方式".
+  `L_PAYQ_EN=${JSON.stringify('Please choose how to pay')},` +
+  `L_PAYW_CN=${JSON.stringify('支付方式')},` +
   // §153's four customer pairs for HOW MANY a pick-any question takes, and
   // every one is COPIED rather than composed: public/shop.html builds these
   // exact four shapes in its own limHint(), and v1.99 of the vocabulary
@@ -3128,10 +3144,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // hide the button — is the branch §47 keeps off this page, and it would be
   // wrong on every browser WeChat ships next.
   `var pw=document.getElementById('cPw');` +
-  `var pm=(bar.getAttribute('data-wxpay')==='1')?'wechat':'counter';` +
+  // NO ANSWER UNTIL THEY GIVE ONE (2026-10-26). `pm` starts empty whenever the
+  // row is on the page, and the Place handler below refuses an empty one. With
+  // no row (no WeChat rail) there is nothing to choose and it is the counter.
+  `var pm=(bar.getAttribute('data-wxpay')==='1')?'':'counter';` +
   `if(pw){pw.addEventListener('click',function(e){` +
   `var b=e.target.closest?e.target.closest('button[data-pm]'):null;if(!b)return;` +
-  `pm=b.getAttribute('data-pm');` +
+  `pm=b.getAttribute('data-pm');pw.className='';errEl.hidden=true;` +
   `var all=pw.querySelectorAll('button[data-pm]');` +
   `for(var i=0;i<all.length;i++)all[i].className=(all[i]===b?'on':'');` +
   `},false)}` +
@@ -3141,6 +3160,17 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // counter calls.
   `place.addEventListener('click',function(){if(sending)return;` +
   `var k=ids();if(!k.length)return;` +
+  /* UNCHOSEN PAYMENT BLOCKS, the way an unanswered required option does in the
+     picker (§120): the order is not sent, and the refusal names what is
+     missing. Only while the row is showing — a voucher hides it and sends the
+     order to the counter (§426), and then there is nothing left to choose.
+     The 中文 is the picker's own refusal, "请选择 ", with the row's heading
+     "支付方式" appended exactly as the picker appends a question's text: two
+     live pieces, nothing composed. The English says the same thing plainly —
+     "Please choose: Pay with" would be the literal join and reads wrong. */
+  `if(!pm&&pw&&!pw.hidden&&!vOff(total())){` +
+  `fail(bi(L_PAYQ_EN,L_PICK_CN+L_PAYW_CN));pw.className='need';` +
+  `if(pw.scrollIntoView)pw.scrollIntoView({block:'nearest'});return}` +
   /* THE LINE CARRIES ITS ANSWERS. `choices` is the chosen choice ids and
      nothing else — the labels, the questions and the deltas on the cart line
      are for drawing the basket, and the server looks all three up again from
@@ -4175,13 +4205,20 @@ router.get('/s/:shopCode', (req, res) => {
           `<div class="vch" id="cVch" hidden></div>` +
           `<div class="err" id="cErr" hidden></div>` +
           // Asked before the order exists, because §50's print rule turns on the
-          // answer. WeChat leads: it is the path that saves the queue, and the
-          // customer who is going to walk to the till is the one already
-          // expecting to do something.
+          // answer. NOTHING IS PRE-CHOSEN (Ash, 2026-10-26: "user need to choose
+          // the payment method by themself"). §50 had WeChat lit by default;
+          // a customer who never looked at the row then went down the WeChat
+          // path without deciding to. Now neither is lit, Place order refuses
+          // until one is, and the row carries the web shop's own heading for
+          // the same question — "Pay with" / "支付方式", public/shop.html's
+          // checkout section title, copied, not composed.
           (wxPay
-            ? `<div class="pw" id="cPw">` +
-                `<button type="button" data-pm="wechat" class="on">${WECHAT_MARK}${bi('WeChat Pay', '微信支付')}</button>` +
-                `<button type="button" data-pm="counter">${bi('Pay at the counter', '收银台付款')}</button>` +
+            ? `<div id="cPw">` +
+                `<div class="pw-h">${bi('Pay with', '支付方式')}</div>` +
+                `<div class="pw">` +
+                  `<button type="button" data-pm="wechat">${WECHAT_MARK}${bi('WeChat Pay', '微信支付')}</button>` +
+                  `<button type="button" data-pm="counter">${bi('Pay at the counter', '收银台付款')}</button>` +
+                `</div>` +
               `</div>`
             : '') +
           `<button type="button" class="place" id="cPlace">${bi('Place order →', '提交订单 →')}</button>` +
