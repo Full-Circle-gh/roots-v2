@@ -184,6 +184,10 @@ app.use((req, res, next) => {
   return res.redirect(302, 'https://' + KITCHEN_HOST + req.originalUrl);
 });
 
+// Printed QR menus on the old shop host go to the filed one (§496 rule 4).
+// Inert until SHOP_MENU_REDIRECT_TO is set; see lib/shop-menu-redirect.js.
+app.use(require('./lib/shop-menu-redirect').shopMenuRedirect(process.env.SHOP_MENU_REDIRECT_TO));
+
 // Static files
 //
 // JavaScript and CSS go through their own handler first (audit J-03): the admin
