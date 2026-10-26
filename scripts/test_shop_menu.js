@@ -1371,6 +1371,38 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.ok(/请到收银台付款。/.test(body), 'a camera-app scan was left with nothing to do');
       });
 
+      // THE TILL MUST HEAR ABOUT IT (fix, 2026-10-26: TC001828). A WeChat order
+      // does not print on submit, so when the payment page sends its customer to
+      // the counter instead, that page is the only thing left that can hand the
+      // kitchen the slip. Two loads at once — a refresh, a phone retrying — must
+      // still make ONE slip, and the till settling it must not make another.
+      await checkAsync('WECHAT CHOSEN, OPENED OUTSIDE WECHAT: the counter fallback prints ONE slip', async () => {
+        await resetOrderLimit();
+        paySlips.length = 0;
+        const r = await post(`/s/${LIVE}/order`, {
+          name: 'Fang', pay_method: 'wechat', items: [{ store_product_id: P_MADE_ON, qty: 1 }],
+        });
+        assert.strictEqual(r.status, 201, JSON.stringify(r.json));
+        await settle();
+        assert.strictEqual(paySlips.length, 0, 'a WeChat order printed before anyone was sent to the counter');
+        const [a, b] = await Promise.all([
+          fetch(`http://127.0.0.1:${PORT}${r.json.data.pay_url}`, { redirect: 'manual', headers: PLAIN_UA }),
+          fetch(`http://127.0.0.1:${PORT}${r.json.data.pay_url}`, { redirect: 'manual', headers: PLAIN_UA }),
+        ]);
+        assert.strictEqual(a.status, 200); assert.strictEqual(b.status, 200);
+        assert.ok(/请到收银台付款。/.test(await a.text()), 'the fallback page no longer sends them to the till');
+        await b.text();
+        await settle();
+        assert.strictEqual(paySlips.length, 1, `the counter fallback sent ${paySlips.length} slips, not one`);
+        assert.ok(paySlips[0].content.includes('Fang'), 'the name to call is not on the slip');
+        const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
+        assert.strictEqual(db.prepare('SELECT print_status FROM retail_orders WHERE id = ?').get(oid).print_status,
+          'printed', 'the slip went but the drawer was not told');
+        retail.autoPrintOrder(oid);
+        await settle();
+        assert.strictEqual(paySlips.length, 1, 'settling it at the till printed a second slip');
+      });
+
       await checkAsync('the payment page sends them to WeChat for an openid, and nowhere else', async () => {
         const r = await fetch(`http://127.0.0.1:${PORT}${payUrl}`, { redirect: 'manual', headers: WX_UA });
         assert.strictEqual(r.status, 302, 'the payment page did not hand off to WeChat');

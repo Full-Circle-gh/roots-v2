@@ -4844,8 +4844,17 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   //
   // AFTER the commit and fire-and-forget: a dead printer must not roll back an
   // order that is otherwise good. autoPrintOrder records the outcome itself.
+  //
+  // CLAIMED FIRST, like the pay page's counter fallback: 'queued' is written
+  // before the slip goes, so a customer who opens their order page while this
+  // print is still in flight does not send a second one from there.
   if (!payInPage) {
-    try { autoPrintOrder(created.orderId); }
+    try {
+      tdb().prepare(
+        `UPDATE retail_orders SET print_status = 'queued' WHERE id = ? AND print_status IS NULL`
+      ).run(created.orderId);
+      autoPrintOrder(created.orderId);
+    }
     catch (e) { console.warn('[shop-menu/print]', created.orderNo, e.message); }
   }
 
@@ -5273,13 +5282,47 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
       `</div>` +
     `</details>`;
 
-  const counter = () => payScreen(req, res, {
-    status: 200, order, main: COUNTER_MAIN, shop,
-    // Offered only while the order is still unpaid and still this shop's to
-    // cancel. Past that the money has moved or the kitchen has it, and the
-    // answer is a person at the counter rather than a button here.
-    extra: order.status === 'pending_payment' ? cancelBlock : '',
-  });
+  /* FALLING BACK TO THE COUNTER SENDS THE TICKET (fix, 2026-10-26).
+
+     An order placed with "WeChat Pay" chosen does not print on submit: §50
+     prints the in-page rail ON PAID, so the kitchen is not handed a drink
+     nobody has paid for. But every road below that ends at counter() — a
+     phone-camera browser that cannot run WeChat Pay (§50's second ruling), a
+     failed OAuth or prepay — sends that customer to the till, and the paid
+     transition that would have printed never comes from here. The customer
+     was told "Pay at the counter" while the kitchen heard nothing. Ash hit
+     exactly that on 2026-10-26: TC001828, Chrome, WeChat Pay chosen, no slip.
+
+     So an unpaid order reaching this screen is now printed, the same slip the
+     counter rail prints on submit.
+
+     CLAIMED BEFORE IT PRINTS. print_status is only written when the printer
+     answers, a second or two later, so two loads of this page inside that
+     window would both see "not printed" and send two slips. The UPDATE takes
+     the order from no status to 'queued' in one statement; only the request
+     that wins it prints. A slip that FAILED stays 'failed' and is not retried
+     from here: the cashier's settle goes through autoPrintOrder, whose guard
+     skips only a 'printed' QR ticket, so a failed one still prints then. Only
+     'printed' and 'failed' are read anywhere else (04-orders.js, m.html), so
+     the short-lived 'queued' changes nothing they show. */
+  const counter = () => {
+    if (order.status === 'pending_payment') {
+      try {
+        const won = tdb().prepare(
+          `UPDATE retail_orders SET print_status = 'queued'
+            WHERE id = ? AND print_status IS NULL AND status = 'pending_payment'`
+        ).run(order.id).changes === 1;
+        if (won) autoPrintOrder(order.id);
+      } catch (e) { console.warn('[shop-menu/pay counter print]', order.order_no, e.message); }
+    }
+    return payScreen(req, res, {
+      status: 200, order, main: COUNTER_MAIN, shop,
+      // Offered only while the order is still unpaid and still this shop's to
+      // cancel. Past that the money has moved or the kitchen has it, and the
+      // answer is a person at the counter rather than a button here.
+      extra: order.status === 'pending_payment' ? cancelBlock : '',
+    });
+  };
 
   // Anything other than an order still waiting for money — cancelled, refunded,
   // already in the kitchen — is not payable here. The till can always take it.
