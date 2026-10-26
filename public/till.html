@@ -373,6 +373,25 @@ button{font:inherit;color:inherit;margin:0}
    so a tenant with none keeps today's grid exactly. A product with no photo in
    a grid that has them is the ordinary tile, just taller. */
 .grid.pics{grid-auto-rows:180px}
+/* §499 — THE BEST-SELLERS ROW. One cell across the grid's first row, sized by
+   its content rather than by grid-auto-rows, holding its own small grid of
+   photo-less tiles and the heading over the tiles that follow.
+   Six across only where six still read: at 1280 a cell is ~135px, at 1024
+   (iPad landscape) it would be ~92px and clip every name, so below 1180 it is
+   two rows of three. On a phone, two columns and four tiles, so the row does
+   not push the whole catalogue below the fold. */
+.grid.has-best{grid-template-rows:auto}
+.best{grid-column:1/-1;display:flex;flex-direction:column;gap:8px}
+.best-hd{display:flex;align-items:baseline;gap:10px}
+.best-t{font-size:15px;font-weight:500}
+.best-w{font-size:13px;color:var(--td-text2)}
+.best-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:8px}
+.tile.bs{height:88px}
+@media (min-width:1180px){ .best-row{grid-template-columns:repeat(6,minmax(0,1fr))} }
+@media (max-width:700px){
+  .best-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .best-row .tile:nth-child(n+5){display:none}
+}
 .tile.has-ph{justify-content:flex-start}
 .tile.has-ph .ft{margin-top:auto}
 .tile .ph{
@@ -1150,6 +1169,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     pending:      ['Pending', '待付款'],               // admin: 03-dashboard.js:3419
     searchAdd:    ['Search a product to add…', '搜索商品以添加…'], // admin: 04-orders/products picker
     all:          ['All', '全部'],                     // admin: i18n EN_ONLY_MAP
+    // §499 — the best-sellers row over the grid. All three LIFTED, nothing
+    // composed; declared in docs/tacet-delivery-vocabulary.md v1.356 because
+    // `热销商品` was retired once from a panel ranked by REVENUE (§165). This
+    // row is ranked by units, which is exactly the claim 热销 makes.
+    bestSellers:  ['Best sellers', '热销商品'],        // admin: 08-customers.js Top items
+    last30:       ['Last 30 days', '近 30 天'],         // m.html: customer ranking Period choice
+    allItems:     ['All items', '全部商品'],           // m.html: channel sync filter
     outOfStock:   ['Out of stock', '缺货'],            // admin: products grid
     // §287 — marking a made-here item sold out from the counter. Both LIFTED,
     // nothing composed: `Sold out · 售罄` is the QR menu's own pill for this
@@ -1399,6 +1425,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     opts: null,
     sheetOpen: false,          // phone only: is the order sheet up?
     products: [], stock: {}, cats: [], catCn: {}, cat: '', q: '',
+    best: [],                  // §499 — product ids, most sold first
     /* §287 — marking made-here items sold out. shopId is the listing's shop
        (the write names it); soMode is the grid showing only made-here menu
        items, where a tap flips the switch instead of adding a line; soBusy
@@ -2067,6 +2094,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // English name → the operator's Chinese name, for the pills. Absent
       // means none was set; the pill keeps the English name.
       S.catCn = (r && r.data && r.data.category_cn) || {};
+      // §499 — this location's best sellers, already cut to what is on the
+      // glass. The server's window ends last night, so this reads the same
+      // all day and the row never moves under a cashier's thumb.
+      S.best = (r && r.data && Array.isArray(r.data.best_sellers)) ? r.data.best_sellers : [];
     });
   }
 
@@ -2388,6 +2419,35 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     return '<span class="ph"><img src="' + esc(p.image) + '" alt="" loading="lazy" decoding="async" data-img="' + p.id + '"></span>';
   }
 
+  // §499 — S.best's ids as products, in rank order. The server has already
+  // cut the list to this till's glass; the lookup guards a catalogue re-read
+  // landing between the two.
+  function bestProducts() {
+    var byId = {};
+    S.products.forEach(function (p) { byId[p.id] = p; });
+    return S.best.map(function (id) { return byId[id]; }).filter(Boolean);
+  }
+
+  // §499 — a best-seller tile: the grid's selling tile without the photo or
+  // the code, so six fit one row and the grid below still shows.
+  function bestTile(p) {
+    var st = stockOf(p.id);
+    var left = st == null ? null : st - inCart(p.id);
+    var out = left != null && left <= 0;
+    var inc = inCart(p.id);
+    return '<button class="tile bs' + (out ? ' out' : '') + '" type="button" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '>'
+         + (inc > 0 ? '<span class="incart">' + inc + '</span>' : '')
+         + (!out && asks(p) ? '<span class="ask"></span>' : '')
+         + '<span class="hd"><span class="nm">' + esc(pname(p)) + '</span>'
+         + (vlabel(p) ? '<i class="vl">' + esc(vlabel(p)) + '</i>' : '') + '</span>'
+         + '<span class="ft">'
+         + (out
+              ? '<span class="lo">' + esc(T(p.switched_off ? 'soldOut' : 'outOfStock')) + '</span>'
+              : '<span class="pr">' + money(p.price) + '</span>'
+                + (left != null && left <= 5 ? '<span class="lo">' + left + '</span>' : ''))
+         + '</span></button>';
+  }
+
   function renderGrid() {
     var list = visibleProducts();
     // Taller rows whenever this till has any photo, decided on the whole
@@ -2395,6 +2455,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // while the cashier typed would move every tile under their thumb.
     $('grid').classList.toggle('pics', S.products.some(function (p) { return p.image && !S.imgBad[p.id]; }));
     $('grid').classList.toggle('so', !!S.soMode);
+    $('grid').classList.remove('has-best');   // §499 — set again below when the row draws
     if (!list.length) { $('grid').innerHTML = '<div class="gempty">' + esc(T('noItems')) + '</div>'; return; }
     var h = '';
     if (S.soMode) {
@@ -2437,6 +2498,19 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       });
       $('grid').innerHTML = h;
       return;
+    }
+    /* §499 — THE BEST SELLERS, above everything, on All with no search only:
+       a category or a search is the cashier asking for something else. One
+       full-width cell in the grid's first row, so it scrolls with the tiles,
+       and the same data-add tap as every tile under it. A sold-out best
+       seller keeps its place, greyed, for the same reason .tile.out does. */
+    var best = (S.cat || S.q.trim()) ? [] : bestProducts();
+    $('grid').classList.toggle('has-best', best.length > 0);
+    if (best.length) {
+      h += '<div class="best"><div class="best-hd"><span class="best-t">' + esc(T('bestSellers')) + '</span>'
+         + '<span class="best-w">' + esc(T('last30')) + '</span></div><div class="best-row">';
+      best.forEach(function (p) { h += bestTile(p); });
+      h += '</div><div class="best-hd"><span class="best-t">' + esc(T('allItems')) + '</span></div></div>';
     }
     list.forEach(function (p) {
       var st = stockOf(p.id);

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.583
+# Tacet shared-core consolidation — decisions record, v4.584
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-26 · v4.584 — **§499 · THE TILL SHOWS ITS BEST SELLERS ON TOP — DECIDED BY ASH.** Ash: *"best seller from the till should show at the top of the till for easy access"*. A mock-up was approved (*"ok build"*): a row of this location's six top till sellers above the grid, on All with no search, worked out over the 30 whole days that ended last night so it stays put all day, a sold-out one greyed in its place. Live re-sorting of the whole grid was considered and rejected. Nothing composed: the three labels are lifted pairs, declared in the vocabulary v1.356.
 
 2026-10-26 · v4.583 — **§498 · A STOCK REQUEST SENT THE WRONG WAY ROUND CAN BE CORRECTED OR WITHDRAWN — DECIDED BY ASH.** Ash, on a slip RS-261026-003 that read *For 天河店* when Tianhe was meant to be supplying Yuexiu: *"no way to change it. please fix it"*, then *"do all"* to a proposal of two controls. Adds `PUT /api/restock/:id/ends` and `PUT /api/restock/:id/withdraw`, a `can_change` flag on `GET /api/restock/mine`, and **Change shops** and **Withdraw** on the phone's Your-stock-requests screen, drawn only while nothing has been picked. Adds `scripts/test_request_change_withdraw.js`. Four strings composed, declared in `docs/tacet-delivery-vocabulary.md` v1.355. No schema change. No change to `.gitignore` or CI.
 
@@ -33359,3 +33361,24 @@ Checked by hand in a real browser before it shipped (typing, no match, switching
 5. **Withdraw is the existing soft archive** (`archived_at`), so the asker's list already shows it as Withdrawn. It sends no push and prints nothing.
 6. **Not decided here:** a cancellation slip or notice to a supplier who already holds the old slip. Raise it if it bites.
 
+## §499 — THE TILL SHOWS ITS BEST SELLERS ON TOP
+
+**2026-10-26 · DECIDED BY ASH.** Ash: *"best seller from the till should show at the top of the till for easy access"*. Asked first, the recommendation was a fixed row rather than re-sorting the grid by sales, and a mock-up of the counter-sale screen with the row drawn in was approved: *"ok build"*.
+
+### Rules
+
+1. **A row, not a re-sort.** The grid under it keeps exactly the order it had. Re-sorting the whole grid by sales was rejected: tiles would move as things sold, and the grid is built so a cashier's thumb learns where things are (the `.tile.out` rule in `public/till.html`: a sold-out tile keeps its slot rather than reshuffling the rest).
+
+2. **What it ranks.** Units sold through THIS location's till (`retail_orders.store_id`, `channel = 'shop'`, `shop_entry_method = 'till'`), on `financeWindow.PAID_O`, summed per `product_id`, most first, ties by id. Not the location's QR orders, not other locations, not unpaid or cancelled orders. Each size is its own product, as it is on the grid.
+
+3. **The window is the 30 whole days that ended last night, on the shop's clock** (`shopDaysAgo(30)` to `shopDaysAgo(1)`). Today is left out so the row is the same all day; it is worked out once per location per day and remembered (`counterBestSellers` in `routes/retail-shops.js`), because the till re-reads the catalogue every minute.
+
+4. **Six, from what is on the glass.** The ranking is cut to the rows the counter catalogue already returns, then to six. A product off the glass takes no slot. A sold-out best seller stays in its place, greyed and not tappable, exactly as on the grid. No sales in the window, no row; it is never padded with things that did not sell.
+
+5. **Where it shows.** Only on All with nothing typed in the search, and never while marking sold out. Six across from 1180px wide; below that two rows of three, because six on an iPad in landscape would be about 92px each and clip every name; on a phone two columns, four tiles.
+
+6. **The tile** is the grid's selling tile without the photo and the code, and adds with the same tap (`data-add`). The low-stock number and the basket count behave as on the grid.
+
+7. **Words, all lifted, nothing composed:** `Best sellers · 热销商品` (the Chinese from the customer page's `Top items · 热销商品`), `Last 30 days · 近 30 天` and `All items · 全部商品` (both `public/m.html`). Declared in `docs/tacet-delivery-vocabulary.md` v1.356, because `热销商品` was once retired from a revenue-ranked panel (§165) and this one is ranked by units.
+
+`scripts/test_till_best_sellers.js` holds the ranking, the window, the location and channel, the cut, the day-long stability and the till's drawing of it.
