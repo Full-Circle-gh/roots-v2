@@ -1285,6 +1285,25 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.ok(/收银台付款/.test(r.body), 'the counter control is missing');
       });
 
+      // NOTHING PRE-CHOSEN (Ash, 2026-10-26). §50 lit WeChat by default, so a
+      // customer who never looked at the row paid by WeChat without deciding
+      // to. The refusal itself runs in the browser; what the server owes it is
+      // an unlit row, a question over it, and the guard wired into Place.
+      await checkAsync('NEITHER WAY TO PAY IS PRE-CHOSEN, and Place refuses until one is', async () => {
+        const r = await get(`/s/${LIVE}`);
+        const row = (r.body.match(/<div id="cPw">[\s\S]*?<\/div><\/div>/) || [''])[0];
+        assert.ok(row, 'the payment row is not on the page');
+        assert.ok(!/data-pm="[a-z]+" class="on"/.test(row), 'a way to pay arrived already chosen');
+        assert.ok(/class="pw-h"/.test(row) && /支付方式/.test(row) && /Pay with/.test(row),
+          'the row has no question over it, in one language or both');
+        assert.ok(/var pm=\(bar\.getAttribute\('data-wxpay'\)==='1'\)\?'':'counter'/.test(r.body),
+          'the script still starts with a payment chosen');
+        assert.ok(/if\(!pm&&pw&&!pw\.hidden&&!vOff\(total\(\)\)\)\{fail\(/.test(r.body),
+          'Place order no longer refuses an unchosen payment');
+        assert.ok(/"Please choose how to pay"/.test(r.body) && /"支付方式"/.test(r.body) && /"请选择 "/.test(r.body),
+          'the refusal lost its words');
+      });
+
       await checkAsync('the user agent still moves nothing — §47 holds with the rail on', async () => {
         const wechat = await get(`/s/${LIVE}`, { 'user-agent': 'Mozilla/5.0 (iPhone) MicroMessenger/8.0.42 NetType/WIFI Language/zh_CN' });
         const safari = await get(`/s/${LIVE}`, { 'user-agent': 'Mozilla/5.0 (iPhone) Version/16.6 Mobile/15E148 Safari/604.1' });
