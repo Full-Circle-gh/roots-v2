@@ -1904,6 +1904,12 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
 .pq-t{font-family:var(--f-bear);font-size:18px;line-height:1.25;text-align:center;
   color:var(--ink);margin-bottom:14px}
 .pq-p .pw{margin-top:0}
+/* #payW, the outside-WeChat message: the WeChat mark over its title, and one
+   plain line under it saying what to do. */
+.pq-i{display:flex;justify-content:center;margin-bottom:8px}
+.pq-i .pw-ico{width:34px;height:34px}
+.pq-t+.pq-s{margin-top:-6px}
+.pq-s{font-size:14px;line-height:1.45;text-align:center;color:var(--olive);margin-bottom:14px}
 @keyframes pqIn{from{transform:scale(.96);opacity:0}to{transform:none;opacity:1}}
 .pq:not([hidden]) .pq-p{animation:pqIn .16s ease-out}
 @media (prefers-reduced-motion:reduce){.pq:not([hidden]) .pq-p{animation:none}}
@@ -3147,11 +3153,11 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // and this script is built once for every shop. When it cannot, `pm` stays
   // 'counter' for the whole visit and the row is not in the DOM to be tapped.
   //
-  // NOTHING HERE LOOKS AT THE BROWSER. A customer who opened the menu from a
-  // camera app rather than WeChat's own scanner may pick WeChat Pay and will be
-  // told at the till instead (§50); the alternative — reading the user agent to
-  // hide the button — is the branch §47 keeps off this page, and it would be
-  // wrong on every browser WeChat ships next.
+  // THE BUTTON IS NEVER HIDDEN BY BROWSER. Reading the user agent to hide
+  // WeChat Pay is the branch §47 keeps off this page. What reads the browser,
+  // since 2026-10-26, is the TAP: outside WeChat it opens #payW, which tells the
+  // customer to scan with WeChat or pay at the counter (see `inWx` below),
+  // instead of going through and being told at the till afterwards (§50).
   `var pw=document.getElementById('cPw');` +
   // NO ANSWER UNTIL THEY GIVE ONE (2026-10-26). `pm` starts empty whenever the
   // row is on the page, and the Place handler below refuses an empty one. With
@@ -3161,9 +3167,27 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // same question and the row must show the answer it gave.
   `var pick=function(v){pm=v;if(!pw)return;var all=pw.querySelectorAll('button[data-pm]');` +
   `for(var i=0;i<all.length;i++)all[i].className=(all[i].getAttribute('data-pm')===v?'on':'')};` +
+  /* OUTSIDE WECHAT, WECHAT PAY EXPLAINS ITSELF (2026-10-26). The one place this
+     script reads the browser, and it reads it the way the payment page's own
+     inWeChat() does (/MicroMessenger/i). It hides nothing and the page bytes
+     stay the same for every browser (§47): the WeChat button is still there,
+     and tapping it outside WeChat opens #payW instead of choosing it, so a
+     customer is never sent down a payment their browser cannot show. */
+  `var inWx=/MicroMessenger/i.test(navigator.userAgent||'');` +
+  `var pwW=document.getElementById('payW');` +
+  `var wxClose=function(){if(pwW)pwW.hidden=true};` +
+  `var wxAsk=function(){if(!pwW)return false;pwW.hidden=false;` +
+  `var f=pwW.querySelector('button[data-pqw="counter"]');if(f&&f.focus)f.focus();return true};` +
+  `var needWx=function(v){return v==='wechat'&&!inWx&&wxAsk()};` +
+  `if(pwW){pwW.addEventListener('click',function(e){` +
+  `if(e.target.id==='payWBg'){wxClose();return}` +
+  `var b=e.target.closest?e.target.closest('button[data-pqw]'):null;if(!b)return;` +
+  `wxClose();if(b.getAttribute('data-pqw')==='counter'){pick('counter');place.click()}},false);` +
+  `document.addEventListener('keydown',function(e){` +
+  `if(e.key==='Escape'&&!pwW.hidden){wxClose();e.stopPropagation()}},true)}` +
   `if(pw){pw.addEventListener('click',function(e){` +
   `var b=e.target.closest?e.target.closest('button[data-pm]'):null;if(!b)return;` +
-  `pick(b.getAttribute('data-pm'))},false)}` +
+  `var v=b.getAttribute('data-pm');if(needWx(v))return;pick(v)},false)}` +
   /* THE POP-UP (2026-10-26). Opened by Place order when nothing is chosen.
      Tapping an answer chooses it, closes the pop-up and places the order by
      pressing Place again — the same handler, so the voucher check, the lock
@@ -3175,7 +3199,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(pq){pq.addEventListener('click',function(e){` +
   `if(e.target.id==='payQBg'){pqClose();return}` +
   `var b=e.target.closest?e.target.closest('button[data-pq]'):null;if(!b)return;` +
-  `pick(b.getAttribute('data-pq'));pqClose();place.click()},false);` +
+  `var v=b.getAttribute('data-pq');pqClose();if(needWx(v))return;` +
+  `pick(v);place.click()},false);` +
   `document.addEventListener('keydown',function(e){` +
   `if(e.key==='Escape'&&!pq.hidden){pqClose();e.stopPropagation()}},true)}` +
   // Submitting. The button locks for the round trip: a customer who taps twice
@@ -4279,6 +4304,32 @@ router.get('/s/:shopCode', (req, res) => {
             `<div class="pw">` +
               `<button type="button" data-pq="wechat">${WECHAT_MARK}${bi('WeChat Pay', '微信支付')}</button>` +
               `<button type="button" data-pq="counter">${bi('Pay at the counter', '收银台付款')}</button>` +
+            `</div>` +
+          `</div>` +
+        `</div>` +
+        // WECHAT PAY, ASKED FOR OUTSIDE WECHAT (Ash, 2026-10-26: "outside
+        // WeChat, tapping WeChat Pay tells the customer to scan with WeChat or
+        // pay at the counter, and places nothing"). WeChat can only show its
+        // payment window inside its own app; in Chrome or a camera-app browser
+        // the order used to go through and quietly become a counter order.
+        // Shown instead of choosing WeChat, so nothing is placed until the
+        // customer picks the counter here — or goes Back and rescans.
+        //
+        // Words, nothing composed: "Scan with WeChat to pay" / "微信扫码支付"
+        // is the live pair public/shop.html and public/m.html show beside a
+        // payment QR; "用微信扫一扫扫码进入。" is lifted whole from the
+        // dashboard's scene list (03-dashboard.js, scene 1011), with plain
+        // English beside it; "Back" / "返回" and the counter pair are this
+        // page's own.
+        `<div class="pq" id="payW" hidden>` +
+          `<div class="pq-bg" id="payWBg"></div>` +
+          `<div class="pq-p" role="dialog" aria-modal="true" aria-labelledby="payWT">` +
+            `<div class="pq-i">${WECHAT_MARK}</div>` +
+            `<div class="pq-t" id="payWT">${bi('Scan with WeChat to pay', '微信扫码支付')}</div>` +
+            `<div class="pq-s">${bi('Scan the QR code with WeChat to open this menu.', '用微信扫一扫扫码进入。')}</div>` +
+            `<div class="pw">` +
+              `<button type="button" data-pqw="back">${bi('Back', '返回')}</button>` +
+              `<button type="button" data-pqw="counter">${bi('Pay at the counter', '收银台付款')}</button>` +
             `</div>` +
           `</div>` +
         `</div>`
