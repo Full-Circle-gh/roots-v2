@@ -1888,12 +1888,25 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
 .pw-h{margin-top:12px;font-size:12px;line-height:1.2;letter-spacing:.04em;
   color:var(--olive);text-transform:uppercase}
 .pw-h+.pw{margin-top:6px}
-/* Place order was pressed with nothing chosen: the row is what is missing,
-   so it is the row that is marked — a heavier frame round both buttons,
-   cleared the moment one is tapped. Ink, not a new colour: the refusal text
-   above already carries the message. */
-#cPw.need .pw button{border-width:3px}
-#cPw.need .pw-h{color:var(--ink);font-weight:700}
+/* THE PAYMENT POP-UP (2026-10-26): Place order with nothing chosen. Centred
+   over everything, above the basket (40) and below the photo viewer (60). The
+   panel is the sheets' own oat-and-ink box and the scrim is their scrim, so it
+   reads as part of the same page rather than a browser alert.
+   ITS ENTRANCE FAILS VISIBLE: no animation-fill-mode, so if the animation
+   never runs (a throttled WebView, a stalled frame) the panel simply sits at
+   its normal state instead of staying at the keyframe's transparent start. */
+.pq{position:fixed;inset:0;z-index:50;display:flex;align-items:center;
+  justify-content:center;padding:16px}
+.pq[hidden]{display:none}
+.pq-bg{position:absolute;inset:0;background:rgba(0,0,0,.42);touch-action:none}
+.pq-p{position:relative;width:100%;max-width:360px;background:var(--oat);
+  border:2px solid var(--ink);padding:18px 16px 16px}
+.pq-t{font-family:var(--f-bear);font-size:18px;line-height:1.25;text-align:center;
+  color:var(--ink);margin-bottom:14px}
+.pq-p .pw{margin-top:0}
+@keyframes pqIn{from{transform:scale(.96);opacity:0}to{transform:none;opacity:1}}
+.pq:not([hidden]) .pq-p{animation:pqIn .16s ease-out}
+@media (prefers-reduced-motion:reduce){.pq:not([hidden]) .pq-p{animation:none}}
 
 /* ── THE PLACED ORDER, WHEREVER IT IS DRAWN ──
    Three surfaces render this block and they are one screen: the sheet that
@@ -2560,10 +2573,6 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `L_OUT=${JSON.stringify(bi('Sold out', '售罄'))},` +
   `L_PICK_EN=${JSON.stringify('Please choose: ')},` +
   `L_PICK_CN=${JSON.stringify('请选择 ')},` +
-  // The basket's refusal when no payment is chosen (2026-10-26). 支付方式 is
-  // the row's own heading, public/shop.html's live pair "Pay with" / "支付方式".
-  `L_PAYQ_EN=${JSON.stringify('Please choose how to pay')},` +
-  `L_PAYW_CN=${JSON.stringify('支付方式')},` +
   // §153's four customer pairs for HOW MANY a pick-any question takes, and
   // every one is COPIED rather than composed: public/shop.html builds these
   // exact four shapes in its own limHint(), and v1.99 of the vocabulary
@@ -3148,12 +3157,27 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // row is on the page, and the Place handler below refuses an empty one. With
   // no row (no WeChat rail) there is nothing to choose and it is the counter.
   `var pm=(bar.getAttribute('data-wxpay')==='1')?'':'counter';` +
+  // Lighting the row is one function, because the pop-up below answers the
+  // same question and the row must show the answer it gave.
+  `var pick=function(v){pm=v;if(!pw)return;var all=pw.querySelectorAll('button[data-pm]');` +
+  `for(var i=0;i<all.length;i++)all[i].className=(all[i].getAttribute('data-pm')===v?'on':'')};` +
   `if(pw){pw.addEventListener('click',function(e){` +
   `var b=e.target.closest?e.target.closest('button[data-pm]'):null;if(!b)return;` +
-  `pm=b.getAttribute('data-pm');pw.className='';errEl.hidden=true;` +
-  `var all=pw.querySelectorAll('button[data-pm]');` +
-  `for(var i=0;i<all.length;i++)all[i].className=(all[i]===b?'on':'');` +
-  `},false)}` +
+  `pick(b.getAttribute('data-pm'))},false)}` +
+  /* THE POP-UP (2026-10-26). Opened by Place order when nothing is chosen.
+     Tapping an answer chooses it, closes the pop-up and places the order by
+     pressing Place again — the same handler, so the voucher check, the lock
+     against double taps and the refusals all still apply. Tapping the dimmed
+     background or Escape closes it and places nothing. Escape is caught in the
+     capture phase so the basket's own Escape does not close the basket too. */
+  `var pq=document.getElementById('payQ');` +
+  `var pqClose=function(){if(pq)pq.hidden=true};` +
+  `if(pq){pq.addEventListener('click',function(e){` +
+  `if(e.target.id==='payQBg'){pqClose();return}` +
+  `var b=e.target.closest?e.target.closest('button[data-pq]'):null;if(!b)return;` +
+  `pick(b.getAttribute('data-pq'));pqClose();place.click()},false);` +
+  `document.addEventListener('keydown',function(e){` +
+  `if(e.key==='Escape'&&!pq.hidden){pqClose();e.stopPropagation()}},true)}` +
   // Submitting. The button locks for the round trip: a customer who taps twice
   // on a slow connection must not put two orders through the counter.
   // §454 — no name is asked for: the number on the done screen is what the
@@ -3161,16 +3185,12 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `place.addEventListener('click',function(){if(sending)return;` +
   `var k=ids();if(!k.length)return;` +
   /* UNCHOSEN PAYMENT BLOCKS, the way an unanswered required option does in the
-     picker (§120): the order is not sent, and the refusal names what is
-     missing. Only while the row is showing — a voucher hides it and sends the
-     order to the counter (§426), and then there is nothing left to choose.
-     The 中文 is the picker's own refusal, "请选择 ", with the row's heading
-     "支付方式" appended exactly as the picker appends a question's text: two
-     live pieces, nothing composed. The English says the same thing plainly —
-     "Please choose: Pay with" would be the literal join and reads wrong. */
-  `if(!pm&&pw&&!pw.hidden&&!vOff(total())){` +
-  `fail(bi(L_PAYQ_EN,L_PICK_CN+L_PAYW_CN));pw.className='need';` +
-  `if(pw.scrollIntoView)pw.scrollIntoView({block:'nearest'});return}` +
+     picker (§120): the order is not sent, and the question is put — now as the
+     pop-up above rather than a line above the row, which customers scrolled
+     past. Only while the row is showing — a voucher hides it and sends the
+     order to the counter (§426), and then there is nothing left to choose. */
+  `if(!pm&&pw&&!pw.hidden&&!vOff(total())){errEl.hidden=true;` +
+  `if(pq){pq.hidden=false;var f=pq.querySelector('button');if(f&&f.focus)f.focus()}return}` +
   /* THE LINE CARRIES ITS ANSWERS. `choices` is the chosen choice ids and
      nothing else — the labels, the questions and the deltas on the cart line
      are for drawing the basket, and the server looks all three up again from
@@ -4236,7 +4256,33 @@ router.get('/s/:shopCode', (req, res) => {
           `<button type="button" class="place" id="oAdd"></button>` +
         `</div>` +
       `</div>` +
-    `</div>`
+    `</div>` +
+    // THE PAYMENT QUESTION AS A POP-UP (Ash, 2026-10-26: "this user can miss,
+    // make it a pop up"). The refusal line above the row was easy to scroll
+    // past; this is centred over everything and cannot be. It carries the two
+    // answers itself, so answering it IS placing the order — one tap, not
+    // "close this, find the row, tap, Place again".
+    //
+    // A SIBLING OF #sheet, NOT A CHILD. .sheet-p is animated with a transform,
+    // and a transformed ancestor becomes the containing block for anything
+    // position:fixed inside it: nested there, this would be clipped to the
+    // panel rather than covering the screen.
+    //
+    // Words: "请选择 支付方式" is the picker's own refusal "请选择 " with the
+    // row's heading "支付方式" (public/shop.html's live pair) appended, the way
+    // §120 appends a question; the buttons are the row's own. Nothing composed.
+    (wxPay
+      ? `<div class="pq" id="payQ" hidden>` +
+          `<div class="pq-bg" id="payQBg"></div>` +
+          `<div class="pq-p" role="dialog" aria-modal="true" aria-labelledby="payQT">` +
+            `<div class="pq-t" id="payQT">${bi('Please choose how to pay', '请选择 支付方式')}</div>` +
+            `<div class="pw">` +
+              `<button type="button" data-pq="wechat">${WECHAT_MARK}${bi('WeChat Pay', '微信支付')}</button>` +
+              `<button type="button" data-pq="counter">${bi('Pay at the counter', '收银台付款')}</button>` +
+            `</div>` +
+          `</div>` +
+        `</div>`
+      : '')
   ) : '';
 
   const paneHtml = groups.map(c => `<section class="cat" id="${c.id}">` +
