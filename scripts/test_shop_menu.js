@@ -1298,10 +1298,25 @@ const soldOut = (row) => /class="sold"/.test(row);
           'the row has no question over it, in one language or both');
         assert.ok(/var pm=\(bar\.getAttribute\('data-wxpay'\)==='1'\)\?'':'counter'/.test(r.body),
           'the script still starts with a payment chosen');
-        assert.ok(/if\(!pm&&pw&&!pw\.hidden&&!vOff\(total\(\)\)\)\{fail\(/.test(r.body),
+        assert.ok(/if\(!pm&&pw&&!pw\.hidden&&!vOff\(total\(\)\)\)\{/.test(r.body),
           'Place order no longer refuses an unchosen payment');
-        assert.ok(/"Please choose how to pay"/.test(r.body) && /"支付方式"/.test(r.body) && /"请选择 "/.test(r.body),
-          'the refusal lost its words');
+      });
+
+      // THE QUESTION IS A POP-UP (Ash, 2026-10-26: "this user can miss, make it
+      // a pop up"). It must be on the page, hidden until asked, carry both
+      // answers, and sit OUTSIDE the basket sheet — the sheet's panel is
+      // transformed, which would clip a fixed pop-up nested inside it.
+      await checkAsync('UNCHOSEN PAYMENT IS ASKED IN A POP-UP that carries both answers', async () => {
+        const r = await get(`/s/${LIVE}`);
+        const pop = (r.body.match(/<div class="pq" id="payQ" hidden>[\s\S]*?<\/div><\/div><\/div>/) || [''])[0];
+        assert.ok(pop, 'the payment pop-up is not on the page, or is not hidden until asked');
+        assert.ok(/Please choose how to pay/.test(pop) && /请选择 支付方式/.test(pop), 'the pop-up lost a language');
+        assert.ok(/data-pq="wechat"/.test(pop) && /data-pq="counter"/.test(pop), 'the pop-up does not carry both answers');
+        assert.ok(/role="dialog"/.test(pop) && /aria-modal="true"/.test(pop), 'the pop-up is not announced as a dialog');
+        assert.ok(r.body.indexOf('id="payQ"') > r.body.indexOf('id="oAdd"'),
+          'the pop-up is nested inside the basket sheet, where its transform would clip it');
+        assert.ok(/pq\.hidden=false/.test(r.body) && /pick\(b\.getAttribute\('data-pq'\)\);pqClose\(\);place\.click\(\)/.test(r.body),
+          'the pop-up is not opened by Place, or answering it does not place the order');
       });
 
       await checkAsync('the user agent still moves nothing — §47 holds with the rail on', async () => {
