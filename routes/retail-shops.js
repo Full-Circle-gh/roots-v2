@@ -43,6 +43,10 @@ const { requireRetailAdmin } = require('./retail');
 const { hasImageFallbackSql } = require('../lib/product-image-sql');
 const { getCategoryTree } = require('../lib/category-tree');
 const { logActivity } = require('../middleware/auth');
+// §499 — the till's best-sellers row: the paid predicate every report uses, on
+// the shop's own clock.
+const financeWindow = require('../lib/finance-window');
+const { shopSqlShift, shopDaysAgo } = require('../lib/shop-clock');
 
 const router = express.Router();
 
@@ -782,6 +786,42 @@ router.get('/api/retail-admin/shop-listings/product-ids', requireRetailAdmin, (r
   ok(res, rows.map(r => r.id));
 });
 
+/* §499 — THE TILL'S BEST SELLERS. Units sold at THIS location's counter
+   (channel 'shop', entered on the till — not its QR orders, not another shop),
+   over the 30 whole days that ended last night on the shop's clock.
+
+   TODAY IS LEFT OUT ON PURPOSE. The row exists so a cashier's thumb learns
+   where the fast movers sit; a window that took in today's sales would let a
+   tile jump places mid-shift, which is the reshuffle the grid is built to
+   avoid (the .tile.out rule in public/till.html). Ending at yesterday makes the
+   answer the same for the whole day, so it is worked out once per location per
+   day and remembered — the till re-reads the catalogue every minute.
+
+   Ids only, most units first, ties by id so the order never flickers. The
+   route keeps those still on the glass; a sold-out one stays in its place. */
+const BEST_SELLERS_MAX = 6;
+const BEST_SELLERS_DAYS = 30;
+const _bestMemo = new Map();      // tenant:location -> { day, ids }
+function counterBestSellers(locationId) {
+  const day = shopDaysAgo(0);
+  const key = `${currentTenantId() || ''}:${locationId}`;
+  const hit = _bestMemo.get(key);
+  if (hit && hit.day === day) return hit.ids;
+  const ids = tdb().prepare(`
+    SELECT i.product_id AS id
+      FROM retail_order_items i
+      JOIN retail_orders o ON o.id = i.order_id
+     WHERE o.store_id = ? AND o.channel = 'shop' AND o.shop_entry_method = 'till'
+       AND ${financeWindow.PAID_O}
+       AND date(COALESCE(o.paid_at, o.placed_at), '${shopSqlShift()}') BETWEEN ? AND ?
+     GROUP BY i.product_id
+    HAVING SUM(i.qty) > 0
+     ORDER BY SUM(i.qty) DESC, i.product_id ASC
+     LIMIT 40`).all(locationId, shopDaysAgo(BEST_SELLERS_DAYS), shopDaysAgo(1)).map(r => r.id);
+  _bestMemo.set(key, { day, ids });
+  return ids;
+}
+
 // ─── What the counter may sell — §150 ───────────────────────────────────
 // THE COUNTER SELLS WHAT THE SHOP PHYSICALLY HAS, PLUS WHAT THE SHOP MAKES.
 // Reported by Ash from a Tianhe till: a product listed on that location's menu
@@ -1010,7 +1050,13 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
     if (t.name && t.name_cn) category_cn[t.name] = t.name_cn;
   }
 
-  ok(res, { has_shop: !!shop, shop_id: shop ? shop.id : null, rows, category_cn });
+  // §499 — the best sellers that are on this till's glass. LIMIT 40 above
+  // leaves room for the ones since taken off it.
+  const best_sellers = counterBestSellers(locationId)
+    .filter(id => rowByProduct.has(id))
+    .slice(0, BEST_SELLERS_MAX);
+
+  ok(res, { has_shop: !!shop, shop_id: shop ? shop.id : null, rows, category_cn, best_sellers });
 });
 
 module.exports = router;
