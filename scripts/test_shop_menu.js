@@ -1285,6 +1285,28 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.ok(/收银台付款/.test(r.body), 'the counter control is missing');
       });
 
+      // THE MENU SEARCH (Ash, 2026-10-26: "i want to add a search bar in the qr
+      // menu"; design approved from a mock-up). Filtering runs in the phone's
+      // script — tried by hand in a real browser before this shipped; what the
+      // server owes it is the field inside the sticky bar (so --barh carries
+      // it), a bilingual label instead of a one-language placeholder, the empty
+      // answer, and the script hooks.
+      await checkAsync('THE MENU HAS A SEARCH, in the bar, in both languages', async () => {
+        const r = await get(`/s/${LIVE}`);
+        const bar = (r.body.match(/<div class="bar">[\s\S]*?<\/div><\/div>(?=<div class="wrap">)/) || [''])[0];
+        assert.ok(/<input id="mq" type="search" placeholder=" "/.test(bar),
+          'the search field is missing, or is not inside the sticky bar');
+        assert.ok(/id="mqL"[^>]*><span class="l-en">Search products<\/span><span class="l-cn">搜索商品<\/span>/.test(bar),
+          'the search label lost a language');
+        assert.ok(/aria-labelledby="mqL"/.test(bar), 'the field has no accessible name');
+        assert.ok(/id="mqX" hidden>/.test(bar) && /清除/.test(bar), 'the clear button is missing or showing before anything is typed');
+        assert.ok(/<div class="srch-none" id="mqNone" hidden><span class="l-en">No products found\.<\/span><span class="l-cn">没有找到商品<\/span><\/div>/.test(r.body),
+          'the empty answer is missing, or is showing before a search');
+        assert.ok(/var q=document\.getElementById\('mq'\);if\(!q\)return;/.test(r.body)
+          && /q\.addEventListener\('input',run,false\)/.test(r.body),
+          'the search script is not wired to the field');
+      });
+
       // NOTHING PRE-CHOSEN (Ash, 2026-10-26). §50 lit WeChat by default, so a
       // customer who never looked at the row paid by WeChat without deciding
       // to. The refusal itself runs in the browser; what the server owes it is

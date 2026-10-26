@@ -33323,3 +33323,21 @@ This is the existing four-host layout moved to a new name. It is NOT the restruc
 - **Values stored in the database** that may hold the old domain (tenants' saved KD100 callback URLs, QR codes already printed) are to be surveyed before cutover.
 - **When the old domain's `/api` and `/assets` are switched off** (rule 2).
 - **The provider and size of the mainland server**, and how deploy access to it is given.
+
+## §497 — THE QR MENU GETS A SEARCH, FILTERED ON THE PHONE, IN BOTH LANGUAGES
+
+**2026-10-26 · DECIDED BY ASH.** Ash: *"i want to add a search bar in the qr menu"*. A mock-up was drawn on the live menu in a browser (field under the shop name; typing "juice" leaving the three juices) and Ash approved it: *"build it as shown, without the count line"*.
+
+### Rules
+
+1. **The field is a second row inside the sticky bar** (`routes/shop-menu.js`, `.srch`), so it stays reachable however far the customer has scrolled, and the bar's measured height (`--barh`) carries it: the rail and the section jumps sit under the taller bar with no new constants.
+
+2. **It filters on the phone, never on the server.** Every card is already on the page. A card matches on its name in BOTH languages (the two spans of its `.t`, joined by a space), case-folded, nothing fuzzier: no pinyin, no guessing. Non-matching cards, and sections and categories left empty, are hidden with a class rather than rebuilt, so the cards keep their + buttons, detail sheets and basket listeners, and clearing restores exactly the page that was there.
+
+3. **While a search shows, the rail and the "tap any product" tip step aside and each section's count is hidden**, so matches run full width and "08" never stands beside one surviving card. **No count line** (Ash).
+
+4. **Words, all live, nothing composed:** "Search products" / "搜索商品" and "No products found." / "没有找到商品" are `public/shop.html`'s own search; "Clear" / "清除" is `public/m.html`'s. The placeholder is a bilingual label laid over the empty field, not a `placeholder=` attribute, because this page switches language without reloading.
+
+5. **16px text in the field**, because iOS zooms the page into any input set smaller.
+
+Checked by hand in a real browser before it shipped (typing, no match, switching language mid-search, clear, a Chinese query, an English query with Chinese showing); `scripts/test_shop_menu.js` holds the server side of it.

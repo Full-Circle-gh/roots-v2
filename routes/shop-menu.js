@@ -763,6 +763,40 @@ img{display:block;max-width:100%}
 .lang button{border:0;background:transparent;padding:6px 10px;font:inherit;
   font-family:var(--f-bear);font-size:13px;letter-spacing:.04em;color:var(--olive);cursor:pointer}
 .lang button.on{background:var(--lime);color:var(--ink)}
+/* ── the search (2026-10-26) ── a full-width second row of the bar. The bar
+   wraps, and the row gap is its own so the name row keeps its 12px. 16px text
+   because iOS zooms the page into any field set smaller, and a menu that
+   lurches sideways when the customer taps search is worse than a big font. */
+.bar{flex-wrap:wrap;row-gap:10px}
+.srch{position:relative;flex:1 1 100%;display:flex;align-items:center;gap:8px;
+  height:42px;padding:0 6px 0 10px;border:2px solid var(--ink);
+  background:rgba(255,255,255,.72);color:var(--ink)}
+.srch-i{width:18px;height:18px;flex:none}
+.srch input{flex:1;min-width:0;height:100%;border:0;padding:0;background:transparent;
+  font:inherit;font-size:16px;color:var(--ink);outline:none;
+  -webkit-appearance:none;appearance:none;border-radius:0}
+.srch input::-webkit-search-cancel-button,.srch input::-webkit-search-decoration{
+  -webkit-appearance:none;display:none}
+.srch-ph{position:absolute;left:38px;right:40px;top:50%;transform:translateY(-50%);
+  pointer-events:none;color:var(--olive);font-size:16px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.srch input:not(:placeholder-shown)~.srch-ph{display:none}
+.srch-x{flex:none;border:0;background:none;color:var(--ink);font-size:24px;
+  line-height:1;padding:4px 6px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.srch-x[hidden]{display:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);
+  clip-path:inset(50%);white-space:nowrap}
+/* While a search is showing, the rail steps aside so the matches run full
+   width, and the "tap any product" tip goes with it. Matches are whatever is
+   NOT marked .sx; sections and categories with no match are marked too. */
+.srching .rail,.srching .dt-tip{display:none}
+/* A section's count is how many it holds, not how many matched: "08" beside
+   the one card a search left standing reads as a fault, so it goes while a
+   search is showing and comes back with the full menu. */
+.srching .sec-h .cnt{display:none}
+.it.sx,.sec-h.sx,.grid.sx,.cat.sx{display:none}
+.srch-none{padding:36px 16px;text-align:center;color:var(--olive);font-size:15px}
+.srch-none[hidden]{display:none}
 
 .wrap{display:flex;align-items:stretch;min-height:100vh}
 
@@ -2271,6 +2305,35 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(window.ResizeObserver){new ResizeObserver(set).observe(b)}` +
   `window.addEventListener('resize',set,false);` +
   `window.addEventListener('orientationchange',set,false);})();` +
+  /* THE SEARCH (2026-10-26). Matches a card on its name in BOTH languages —
+     the two spans of its .t joined by a space, so "juice" and "果汁" both find
+     it whichever language is showing, and the two names never run together
+     into a false match. Case-folded, and nothing else: no pinyin, no fuzzy
+     guessing, so what shows is plainly what was typed.
+     Hides what does not match (.sx) rather than rebuilding anything, so the
+     cards, their + buttons, the basket and the detail sheets are the same
+     elements with the same listeners; clearing puts back exactly the page that
+     was there. The first keystroke scrolls to the top, where the matches are. */
+  `(function(){var q=document.getElementById('mq');if(!q)return;` +
+  `var x=document.getElementById('mqX'),w=document.querySelector('.wrap'),` +
+  `none=document.getElementById('mqNone'),cats=document.querySelectorAll('.cat'),was='';` +
+  `var nm=function(it){var t=it.querySelector('.t');if(!t)return '';var s=t.children,a=[];` +
+  `for(var i=0;i<s.length;i++)a.push(s[i].textContent);return a.join(' ').toLowerCase()};` +
+  `var mark=function(el,off){if(off)el.classList.add('sx');else el.classList.remove('sx')};` +
+  `var run=function(){var v=q.value.trim().toLowerCase();x.hidden=!v;` +
+  `if(!v){if(w)w.classList.remove('srching');var h=document.querySelectorAll('.sx');` +
+  `for(var i=0;i<h.length;i++)h[i].classList.remove('sx');none.hidden=true;was='';return}` +
+  `if(!was)window.scrollTo(0,0);was=v;if(w)w.classList.add('srching');var any=0;` +
+  `for(var c=0;c<cats.length;c++){var g=cats[c].querySelectorAll('.grid'),cAny=0;` +
+  `for(var j=0;j<g.length;j++){var its=g[j].querySelectorAll('.it'),gAny=0;` +
+  `for(var k=0;k<its.length;k++){var ok=nm(its[k]).indexOf(v)>=0;mark(its[k],!ok);if(ok)gAny=1}` +
+  `mark(g[j],!gAny);var hd=g[j].previousElementSibling;` +
+  `if(hd&&hd.classList.contains('sec-h'))mark(hd,!gAny);if(gAny)cAny=1}` +
+  `mark(cats[c],!cAny);if(cAny)any=1}none.hidden=!!any};` +
+  `q.addEventListener('input',run,false);q.addEventListener('search',run,false);` +
+  // Enter closes the phone's keyboard: the matches are already showing.
+  `q.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();q.blur()}},false);` +
+  `x.addEventListener('click',function(){q.value='';run();q.focus()},false);})();` +
   // The rail follows the scroll. Progressive enhancement only: without it the
   // rail is still a working list of anchors, which is the whole of its job.
   `(function(){var r=document.querySelectorAll('.rail a[data-cat]');if(!r.length||!window.IntersectionObserver)return;` +
@@ -3994,7 +4057,37 @@ router.get('/s/:shopCode', (req, res) => {
      lib/qr-menu-block-defaults — the eight Quinoa Salad shows. */
   const qrShown = qrBlockDefaults.readShownTypes(tdb());
 
-  const head = `<div class="bar"><div class="nm">${bi(name.en, name.cn)}</div>${toggle(lang)}</div>`;
+  /* THE SEARCH (Ash, 2026-10-26: "i want to add a search bar in the qr menu";
+     design approved from a mock-up on the live menu). A second row INSIDE the
+     sticky bar, so it stays reachable however far the customer has scrolled,
+     and so the bar's measured height (--barh, below) already carries it: the
+     rail and the section jumps sit under the taller bar with no new numbers.
+
+     Filtered on the phone, never asked of the server: every card is already
+     on the page, and a keystroke that waits on a network is the flicker the
+     back office's search was fixed for (test_shop_menu_search_typing.js).
+
+     THE PLACEHOLDER IS A LABEL, NOT A placeholder="". An attribute holds one
+     language and this page switches language without reloading; a bi() pair
+     laid over the empty field switches with every other label, and hides the
+     moment there is text (:placeholder-shown, with a single-space placeholder
+     so the selector has something to test).
+
+     Words, all live: "Search products" / "搜索商品" and the empty answer below
+     are public/shop.html's own search; "Clear" / "清除" is public/m.html's. */
+  const search = groups.length
+    ? `<div class="srch">` +
+        `<svg class="srch-i" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"` +
+        ` stroke="currentColor" stroke-width="1.9" stroke-linecap="round">` +
+        `<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>` +
+        `<input id="mq" type="search" placeholder=" " autocomplete="off" autocapitalize="off"` +
+        ` spellcheck="false" enterkeyhint="search" aria-labelledby="mqL">` +
+        `<span class="srch-ph" id="mqL">${bi('Search products', '搜索商品')}</span>` +
+        `<button type="button" class="srch-x" id="mqX" hidden>` +
+          `<span aria-hidden="true">×</span><span class="sr">${bi('Clear', '清除')}</span></button>` +
+      `</div>`
+    : '';
+  const head = `<div class="bar"><div class="nm">${bi(name.en, name.cn)}</div>${toggle(lang)}${search}</div>`;
 
   // The rail: ALL, every category holding something, then OTHER. Anchors, not
   // tabs — a menu is short enough to scroll, and an anchor needs no state and
@@ -4348,7 +4441,10 @@ router.get('/s/:shopCode', (req, res) => {
     ? `<div class="dt-tip">${bi('Tap any product to see its details.', '点击商品查看详情。')}</div>`
     : '';
   const body = groups.length
-    ? `<div class="wrap">${rail}<div class="pane">${dtTip}${paneHtml}</div></div>` + cartUi
+    ? `<div class="wrap">${rail}<div class="pane">` +
+        // The search's empty answer, public/shop.html's live pair.
+        `<div class="srch-none" id="mqNone" hidden>${bi('No products found.', '没有找到商品')}</div>` +
+        `${dtTip}${paneHtml}</div></div>` + cartUi
     : `<div class="empty"><div class="t">${bi('No products yet.', '暂无商品')}</div>` +
       `<div class="s">${bi('Check back soon.', '请稍后再来')}</div></div>`;
 
