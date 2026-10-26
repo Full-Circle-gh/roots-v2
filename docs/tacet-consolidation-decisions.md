@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.582
+# Tacet shared-core consolidation — decisions record, v4.583
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-26 · v4.583 — **§498 · A STOCK REQUEST SENT THE WRONG WAY ROUND CAN BE CORRECTED OR WITHDRAWN — DECIDED BY ASH.** Ash, on a slip RS-261026-003 that read *For 天河店* when Tianhe was meant to be supplying Yuexiu: *"no way to change it. please fix it"*, then *"do all"* to a proposal of two controls. Adds `PUT /api/restock/:id/ends` and `PUT /api/restock/:id/withdraw`, a `can_change` flag on `GET /api/restock/mine`, and **Change shops** and **Withdraw** on the phone's Your-stock-requests screen, drawn only while nothing has been picked. Adds `scripts/test_request_change_withdraw.js`. Four strings composed, declared in `docs/tacet-delivery-vocabulary.md` v1.355. No schema change. No change to `.gitignore` or CI.
 
 2026-10-24 · v4.582 — **§496 AMENDED · THE QR MENU GETS ITS FILED ADDRESS FIRST, THROUGH A PASS-THROUGH — DECIDED BY ASH.** Ash: *"the most important thing right now is the payment setup for the qr code menu"*, then *"do it, write the nginx settings and the redirect"*. Rule 7 added: `shop.tacetapp.cn` is served by a pass-through on the mainland server to the existing app, ahead of the full move; the old shop host's printed QR menus redirect to it behind `SHOP_MENU_REDIRECT_TO`. Adds `lib/shop-menu-redirect.js`, `scripts/test_shop_menu_redirect.js`, `ops/china-proxy/shop.tacetapp.cn.conf`. No change to `.gitignore` or CI.
 
@@ -33341,3 +33343,19 @@ This is the existing four-host layout moved to a new name. It is NOT the restruc
 5. **16px text in the field**, because iOS zooms the page into any input set smaller.
 
 Checked by hand in a real browser before it shipped (typing, no match, switching language mid-search, clear, a Chinese query, an English query with Chinese showing); `scripts/test_shop_menu.js` holds the server side of it.
+
+## §498 — A STOCK REQUEST SENT THE WRONG WAY ROUND CAN BE CORRECTED OR WITHDRAWN, UNTIL SOMEBODY STARTS PICKING IT
+
+**2026-10-26 · DECIDED BY ASH.** Ash, on RS-261026-003, whose slip read `For 天河店` when Tianhe was meant to be the shop supplying Yuexiu: *"it should have been from tianhe to yuexiu location, no way to change it. please fix it"*. Offered two controls (change the shops; withdraw) he answered *"do all"*.
+
+**The gap.** A request names its supplier (`from_store_id`) and destination (`to_store_id`) once, at creation. Nothing edited either afterwards and nothing cancelled the request: `PUT /api/restock/:id` takes only free-text names, and the phone had no door to the archive route.
+
+### Rules
+
+1. **"Untouched" has one definition**, `_untouchedRequest` in `routes/restock.js`: not archived, not dispatched, `goods_state` none, status draft/sent/received, not a kitchen request, and no line ticked or with a quantity sent. The list uses it to decide whether to draw the buttons and both routes use it to decide whether to obey them, so a screen and a server cannot disagree.
+2. **Past that point the answer is Withdraw and ask again, never edit.** Stock moves at dispatch by reading the order's two ends at that moment; a late change would move goods between the wrong shelves. Withdraw is refused too once picking has started: the goods are in somebody's hands.
+3. **Only the person who asked, or an admin or owner.** A supplier must not be able to redirect a request addressed to them.
+4. **A change clears the free-text `store_name` and `store_cn`**, which describe the old destination, and for a request already sent re-fires the new-request push and re-prints the slip at the NEW supplier. The slip already printed at the old supplier cannot be recalled; it is paper.
+5. **Withdraw is the existing soft archive** (`archived_at`), so the asker's list already shows it as Withdrawn. It sends no push and prints nothing.
+6. **Not decided here:** a cancellation slip or notice to a supplier who already holds the old slip. Raise it if it bites.
+

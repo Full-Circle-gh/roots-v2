@@ -1573,8 +1573,9 @@ router.get('/api/restock/mine', requireRestockAccess, tacetOnly, (req, res) => {
   // screen with a different answer (kitchen-ready), and folding the two into
   // one list would put a tray of food and a case of almonds under one heading.
   const rows = conn.prepare(`
-    SELECT id, rs_number, date, status, notes, sent_at, delivered_at, archived_at,
+    SELECT id, rs_number, date, status, notes, sent_at, delivered_at, archived_at, dispatched_at,
            from_store_id, to_store_id, store_name, store_cn,
+           COALESCE(from_role,'store') AS from_role, COALESCE(to_role,'warehouse') AS to_role,
            COALESCE(goods_state, 'none') AS goods_state
       FROM restock_orders
      WHERE created_by = ?
@@ -1617,6 +1618,7 @@ router.get('/api/restock/mine', requireRestockAccess, tacetOnly, (req, res) => {
       l.state = delivered.has(l.restock_id) ? 'arrived'
               : moving.has(l.restock_id)    ? 'transit'
               : (l.is_checked ? 'picked' : 'waiting');
+      l.is_checked_raw = l.is_checked;
       delete l.is_checked;
       byReq.get(l.restock_id).push(l);
     }
@@ -1637,6 +1639,10 @@ router.get('/api/restock/mine', requireRestockAccess, tacetOnly, (req, res) => {
       // an asker reading a list of what they asked for must not be shown a
       // dead row as though somebody were still walking a freezer for it.
       r.withdrawn = !!r.archived_at;
+      // Whether the asker may still change the shops or withdraw it (§498). The
+      // server decides, for the same reason `state` above arrives decided.
+      r.can_change = _untouchedRequest(r, r.items.map(l => ({ is_checked: l.is_checked_raw, qty_sent: l.qty_sent })));
+      r.items.forEach(l => { delete l.is_checked_raw; });
       const from = nameOf(r.from_store_id);
       r.from_name_en = from ? from.name_en : '';
       r.from_name_cn = from ? from.name_cn : (r.store_cn || r.store_name || '');
@@ -2338,6 +2344,92 @@ router.put('/api/restock/:id/archive', requireRestockAccess, tacetOnly, (req, re
   logActivity(req.user.id, req.user.username,
     wantArchived ? 'archive' : 'unarchive', 'restock', order.id, null, req.ip);
   res.json({ success: true, archived: !!wantArchived });
+});
+
+// ── Change a request's shops, or withdraw it (§498) ────────────────────────
+//
+// THE GAP. A request names its supplier and its destination once, at creation,
+// and nothing after that could change either — nor cancel the request. Ash sent
+// one the wrong way round (Tianhe asking when Tianhe was meant to supply) and
+// the phone had no door out of it.
+//
+// ONLY WHILE NOTHING HAS HAPPENED TO IT. Stock moves when the supplier's picker
+// dispatches, reading the order's two ends at that moment, so changing them
+// before then is safe and after it would send goods between the wrong shelves.
+// "Nothing has happened" is one definition, below, shared by the list (which
+// decides whether to draw the buttons) and by both routes (which decide
+// whether to obey them), so a screen and a server can never disagree on it.
+// Past that point the answer is Withdraw-and-ask-again, never edit.
+//
+// ONLY THE PERSON WHO ASKED, or an admin/owner. A supplier must not be able to
+// redirect a request that is addressed to them.
+function _untouchedRequest(order, lines) {
+  if (!order || order.archived_at || order.dispatched_at) return false;
+  if (order.from_role === 'kitchen' || order.to_role === 'kitchen') return false;
+  if (order.status && !['draft', 'sent', 'received'].includes(order.status)) return false;
+  if (order.goods_state && order.goods_state !== 'none') return false;
+  return !(lines || []).some(l => Number(l.is_checked) === 1 || l.qty_sent != null);
+}
+function _loadChangeable(req, res) {
+  const conn = tdb();
+  const order = conn.prepare(`SELECT id, status, created_by, archived_at, dispatched_at, goods_state,
+      from_store_id, to_store_id,
+      COALESCE(from_role,'store') AS from_role, COALESCE(to_role,'warehouse') AS to_role
+    FROM restock_orders WHERE id = ?`).get(req.params.id);
+  if (!order) { res.status(404).json({ error: 'not_found', message: 'Not found · 未找到' }); return null; }
+  const me = req.user && req.user.id;
+  const privileged = req.user && ['admin', 'owner'].includes(req.user.role);
+  if (!privileged && (!me || order.created_by !== me)) {
+    res.status(403).json({ error: 'not_yours', message: 'Only the person who asked can change this request' });
+    return null;
+  }
+  const lines = conn.prepare('SELECT is_checked, qty_sent FROM restock_items WHERE restock_id = ?').all(order.id);
+  if (!_untouchedRequest(order, lines)) {
+    res.status(409).json({ error: 'not_changeable', message: 'Picking has started, so this request can no longer be changed' });
+    return null;
+  }
+  return { conn, order };
+}
+
+router.put('/api/restock/:id/ends', requireRestockAccess, tacetOnly, (req, res) => {
+  const ctx = _loadChangeable(req, res);
+  if (!ctx) return;
+  const { conn, order } = ctx;
+  const from = parseInt(req.body && req.body.from_store_id, 10);
+  const to   = parseInt(req.body && req.body.to_store_id, 10);
+  if (!(from > 0) || !(to > 0)) return res.status(400).json({ error: 'bad_shops', message: 'Both shops are required' });
+  if (from === to) {
+    return res.status(400).json({
+      error: 'same_shop',
+      message: 'A transfer cannot leave from and arrive at the same location · 调拨的发出与接收地点不能相同',
+    });
+  }
+  const known = conn.prepare('SELECT id FROM retail_stores WHERE id IN (?, ?)').all(from, to);
+  if (known.length !== 2) return res.status(400).json({ error: 'unknown_shop', message: 'Unknown shop' });
+  if (from === order.from_store_id && to === order.to_store_id) return res.json({ success: true, unchanged: true });
+
+  // The free-text names describe the OLD destination; clear them so the slip
+  // and the pushes read the order's own ids instead of a stale name.
+  conn.prepare('UPDATE restock_orders SET from_store_id = ?, to_store_id = ?, store_name = NULL, store_cn = NULL WHERE id = ?')
+    .run(from, to, order.id);
+  logActivity(req.user.id, req.user.username, 'change_ends', 'restock', order.id,
+    { from: [order.from_store_id, from], to: [order.to_store_id, to] }, req.ip);
+  if (order.status !== 'draft') {
+    // The slip that went to the old supplier is wrong, and the new supplier has
+    // never heard of it: tell them the way a new request tells them.
+    _fireRestockPush(order.id, 'sent', _actorOperatorId(req));
+    _tprint.autoPrintTransferRequest(order.id, 'sent');
+  }
+  res.json({ success: true });
+});
+
+router.put('/api/restock/:id/withdraw', requireRestockAccess, tacetOnly, (req, res) => {
+  const ctx = _loadChangeable(req, res);
+  if (!ctx) return;
+  const { conn, order } = ctx;
+  conn.prepare('UPDATE restock_orders SET archived_at = ? WHERE id = ?').run(new Date().toISOString(), order.id);
+  logActivity(req.user.id, req.user.username, 'withdraw', 'restock', order.id, null, req.ip);
+  res.json({ success: true });
 });
 
 // ── Bulk archive ───────────────────────────────────────────────────────────

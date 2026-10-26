@@ -1379,7 +1379,7 @@ const state = {
   mbs:{list:null,tried:false,err:''},
   /* §198 — what became of what you asked another shop for. Named `rqs` for the
      Ask-for-stock screen's `rq` the way `mbs` is named for `mb`. */
-  rqs:{list:null,tried:false,err:''},
+  rqs:{list:null,tried:false,err:'',edit:null,ef:null,et:null,confirm:null,busy:false,fix:''},
   pickWaiting:0,
   /* §215 — WHO is waiting and SINCE WHEN, beside the count. The Pick row's dot
      needs neither; Home's "Needs you" row is a sentence and this is what fills
@@ -2243,6 +2243,40 @@ reg('rqTo', id=>{ state.rq.to=Number(id);
   if(state.rq.from===state.rq.to) state.rq.from=null;
   render(); });
 reg('rqFrom', id=>{ state.rq.from=Number(id); render(); });
+/* §498 — CHANGE THE SHOPS ON, OR WITHDRAW, A REQUEST NOBODY HAS STARTED PICKING.
+   The server decides whether it still can (`can_change` on the row) and says so
+   again on the write, so a stale screen is refused rather than obeyed. */
+function rqsFail(e){
+  const m=state.rqs; m.busy=false;
+  if(String(e&&e.message)==='auth') return;
+  const code=e&&e.code;
+  m.fix = code==='not_changeable' ? T('Picking has started, so this can no longer be changed.','已开始拣货，无法再更改。')
+        : code==='not_yours'      ? T('Only the person who asked can change this.','只有发起人可以更改。')
+        : code==='same_shop'      ? T('A request cannot go from a shop to itself.','不能从一家门店发给它自己。')
+        : e&&e.refused              ? T(...e.words)
+        :                           T('That did not save. Nothing has changed — try again.','未保存,数据未变 — 请重试。');
+  render();
+}
+function rqsWrite(id,what,body){
+  const m=state.rqs;
+  if(m.busy) return;
+  m.busy=true; m.fix=''; render();
+  apiWrite('/api/restock/'+id+'/'+what, body, 'PUT').then(()=>{
+    m.busy=false; m.edit=null; m.confirm=null; m.tried=false; m.list=null; render();
+  }).catch(rqsFail);
+}
+reg('rqsChange', id=>{ const m=state.rqs; id=Number(id);
+  const r=(m.list||[]).find(x=>x.id===id); if(!r) return;
+  m.edit=id; m.confirm=null; m.fix=''; m.et=r.to_store_id||null; m.ef=r.from_store_id||null;
+  if(!state.stores) api('/stores').then(x=>{ state.stores=(Array.isArray(x)?x:[]).filter(s=>s.is_active==null||s.is_active); render(); }).catch(()=>{});
+  render(); });
+reg('rqsTo', id=>{ const m=state.rqs; m.et=Number(id); if(m.ef===m.et) m.ef=null; render(); });
+reg('rqsFrom', id=>{ state.rqs.ef=Number(id); render(); });
+reg('rqsSave', id=>{ const m=state.rqs; if(!m.ef||!m.et||m.ef===m.et) return;
+  rqsWrite(Number(id),'ends',{from_store_id:m.ef,to_store_id:m.et}); });
+reg('rqsWithdrawAsk', id=>{ const m=state.rqs; m.confirm=Number(id); m.edit=null; m.fix=''; render(); });
+reg('rqsWithdraw', id=>rqsWrite(Number(id),'withdraw',{}));
+reg('rqsClose', ()=>{ const m=state.rqs; m.edit=null; m.confirm=null; m.fix=''; render(); });
 /* The purchase-request basket (§86). Its own commands for its own state; the
    caret rescue is the same one every search box on this page needs. */
 /* TYPING REPAINTS THE LIST AND NOTHING ELSE. render() replaces the whole app in
@@ -21583,6 +21617,44 @@ function rqsFrom(r){
   const en=r.from_name_en||'', cn=r.from_name_cn||'';
   return LANG==='en'?(en||cn):(cn||en);
 }
+/* §498 — THE TWO WAYS OUT OF A REQUEST SENT THE WRONG WAY ROUND. Drawn only
+   where the server says `can_change`; the Chinese is `更改门店` (更改 + 门店, both
+   live) and `撤回` (the verb live in 撤回此群发消息 and in 已撤回 on this very
+   screen). Withdraw asks once, in the same words, rather than in a sentence
+   composed for the purpose. */
+function rqsActions(r){
+  const m=state.rqs;
+  if(!r.can_change||r.withdrawn) return '';
+  const btn=(cmd,label,danger)=>`<button class="btn2" style="width:auto;padding:8px 16px;font-size:13px;${danger?'color:var(--brick-ink);':''}"
+    ${m.busy?'disabled':''} onclick="APP.cmd('${cmd}',${r.id})">${label}</button>`;
+  const fixLine=(m.edit===r.id||m.confirm===r.id)&&m.fix
+    ? `<div style="font-size:13px;color:var(--brick-ink);margin-top:8px">${escAttr(m.fix)}</div>`:'';
+  if(m.confirm===r.id) return `<div style="display:flex;gap:8px;margin-top:10px">
+      ${btn('rqsWithdraw',T('Withdraw','撤回'),true)}
+      <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('rqsClose')">${T('Cancel','取消')}</button>
+    </div>${fixLine}`;
+  if(m.edit===r.id){
+    const stores=state.stores||[];
+    const chip=(id,on,cmd)=>`<button class="row" style="min-height:44px;padding:8px 14px;border-radius:999px;
+      border:1px solid ${on?'var(--text-primary)':'var(--border-default)'};
+      background:${on?'var(--text-primary)':'var(--surface-card)'};color:${on?'var(--surface-card)':'var(--text-primary)'};
+      font-size:14px;width:auto;display:inline-flex" onclick="APP.cmd('${cmd}',${id})">${escAttr(rqStoreName(id))}</button>`;
+    const ok=m.ef&&m.et&&m.ef!==m.et&&!m.busy;
+    return `<div style="margin-top:10px">
+      <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${T('For which store?','送到哪家门店？')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${stores.map(st=>chip(st.id,m.et===st.id,'rqsTo')).join('')}</div>
+      <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${T('Ask which location?','向哪个地点申请？')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${stores.filter(st=>st.id!==m.et).map(st=>chip(st.id,m.ef===st.id,'rqsFrom')).join('')}</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" ${ok?'':'disabled'} onclick="APP.cmd('rqsSave',${r.id})">${T('Save','保存')}</button>
+        <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('rqsClose')">${T('Cancel','取消')}</button>
+      </div>${fixLine}
+    </div>`;
+  }
+  return `<div style="display:flex;gap:8px;margin-top:10px">
+    ${btn('rqsChange',T('Change shops','更改门店'),false)}${btn('rqsWithdrawAsk',T('Withdraw','撤回'),true)}
+  </div>`;
+}
 function screenAskStockSent(){
   loadRqSent();
   const m=state.rqs;
@@ -21603,6 +21675,7 @@ function screenAskStockSent(){
            has that the buying one does not need — that screen asks the buyer,
            and there is only ever one of those; this one can ask any shop. */''}
       ${from?`<div style="font-size:13px;color:var(--text-secondary);margin-top:2px">${escAttr(from)}</div>`:''}
+      ${rqsActions(r)}
       ${items.map(l=>{
         const [bg,fg]=PILL[RQS_PILL[l.state]||'clear'];
         /* THE NUMBER THAT LEFT, WHERE IT IS NOT THE NUMBER THAT WAS ASKED FOR.
