@@ -22664,6 +22664,12 @@ function xfrItems(){
 }
 function xfrNum(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
 function xfrSent(it){ return xfrNum(it.qty_sent!=null?it.qty_sent:it.qty_requested); }
+/* WHAT THE SHOP ASKED FOR, shown only where the warehouse sent something else.
+   `sent` quietly falls back to the request when the warehouse changed nothing,
+   so a bare "sent 15" could not say whether 15 was loaded or merely never
+   touched; "asked 20 · sent 15" says the line was cut. Equal lines stay quiet. */
+function xfrAskedDiffers(it){ return it.qty_requested!=null&&xfrNum(it.qty_requested)!==xfrSent(it); }
+function xfrAskedTag(it){ return xfrAskedDiffers(it)?`${T('asked','申请')} <span class="num">${xfrNum(it.qty_requested)}</span> · `:''; }
 function xfrGot(it){ return it.qty_received==null?null:xfrNum(it.qty_received); }
 function xfrHeldFor(it){ const h=state.xfr.held; return h&&h.item_id===it.id?h.qty:null; }
 function xfrCount(it){ const h=xfrHeldFor(it); return h!=null?h:xfrGot(it); }
@@ -24236,7 +24242,7 @@ function screenReceiveTransfer(){
           return `<div style="border-top:1px solid var(--border-default);padding:12px 16px;display:flex;align-items:center;gap:12px">
             <span style="flex:1;min-width:0">
               <span style="display:block;font-size:15px;font-weight:500">${escAttr(xfrName(it))}</span>
-              <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span>${it.sku?` · <span class="num">${escAttr(it.sku)}</span>`:''}</span>
+              <span style="display:block;font-size:13px;color:var(--text-secondary)">${xfrAskedTag(it)}${T('sent','发出')} <span class="num">${xfrSent(it)}</span>${it.sku?` · <span class="num">${escAttr(it.sku)}</span>`:''}</span>
             </span>
             <span class="num" style="font-size:20px;font-weight:500;color:${full?'var(--text-primary)':'var(--amber-ink)'}">${got==null?'—':got}</span>
           </div>`;}).join('')}</div>`:''}`;
@@ -24246,7 +24252,9 @@ function screenReceiveTransfer(){
       const counted=items.reduce((a,it)=>a+(xfrCount(it)||0),0);
       const sent=items.reduce((a,it)=>a+xfrSent(it),0);
       // Against the VAN — all this screen can compare before they confirm.
-      const diff=items.filter(it=>xfrCount(it)!==xfrSent(it));
+      // A line the warehouse cut shows here too, even when it was counted in at
+      // exactly what was sent, because "asked 20 · sent 15" is the news.
+      const diff=items.filter(it=>xfrCount(it)!==xfrSent(it)||xfrAskedDiffers(it));
       return `<div style="padding:4px 16px 12px">
           <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('xfrCount')">${T('Back to the count','返回清点')}</button></div>
         ${err}
@@ -24254,8 +24262,8 @@ function screenReceiveTransfer(){
         <div style="padding:0 16px 14px;font-size:14px;color:var(--text-secondary)">
           <span class="num">${counted}</span> ${T('counted','已点')} · <span class="num">${sent}</span> ${T('sent','发出')}</div>
         ${diff.length?`<div style="padding:0 16px 12px">${diff.map(it=>`<div style="display:flex;gap:12px;padding:8px 0;font-size:14px">
-            <span style="flex:1;min-width:0">${escAttr(xfrName(it))}</span>
-            <span class="num" style="color:var(--amber-ink)">${xfrCount(it)} / ${xfrSent(it)}</span></div>`).join('')}</div>`:''}
+            <span style="flex:1;min-width:0">${escAttr(xfrName(it))}${xfrAskedDiffers(it)?`<span style="display:block;font-size:13px;color:var(--text-secondary)">${xfrAskedTag(it)}${T('sent','发出')} <span class="num">${xfrSent(it)}</span>${it.sku?` · <span class="num">${escAttr(it.sku)}</span>`:''}</span>`:''}</span>
+            <span class="num" style="color:${xfrCount(it)!==xfrSent(it)?'var(--amber-ink)':'var(--text-primary)'}">${xfrCount(it)} / ${xfrSent(it)}</span></div>`).join('')}</div>`:''}
         <div style="padding:0 16px 20px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
           T('Confirming puts these counts on the shelf.','确认后将按此数量入库。')}</div>
         ${footBar(`<button class="btn2" style="width:auto;padding:11px 26px"${x.busy?' disabled':''}
@@ -24321,7 +24329,7 @@ function screenReceiveTransfer(){
         return `<div style="width:100%;border-top:1px solid var(--border-default);padding:8px 16px;display:flex;align-items:center;gap:10px">
           <span style="flex:1;min-width:0">
             <span style="display:block;font-size:15px;font-weight:500">${escAttr(xfrName(it))}</span>
-            <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span>${it.sku?` · <span class="num">${escAttr(it.sku)}</span>`:''}</span>
+            <span style="display:block;font-size:13px;color:var(--text-secondary)">${xfrAskedTag(it)}${T('sent','发出')} <span class="num">${xfrSent(it)}</span>${it.sku?` · <span class="num">${escAttr(it.sku)}</span>`:''}</span>
             ${terr?`<span style="display:block;font-size:13px;color:var(--brick-ink);margin-top:3px">${escAttr(terr)}</span>`:''}
           </span>
           ${numCell}
