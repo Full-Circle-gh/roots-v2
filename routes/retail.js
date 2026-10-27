@@ -24572,7 +24572,10 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
   ).get(...args).n;
 
   // Oldest UNFULFILLED order, for the Orders page header status line (§1.7).
-  // "Unfulfilled" = paid but not yet gone: paid / preparing / rider_pickup.
+  // "Unfulfilled" = paid but not yet gone: paid / preparing / rider_pickup /
+  // awaiting_restock. Awaiting restock is paid work parked for stock, still owed
+  // to the customer, and often the oldest thing in the queue — leaving it out
+  // made the line understate how long someone has actually been waiting.
   // NOT the list's `isActionable`, which admits dispatched, delivered and
   // refunded — that answers "is this ours to touch at all", a different
   // question. Read-only channels are excluded by the shared `where`, same as
@@ -24584,7 +24587,7 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
   // Null when nothing is waiting — the header then renders NO line at all.
   out.oldest_unfulfilled = tdb().prepare(
     `SELECT MIN(COALESCE(paid_at, placed_at)) AS d FROM retail_orders
-      WHERE status IN ('paid','preparing','rider_pickup')${where}`
+      WHERE status IN ('paid','preparing','rider_pickup','awaiting_restock')${where}`
   ).get(...args).d || null;
 
   res.json({ success: true, data: out });
