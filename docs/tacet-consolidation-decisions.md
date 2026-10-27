@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.584
+# Tacet shared-core consolidation — decisions record, v4.585
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-27 · v4.585 — **§500 · THE TILL SHOWS EVERY PAYMENT METHOD, AND WORKS OUT THE CHANGE ON A CASH SALE — DECIDED BY ASH.** Ash: *"when selecting payment method i want to see all payment method without clicking show more. also if i select cash i should be able to add how much someone gave me and how much i need to give back"*; the plan was put to Ash and approved (*"ok lets do it"*). The "Other" fold is gone; the international card stays last and set apart. Picking Cash opens an amount-received box with quick amounts and the change; on screen only, nothing new is stored. Two Chinese strings composed, declared in the vocabulary v1.357.
 
 2026-10-26 · v4.584 — **§499 · THE TILL SHOWS ITS BEST SELLERS ON TOP — DECIDED BY ASH.** Ash: *"best seller from the till should show at the top of the till for easy access"*. A mock-up was approved (*"ok build"*): a row of this location's six top till sellers above the grid, on All with no search, worked out over the 30 whole days that ended last night so it stays put all day, a sold-out one greyed in its place. Live re-sorting of the whole grid was considered and rejected. Nothing composed: the three labels are lifted pairs, declared in the vocabulary v1.356.
 
@@ -33389,3 +33391,25 @@ Checked by hand in a real browser before it shipped (typing, no match, switching
 7. **Words, all lifted, nothing composed:** `Best sellers · 热销商品` (the Chinese from the customer page's `Top items · 热销商品`), `Last 30 days · 近 30 天` and `All items · 全部商品` (both `public/m.html`). Declared in `docs/tacet-delivery-vocabulary.md` v1.356, because `热销商品` was once retired from a revenue-ranked panel (§165) and this one is ranked by units.
 
 `scripts/test_till_best_sellers.js` holds the ranking, the window, the location and channel, the cut, the day-long stability and the till's drawing of it.
+
+## §500 — THE TILL SHOWS EVERY PAYMENT METHOD, AND WORKS OUT THE CHANGE ON A CASH SALE
+
+**2026-10-27 · DECIDED BY ASH.** Ash: *"when selecting payment method i want to see all payment method without clicking show more. also if i select cash i should be able to add how much someone gave me and how much i need to give back"*. The plan below was put to Ash first, with the concern about the international card stated, and approved: *"ok lets do it"*.
+
+### Rules
+
+1. **Every tender is on the settle screen at once.** The "Other ›" fold that hid Cash, Bank transfer, Other and International card is removed (`WALLETS` in `public/till.html`, drawn whole). It cost a tap on every cash sale.
+
+2. **The international card stays last and set apart** (`sep`, a gap above it). It was folded in the first place (§450) because a mis-tap charges a local customer 4%. Unfolded, the guard is what already happens on the tap: the big amount moves by the 4% and the subline names the fee, before Mark paid.
+
+3. **Picking Cash opens a box under it:** an "Amount received" field (numeric keypad), quick amounts, and the change. The quick amounts are the exact bill, then up to three round figures above it, to the next 10, 50 and 100 and the 100 after (¥73 gives 73, 80, 100, 200).
+
+4. **Typing is optional.** Exact cash is the common case, and Mark paid works with the field empty. **A figure that does not cover the bill holds Mark paid** and says how much is short, so a short payment is never booked as a full one.
+
+5. **On screen only.** Nothing about the cash handed over is sent or stored; the order records the sale and the tender exactly as before. The shop's books need the sale, not the note the customer handed over. If it is ever wanted on the printed receipt, that is a follow-up with its own column.
+
+6. **The done screen repeats the change**, large, for a cash sale where an amount was typed, so it can be read while the coins are counted out. Both settle paths carry it (a new sale, and a recalled QR order).
+
+7. **Words:** `Amount received · 收到金额` copied whole from the admin (`public/retail-admin/04-orders.js`). `Change · 找零` and `Short · 还差` composed by Claude, declared in `docs/tacet-delivery-vocabulary.md` v1.357.
+
+`scripts/test_till_cash_change.js` runs the till's own cash functions and holds the fold's removal, the order of the tenders, the quick amounts, the short rule, that nothing is sent, and the words. Checked by hand in Chromium at tablet and phone size, through to the done screen.
