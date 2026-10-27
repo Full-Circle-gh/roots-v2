@@ -352,6 +352,74 @@ for (const file of files) {
     const hit = rc.filter(r => r.unpacked > 0);
     console.log(`\n14 · recounts saved while paid orders for that product were not yet out the door: ${hit.length} of ${rc.length} (${hit.reduce((a, r) => a + r.unpacked, 0)} u on those orders)`);
     for (const r of hit.slice(0, 10)) console.log(`   ${r.created_at} ${pad(pname(r.product_id), 36)} recount ${r.delta > 0 ? '+' : ''}${r.delta} · ${r.unpacked} u paid, not yet out`);
+
+    /* 15 · WHO FIXES, WITH WHAT, AND WHAT HAPPENED SINCE THE LAST FIX. A hand
+       fix is the shelf telling us the record was wrong. Grouping each fix by the
+       movements recorded on that product since its previous fix says which kind
+       of movement keeps being wrong: fixes that follow only deliveries point at
+       deliveries, fixes that follow only sales point at sales, and a fix right
+       after another fix is somebody correcting their own count. */
+    const fixes = all(`
+      SELECT id, product_id, delta, created_at, COALESCE(note, '') AS note, COALESCE(actor_label, '') AS who, reason
+        FROM retail_stock_ledger
+       WHERE store_id = ? AND created_at >= datetime('now', ?) AND reason IN (${marks}) AND delta <> 0
+       ORDER BY product_id, id`, s.id, since, ...RECOUNT);
+    const tally = (rows, key) => {
+      const m = {};
+      for (const r of rows) { const k = key(r); const o = m[k] || (m[k] = { n: 0, up: 0, down: 0 }); o.n++; if (r.delta > 0) o.up += r.delta; else o.down -= r.delta; }
+      return Object.entries(m).sort((a, b) => b[1].n - a[1].n);
+    };
+    console.log(`\n15 · hand fixes: ${fixes.length}`);
+    console.log('   by reason + note:');
+    for (const [k, o] of tally(fixes, r => `${r.reason} · ${(r.note || '(no note)').replace(/\d+/g, '#').slice(0, 40)}`).slice(0, 8)) console.log(`     ${pad(k, 56)} ${lpad(o.n, 4)}×  +${o.up} / −${o.down}`);
+    console.log('   by person:');
+    for (const [k, o] of tally(fixes, r => r.who || '(none)').slice(0, 8)) console.log(`     ${pad(k, 56)} ${lpad(o.n, 4)}×  +${o.up} / −${o.down}`);
+    console.log('   by hour of day (server time):');
+    console.log('     ' + tally(fixes, r => r.created_at.slice(11, 13)).sort((a, b) => a[0].localeCompare(b[0])).map(([h, o]) => `${h}h ${o.n}`).join(' · '));
+
+    const GROUP = (reason) =>
+      reason === 'restock_transfer_in' || reason === 'restock' || reason === 'kitchen_add' ? 'delivery' :
+      reason === 'counter_miscount' ? 'till floor' :
+      /^order_|^till_|^awaiting|^reroute/.test(reason) ? 'sale' :
+      reason === 'waste' ? 'waste' :
+      RECOUNT.includes(reason) ? 'fix' : 'other';
+    const buckets = {};
+    let prev = null;
+    let sameMinute = 0;
+    for (const f of fixes) {
+      if (!prev || prev.product_id !== f.product_id) { prev = f; continue; }
+      let rows = [];
+      try { rows = db.prepare(`SELECT reason, SUM(delta) AS d FROM retail_stock_ledger WHERE store_id = ? AND product_id = ? AND id > ? AND id < ? GROUP BY reason`).all(s.id, f.product_id, prev.id, f.id); }
+      catch (e) { moan('between', e); }
+      const kinds = [...new Set(rows.map(r => GROUP(r.reason)))].filter(k => k !== 'fix').sort();
+      const key = kinds.length ? kinds.join(' + ') : 'nothing (fix right after a fix)';
+      const b = buckets[key] || (buckets[key] = { n: 0, up: 0, down: 0, delivered: 0, sold: 0 });
+      b.n++; if (f.delta > 0) b.up += f.delta; else b.down -= f.delta;
+      for (const r of rows) { if (GROUP(r.reason) === 'delivery') b.delivered += r.d; if (GROUP(r.reason) === 'sale') b.sold -= r.d; }
+      if (!kinds.length && (Date.parse(f.created_at.replace(' ', 'T') + 'Z') - Date.parse(prev.created_at.replace(' ', 'T') + 'Z')) < 15 * 60000) sameMinute++;
+      prev = f;
+    }
+    console.log('   what was recorded on the product since its previous fix:');
+    for (const [k, b] of Object.entries(buckets).sort((a, b) => b[1].n - a[1].n)) {
+      console.log(`     ${pad(k, 40)} ${lpad(b.n, 4)} fixes · found +${b.up} / missing −${b.down} · in between: delivered ${b.delivered}, sold ${b.sold}`);
+    }
+    console.log(`     (fixes within 15 min of a previous fix on the same product with nothing in between: ${sameMinute})`);
+
+    /* 16 · THE MOST-FIXED PRODUCTS, ROW BY ROW, last 30 days. The pattern a
+       person sees in a timeline is worth more than any total above. */
+    const most = all(`
+      SELECT product_id, COUNT(*) AS n FROM retail_stock_ledger
+       WHERE store_id = ? AND created_at >= datetime('now', '-30 days') AND reason IN (${marks}) AND delta <> 0
+       GROUP BY product_id ORDER BY n DESC LIMIT 4`, s.id, ...RECOUNT);
+    for (const m of most) {
+      console.log(`\n16 · timeline ${pname(m.product_id)} (${m.n} fixes in 30 days)`);
+      for (const r of all(`
+        SELECT created_at, reason, delta, balance_after, COALESCE(actor_label,'') AS who, substr(COALESCE(note,''),1,60) AS note
+          FROM retail_stock_ledger WHERE store_id = ? AND product_id = ? AND created_at >= datetime('now', '-30 days')
+         ORDER BY id DESC LIMIT 45`, s.id, m.product_id).reverse()) {
+        console.log(`   ${r.created_at.slice(5, 16)} ${pad(r.reason, 24)} ${lpad((r.delta > 0 ? '+' : '') + r.delta, 4)} → ${lpad(r.balance_after, 3)}  ${pad(r.who.slice(0, 14), 15)} ${r.note}`);
+      }
+    }
   }
   try { db.close(); } catch (_) {}
   console.log('');
