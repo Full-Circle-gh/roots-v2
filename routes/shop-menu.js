@@ -105,7 +105,16 @@ const {
   // two answers about the same voucher.
   counterHoldersByPhone, counterVouchersFor, bestCounterVoucher, counterVoucherTerms,
   consumeCounterVoucher, reverseOrderVoucher,
+  // §496 rule 9 — the one-tap Alipay rail: its expiry, whether Alipay is set up
+  // here at all, and the paid transition a trade-state query settles through.
+  alipayPayExpiry, alipayRailReady, markOrderPaid,
 } = require('./retail');
+// The Alipay charge itself, from the same module every other Alipay rail
+// signs with, so a menu payment carries the same out_trade_no namespace and
+// settles through the same notify.
+const {
+  alipayPageRedirectUrl, alipayOutTradeNo, alipayTradeQuery, alipayTradeClose,
+} = require('../lib/payment-gateways');
 const crypto = require('crypto');
 const wechatOa = require('../lib/wechat-oa');
 const { allocateShopOrderCode } = require('../lib/shop-order-code');
@@ -206,6 +215,18 @@ const WECHAT_MARK =
   '<g fill="currentColor" stroke="none">' +
   '<circle cx="7" cy="7.8" r="1.15"/><circle cx="11.8" cy="7.8" r="1.15"/>' +
   '<circle cx="13.5" cy="13.6" r=".95"/><circle cx="17.7" cy="13.6" r=".95"/></g>' +
+  '</svg>';
+
+// Alipay's mark beside the Alipay choice (§496 rule 9), in the same recipe: the
+// rounded square with 支 in it, drawn in line and currentColor rather than the
+// blue brand bitmap. Decorative, like the WeChat mark.
+const ALIPAY_MARK =
+  '<svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"' +
+  ' stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' +
+  '<rect x="3" y="3" width="18" height="18" rx="4.5"/>' +
+  '<path d="M7.5 8.6h9M12 6.4v4.9M8.4 11.6h7.2"/>' +
+  '<path d="M8.6 13.6h6.6c-1.3 2.6-3.9 4.2-6.7 5"/>' +
+  '<path d="M10.4 14.9c1.6 1.8 3.8 3 6.4 3.6"/>' +
   '</svg>';
 
 // Reported on the rail: a Chinese category name carrying "&" ("鲜食 & 熟食")
@@ -1900,6 +1921,10 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
   color:var(--ink);padding:13px;font:inherit;font-family:var(--f-bear);font-size:16px;
   cursor:pointer;-webkit-tap-highlight-color:transparent}
 .place[disabled]{opacity:.55;cursor:default}
+/* The Alipay order page's "Pay with Alipay" is a link, so it works with no
+   script (§496 rule 9); drawn as the same button, mark beside the words. */
+a.place{display:flex;align-items:center;justify-content:center;gap:7px;
+  box-sizing:border-box;text-decoration:none}
 .err{margin-top:10px;padding:10px 12px;border:2px solid var(--ink);
   background:rgba(255,255,255,.72);font-size:14px}
 .err[hidden]{display:none}
@@ -1915,6 +1940,9 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
   cursor:pointer;-webkit-tap-highlight-color:transparent;
   display:flex;align-items:center;justify-content:center;gap:7px}
 .pw button.on{background:var(--lime)}
+/* Alipay is hidden by the script inside WeChat (§496 rule 9); the rule above
+   sets display, which would otherwise beat the attribute. */
+.pw button[hidden]{display:none}
 .pw-ico{width:20px;height:20px;flex:none}
 /* The row's heading (2026-10-26), now that nothing in it is pre-lit: an
    unlit pair of buttons with no question over it reads as decoration. Set
@@ -3225,7 +3253,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // NO ANSWER UNTIL THEY GIVE ONE (2026-10-26). `pm` starts empty whenever the
   // row is on the page, and the Place handler below refuses an empty one. With
   // no row (no WeChat rail) there is nothing to choose and it is the counter.
-  `var pm=(bar.getAttribute('data-wxpay')==='1')?'':'counter';` +
+  `var hasWx=bar.getAttribute('data-wxpay')==='1';` +
+  `var pm=(hasWx||bar.getAttribute('data-alipay')==='1')?'':'counter';` +
   // Lighting the row is one function, because the pop-up below answers the
   // same question and the row must show the answer it gave.
   `var pick=function(v){pm=v;if(!pw)return;var all=pw.querySelectorAll('button[data-pm]');` +
@@ -3242,6 +3271,14 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var wxAsk=function(){if(!pwW)return false;pwW.hidden=false;` +
   `var f=pwW.querySelector('button[data-pqw="counter"]');if(f&&f.focus)f.focus();return true};` +
   `var needWx=function(v){return v==='wechat'&&!inWx&&wxAsk()};` +
+  /* §496 rule 9 — ALIPAY IS NOT OFFERED INSIDE WECHAT (Ash, 2026-10-27:
+     "correct"). WeChat Pay is the rail there, and WeChat does not open Alipay.
+     Hidden here rather than left out of the page, for the same §47 reason the
+     WeChat button above is never hidden by browser: the bytes stay one for
+     every reader. A shop with Alipay but no WeChat rail is then left with the
+     counter alone inside WeChat, so the counter is chosen for them. */
+  `if(inWx){var ab=document.querySelectorAll('button[data-pm=\"alipay\"],button[data-pq=\"alipay\"]');` +
+  `for(var ai=0;ai<ab.length;ai++)ab[ai].hidden=true;if(!hasWx)pick('counter')}` +
   `if(pwW){pwW.addEventListener('click',function(e){` +
   `if(e.target.id==='payWBg'){wxClose();return}` +
   `var b=e.target.closest?e.target.closest('button[data-pqw]'):null;if(!b)return;` +
@@ -3969,6 +4006,20 @@ function oaReady() {
   } catch (e) { return false; }
 }
 
+/* §496 rule 9 — ONE-TAP ALIPAY, FOR A CUSTOMER OUTSIDE WECHAT (Ash, 2026-10-27:
+   "when its H5 i want an integrated alipay function"). The order page sends
+   them to the Alipay app through alipay.trade.wap.pay; Alipay's notify settles
+   it, and the order page asks Alipay for the trade state as a fallback.
+
+   ITS OWN SWITCH, as WeChat's rail has, AND the keys. SHOP_QR_ALIPAY=1 alone
+   offers nothing at a box with no Alipay keys: alipayRailReady() is the same
+   test /payment/create makes before it raises any Alipay charge, so the menu
+   cannot offer a payment the gateway would refuse. Off today on both counts. */
+function aliReady() {
+  if (process.env.SHOP_QR_ALIPAY !== '1') return false;
+  try { return alipayRailReady(); } catch (e) { return false; }
+}
+
 // The OAuth `state`, bound to the order it was issued for.
 //
 // There is no session and no cookie on this page (§44), so state cannot be
@@ -4045,6 +4096,10 @@ router.get('/s/:shopCode', (req, res) => {
     }
   }
   const wxPay = oaReady();
+  // §496 rule 9 — and whether this shop can take a one-tap Alipay payment.
+  // Either rail puts the pay row on the page.
+  const aliPay = aliReady();
+  const anyPay = wxPay || aliPay;
   const brand = brandText();
   /* §179 — ONCE PER REQUEST, not once per card. Every product on this menu is
      signed by the same shop, and a per-card lookup would put one identical
@@ -4241,7 +4296,7 @@ router.get('/s/:shopCode', (req, res) => {
     // its test still compares these bytes across three of them.
     `<div class="cbar" id="cbar" hidden data-sym="${esc(cur.symbol)}"` +
       ` data-dec="${esc(String(cur.decimals))}" data-pos="${esc(cur.position)}"` +
-      `${wxPay ? ' data-wxpay="1"' : ''}>` +
+      `${wxPay ? ' data-wxpay="1"' : ''}${aliPay ? ' data-alipay="1"' : ''}>` +
       `<button type="button" class="cbar-b" id="cbarOpen">` +
         `<span class="cbar-n" id="cbarN">0</span>` +
         `<span class="cbar-l" id="cbarL">${bi('YOUR BASKET', '购物车')}</span>` +
@@ -4350,11 +4405,14 @@ router.get('/s/:shopCode', (req, res) => {
           // until one is, and the row carries the web shop's own heading for
           // the same question — "Pay with" / "支付方式", public/shop.html's
           // checkout section title, copied, not composed.
-          (wxPay
+          // §496 rule 9: Alipay sits between the two when this shop can take
+          // it — "Alipay" / "支付宝" is the web shop's own checkout row label.
+          (anyPay
             ? `<div id="cPw">` +
                 `<div class="pw-h">${bi('Pay with', '支付方式')}</div>` +
                 `<div class="pw">` +
-                  `<button type="button" data-pm="wechat">${WECHAT_MARK}${bi('WeChat Pay', '微信支付')}</button>` +
+                  (wxPay ? `<button type="button" data-pm="wechat">${WECHAT_MARK}${bi('WeChat Pay', '微信支付')}</button>` : '') +
+                  (aliPay ? `<button type="button" data-pm="alipay">${ALIPAY_MARK}${bi('Alipay', '支付宝')}</button>` : '') +
                   `<button type="button" data-pm="counter">${bi('Pay at the counter', '收银台付款')}</button>` +
                 `</div>` +
               `</div>`
@@ -4389,13 +4447,14 @@ router.get('/s/:shopCode', (req, res) => {
     // Words: "请选择 支付方式" is the picker's own refusal "请选择 " with the
     // row's heading "支付方式" (public/shop.html's live pair) appended, the way
     // §120 appends a question; the buttons are the row's own. Nothing composed.
-    (wxPay
+    (anyPay
       ? `<div class="pq" id="payQ" hidden>` +
           `<div class="pq-bg" id="payQBg"></div>` +
           `<div class="pq-p" role="dialog" aria-modal="true" aria-labelledby="payQT">` +
             `<div class="pq-t" id="payQT">${bi('Please choose how to pay', '请选择 支付方式')}</div>` +
             `<div class="pw">` +
-              `<button type="button" data-pq="wechat">${WECHAT_MARK}${bi('WeChat Pay', '微信支付')}</button>` +
+              (wxPay ? `<button type="button" data-pq="wechat">${WECHAT_MARK}${bi('WeChat Pay', '微信支付')}</button>` : '') +
+              (aliPay ? `<button type="button" data-pq="alipay">${ALIPAY_MARK}${bi('Alipay', '支付宝')}</button>` : '') +
               `<button type="button" data-pq="counter">${bi('Pay at the counter', '收银台付款')}</button>` +
             `</div>` +
           `</div>` +
@@ -4603,6 +4662,17 @@ const CANCEL_LIMIT = rateLimit({
   message: { success: false, error: 'too_many_requests' },
 });
 
+/* §496 rule 9 — the Alipay order page asks every few seconds whether the money
+   has arrived, and each ask may ask Alipay. Enough for one page open on one
+   phone (a check every 4s is 15 a minute), and no more. */
+const ALIPAY_STATE_LIMIT = rateLimit({
+  windowMs: 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'too_many_requests' },
+});
+
 /* §426 — THE PHONE LOOKUP GETS ITS OWN, TIGHT BUDGET. It answers one thing —
    does this number hold a voucher at this counter — and an answer like that is
    worth guessing at. A person types their number once or twice; the budget is
@@ -4664,6 +4734,9 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   // to the counter rather than being refused — the customer gets the flow that
   // works instead of an error, and the ticket still prints on submit.
   const wantsWechat = String(b.pay_method || '') === 'wechat' && oaReady();
+  // §496 rule 9 — Alipay on the same terms: honoured only where this shop can
+  // take it, otherwise the counter.
+  const wantsAlipay = !wantsWechat && String(b.pay_method || '') === 'alipay' && aliReady();
 
   const rawLines = Array.isArray(b.items) ? b.items : [];
   if (!rawLines.length) return res.status(400).json({ success: false, error: 'no_items' });
@@ -4883,7 +4956,9 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   // rail would take it first and leave nothing to check — so an order carrying
   // such a discount goes the counter way, which is also what this page does for
   // every order when the rail is not set up.
-  const payInPage = wantsWechat && !cv;
+  const payInPage = (wantsWechat || wantsAlipay) && !cv;
+  // Which in-page rail, when there is one (§496 rule 9).
+  const inPageRail = !payInPage ? null : (wantsAlipay ? 'alipay' : 'wechat');
 
   let created;
   try {
@@ -4920,7 +4995,10 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       // by WeChat while the cashier was trying to. The till reads 'wechat' on a
       // waiting order as "being paid on the phone": tagged, not rung for. Staff's
       // Mark-paid still overwrites it if the customer gives up and pays here.
-      const PLACEHOLDER_TENDER = payInPage ? 'wechat' : 'offline';
+      //
+      // §496 rule 9 — an Alipay order is 'alipay' from the start on the same
+      // reasoning, and the till treats it the same way.
+      const PLACEHOLDER_TENDER = inPageRail || 'offline';
       const info = h.prepare(`
         INSERT INTO retail_orders (
           order_no, customer_id, status, payment_method,
@@ -5119,7 +5197,11 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       // Present only on the WeChat path. The browser reads its presence as
       // "go here next" rather than being told separately which path it is on,
       // so the two cannot disagree.
-      ...(payInPage ? { pay_url: `/s/${code}/pay/${created.payToken}` } : {}),
+      //
+      // §496 rule 9 — an Alipay order's first visit carries ?ali=go, which is
+      // what sends the browser on to Alipay. The order's own address (below)
+      // does not, so coming back to it later never starts a second charge.
+      ...(payInPage ? { pay_url: `/s/${code}/pay/${created.payToken}${inPageRail === 'alipay' ? '?ali=go' : ''}` } : {}),
       // WHERE THIS ORDER LIVES FROM NOW ON. Always present, on every path.
       // Reported 2026-09-08: a customer closed the sheet carrying their number
       // and had nothing left, because the number only ever existed on that
@@ -5297,7 +5379,7 @@ function payScreen(req, res, { status, order, main, extra, shop }) {
   // chose the screen and the colour separately could hand the paid screen the
   // colour that means "money is still owed", which is the exact confusion this
   // class exists to end. One source, and it is the row itself.
-  const tone = order.status === 'paid' ? ' paid'
+  const tone = moneyIn(order.status) ? ' paid'
     : order.status === 'cancelled' ? ' void' : '';
   // The bar carries the shop's name here for the same reason it carries it on
   // the menu: it was an empty band with a 2px rule under it and one small
@@ -5371,6 +5453,52 @@ const COUNTER_MAIN =
 // state, not an approximation of one.
 const CANCELLED_MAIN =
   `<div class="done-h">${bi('Cancelled', '已取消')}</div>`;
+/* HAS THE MONEY ARRIVED? A QR order is a counter order, and a counter order is
+   finished the moment it is paid: markOrderPaid takes it straight from
+   pending_payment to 'delivered' (lib/fulfilment.js isTerminalOnPaid), so
+   'paid' alone is a state this page's orders pass through rather than stay in.
+   Reading 'paid' only, a customer who reopened an order paid on their phone was
+   told "Pay at the counter." (found 2026-10-27 building §496 rule 9; true of the
+   WeChat rail too). */
+function moneyIn(status) {
+  return status === 'paid' || status === 'delivered';
+}
+
+// §496 rule 9 — an Alipay order still waiting for its money. Both pairs are the
+// mini app's own Alipay page (miniapp/pages/alipay-pay/alipay-pay.js: `waiting`
+// and `title`), copied, not composed: the customer paying with Alipay there and
+// here is the same person.
+const ALIPAY_WAIT_MAIN =
+  `<div class="done-h">${bi('Waiting for payment…', '等待付款确认…')}</div>`;
+const ALIPAY_PAY_LABEL = bi('Pay with Alipay', '支付宝支付');
+
+/* §496 rule 9 — HAS THIS ALIPAY ORDER BEEN PAID? Asks Alipay, and settles the
+   order when it has. The async notify is what normally settles it; this is the
+   fallback for a notify that is late or lost, the same one the guest pay page
+   and the mini app's status poll use (markOrderPaid is idempotent and guarded by
+   status). Only an order whose charge was actually raised here is asked about:
+   its pending payment row carries the Alipay trade number. Never throws — a
+   failed ask leaves the order as it was. Returns the order's status after. */
+async function settleAlipayOrder(order) {
+  if (!order || order.status !== 'pending_payment' || order.payment_method !== 'alipay') {
+    return order && order.status;
+  }
+  try {
+    const tradeNo = alipayOutTradeNo(order.order_no);
+    const pay = tdb().prepare(
+      "SELECT out_trade_no FROM retail_payments WHERE order_id = ? AND status = 'pending'"
+    ).get(order.id);
+    if (!pay || pay.out_trade_no !== tradeNo) return order.status;
+    const st = await alipayTradeQuery(tradeNo);
+    if (st !== 'TRADE_SUCCESS' && st !== 'TRADE_FINISHED') return order.status;
+    markOrderPaid(order.id);
+    const row = tdb().prepare('SELECT status FROM retail_orders WHERE id = ?').get(order.id);
+    return row ? row.status : order.status;
+  } catch (e) {
+    console.warn('[shop-menu/alipay query]', order.order_no, e.message);
+    return order.status;
+  }
+}
 
 /* THE CUSTOMER CANCELS THEIR OWN ORDER — Ash, 2026-09-08.
    "if a customer eventually doesn't want the order there should be an option to
@@ -5400,7 +5528,7 @@ const CANCELLED_MAIN =
 
    A FORM POST, so it answers with a redirect rather than JSON — the page it
    came from has no script to read a body. */
-router.post('/s/:shopCode/order/:token/cancel', CANCEL_LIMIT, express.urlencoded({ extended: false, limit: '2kb' }), (req, res) => {
+router.post('/s/:shopCode/order/:token/cancel', CANCEL_LIMIT, express.urlencoded({ extended: false, limit: '2kb' }), async (req, res) => {
   const code = String(req.params.shopCode || '');
   if (!isShopCode(code)) return notFoundPage(req, res);
   const shop = resolveShop(code);
@@ -5410,7 +5538,7 @@ router.post('/s/:shopCode/order/:token/cancel', CANCEL_LIMIT, express.urlencoded
   if (!/^[a-f0-9]{16,64}$/i.test(token)) return notFoundPage(req, res);
 
   const order = tdb().prepare(
-    `SELECT id, status, store_id, shop_entry_method FROM retail_orders WHERE pay_token = ?`
+    `SELECT id, order_no, status, store_id, shop_entry_method FROM retail_orders WHERE pay_token = ?`
   ).get(token);
   // Same 404 the pay page gives for an order that is not this shop's or did not
   // come in by this door — this route must not confirm which guesses hit
@@ -5418,6 +5546,20 @@ router.post('/s/:shopCode/order/:token/cancel', CANCEL_LIMIT, express.urlencoded
   if (!order || order.store_id !== shop.location_id || order.shop_entry_method !== 'qr') {
     return notFoundPage(req, res);
   }
+  // §496 rule 9 — read BEFORE the payment row is cancelled below: was an
+  // Alipay charge raised for this order? Its trade number is on the row.
+  let aliTrade = null;
+  try {
+    const pay = tdb().prepare(
+      "SELECT out_trade_no FROM retail_payments WHERE order_id = ? AND status = 'pending'"
+    ).get(order.id);
+    if (pay && pay.out_trade_no === alipayOutTradeNo(order.order_no)) aliTrade = pay.out_trade_no;
+  } catch (e) { aliTrade = null; }
+  // And ask Alipay first whether it was paid. A customer who paid and tapped
+  // Cancel before the notify landed would otherwise have the order cancelled
+  // under money already taken; settled here, the cancel below loses the race
+  // cleanly and the page says paid.
+  if (aliTrade) await settleAlipayOrder({ ...order, payment_method: 'alipay' });
 
   const flipped = tdb().prepare(
     `UPDATE retail_orders
@@ -5438,6 +5580,14 @@ router.post('/s/:shopCode/order/:token/cancel', CANCEL_LIMIT, express.urlencoded
     catch (e) { console.error('[shop-menu/cancel release]', e.message); }
     try { reverseOrderVoucher(order.id); }
     catch (e) { console.error('[shop-menu/cancel voucher]', e.message); }
+    // §496 rule 9 — CLOSE THE ALIPAY TRADE, so a cashier page the customer left
+    // open in the Alipay app cannot take money for an order that no longer
+    // exists: the notify would find no pending payment and the shop would keep
+    // money for nothing. Fire-and-forget — Alipay being slow must not hold the
+    // customer's redirect, and the trade's own time_expire is the floor.
+    if (aliTrade) {
+      alipayTradeClose(aliTrade).catch((e) => console.warn('[shop-menu/cancel alipay close]', order.order_no, e.message));
+    }
     // Ring the counter: the order has to come OFF the pending list as promptly
     // as it went on, or a cashier calls a number nobody is waiting for.
     try {
@@ -5454,6 +5604,27 @@ router.post('/s/:shopCode/order/:token/cancel', CANCEL_LIMIT, express.urlencoded
   res.redirect(303, `/s/${encodeURIComponent(code)}/pay/${encodeURIComponent(token)}`);
 });
 
+/* §496 rule 9 — THE ALIPAY ORDER PAGE'S QUESTION: has the money arrived? The
+   same token authority and the same 404s as the page itself; it answers only
+   the status, and asks Alipay (settling the order) when the order is an Alipay
+   one still waiting. Under /s/ because that is what the filed domain forwards. */
+router.get('/s/:shopCode/pay/:token/state', ALIPAY_STATE_LIMIT, async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const code = String(req.params.shopCode || '');
+  const shop = isShopCode(code) ? resolveShop(code) : null;
+  const token = String(req.params.token || '');
+  if (!shop || !/^[a-f0-9]{16,64}$/i.test(token)) return res.status(404).json({ success: false, error: 'not_found' });
+  const order = tdb().prepare(
+    `SELECT id, order_no, status, store_id, shop_entry_method, payment_method
+       FROM retail_orders WHERE pay_token = ?`
+  ).get(token);
+  if (!order || order.store_id !== shop.location_id || order.shop_entry_method !== 'qr') {
+    return res.status(404).json({ success: false, error: 'not_found' });
+  }
+  const status = aliReady() ? await settleAlipayOrder(order) : order.status;
+  res.json({ success: true, status });
+});
+
 router.get('/s/:shopCode/pay/:token', async (req, res) => {
   const code = String(req.params.shopCode || '');
   if (!isShopCode(code)) return notFoundPage(req, res);
@@ -5467,7 +5638,7 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
 
   const order = tdb().prepare(
     `SELECT id, order_no, status, total, recipient_name, shop_order_code, store_id,
-            shop_entry_method
+            shop_entry_method, payment_method
        FROM retail_orders WHERE pay_token = ?`
   ).get(token);
   // AN ORDER FROM ANOTHER SHOP IS A 404, not an error — the same answer a wrong
@@ -5485,7 +5656,7 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
     return notFoundPage(req, res);
   }
 
-  if (order.status === 'paid') return payScreen(req, res, { status: 200, order, main: PAID_MAIN, shop });
+  if (moneyIn(order.status)) return payScreen(req, res, { status: 200, order, main: PAID_MAIN, shop });
   // A cancelled order still answers here rather than 404ing. The customer who
   // just cancelled it lands on this page, and "the order does not exist" is the
   // wrong thing to tell somebody about an order they placed ten minutes ago.
@@ -5561,6 +5732,69 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
       extra: order.status === 'pending_payment' ? cancelBlock : '',
     });
   };
+
+  /* §496 rule 9 — ONE-TAP ALIPAY. An order placed with Alipay chosen.
+
+     ?ali=go — the first visit, straight from Place order, and the "Pay with
+     Alipay" button below — sends the browser to Alipay's own cashier through
+     alipay.trade.wap.pay, which hands over to the Alipay app on a phone. The
+     amount is the order's, read here; the trade number and expiry are the same
+     on every visit (§479), so a second tap reopens the same trade rather than
+     raising another. Alipay sends the customer back to this page.
+
+     Without ?ali=go — coming back from Alipay, or opening the order later —
+     the page asks Alipay whether the money has arrived before drawing anything,
+     then keeps asking from the browser while it stays open. It never sends the
+     browser to Alipay by itself, so a customer who returns to the order cannot
+     be thrown into a payment they did not ask for.
+
+     Every other road is the counter, which prints the slip (2026-10-26): inside
+     WeChat, where Alipay cannot open; the rail switched off since the order was
+     placed; a charge that could not be built. */
+  if (order.payment_method === 'alipay' && order.status === 'pending_payment') {
+    if (!aliReady() || inWeChat(req)) return counter();
+    if (req.query.ali === 'go') {
+      let url;
+      try {
+        // The callback finds the order by this trade number, as every other
+        // Alipay rail stamps it before handing the customer over.
+        tdb().prepare(
+          "UPDATE retail_payments SET method = 'alipay', out_trade_no = ? WHERE order_id = ? AND status = 'pending'"
+        ).run(alipayOutTradeNo(order.order_no), order.id);
+        url = alipayPageRedirectUrl(order, {
+          mobile: true,
+          returnUrl: payReturnUrl(req, code, token),
+          timeExpire: alipayPayExpiry(order.id),
+        });
+      } catch (e) {
+        console.error('[shop-menu/pay alipay]', order.order_no, e.message);
+        return counter();
+      }
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.redirect(302, url);
+    }
+    const st = await settleAlipayOrder(order);
+    if (moneyIn(st)) return payScreen(req, res, { status: 200, order: { ...order, status: st }, main: PAID_MAIN, shop });
+    if (st !== 'pending_payment') return counter();
+    const lq = (req.query.lang === 'cn' || req.query.lang === 'en') ? `&lang=${req.query.lang}` : '';
+    // While the page is open it asks /state every 4 seconds for ten minutes,
+    // and reloads once the answer is no longer "waiting" — the reload draws
+    // whichever screen is now true. No script, no harm: the button still works
+    // and a manual reload asks Alipay too.
+    const poll =
+      `<script>(function(){var n=0,u=location.pathname.replace(/\\/$/,'')+'/state';` +
+      `var t=setInterval(function(){if(++n>150){clearInterval(t);return}` +
+      `fetch(u,{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){` +
+      `if(j&&j.status&&j.status!=='pending_payment'){clearInterval(t);location.reload()}` +
+      `}).catch(function(){})},4000)})();</script>`;
+    return payScreen(req, res, {
+      status: 200, order, shop,
+      main: ALIPAY_WAIT_MAIN +
+        `<a class="place" href="/s/${esc(code)}/pay/${esc(token)}?ali=go${lq}">${ALIPAY_MARK}${ALIPAY_PAY_LABEL}</a>` +
+        poll,
+      extra: cancelBlock,
+    });
+  }
 
   // Anything other than an order still waiting for money — cancelled, refunded,
   // already in the kitchen — is not payable here. The till can always take it.

@@ -199,7 +199,7 @@ const {
 } = require('../lib/payment-gateways');
 // §479 — a WeChat charge for an order expires when the order would be
 // cancelled, and money that still lands on a cancelled order goes back.
-const { orderWechatTimeExpire, findLatePayment, refundLatePayment } = require('../lib/wechat-pay-window');
+const { orderWechatTimeExpire, orderAlipayTimeExpire, findLatePayment, refundLatePayment } = require('../lib/wechat-pay-window');
 // Bundle products (recipe, parts, stock made from parts, the stock lines a cart
 // reserves, a bundle's derived admin cost) and the cost stamped on a sold line,
 // moved to lib/ (decisions §477).
@@ -4990,6 +4990,25 @@ function wechatPayExpiry(orderId) {
     console.warn('[wechat-pay expiry]', orderId, e.message);
     return null;
   }
+}
+
+// The same deadline for an Alipay charge, in Alipay's own format (§496 rule 9).
+function alipayPayExpiry(orderId) {
+  try {
+    return orderAlipayTimeExpire(orderId, {
+      autoCancelHours: Number(cfgValue('orders.autoCancelHours', STALE_ORDER_CANCEL_HOURS_DEFAULT)),
+      counterMinutes: inventory.counterCancelMinutes(),
+    });
+  } catch (e) {
+    console.warn('[alipay expiry]', orderId, e.message);
+    return null;
+  }
+}
+
+// Can this tenant take a real Alipay charge? Roots only, with the keys set —
+// the same test /payment/create applies before its 当面付 and redirect paths.
+function alipayRailReady() {
+  return currentTenantId() === ROOTS_TENANT_ID && !ALIPAY_DEV_MODE;
 }
 
 // §452 — A SHOPPER'S PAYMENT COULD NOT BE STARTED, SO TELL THE SHOP.
@@ -36637,6 +36656,12 @@ module.exports.wxOutTradeNo          = wxOutTradeNo;
 module.exports.payDescription        = payDescription;
 // §479 — the QR menu's charge expires with its order, like every other rail's.
 module.exports.wechatPayExpiry       = wechatPayExpiry;
+// §496 rule 9 — the QR menu's one-tap Alipay: the same expiry in Alipay's
+// format, the same "is Alipay set up here" test /payment/create applies, and the
+// same paid transition the guest pay page's status poll settles through.
+module.exports.alipayPayExpiry       = alipayPayExpiry;
+module.exports.alipayRailReady       = alipayRailReady;
+module.exports.markOrderPaid         = markOrderPaid;
 // The replace-all writer for a product's customer-choice questions, exported so
 // its refusal can be tested against a REAL database rather than a reimplementation
 // of it. What needs holding is not that it saves — it is that it DECLINES to,

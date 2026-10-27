@@ -112,11 +112,14 @@ const rec = (id) => ({ id, order_no: 'TC00' + id, code: id, name: '', total: 30,
 // ── 1. placed as WeChat ─────────────────────────────────────────────────────
 section('The QR menu marks a WeChat Pay order from the moment it is placed');
 check("the placeholder tender is 'wechat' for an in-page WeChat order, 'offline' otherwise", () => {
-  assert.match(menu, /const PLACEHOLDER_TENDER = payInPage \? 'wechat' : 'offline';/);
+  // §496 rule 9 — inPageRail is 'wechat' or 'alipay' when the customer pays on
+  // the page, null otherwise.
+  assert.match(menu, /const inPageRail = !payInPage \? null : \(wantsAlipay \? 'alipay' : 'wechat'\);/);
+  assert.match(menu, /const PLACEHOLDER_TENDER = inPageRail \|\| 'offline';/);
 });
 check('payInPage is decided before the order is written, and the INSERT uses the placeholder', () => {
-  const decided = menu.indexOf('const payInPage = wantsWechat && !cv;');
-  const placeholder = menu.indexOf('const PLACEHOLDER_TENDER = payInPage');
+  const decided = menu.indexOf('const payInPage = (wantsWechat || wantsAlipay) && !cv;');
+  const placeholder = menu.indexOf('const PLACEHOLDER_TENDER = inPageRail');
   assert.ok(decided > 0 && placeholder > decided, 'payInPage must be decided first');
   const insert = menu.indexOf("orderNo, cv ? cv.customerId : null, 'pending_payment', PLACEHOLDER_TENDER,", placeholder);
   assert.ok(insert > placeholder, 'the INSERT no longer binds PLACEHOLDER_TENDER');
@@ -136,7 +139,16 @@ check('a new order being paid on the phone does not knock; a counter one does', 
 });
 check('the row carries the WeChat Pay tag only when the customer chose it', () => {
   const r = fn('renderPend');
-  assert.match(r, /payingOnPhone\(o\) \? '<i class="wx">' \+ esc\(T\('wxPay'\)\) \+ '<\/i>' : ''/);
+  // §496 rule 9 — and names the rail: Alipay for an Alipay order.
+  assert.match(r, /payingOnPhone\(o\) \? '<i class="wx">' \+ esc\(T\(o\.payment_method === 'alipay' \? 'aliPay' : 'wxPay'\)\) \+ '<\/i>' : ''/);
+});
+check('an Alipay order is being paid on the phone too; an offline one is not', () => {
+  const ctx = {};
+  vm.createContext(ctx);
+  vm.runInContext(fn('payingOnPhone'), ctx);
+  assert.strictEqual(ctx.payingOnPhone({ payment_method: 'alipay' }), true);
+  assert.strictEqual(ctx.payingOnPhone({ payment_method: 'wechat' }), true);
+  assert.strictEqual(ctx.payingOnPhone({ payment_method: 'offline' }), false);
 });
 
 // ── 3. paid elsewhere ───────────────────────────────────────────────────────
@@ -288,6 +300,8 @@ check('the till carries the four pairs, each live where it says it was copied fr
     ['cancelledSt', 'Cancelled', '已取消', 'public/retail-admin/26-print.js', /cancelled: \['Cancelled', '已取消'\]/],
     ['refundedSt', 'Refunded', '已退款', 'public/retail-admin/26-print.js', /refunded: \['Refunded', '已退款'\]/],
     ['wxPay', 'WeChat Pay', '微信支付', 'public/retail-admin/03-dashboard.js', /wechat: \['WeChat Pay', '微信支付'\]/],
+    // §496 rule 9 — the same tag for an order being paid with Alipay.
+    ['aliPay', 'Alipay', '支付宝', 'public/retail-admin/03-dashboard.js', /alipay: \['Alipay', '支付宝'\]/],
   ];
   for (const [k, en, cn, src, re] of pairs) {
     assert.strictEqual(W.T(k), cn, k + ' Chinese');

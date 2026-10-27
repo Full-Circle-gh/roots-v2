@@ -1324,6 +1324,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     refundedSt:   ['Refunded', '已退款'],              // admin: 26-print.js:386
     // The customer chose WeChat Pay on their phone. The tag on the row.
     wxPay:        ['WeChat Pay', '微信支付'],          // admin: 03-dashboard.js PAY_LBL
+    // ... or Alipay (§496 rule 9).
+    aliPay:       ['Alipay', '支付宝'],                // admin: 03-dashboard.js PAY_LBL
     printReceipt: ['Print receipt', '打印小票'],       // admin: 04-orders.js
     newOrder:     ['New order', '新建订单'],           // admin: retail-admin.html:2218
     // failure — the generic locked sentence, reused rather than re-minted
@@ -2682,7 +2684,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
      placed. It is on this list only for the few seconds WeChat takes to confirm
      the money, unless the customer gives up and walks to the counter; then the
      cashier settles it like any other, and Mark paid overwrites the tender. */
-  function payingOnPhone(o) { return !!o && o.payment_method === 'wechat'; }
+  /* §496 rule 9 — and the same for a QR order paid with Alipay on the phone,
+     which routes/shop-menu.js writes as 'alipay' from the moment it is placed. */
+  function payingOnPhone(o) { return !!o && (o.payment_method === 'wechat' || o.payment_method === 'alipay'); }
 
   /* §502 — AN ORDER THAT LEFT THE WAITING LIST WITHOUT THIS TILL.
      Reported 2026-10-27, TC001860: the customer paid with WeChat on their
@@ -2789,7 +2793,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
          // §502 — the customer is paying on their phone. Usually it is gone
          // from this list a few seconds later; if they give up and walk over,
          // it is still here to be settled.
-         + (payingOnPhone(o) ? '<i class="wx">' + esc(T('wxPay')) + '</i>' : '') + '</span>'
+         + (payingOnPhone(o) ? '<i class="wx">' + esc(T(o.payment_method === 'alipay' ? 'aliPay' : 'wxPay')) + '</i>' : '') + '</span>'
          + '<span class="amt">' + money(o.total) + '</span>'
          + '</button>';
     });
