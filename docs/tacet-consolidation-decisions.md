@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.588
+# Tacet shared-core consolidation — decisions record, v4.589
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-27 · v4.589 — **§503 · THE WEB SHOP OPENS IN CHINESE ON A CHINESE PHONE, AND ?lang= SETS IT — DECIDED BY ASH.** Put to Ash as "the web shop always opens in English. Alipay only accepts Chinese-language sites, and Chinese customers would expect Chinese"; Ash: *"also do this"*. `public/shop.html` picks its language the way the QR menu does: the customer's own toggle, then `?lang=en|cn` in the address, then the phone's language (`zh…` → Chinese), else English. No strings added. No change to `.gitignore` or CI.
 
 2026-10-27 · v4.588 — **§496 rule 9 AMENDED · ALIPAY ON THE QR MENU IS ONE-TAP 手机网站支付, OUTSIDE WECHAT ONLY, BEHIND ITS OWN SWITCH — DECIDED BY ASH.** Offered the uploaded 收款码 with a payment screenshot (the web shop's flow), Ash: *"i dont want it like this . when its H5 i want an integrated alipay fumction"*, and on showing it only outside WeChat: *"correct"*; then *"Build the one-tap Alipay menu code switched off"*. The menu gains an Alipay choice that sends the customer to the Alipay app through `alipay.trade.wap.pay` and settles through the existing Alipay notify, with a trade-state query from the order page as the fallback. It is off until `SHOP_QR_ALIPAY=1` AND Alipay's keys are set; neither is today, and no Alipay account can yet sign 手机网站支付. The till tags such an order "Alipay" and does not ring for it (§502). Found while building it, and fixed here because the Alipay page depends on it: a QR order is `delivered` the moment it is paid, so the order page, which read `paid` only, told a customer who reopened an order paid on their phone to pay at the counter; it now reads both, for WeChat too. Strings are live pairs (vocabulary v1.360); nothing composed. No change to `.gitignore` or CI.
 
@@ -33466,3 +33468,20 @@ Ash's first instinct was that such an order should not show on the till at all. 
 5. **Words:** nothing composed. `Payment confirmed · 支付成功` (routes/retail.js, the paid status notice), `Cancelled · 已取消` and `Refunded · 已退款` (public/retail-admin/26-print.js), and `WeChat Pay · 微信支付` (public/retail-admin/03-dashboard.js) are copied whole, declared in `docs/tacet-delivery-vocabulary.md` v1.359. A composed "paying on phone" label was considered and dropped in favour of the live pair, which says the same thing to a cashier.
 
 `scripts/test_till_paid_elsewhere.js` runs the till's own functions and the route's guard: the placeholder, the tag and the silent knock, each path that meets a paid order, the cancel guard both ways, and the words. It goes red with the fix taken out.
+
+## §503 — THE WEB SHOP OPENS IN CHINESE ON A CHINESE PHONE, AND ?lang= SETS IT
+
+**DECIDED 2026-10-27 by Ash.** Put to Ash: *"The web shop always opens in English. Alipay only accepts Chinese-language sites, and Chinese customers would expect Chinese. It's a small separate fix."* Ash: *"also do this"*.
+
+**What was wrong.** `public/shop.html` read the customer's saved toggle (`localStorage` `shop_lang`) and otherwise fell back to English. A Chinese phone opening the shop for the first time got English, and no address could open it in Chinese — so the shop could not be offered to Alipay's 手机网站支付 review (Chinese-language sites only; §496 rule 9), and a Chinese customer had to find the toggle.
+
+**The rule, one order for the whole customer side.** The same order the QR menu's `langScript` (`routes/shop-menu.js`) already uses:
+
+1. the customer's own toggle, when they have used it — a choice made is never overridden;
+2. `?lang=cn` or `?lang=en` in the address, so a link can open the shop in a given language;
+3. the phone's language: `navigator.language` starting `zh` → Chinese;
+4. otherwise English.
+
+The toggle still saves its choice as before. A `?lang=` does not save anything, so it decides only for a visitor who has not chosen.
+
+**Not changed.** The mini app, the QR menu, the back office. No strings were added (vocabulary untouched).
