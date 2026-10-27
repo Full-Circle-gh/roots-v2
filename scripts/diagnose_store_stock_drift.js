@@ -405,6 +405,68 @@ for (const file of files) {
     }
     console.log(`     (fixes within 15 min of a previous fix on the same product with nothing in between: ${sameMinute})`);
 
+    /* 17 · DELIVERIES COUNTED TWICE? A hand "+" on the phone when the goods
+       land, then the transfer confirmed in the app adds them again. For every
+       transfer receipt: was there a hand increase of that product in the 24h
+       before it (and no other receipt in between), and a hand decrease in the
+       24h after it? */
+    const rcpts = all(`
+      SELECT t.id, t.product_id, t.delta, t.created_at,
+             (SELECT COALESCE(SUM(a.delta),0) FROM retail_stock_ledger a
+               WHERE a.store_id = t.store_id AND a.product_id = t.product_id AND a.reason IN (${marks}) AND a.delta > 0
+                 AND a.created_at BETWEEN datetime(t.created_at, '-24 hours') AND t.created_at
+                 AND NOT EXISTS (SELECT 1 FROM retail_stock_ledger x WHERE x.store_id = t.store_id AND x.product_id = t.product_id
+                                  AND x.reason = 'restock_transfer_in' AND x.id > a.id AND x.id < t.id)) AS hand_up_before,
+             (SELECT COALESCE(SUM(-a.delta),0) FROM retail_stock_ledger a
+               WHERE a.store_id = t.store_id AND a.product_id = t.product_id AND a.reason IN (${marks}) AND a.delta < 0
+                 AND a.created_at BETWEEN t.created_at AND datetime(t.created_at, '+24 hours')) AS hand_down_after
+        FROM retail_stock_ledger t
+       WHERE t.store_id = ? AND t.reason = 'restock_transfer_in' AND t.created_at >= datetime('now', ?)`, ...RECOUNT, ...RECOUNT, s.id, since);
+    if (rcpts.length) {
+      const upB = rcpts.filter(r => r.hand_up_before > 0);
+      const dnA = rcpts.filter(r => r.hand_down_after > 0);
+      const both = rcpts.filter(r => r.hand_up_before > 0 && r.hand_down_after > 0);
+      const units = rcpts.reduce((a, r) => a + r.delta, 0);
+      console.log(`\n17 · transfer receipts: ${rcpts.length} (${units} u)`);
+      console.log(`     a hand increase of the same product in the 24h BEFORE: ${upB.length} receipts (${upB.reduce((a, r) => a + r.delta, 0)} u received · ${upB.reduce((a, r) => a + r.hand_up_before, 0)} u added by hand)`);
+      console.log(`     a hand decrease in the 24h AFTER:                  ${dnA.length} receipts (${dnA.reduce((a, r) => a + r.delta, 0)} u received · ${dnA.reduce((a, r) => a + r.hand_down_after, 0)} u taken off by hand)`);
+      console.log(`     both:                                             ${both.length}`);
+      for (const r of both.slice(0, 8)) console.log(`       ${r.created_at} ${pad(pname(r.product_id), 34)} received +${r.delta} · hand +${r.hand_up_before} before · hand −${r.hand_down_after} after`);
+      // When are receipts confirmed, relative to the sending side's dispatch?
+      const lag = all(`
+        SELECT ROUND(AVG((julianday(i.created_at) - julianday(o.created_at)) * 24), 1) AS avg_h,
+               SUM((julianday(i.created_at) - julianday(o.created_at)) * 24 > 6) AS over6h, COUNT(*) AS n
+          FROM retail_stock_ledger i JOIN retail_stock_ledger o
+            ON o.reason = 'restock_transfer_out' AND o.product_id = i.product_id AND o.note = i.note
+         WHERE i.store_id = ? AND i.reason = 'restock_transfer_in' AND i.created_at >= datetime('now', ?)`, s.id, since)[0];
+      if (lag && lag.n) console.log(`     sent → counted in: average ${lag.avg_h} h · more than 6 h on ${lag.over6h} of ${lag.n} lines`);
+    }
+
+    /* 18 · WHICH SALES COME BEFORE A "FOUND MORE" FIX. When only sales were
+       recorded since the previous fix and staff then find MORE than the record,
+       some of those sales did not leave this shelf. Split by how the sale was
+       recorded. */
+    const upFix = all(`
+      SELECT f.id, f.product_id, f.delta,
+             (SELECT MAX(p.id) FROM retail_stock_ledger p WHERE p.store_id = f.store_id AND p.product_id = f.product_id
+                AND p.reason IN (${marks}) AND p.id < f.id) AS prev_id
+        FROM retail_stock_ledger f
+       WHERE f.store_id = ? AND f.reason IN (${marks}) AND f.delta > 0 AND f.created_at >= datetime('now', ?)`, ...RECOUNT, s.id, ...RECOUNT, since);
+    const saleKinds = {};
+    let considered = 0;
+    for (const f of upFix) {
+      if (!f.prev_id) continue;
+      const rows = all(`SELECT l.reason, COALESCE(o.channel, '-') AS ch, COALESCE(o.fulfillment_type, '-') AS ft, -SUM(l.delta) AS u
+                          FROM retail_stock_ledger l LEFT JOIN retail_orders o ON l.ref_table = 'retail_orders' AND o.id = l.ref_id
+                         WHERE l.store_id = ? AND l.product_id = ? AND l.id > ? AND l.id < ?
+                         GROUP BY l.reason, ch, ft`, s.id, f.product_id, f.prev_id, f.id);
+      if (!rows.length || rows.some(r => !/^order_|^till_|^reroute|^awaiting/.test(r.reason))) continue;
+      considered++;
+      for (const r of rows) { const k = `${r.reason} · ${r.ch} · ${r.ft}`; saleKinds[k] = (saleKinds[k] || 0) + r.u; }
+    }
+    console.log(`\n18 · "found more" fixes preceded only by sales: ${considered} · units of each kind of sale in those gaps:`);
+    for (const [k, u] of Object.entries(saleKinds).sort((a, b) => b[1] - a[1]).slice(0, 10)) console.log(`     ${pad(k, 50)} ${lpad(u, 5)} u`);
+
     /* 16 · THE MOST-FIXED PRODUCTS, ROW BY ROW, last 30 days. The pattern a
        person sees in a timeline is worth more than any total above. */
     const most = all(`
