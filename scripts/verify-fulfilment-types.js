@@ -137,7 +137,7 @@ check('delivery + pickup are still open at paid',
 // Mirror of retail.js `oldest_unfulfilled` (Orders header status line, §1.7).
 const unfulfilled = db.prepare(
   `SELECT order_no FROM retail_orders
-    WHERE status IN ('paid','preparing','rider_pickup')
+    WHERE status IN ('paid','preparing','rider_pickup','awaiting_restock')
       AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')
     ORDER BY id`
 ).all().map(r => r.order_no);

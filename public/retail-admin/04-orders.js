@@ -10881,7 +10881,8 @@ async function openRefundEvents(orderId) {
 // ── §1.7 status line — "Oldest unfulfilled order · 3 days" ──────────────────
 // Deliberately NOT a count. "5 awaiting fulfilment" would restate Paid (2) +
 // Preparing (3), two chips sitting directly under the line, and §1.7's
-// non-duplication test rules that out. The age is the one fact nothing else on
+// non-duplication test rules that out. (Awaiting restock counts toward the age
+// too: those orders are paid and still owed.) The age is the one fact nothing else on
 // this page reports.
 // The raw timestamp is cached so a language toggle can re-word the line without
 // another round trip; the server sends null when nothing is waiting.
