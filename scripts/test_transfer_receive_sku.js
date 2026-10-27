@@ -40,7 +40,10 @@ ok(SCREEN.length > 0, 'screenReceiveTransfer is found');
 const LINE = "${T('sent','发出')} <span class=\"num\">${xfrSent(it)}</span>"
            + "${it.sku?` · <span class=\"num\">${escAttr(it.sku)}</span>`:''}</span>";
 const hits = SCREEN.split(LINE).length - 1;
-ok(hits === 2, 'the sent line carries the SKU on both the count row and the receipt row (found ' + hits + ')');
+// Three: the counting row, the finished-delivery receipt, and the confirm screen's
+// asked-against-sent line (a line the warehouse cut), which needs the code for the
+// same reason the others do.
+ok(hits === 3, 'the sent line carries the SKU on the count row, the receipt row and the confirm row (found ' + hits + ')');
 
 const bare = SCREEN.split("${T('sent','发出')} <span class=\"num\">${xfrSent(it)}</span></span>").length - 1;
 ok(bare === 0, 'no sent line is left without the SKU');

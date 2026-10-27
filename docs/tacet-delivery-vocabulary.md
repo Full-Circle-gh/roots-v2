@@ -1401,6 +1401,16 @@ is the order the goods moved. `实收` is the outcome quantity: `收` is the out
 and `点` is the act of counting, so a screen that reached for `点数` here would
 name an action where it means a number.
 
+**REUSED ON THE PHONE'S RECEIVE SCREENS, 2026-10-27 — NOTHING COMPOSED.** The
+shop-to-shop count in `public/m.html` (`screenReceiveTransfer`) now prints
+`asked 20 · sent 15` / `申请 20 · 发出 15`, but only on a line where the request and
+the sent figure differ. `asked`/`申请` is the `askedQty` pair above and
+`sent`/`发出` was already live on that screen. The order is the one this section
+fixes (asked, then sent). Why only on differing lines: `qty_sent` falls back to
+`qty_requested` when the warehouse changed nothing, so a bare `sent 15` could not
+say whether 15 was loaded or never touched, and "Everything arrived" counts a line
+in at the SENT figure.
+
 **THE CHINESE `Received` ARTBOARD WAS BLOCKED ON THESE AND IS NOW DRAWN**
 (`design-handoff/store-receiving/ReceivedZH.dc.html`). Nothing shipped
 English-on-both-sides in the interval — the screen simply was not drawn in
