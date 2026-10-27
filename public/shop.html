@@ -6629,7 +6629,12 @@ function ctaRoute(t){
   state.brand=brandName(state.config);
   document.title=state.brand;
   try{ state.cats=(await api('/api/retail/category-tree?counts=1'))||[]; }catch(e){ state.cats=[]; }
-  state.cats=state.cats.filter(c=>!c.count||c.count>0);
+  // Drop a category with nothing on sale. `!c.count` read a count of 0 as "no
+  // count given" and kept it, so every empty top showed as a chip and a home
+  // tile that opened onto nothing — among them a restock-only category whose
+  // products the count rightly leaves out (found 2026-10-27). A missing count
+  // still keeps the category.
+  state.cats=state.cats.filter(c=>c.count==null||c.count>0);
 
   applyLangToUI();
   document.querySelector('header.bar').hidden=false;
