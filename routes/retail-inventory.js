@@ -32,6 +32,8 @@ const { zoneForLocation } = require('../lib/business-date');
 // The fold of those rows into "what went on today, and who put it there",
 // in lib/ so its rules can be exercised without a database.
 const { summariseKitchenAdds } = require('../lib/kitchen-adds');
+// §504 — what is on a van to a shop, for the stock screen's card.
+const handAdded = require('../lib/delivery-hand-added');
 // A store's zone is what its dates, cutoffs and pickup window are judged in
 // (decisions §82). One the runtime cannot read was stored as typed and then
 // quietly answered with Guangzhou's, so it is refused here instead — the same
@@ -413,6 +415,13 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
      ORDER BY p.is_published DESC, p.name_en COLLATE NOCASE
   `).all(id);
 
+  /* §504 — WHAT IS ON A VAN TO THIS SHOP, on every shape below, the add-only one
+     included. It is not the shelf total §46 keeps from an add-only operator; it
+     is the delivery, and the person adding by hand as boxes come in is exactly
+     who needs to see it before they do. Absent (not 0) where nothing is coming. */
+  const incoming = handAdded.incomingByProduct(tdb(), id);
+  const withIncoming = (o, pid) => (incoming[pid] ? { ...o, incoming_qty: incoming[pid] } : o);
+
   /* ADD MODE WITHOUT THE GRANT: a quantity-free list (id/name/sku only), so the
      shelf total is never exposed — not in the UI, not over the raw API. This
      is the original kitchen contract and it is unchanged for every kitchen that
@@ -425,9 +434,9 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
      them. The claim in the comment above was true of one realm and not the
      other; keying on the grant makes it true of both. */
   if (addOnlyOperator(req)) {
-    return res.json({ success: true, data: rows.map(r => ({
+    return res.json({ success: true, data: rows.map(r => withIncoming({
       product_id: r.product_id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku,
-    })) });
+    }, r.product_id)) });
   }
 
   /* ADD MODE WITH THE GRANT: the shelf total, and nothing else that was hidden.
@@ -436,10 +445,10 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
      grants them the count so they can check it against a shelf they can see.
      The narrow shape is also what the app already maps. */
   if (quickStockMode(req) === 'add') {
-    return res.json({ success: true, data: rows.map(r => ({
+    return res.json({ success: true, data: rows.map(r => withIncoming({
       product_id: r.product_id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku,
       physical_qty: r.physical_qty,
-    })) });
+    }, r.product_id)) });
   }
 
   // Decorate with computed `available` (wechat channel) so the admin sees
@@ -448,6 +457,7 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
     const av = inventory.getAvailable(id, r.product_id, 'wechat');
     r.available_wechat = av.available;
     r.active_reservations = av.activeThisChannel || 0;
+    if (incoming[r.product_id]) r.incoming_qty = incoming[r.product_id];
   }
 
   res.json({ success: true, data: rows });

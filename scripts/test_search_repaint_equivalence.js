@@ -120,6 +120,8 @@ function makeSandbox(state) {
     asstCan: () => false,   // §495 rule 14: the shelf's mic is the assistant's, drawn only when it is open to the operator
     qsShelf: (p) => p.shelf == null ? 0 : p.shelf,
     qsMeta: (p, id) => `[meta:${id}]`,
+    qsIncoming: () => '',   // §504's on-its-way line; this suite is about the repaint, not the line
+
     qsCountCell: (p, id) => `[count:${id}]`,
     qsCardFoot: (id) => `[foot:${id}]`,
     batChosen: () => [],

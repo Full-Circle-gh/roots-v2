@@ -67,7 +67,9 @@ ok(SCREEN.length > 0, 'screenReceiveTransfer is found');
 const before = "${xfrAskedTag(it)}${T('sent','发出')}";
 const hits = SCREEN.split(before).length - 1;
 ok(hits === 3, 'asked precedes sent on the count row, the receipt row and the confirm row (found ' + hits + ')');
-ok(/const diff=items\.filter\(it=>xfrCount\(it\)!==xfrSent\(it\)\|\|xfrAskedDiffers\(it\)\)/.test(SCREEN),
+// §504 adds a third clause (a line already added by hand); this suite owns only
+// the second, so it allows anything after it.
+ok(/const diff=items\.filter\(it=>xfrCount\(it\)!==xfrSent\(it\)\|\|xfrAskedDiffers\(it\)[|)]/.test(SCREEN),
    'the confirm screen lists a cut line even when counted in at what was sent');
 ok(grab('xfrAskedTag').includes("T('asked','申请')"), 'the label is the live pair asked / 申请');
 
