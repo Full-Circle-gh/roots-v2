@@ -71,6 +71,23 @@ const { spawnSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 
+// §496 rule 9 — Alipay's keys are read ONCE, when lib/payment-gateways.js and
+// routes/retail.js load, so the suite hands them a test pair before either
+// does. Nothing reaches Alipay: the Alipay section answers every call itself.
+// The menu's Alipay rail stays off behind SHOP_QR_ALIPAY until that section.
+{
+  const k = require('crypto').generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  process.env.ALIPAY_APP_ID = '2021000000000001';
+  process.env.ALIPAY_PRIVATE_KEY = k.privateKey;
+  process.env.ALIPAY_PUBLIC_KEY = k.publicKey;
+  delete process.env.ALIPAY_GATEWAY;
+  delete process.env.SHOP_QR_ALIPAY;
+}
+
 require(path.join(ROOT, 'database.js'));
 const { tdb } = require(path.join(ROOT, 'lib', 'tenant-db.js'));
 const router  = require(path.join(ROOT, 'routes', 'shop-menu.js'));
@@ -1318,7 +1335,8 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.ok(!/data-pm="[a-z]+" class="on"/.test(row), 'a way to pay arrived already chosen');
         assert.ok(/class="pw-h"/.test(row) && /支付方式/.test(row) && /Pay with/.test(row),
           'the row has no question over it, in one language or both');
-        assert.ok(/var pm=\(bar\.getAttribute\('data-wxpay'\)==='1'\)\?'':'counter'/.test(r.body),
+        // §496 rule 9 — either rail on the page leaves the choice empty.
+        assert.ok(/var hasWx=bar\.getAttribute\('data-wxpay'\)==='1';var pm=\(hasWx\|\|bar\.getAttribute\('data-alipay'\)==='1'\)\?'':'counter'/.test(r.body),
           'the script still starts with a payment chosen');
         assert.ok(/if\(!pm&&pw&&!pw\.hidden&&!vOff\(total\(\)\)\)\{/.test(r.body),
           'Place order no longer refuses an unchosen payment');
@@ -1836,6 +1854,186 @@ const soldOut = (row) => /class="sold"/.test(row);
       restoreOa();
       feieMod.printContent = realPrint;
       feieMod.feieEnabled = realEnabled;
+    }
+
+    // ── One-tap Alipay (§496 rule 9) ────────────────────────────────────────
+    // Ash, 2026-10-27: "when its H5 i want an integrated alipay function", shown
+    // only outside WeChat. The suite's Alipay keys were set before any module
+    // loaded (top of file); the rail's own switch is what these checks turn.
+    // Alipay itself is the one thing faked: every call the gateway makes to
+    // openapi.alipay.com is answered here, and recorded, so what is asserted is
+    // which questions our code asked and what it did with the answers.
+    console.log('\nOne-tap Alipay on the menu (§496 rule 9)');
+    const aliSlips = [];
+    feieMod.enabled = () => true;
+    feieMod.printContent = (content) => { aliSlips.push(String(content || '')); return Promise.resolve({ ok: true }); };
+    const realFetch = global.fetch;
+    const aliCalls = [];
+    let aliTradeStatus = 'WAIT_BUYER_PAY';
+    global.fetch = (u, o) => {
+      if (String(u).startsWith('https://openapi.alipay.com/')) {
+        const p = new URLSearchParams(String(o && o.body || ''));
+        const method = p.get('method');
+        aliCalls.push({ method, biz: JSON.parse(p.get('biz_content') || '{}') });
+        const key = method.replace(/\./g, '_') + '_response';
+        const biz = method === 'alipay.trade.query'
+          ? { code: '10000', msg: 'Success', trade_status: aliTradeStatus }
+          : { code: '10000', msg: 'Success' };
+        return Promise.resolve(new Response(JSON.stringify({ [key]: biz }), { headers: { 'Content-Type': 'application/json' } }));
+      }
+      return realFetch(u, o);
+    };
+    const ALI_WX_UA = { 'user-agent': 'Mozilla/5.0 (iPhone) MicroMessenger/8.0.42 NetType/WIFI Language/zh_CN' };
+    const ALI_PLAIN_UA = { 'user-agent': 'Mozilla/5.0 (iPhone) Version/16.6 Mobile/15E148 Safari/604.1' };
+    const placeAli = async (name) => {
+      await resetOrderLimit();
+      const r = await post(`/s/${LIVE}/order`, {
+        name, pay_method: 'alipay', items: [{ store_product_id: P_MADE_ON, qty: 1 }],
+      });
+      assert.strictEqual(r.status, 201, JSON.stringify(r.json));
+      const row = db.prepare('SELECT id, order_no, payment_method, print_status, pay_token, total FROM retail_orders WHERE order_no = ?')
+        .get(r.json.data.order_no);
+      return { r, row };
+    };
+    try {
+      delete process.env.SHOP_QR_WECHAT_PAY;
+      delete process.env.SHOP_QR_ALIPAY;
+
+      await checkAsync('ALIPAY IS OFF behind its own switch: no control, and a submit claiming it is a counter order', async () => {
+        const page = await get(`/s/${LIVE}`);
+        // The row and the pop-up, not the whole page: the basket script names
+        // the Alipay buttons in order to hide them inside WeChat.
+        assert.ok(!/<button type="button" data-p[mq]="alipay"/.test(page.body), 'an Alipay control reached a menu whose switch is off');
+        assert.ok(!/data-alipay/.test((/<div class="cbar"[^>]*>/.exec(page.body) || [''])[0]), 'the bar advertised Alipay');
+        aliSlips.length = 0;
+        const { r, row } = await placeAli('Off');
+        assert.strictEqual(r.json.data.pay_url, undefined, 'a payment page was handed out with the switch off');
+        assert.strictEqual(row.payment_method, 'offline');
+        await settle();
+        assert.strictEqual(aliSlips.length, 1, 'a counter-routed order did not print on submit');
+      });
+
+      process.env.SHOP_QR_ALIPAY = '1';
+
+      await checkAsync('switched on, the basket offers Alipay beside the counter, in both languages, and the pop-up does too', async () => {
+        const page = await get(`/s/${LIVE}`);
+        assert.ok(/data-alipay="1"/.test((/<div class="cbar"[^>]*>/.exec(page.body) || [''])[0]), 'the bar was not told');
+        const row = (page.body.match(/<div id="cPw">[\s\S]*?<\/div><\/div>/) || [''])[0];
+        assert.ok(/data-pm="alipay"/.test(row) && /<span class="l-en">Alipay<\/span><span class="l-cn">支付宝<\/span>/.test(row),
+          'the Alipay choice is missing, or lost a language');
+        assert.ok(/data-pm="counter"/.test(row), 'the counter choice went missing');
+        assert.ok(!/data-pm="wechat"/.test(row), 'WeChat Pay appeared with its own rail off');
+        assert.ok(/data-pq="alipay"/.test(page.body), 'the "please choose" pop-up does not offer Alipay');
+      });
+
+      await checkAsync('INSIDE WECHAT the script hides Alipay — and the page bytes are still one for every browser (§47)', async () => {
+        const a = await get(`/s/${LIVE}`, ALI_WX_UA);
+        const b = await get(`/s/${LIVE}`, ALI_PLAIN_UA);
+        assert.strictEqual(a.body, b.body, 'the menu now differs by browser');
+        assert.ok(/if\(inWx\)\{var ab=document\.querySelectorAll\('button\[data-pm="alipay"\],button\[data-pq="alipay"\]'\)/.test(a.body),
+          'nothing hides Alipay inside WeChat');
+        assert.ok(/\.pw button\[hidden\]\{display:none\}/.test(a.body), 'a hidden Alipay button would still be drawn');
+      });
+
+      let ali;
+      await checkAsync('PLACED WITH ALIPAY: tendered alipay from the start, sent on with ?ali=go, and NOT printed yet', async () => {
+        aliSlips.length = 0;
+        ali = await placeAli('Lan');
+        assert.strictEqual(ali.row.payment_method, 'alipay', 'the till would ring for an order being paid on the phone');
+        assert.strictEqual(ali.r.json.data.pay_url, `/s/${LIVE}/pay/${ali.row.pay_token}?ali=go`);
+        assert.strictEqual(ali.r.json.data.order_url, `/s/${LIVE}/pay/${ali.row.pay_token}`,
+          'the remembered address would start a charge every time it was opened');
+        await settle();
+        assert.strictEqual(aliSlips.length, 0, 'an Alipay order printed before it was paid');
+      });
+
+      await checkAsync('?ali=go sends the browser to Alipay\'s phone cashier, for the order\'s own total, and back to the order', async () => {
+        const res = await fetch(`http://127.0.0.1:${PORT}${ali.r.json.data.pay_url}`, { redirect: 'manual', headers: ALI_PLAIN_UA });
+        assert.strictEqual(res.status, 302, 'the order page did not hand over to Alipay');
+        const loc = new URL(res.headers.get('location'));
+        assert.strictEqual(loc.origin + loc.pathname, 'https://openapi.alipay.com/gateway.do');
+        assert.strictEqual(loc.searchParams.get('method'), 'alipay.trade.wap.pay');
+        const biz = JSON.parse(loc.searchParams.get('biz_content'));
+        assert.strictEqual(biz.product_code, 'QUICK_WAP_WAY');
+        assert.strictEqual(biz.total_amount, Number(ali.row.total).toFixed(2), 'the charge is not the order\'s total');
+        assert.strictEqual(biz.out_trade_no, 'FC' + ali.row.order_no, 'the notify could not find this order');
+        assert.ok(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(biz.time_expire || ''), `no Alipay-format expiry: ${biz.time_expire}`);
+        assert.ok(loc.searchParams.get('return_url').endsWith(`/s/${LIVE}/pay/${ali.row.pay_token}`),
+          'Alipay would send the customer somewhere other than their order');
+        assert.ok(loc.searchParams.get('sign'), 'the request is unsigned');
+        const pay = db.prepare("SELECT method, out_trade_no FROM retail_payments WHERE order_id = ? AND status = 'pending'").get(ali.row.id);
+        assert.deepStrictEqual({ ...pay }, { method: 'alipay', out_trade_no: 'FC' + ali.row.order_no });
+      });
+
+      await checkAsync('BACK FROM ALIPAY, NOT YET PAID: the order page waits, offers Pay with Alipay, and sends nobody anywhere', async () => {
+        aliTradeStatus = 'WAIT_BUYER_PAY';
+        aliCalls.length = 0;
+        const res = await fetch(`http://127.0.0.1:${PORT}/s/${LIVE}/pay/${ali.row.pay_token}`, { redirect: 'manual', headers: ALI_PLAIN_UA });
+        assert.strictEqual(res.status, 200, 'returning to the order threw the customer into another payment');
+        const body = await res.text();
+        assert.ok(/等待付款确认…/.test(body) && /Waiting for payment…/.test(body), 'the waiting line is missing a language');
+        assert.ok(body.includes(`href="/s/${LIVE}/pay/${ali.row.pay_token}?ali=go"`) && /支付宝支付/.test(body),
+          'there is no way back to Alipay from the order');
+        assert.ok(/取消订单/.test(body), 'the order can no longer be cancelled');
+        assert.ok(aliCalls.some(c => c.method === 'alipay.trade.query'), 'the page did not ask Alipay before drawing');
+        await settle();
+        assert.strictEqual(aliSlips.length, 0, 'waiting for Alipay printed a slip');
+      });
+
+      await checkAsync('PAID: the status question settles it, the page says so, and the slip prints once', async () => {
+        aliTradeStatus = 'TRADE_SUCCESS';
+        const st = await get(`/s/${LIVE}/pay/${ali.row.pay_token}/state`);
+        // A counter order is finished the moment it is paid (isTerminalOnPaid).
+        assert.strictEqual(JSON.parse(st.body).status, 'delivered', st.body);
+        await settle();
+        assert.strictEqual(aliSlips.length, 1, `paying printed ${aliSlips.length} slips`);
+        const page = await get(`/s/${LIVE}/pay/${ali.row.pay_token}`, ALI_PLAIN_UA);
+        assert.ok(/支付成功！/.test(page.body), 'a paid order was not shown as paid');
+        await settle();
+        assert.strictEqual(aliSlips.length, 1, 'opening the paid order printed again');
+      });
+
+      await checkAsync('INSIDE WECHAT an Alipay order goes to the counter, which prints it', async () => {
+        aliSlips.length = 0;
+        const o = await placeAli('Wu');
+        const res = await fetch(`http://127.0.0.1:${PORT}${o.r.json.data.pay_url}`, { redirect: 'manual', headers: ALI_WX_UA });
+        assert.strictEqual(res.status, 200, 'WeChat was sent to Alipay, which it does not open');
+        assert.ok(/请到收银台付款。/.test(await res.text()), 'the customer was left with nothing to do');
+        await settle();
+        assert.strictEqual(aliSlips.length, 1, 'the counter fallback did not print');
+      });
+
+      await checkAsync('CANCELLING asks Alipay first, then closes the trade so it cannot be paid later', async () => {
+        aliTradeStatus = 'WAIT_BUYER_PAY';
+        const o = await placeAli('Qi');
+        await fetch(`http://127.0.0.1:${PORT}${o.r.json.data.pay_url}`, { redirect: 'manual', headers: ALI_PLAIN_UA });
+        aliCalls.length = 0;
+        const res = await fetch(`http://127.0.0.1:${PORT}/s/${LIVE}/order/${o.row.pay_token}/cancel`, {
+          method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: '',
+        });
+        assert.strictEqual(res.status, 303);
+        await settle();
+        assert.strictEqual(db.prepare('SELECT status FROM retail_orders WHERE id = ?').get(o.row.id).status, 'cancelled');
+        const methods = aliCalls.map(c => c.method);
+        assert.deepStrictEqual(methods, ['alipay.trade.query', 'alipay.trade.close'], `asked Alipay: ${methods.join(', ')}`);
+        assert.strictEqual(aliCalls[1].biz.out_trade_no, 'FC' + o.row.order_no);
+      });
+
+      await checkAsync('...and an order Alipay says was PAID is not cancelled under the money', async () => {
+        const o = await placeAli('Su');
+        await fetch(`http://127.0.0.1:${PORT}${o.r.json.data.pay_url}`, { redirect: 'manual', headers: ALI_PLAIN_UA });
+        aliTradeStatus = 'TRADE_SUCCESS';
+        await fetch(`http://127.0.0.1:${PORT}/s/${LIVE}/order/${o.row.pay_token}/cancel`, {
+          method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: '',
+        });
+        assert.strictEqual(db.prepare('SELECT status FROM retail_orders WHERE id = ?').get(o.row.id).status, 'delivered',
+          'a paid Alipay order was cancelled');
+      });
+    } finally {
+      global.fetch = realFetch;
+      delete process.env.SHOP_QR_ALIPAY;
+      feieMod.printContent = realPrint;
+      feieMod.enabled = realEnabled;
     }
 
   } finally {
