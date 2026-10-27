@@ -341,9 +341,16 @@ button{font:inherit;color:inherit;margin:0}
    One row per item that asks something, one chip per answer; a chip is the
    same switch as a tile, for "out of crackers" rather than "out of hummus".
    The rows grow with their chips, so only in this mode may a grid row be
-   taller than its tile. */
-.grid.so{grid-auto-rows:minmax(100px,auto)}
-.grid.so.pics{grid-auto-rows:minmax(180px,auto)}
+   taller than its tile.
+   PLAIN auto, WITH THE TILE CARRYING ITS OWN HEIGHT. The rows used to be
+   minmax(100px,auto), and Chrome sized a chip row against a wider width than
+   it drew at: on a 1180px iPad the Dip Sampler row came out 206px for 233px of
+   chips, at 1024 148px for 285px, and the next item's chips drew over the
+   last line. Plain auto rows size to what is actually drawn (the same reason
+   .grid.has-best uses one), so the tile's height moved onto the tile. */
+.grid.so,.grid.so.pics{grid-auto-rows:auto}
+.grid.so .tile{height:100px}
+.grid.so.pics .tile{height:180px}
 .so-opts{grid-column:1/-1;display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .so-oh{font-size:14px;font-weight:500}
 .so-oh .vl{font-style:normal;font-weight:400;color:var(--td-text2);margin-left:6px}
