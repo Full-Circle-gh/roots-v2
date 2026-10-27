@@ -63,7 +63,7 @@ console.log('\n1 · marking an order paid on an international card');
 const ROUTE = "router.patch('/api/retail-admin/orders/:id/status'";
 const r0 = RETAIL_SRC.indexOf(ROUTE);
 assert.notStrictEqual(r0, -1, 'the status route moved');
-const ANCHOR = '/* §450 — the international-card 4%, on THIS path too';
+const ANCHOR = '/* §450 — the international-card fee, on THIS path too';
 const a0 = RETAIL_SRC.indexOf(ANCHOR, r0);
 assert.notStrictEqual(a0, -1, 'the §450 block is gone from the status route');
 let BLOCK = braceSlice(RETAIL_SRC, RETAIL_SRC.indexOf('if (offlinePay) {', a0));
@@ -90,27 +90,28 @@ function markPaid(d, offlinePay) {
   return d.prepare('SELECT total, card_surcharge_fee, status FROM retail_orders WHERE id = 1').get();
 }
 
-it('a ¥50 QR order paid on an international card becomes ¥52', () => {
+// §501 — the rate is 5% (it was 4%), so ¥50 becomes ¥52.50.
+it('a ¥50 QR order paid on an international card becomes ¥52.50', () => {
   const row = markPaid(fixture(50, 0, 'wechat'), 'intl_card');
-  assert.deepStrictEqual([row.total, row.card_surcharge_fee], [52, 2]);
+  assert.deepStrictEqual([row.total, row.card_surcharge_fee], [52.5, 2.5]);
 });
 it('the same order paid in cash is the ¥50 it was', () => {
   const row = markPaid(fixture(50, 0, 'wechat'), 'cash');
   assert.deepStrictEqual([row.total, row.card_surcharge_fee], [50, 0]);
 });
 it('an order already carrying the fee is never charged it twice', () => {
-  const row = markPaid(fixture(52, 2, 'intl_card'), 'intl_card');
-  assert.deepStrictEqual([row.total, row.card_surcharge_fee], [52, 2]);
+  const row = markPaid(fixture(52.5, 2.5, 'intl_card'), 'intl_card');
+  assert.deepStrictEqual([row.total, row.card_surcharge_fee], [52.5, 2.5]);
 });
 it('an order created on the card and settled in cash loses the fee', () => {
-  const row = markPaid(fixture(52, 2, 'intl_card'), 'cash');
+  const row = markPaid(fixture(52.5, 2.5, 'intl_card'), 'cash');
   assert.deepStrictEqual([row.total, row.card_surcharge_fee], [50, 0]);
 });
 it('a fully credit-paid order (¥0 left) carries no fee', () => {
   const row = markPaid(fixture(0, 0, 'points'), 'intl_card');
   assert.deepStrictEqual([row.total, row.card_surcharge_fee], [0, 0]);
 });
-it('the payment row is written AFTER the fee lands, so it records the ¥52', () => {
+it('the payment row is written AFTER the fee lands, so it records the ¥52.50', () => {
   const blockAt = RETAIL_SRC.indexOf(ANCHOR, r0);
   const update = RETAIL_SRC.indexOf('tdb().prepare(`UPDATE retail_orders SET ${sets.join', blockAt);
   const payRead = RETAIL_SRC.indexOf("SELECT total FROM retail_orders WHERE id = ?", blockAt);
@@ -135,6 +136,16 @@ it('the till and lib/card-surcharge.js agree on every amount from ¥0.01 to ¥30
     if (a !== b) throw new Error(`¥${due}: till ${a}, server ${b}`);
   }
 });
+it('§501 — the rate is 5%, on the server and on the till', () => {
+  assert.strictEqual(require('../lib/card-surcharge').CARD_SURCHARGE_PCT, 5);
+  assert.strictEqual(Number(pctM[1]), 5);
+  assert.strictEqual(cardSurcharge(INTL_CARD, 100), 5);
+});
+it('§501 — the order history and the receipt name the fee without a rate', () => {
+  for (const f of ['public/retail-admin/04-orders.js', 'public/m.html', 'lib/feie.js']) {
+    assert.doesNotMatch(read(f), /Card fee [0-9]+%/, f + ' prints a rate beside a stored fee');
+  }
+});
 it('and the till charges nothing extra for any other wallet', () => {
   assert.strictEqual(tillFee('wechat_offline', 100), 0);
 });
@@ -154,13 +165,14 @@ it('the create route accepts it, so a counter sale on it is not refused', () => 
   assert.ok(/const ALLOWED_PAY = \[[\s\S]*?'intl_card'[\s\S]*?\];/.test(RETAIL_SRC));
 });
 it('the receipt prints the fee as its own line, so the column adds up to TOTAL', () => {
-  assert.ok(FEIE_SRC.includes("row('Card fee 4%', money(o.card_surcharge_fee))"));
+  // §501 — no rate on the line: a reprint of a 4% order must not say 5%.
+  assert.ok(FEIE_SRC.includes("row('Card fee', money(o.card_surcharge_fee))"));
 });
 for (const [file, needle] of [
   ['public/retail-admin/04-orders.js', "['intl_card',"],
   ['public/retail-admin/01-core.js', "intl_card: 'International card · 外卡'"],
   ['public/retail-admin/03-dashboard.js', "intl_card: ['International card', '外卡']"],
-  ['public/m.html', "['intl_card','International card +4%','外卡 +4%']"],
+  ['public/m.html', "['intl_card','International card +5%','外卡 +5%']"],
   ['public/m.html', "intl_card:['International card','外卡']"],
 ]) {
   it(`${file} names it`, () => assert.ok(read(file).includes(needle)));
