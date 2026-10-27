@@ -798,10 +798,29 @@ button{font:inherit;color:inherit;margin:0}
 .wal.on{border-color:var(--td-text);background:var(--td-raised)}
 .wal.on .rad{border-color:var(--td-text)}
 .wal.on .rad::after{content:"";width:11px;height:11px;border-radius:50%;background:var(--td-text)}
-.more{
-  width:100%;min-height:44px;border:0;background:transparent;color:var(--td-text2);
-  font-size:13px;font-weight:500;text-align:left;padding:4px 0;
+/* §500 — the international card, last and set apart: a mis-tap adds 4%. */
+.wal.sep{margin-top:16px}
+/* §500 — the cash box, under Cash once picked. */
+.cashbox{
+  margin:-2px 0 10px;padding:12px 14px;border-radius:var(--r-control);
+  background:var(--td-raised);display:flex;flex-direction:column;gap:8px;
 }
+.cb-l{font-size:13px;color:var(--td-text2)}
+.cb-in{
+  height:48px;padding:0 12px;border-radius:var(--r-control);border:1px solid var(--td-border);
+  background:var(--td-surface);color:var(--td-text);font:inherit;font-size:20px;
+  font-variant-numeric:tabular-nums;-webkit-user-select:text;user-select:text;
+}
+.cb-q{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.cb-b{
+  min-height:44px;padding:0 4px;border-radius:var(--r-pill);border:1px solid var(--td-border);
+  background:var(--td-surface);font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+.cb-b.on{border-color:var(--td-text);background:var(--td-text);color:var(--td-paper)}
+.cb-ch{display:flex;align-items:baseline;justify-content:space-between;min-height:30px}
+.cb-k{font-size:15px;color:var(--td-text2)}
+.cb-v{font-size:26px;font-weight:500;font-variant-numeric:tabular-nums}
+.cb-v.short{color:var(--td-brick-ink)}
 /* ---- store credit (§93) ----
    The same row as a wallet, because it is the same act — choosing what pays for
    this sale — and a cashier should not have to learn two controls for it. Two
@@ -857,6 +876,9 @@ button{font:inherit;color:inherit;margin:0}
 .mark svg{width:50px;height:50px}
 .done h2{margin:0;font-size:24px;font-weight:500}
 .done .meta{font-size:14px;color:var(--td-text2);font-variant-numeric:tabular-nums;text-align:center}
+/* §500 — the change due, large enough to read while counting coins. */
+.done .dchange{font-size:16px;color:var(--td-text2);font-variant-numeric:tabular-nums;text-align:center}
+.done .dchange b{font-size:28px;font-weight:500;color:var(--td-text);margin-left:4px}
 .drow{display:flex;gap:12px;align-items:center}
 .dprim{
   min-height:60px;padding:0 28px;border-radius:var(--r-control);
@@ -1348,7 +1370,14 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        doc v1.324. The note's label is the New order form's own, copied whole. */
     hold:         ['Hold', '挂单'],                    // vocab: composed §457
     held:         ['Held', '已挂单'],                  // vocab: composed §457
-    noteOpt:      ['Note (optional)', '备注(可选)']    // admin: 04-orders.js New order note
+    noteOpt:      ['Note (optional)', '备注(可选)'],   // admin: 04-orders.js New order note
+    /* §500 — what a cash customer handed over, and what goes back. The first
+       is the admin's own, copied whole; the other two are COMPOSED by Claude
+       and declared in the vocabulary doc v1.357: nothing in the product had
+       to tell a cashier the change due, or that the cash did not cover it. */
+    cashGiven:    ['Amount received', '收到金额'],     // admin: 04-orders.js carrier claim
+    change:       ['Change', '找零'],                  // vocab: composed §500
+    short:        ['Short', '还差']                    // vocab: composed §500
   };
   function T(k) { var p = STRINGS[k]; return cuT(p[0], p[1]); }
 
@@ -1357,23 +1386,26 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
      OFFLINE_PAY_METHODS server-side, so what the till writes is what the
      admin's own Mark-paid control has always written.
 
-     WeChat / Alipay leads because it is what a counter actually takes; the
-     others are real tenders that must stay reachable, folded behind one tap
-     so they do not compete with it. */
+     WeChat / Alipay leads because it is what a counter actually takes.
+     §500 — EVERY TENDER IS ON SCREEN. They used to sit folded behind an
+     "Other" tap, which cost a tap on every cash sale (Ash: "i want to see all
+     payment method without clicking show more"). The international card stays
+     LAST and set apart (`sep`): its 4% lands on the bill the moment it is
+     tapped and the subline names it, so a mis-tap is seen before Mark paid. */
   var WALLETS = [
     /* §451 — ONE choice for WeChat and Alipay (Ash: the shop's terminal takes
        both and charges them the same, so asking which is a question nobody
        needs answered). The halves are the two old live labels joined; the
        old two values stay valid server-side for every past row. */
-    { v: 'wechat_alipay_offline', en: 'WeChat / Alipay (off-app)', cn: '微信 / 支付宝(线下)', lead: true },
+    { v: 'wechat_alipay_offline', en: 'WeChat / Alipay (off-app)', cn: '微信 / 支付宝(线下)' },
     { v: 'cash',           en: 'Cash',              cn: '现金' },
     { v: 'bank_transfer',  en: 'Bank transfer',     cn: '银行转账' },
     { v: 'other',          en: 'Other',             cn: '其他' },
     // §450 — adds 4% to what the card takes (lib/card-surcharge.js), and the
-    // label says so BEFORE the tap. Folded with the other three rather than
-    // led: a mis-tap here charges a local customer 4% for nothing, so it is one
-    // deliberate tap away. Composed pair, declared in the vocabulary doc v1.320.
-    { v: 'intl_card',      en: 'International card +4%', cn: '外卡 +4%' }
+    // label says so BEFORE the tap. Last, and set apart from the rest (§500):
+    // a mis-tap here charges a local customer 4% for nothing. Composed pair,
+    // declared in the vocabulary doc v1.320.
+    { v: 'intl_card',      en: 'International card +4%', cn: '外卡 +4%', sep: true }
   ];
 
   /* ====================================================================
@@ -1488,7 +1520,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     home: null, homeLabel: null,  // where Back goes, and what it says — /api/backend/me
     leaveOpen: false,          // is the "leave without saving?" question up?
     mode: 'manual',
-    wallet: null, moreOpen: false, busy: false, err: '',
+    wallet: null, cashIn: '', busy: false, err: '',
     /* Store credit the cashier has chosen to spend on THIS sale (§93), and the
        shop's rules for it.
 
@@ -2706,7 +2738,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       name: o.recipient_name || '', total: Number(o.total) || 0, loading: true
     };
     S.cxArm = false;
-    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.disc = null;
+    S.wallet = null; S.useP = false; S.useB = false; S.cashIn = ''; S.err = ''; S.disc = null;
     // The sheet is where the rail lives on a phone, and it is closed by
     // default. Opening it is what makes "check the order" a thing that has
     // happened rather than a thing the cashier could have done.
@@ -2757,7 +2789,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   function cancelRecall() {
     S.cxArm = false;
     S.recall = null; S.lines = []; S.sel = null;
-    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.disc = null;
+    S.wallet = null; S.useP = false; S.useB = false; S.cashIn = ''; S.err = ''; S.disc = null;
     S.view = 'till'; S.pane = 'pend'; S.paneTouched = true;
     render();
   }
@@ -2871,7 +2903,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (!heldPut(bill)) { S.err = T('didNotSave'); return false; }
     heldStockPush(id, bill.lines);
     S.lines = []; S.sel = null; S.customer = null; S.heldId = null; S.heldLast = '';
-    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.disc = null;
+    S.wallet = null; S.useP = false; S.useB = false; S.cashIn = ''; S.err = ''; S.disc = null;
     return true;
   }
 
@@ -2918,7 +2950,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     S.sel = null;
     S.customer = bill.customer ? custRow({ id: bill.customer.id, nickname: bill.customer.nickname,
                                            points: bill.customer.points, balance: bill.customer.balance }) : null;
-    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.disc = null;
+    S.wallet = null; S.useP = false; S.useB = false; S.cashIn = ''; S.err = ''; S.disc = null;
     // Back to the menu, so the coffee they just ordered is one tap away; and
     // on a phone the sheet opens, as it does for a recall.
     S.pane = 'menu'; S.paneTouched = true; S.sheetOpen = true;
@@ -3751,11 +3783,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // answered on the screen the customer is looking at.
     var fee = cardFee();
     if (fee > 0) subline += ' · ' + esc(T('cardFee')) + ' ' + money(fee);
-    var lead = WALLETS.filter(function (w) { return w.lead; });
-    var rest = WALLETS.filter(function (w) { return !w.lead; });
+    // §500 — every tender on screen, and the cash box under Cash once picked.
     var walletBtn = function (w) {
-      return '<button class="wal' + (S.wallet === w.v ? ' on' : '') + '" type="button" data-wal="' + w.v + '">'
-           + '<span class="rad"></span><span>' + esc(cuT(w.en, w.cn)) + '</span></button>';
+      return '<button class="wal' + (S.wallet === w.v ? ' on' : '') + (w.sep ? ' sep' : '') + '" type="button" data-wal="' + w.v + '">'
+           + '<span class="rad"></span><span>' + esc(cuT(w.en, w.cn)) + '</span></button>'
+           + (w.v === 'cash' && S.wallet === 'cash' ? cashBox() : '');
     };
     el.innerHTML =
       '<div class="stop"><button class="back" type="button" data-go="till">'
@@ -3796,19 +3828,65 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
          order still names its tender: confirm() sends 'points' or 'balance',
          which is what actually settled it. */
       +     (due > 0 ? '<div class="lb">' + esc(T('payMethod')) + '</div>' : '')
-      +     (due > 0 ? lead.map(walletBtn).join('') : '')
-      +     (due > 0
-              ? (S.moreOpen ? rest.map(walletBtn).join('')
-                            : '<button class="more" type="button" data-more="1">' + esc(T('other')) + ' ›</button>')
-              : '')
+      +     (due > 0 ? WALLETS.map(walletBtn).join('') : '')
       +   '</div>'
       + '</div>'
       + '<div class="sfoot">'
       +   (S.err ? '<div class="serr">' + esc(S.err) + '</div>' : '')
       +   '<button class="sconf" type="button" data-confirm="1"' + (canConfirm() ? '' : ' disabled') + '>'
       +     esc(S.busy ? T('markPaid') + '…' : T('markPaid')) + '</button>'
-      +   '<div class="shint">' + esc(canConfirm() || S.busy ? '' : T('payMethod')) + '</div>'
+      +   '<div class="shint" id="shint">' + esc(settleHint()) + '</div>'
       + '</div>';
+  }
+
+  /* §500 — CASH IN, CHANGE OUT. On screen only: the order records the sale
+     and the tender, exactly as before, and nothing here is sent. What the
+     customer handed over is a fact about the drawer for the next ten seconds,
+     not about the books. Typing is optional — exact cash is the common case
+     and Mark paid works without it — but a figure that does not cover the bill
+     holds Mark paid until it is corrected, so a short payment is never booked
+     as a full one. */
+  function cashGiven() {
+    var n = parseFloat(String(S.cashIn || '').replace(/[^0-9.]/g, ''));
+    return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+  }
+  function cashShort() {
+    var g = S.wallet === 'cash' ? cashGiven() : null;
+    if (g == null) return 0;
+    var d = chargeDue();
+    return g < d ? Math.round((d - g) * 100) / 100 : 0;
+  }
+  // The exact amount, then the next round figures a customer is likely to
+  // hand over: ¥73 gives 80, 100 and 200; ¥164 gives 170, 200 and 300.
+  function cashQuick(due) {
+    var up = function (step) { return Math.ceil(due / step) * step; };
+    var out = [];
+    [up(10), up(50), up(100), up(100) + 100].forEach(function (v) {
+      if (v > due && out.indexOf(v) < 0 && out.length < 3) out.push(v);
+    });
+    return [due].concat(out);
+  }
+  function cashLine() {
+    var g = cashGiven();
+    if (g == null) return '';
+    var sh = cashShort();
+    if (sh > 0) return '<span class="cb-k">' + esc(T('short')) + '</span><span class="cb-v short">' + money(sh) + '</span>';
+    return '<span class="cb-k">' + esc(T('change')) + '</span><span class="cb-v">' + money(Math.round((g - chargeDue()) * 100) / 100) + '</span>';
+  }
+  function cashBox() {
+    var due = chargeDue();
+    return '<div class="cashbox">'
+      + '<label class="cb-l" for="cash-in">' + esc(T('cashGiven')) + '</label>'
+      + '<input class="cb-in" id="cash-in" type="text" inputmode="decimal" autocomplete="off" value="' + esc(S.cashIn || '') + '">'
+      + '<div class="cb-q">' + cashQuick(due).map(function (v) {
+          return '<button class="cb-b' + (cashGiven() === v ? ' on' : '') + '" type="button" data-cash="' + v + '">' + money(v) + '</button>';
+        }).join('') + '</div>'
+      + '<div class="cb-ch" id="cash-ch">' + cashLine() + '</div>'
+      + '</div>';
+  }
+  function settleHint() {
+    if (canConfirm() || S.busy) return '';
+    return cashShort() > 0 ? T('short') + ' ' + money(cashShort()) : T('payMethod');
   }
 
   function canConfirm() {
@@ -3816,7 +3894,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // A recalled order has no lines on this till and never will — it is settled,
     // not built — so "there is something to charge for" is the recall OR a
     // basket, never the basket alone.
-    return !S.busy && (!!S.recall || S.lines.length > 0) && m && m.ready(S);
+    return !S.busy && (!!S.recall || S.lines.length > 0) && m && m.ready(S) && !(cashShort() > 0);
   }
 
   function doneHtml() {
@@ -3856,6 +3934,12 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       +     (w ? esc(cuT(w.en, w.cn)) + ' · ' : '')
       +     (d.cardFee > 0 ? esc(T('cardFee')) + ' ' + money(d.cardFee) + ' · ' : '')
       +     esc(d.order_no || '') + '</div>'
+      /* §500 — the change, still on screen while the coins are counted out.
+         Only for cash, and only when the cashier typed what they were given. */
+      +   (w && w.v === 'cash' && d.cashIn != null && d.cashIn >= cash
+            ? '<div class="dchange">' + esc(T('cashGiven')) + ' ' + money(d.cashIn) + ' · '
+              + esc(T('change')) + ' <b>' + money(Math.round((d.cashIn - cash) * 100) / 100) + '</b></div>'
+            : '')
       +   '<div class="drow">'
       +     '<button class="dsec" type="button" data-print="1"' + (S.printState === 'busy' ? ' disabled' : '') + '>' + esc(printLabel) + '</button>'
       +     '<button class="dprim" type="button" data-go="reset">' + esc(T('newOrder')) + '</button>'
@@ -4117,7 +4201,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
                  wallet: S.wallet, tender: body.payment_method,
                  pointsAmount: Number(j.data.points_amount) || 0,
                  balanceUsed: Number(j.data.balance_used) || 0,
-                 cardFee: Number(j.data.card_surcharge_fee) || 0 };
+                 cardFee: Number(j.data.card_surcharge_fee) || 0,
+                 cashIn: S.wallet === 'cash' ? cashGiven() : null };
       S.view = 'done'; S.printState = 'idle';
       // §457 — a held bill that has just been paid is over. §461: its held
       // units went back to the shelf and the sale took them again, so they are
@@ -4182,7 +4267,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       var row = j.data || {};
       S.done = { id: r.id, order_no: r.order_no, wallet: S.wallet,
                  total: row.total != null ? Number(row.total) : r.total,
-                 cardFee: Number(row.card_surcharge_fee) || 0 };
+                 cardFee: Number(row.card_surcharge_fee) || 0,
+                 cashIn: S.wallet === 'cash' ? cashGiven() : null };
       S.view = 'done'; S.printState = 'idle';
       // It is not waiting any more. Dropped locally so the count is right the
       // instant the screen changes rather than up to fifteen seconds later —
@@ -4266,7 +4352,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
 
   function reset() {
     S.lines = []; S.sel = null; S.customer = null; S.heldId = null; S.heldLast = '';
-    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.done = null; S.disc = null;
+    S.wallet = null; S.useP = false; S.useB = false; S.cashIn = ''; S.err = ''; S.done = null; S.disc = null;
     S.view = 'till'; S.printState = 'idle';
     S.q = ''; $('q').value = '';
     // The sale is over, so the pane goes back to being defaulted rather than
@@ -4846,7 +4932,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (S.holdOpen && ev.target.id === 'holdpick') return closeHoldAsk();
       // §474 — tapping away from the discount sheet is not giving one.
       if (S.discOpen && ev.target.id === 'discpick') return closeDiscAsk();
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-so-c],[data-hold],[data-held],[data-disc],[data-disc-pct],[data-disc-why],[data-disc-mgr]');
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-cash],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-so-c],[data-hold],[data-held],[data-disc],[data-disc-pct],[data-disc-why],[data-disc-mgr]');
       if (!t) return;
       // §183 — the question sheet. Answered before anything else on the screen:
       // while it is up it is the only thing the cashier is being asked.
@@ -4942,7 +5028,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         S.err = '';
         return render();
       }
-      if (t.hasAttribute('data-more'))  { S.moreOpen = true; return render(); }
+      // §500 — a quick amount for the cash a customer handed over.
+      if (t.hasAttribute('data-cash'))  { S.cashIn = t.getAttribute('data-cash'); return render(); }
       if (t.hasAttribute('data-confirm')) return confirm();
       if (t.hasAttribute('data-print')) return reprint();
       if (t.hasAttribute('data-go'))    {
@@ -4982,6 +5069,21 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (e.target && e.target.id === 'disc-amt') discTyped();
     });
     $('q').addEventListener('input', function (e) { S.q = e.target.value || ''; $('q-clr').hidden = !S.q; renderGrid(); });
+    /* §500 — typing what the customer handed over. The change line, the quick
+       buttons' mark and Mark paid are updated in place rather than re-drawing
+       the screen, which would take the field, and the keyboard, away mid-number. */
+    $('settle').addEventListener('input', function (e) {
+      if (!e.target || e.target.id !== 'cash-in') return;
+      S.cashIn = e.target.value || '';
+      $('cash-ch').innerHTML = cashLine();
+      var g = cashGiven();
+      Array.prototype.forEach.call(document.querySelectorAll('.cb-b'), function (b) {
+        b.classList.toggle('on', g != null && Number(b.getAttribute('data-cash')) === g);
+      });
+      var c = document.querySelector('.sconf');
+      if (c) c.disabled = !canConfirm();
+      $('shint').textContent = settleHint();
+    });
     $('q-clr').addEventListener('click', function () { S.q = ''; $('q').value = ''; $('q-clr').hidden = true; renderGrid(); });
   }
 
