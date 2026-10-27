@@ -2525,8 +2525,10 @@ check('a tap anywhere else takes the question back down',
    an error into a state nothing on that view drew. A refused cancel and an
    expired session both came back as the control quietly disarming itself and
    not one word said, which is the "nothing else" of the report. */
+// §502 — the same box also carries S.note (news, not a failure), so the line
+// reads the message through tmsg; S.err still comes first.
 check('the till view can show what went wrong',
-  /te\.hidden = !\(S\.view === 'till' && S\.err\)/.test(POS_TILL_SRC), true);
+  /var tmsg = S\.err \|\| S\.note \|\| '';\s*te\.hidden = !\(S\.view === 'till' && tmsg\)/.test(POS_TILL_SRC), true);
 check('...and there is an element for it to show it in',
   /<div class="terr" id="till-err" hidden><\/div>/.test(POS_TILL_SRC), true);
 /* A 409 IS NOT A SAVE THAT FAILED. The till's list is up to fifteen seconds
