@@ -107,6 +107,22 @@ for (const file of files) {
                         FROM ${t} GROUP BY store_code ORDER BY store_code`, since);
     console.log(`\n 0 · ${k} imports by store code: ${rows.map(r => `${r.store_code} ${r.recent || 0} in window / ${r.ever} ever, last ${r.last_at}`).join(' · ') || 'none ever'}`);
   }
+  /* Is the platform reader alive for each store code, and what is it saying?
+     A reader that polls and logs errors, or polls and finds nothing, reads very
+     differently from one that stopped writing anything at all. */
+  for (const t of ['meituan_sync_log', 'eleme_sync_log']) {
+    if (!has(t)) continue;
+    for (const c of all(`SELECT store_code, MAX(created_at) AS last_at FROM ${t} GROUP BY store_code`)) {
+      const kinds = all(`SELECT event_type, status, COUNT(*) AS n, MAX(created_at) AS last_at FROM ${t}
+                          WHERE store_code = ? AND created_at >= datetime('now', '-7 days')
+                          GROUP BY event_type, status ORDER BY n DESC LIMIT 8`, c.store_code);
+      console.log(`   ${t} ${c.store_code}: last row ${c.last_at} · last 7 days: ${kinds.map(k => `${k.event_type}/${k.status} ${k.n}`).join(', ') || 'nothing'}`);
+      const ord = all(`SELECT event_type, status, created_at, substr(COALESCE(error_msg, detail, ''), 1, 140) AS msg FROM ${t}
+                        WHERE store_code = ? AND (event_type LIKE '%order%' OR COALESCE(error_msg,'') <> '')
+                        ORDER BY id DESC LIMIT 4`, c.store_code);
+      for (const o of ord) console.log(`      ${o.created_at} ${o.event_type}/${o.status} ${o.msg}`);
+    }
+  }
   const byCh = all(`SELECT store_id, channel, COUNT(*) AS n, MAX(placed_at) AS last_at FROM retail_orders
                      WHERE placed_at >= datetime('now', ?) GROUP BY store_id, channel ORDER BY store_id, n DESC`, since);
   console.log(`   orders in window by store and channel: ${byCh.map(r => `store ${r.store_id} ${r.channel} ${r.n}`).join(' · ')}`);
