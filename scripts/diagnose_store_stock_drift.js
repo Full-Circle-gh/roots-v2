@@ -90,11 +90,26 @@ for (const file of files) {
   const nameCols = all("SELECT name FROM pragma_table_info('retail_stores')").map(r => r.name);
   const label = ['name_en', 'name', 'name_cn', 'store_name'].find(c => nameCols.includes(c));
   const stores = all(`SELECT id, ${label ? label : "'store'"} AS label, COALESCE(is_active,1) AS active FROM retail_stores ORDER BY id`);
+  // store_products has name_en / name_cn and no `name`; the first run asked for
+  // `name` and printed every product as a bare id.
   const pname = (pid) => {
-    const r = all(`SELECT COALESCE(name_en, name, '') AS n FROM store_products WHERE id = ?`, pid)[0]
-           || all(`SELECT COALESCE(name_en, name, '') AS n FROM products WHERE id = ?`, pid)[0];
-    return (r && r.n ? r.n : '#' + pid).slice(0, 38);
+    const r = all(`SELECT COALESCE(NULLIF(name_en,''), name_cn, '') AS n FROM store_products WHERE id = ?`, pid)[0];
+    return ('#' + pid + ' ' + (r && r.n ? r.n : '')).trim().slice(0, 38);
   };
+
+  /* 0 · ARE CHANNEL ORDERS ARRIVING AT ALL, per store code. A store that sells
+     on a platform but shows no imports in the window takes no stock for any of
+     those sales. Printed once per database, before the per-store sections. */
+  for (const [t, k] of [['meituan_order_import', 'Meituan'], ['eleme_order_import', 'Eleme']]) {
+    if (!has(t)) continue;
+    const rows = all(`SELECT store_code, COUNT(*) AS ever, MAX(imported_at) AS last_at,
+                             SUM(imported_at >= datetime('now', ?)) AS recent
+                        FROM ${t} GROUP BY store_code ORDER BY store_code`, since);
+    console.log(`\n 0 · ${k} imports by store code: ${rows.map(r => `${r.store_code} ${r.recent || 0} in window / ${r.ever} ever, last ${r.last_at}`).join(' · ') || 'none ever'}`);
+  }
+  const byCh = all(`SELECT store_id, channel, COUNT(*) AS n, MAX(placed_at) AS last_at FROM retail_orders
+                     WHERE placed_at >= datetime('now', ?) GROUP BY store_id, channel ORDER BY store_id, n DESC`, since);
+  console.log(`   orders in window by store and channel: ${byCh.map(r => `store ${r.store_id} ${r.channel} ${r.n}`).join(' · ')}`);
 
   for (const s of stores) {
     const total = all(`SELECT COUNT(*) AS n FROM retail_stock_ledger WHERE store_id = ? AND created_at >= datetime('now', ?)`, s.id, since)[0];
@@ -267,6 +282,60 @@ for (const file of files) {
        ORDER BY since_at`, s.id);
     console.log(`    held till bills still holding stock after a day: ${held.length} (${held.reduce((a, h) => a + h.still_out, 0)} u)`);
     for (const h of held.slice(0, 6)) console.log(`   ${pad(String(h.note || '').slice(0, 40), 42)} ${h.still_out} u since ${h.since_at}`);
+
+    /* 12 · WHICH PRODUCTS THE CHAIN BREAKS ARE ON. A sale recorded as "was 0,
+       took 1, still 0" is a ledger row with no stock row under it. Is there a
+       stock row now, is the product made here at this shop, and how many such
+       sales — so a made-to-order drink can be told from a shelf product that
+       was never set up at this store. */
+    const brk = {};
+    for (const b of breaks) {
+      const k = b.product_id;
+      const o = brk[k] || (brk[k] = { n: 0, units: 0, first: b.created_at, last: b.created_at });
+      o.n++; o.units += (b.balance_after - b.delta - b.prev_bal); o.first = b.created_at < o.first ? b.created_at : o.first; o.last = b.created_at > o.last ? b.created_at : o.last;
+    }
+    const brkList = Object.entries(brk).sort((a, b) => b[1].n - a[1].n);
+    console.log(`\n12 · chain breaks by product: ${brkList.length} product(s)`);
+    for (const [pid, o] of brkList.slice(0, 15)) {
+      const row = all(`SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?`, s.id, pid)[0];
+      const mode = all(`SELECT sl.fulfilment_mode AS m FROM shop_listings sl JOIN shops sh ON sh.id = sl.shop_id
+                         WHERE sh.location_id = ? AND sl.store_product_id = ?`, s.id, pid)[0];
+      const kinds = all(`SELECT reason, COUNT(*) AS n FROM retail_stock_ledger WHERE store_id = ? AND product_id = ? GROUP BY reason ORDER BY n DESC`, s.id, pid)
+        .map(r => `${r.reason} ${r.n}`).join(', ');
+      console.log(`   ${pad(pname(pid), 40)} ${lpad(o.n, 3)}× (${o.units} u) ${o.first.slice(0, 10)}→${o.last.slice(0, 10)} · stock row: ${row ? row.physical_qty : 'NONE'} · listing: ${mode ? mode.m : 'none'} · ledger: ${kinds}`);
+    }
+
+    /* 13 · THE SAME-TOTAL PAIRS, COMPARED LINE BY LINE. Identical lines within
+       three minutes is a retried submit; different lines is two customers. */
+    const linesOf = (oid) => all(`SELECT product_id, qty FROM retail_order_items WHERE order_id = ? ORDER BY product_id, qty`, oid)
+      .map(r => `${r.product_id}x${r.qty}`).join(',');
+    const same = dup.filter(d => linesOf(d.a) === linesOf(d.b));
+    console.log(`\n13 · same-total counter pairs with IDENTICAL lines: ${same.length} of ${dup.length}`);
+    for (const d of same.slice(0, 8)) {
+      const at = all(`SELECT placed_at, status FROM retail_orders WHERE id IN (?, ?) ORDER BY id`, d.a, d.b);
+      console.log(`   orders ${d.a} & ${d.b} · ${linesOf(d.a)} · ${at.map(x => `${x.placed_at} ${x.status}`).join(' | ')}`);
+    }
+
+    /* 14 · RECOUNTS TAKEN WHILE SOLD GOODS WERE STILL ON THE SHELF. Stock comes
+       off at payment; the goods leave at packing. A recount between the two
+       counts those units again. For each recount, the units of that product on
+       this store's orders that were paid before it and not yet dispatched,
+       delivered or cancelled when it was saved. */
+    const rc = all(`
+      SELECT l.id, l.product_id, l.delta, l.created_at,
+             (SELECT COALESCE(SUM(i.qty), 0) FROM retail_order_items i JOIN retail_orders o ON o.id = i.order_id
+               WHERE o.store_id = l.store_id AND i.product_id = l.product_id
+                 AND o.paid_at IS NOT NULL AND o.paid_at < l.created_at
+                 AND COALESCE(o.fulfillment_type, '') <> 'counter'
+                 AND (o.dispatched_at IS NULL OR o.dispatched_at > l.created_at)
+                 AND (o.delivered_at  IS NULL OR o.delivered_at  > l.created_at)
+                 AND (o.cancelled_at  IS NULL OR o.cancelled_at  > l.created_at)
+                 AND o.paid_at >= datetime(l.created_at, '-3 days')) AS unpacked
+        FROM retail_stock_ledger l
+       WHERE l.store_id = ? AND l.created_at >= datetime('now', ?) AND l.reason IN (${marks}) AND l.delta <> 0`, s.id, since, ...RECOUNT);
+    const hit = rc.filter(r => r.unpacked > 0);
+    console.log(`\n14 · recounts saved while paid orders for that product were not yet out the door: ${hit.length} of ${rc.length} (${hit.reduce((a, r) => a + r.unpacked, 0)} u on those orders)`);
+    for (const r of hit.slice(0, 10)) console.log(`   ${r.created_at} ${pad(pname(r.product_id), 36)} recount ${r.delta > 0 ? '+' : ''}${r.delta} · ${r.unpacked} u paid, not yet out`);
   }
   try { db.close(); } catch (_) {}
   console.log('');
