@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.585
+# Tacet shared-core consolidation — decisions record, v4.586
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-27 · v4.586 — **§501 · THE INTERNATIONAL CARD ADDS 5%, NOT 4% — AMENDS §450 — DECIDED BY ASH.** Ash: *"change international card to 5% commission, not 4%"*. `CARD_SURCHARGE_PCT` and the till's preview go to 5, the tender labels say +5%, and the fee line in the order history and on the receipt loses its rate so an order charged 4% before today is not shown as 5%.
 
 2026-10-27 · v4.585 — **§500 · THE TILL SHOWS EVERY PAYMENT METHOD, AND WORKS OUT THE CHANGE ON A CASH SALE — DECIDED BY ASH.** Ash: *"when selecting payment method i want to see all payment method without clicking show more. also if i select cash i should be able to add how much someone gave me and how much i need to give back"*; the plan was put to Ash and approved (*"ok lets do it"*). The "Other" fold is gone; the international card stays last and set apart. Picking Cash opens an amount-received box with quick amounts and the change; on screen only, nothing new is stored. Two Chinese strings composed, declared in the vocabulary v1.357.
 
@@ -33413,3 +33415,19 @@ Checked by hand in a real browser before it shipped (typing, no match, switching
 7. **Words:** `Amount received · 收到金额` copied whole from the admin (`public/retail-admin/04-orders.js`). `Change · 找零` and `Short · 还差` composed by Claude, declared in `docs/tacet-delivery-vocabulary.md` v1.357.
 
 `scripts/test_till_cash_change.js` runs the till's own cash functions and holds the fold's removal, the order of the tenders, the quick amounts, the short rule, that nothing is sent, and the words. Checked by hand in Chromium at tablet and phone size, through to the done screen.
+
+## §501 — THE INTERNATIONAL CARD ADDS 5%, NOT 4% (AMENDS §450)
+
+**2026-10-27 · DECIDED BY ASH.** Ash: *"change international card to 5% commission, not 4%"*. §450's rule stands in every other respect: on what the card takes after credit, rounded to the fen, not taxed, a constant and not a setting.
+
+### Rules
+
+1. **The rate is 5%** from this change on: `CARD_SURCHARGE_PCT` in `lib/card-surcharge.js`, and `CARD_FEE_PCT` in `public/till.html`, which previews the same arithmetic and is held equal to it fen by fen in `scripts/test_intl_card_surcharge.js`.
+
+2. **An order keeps the fee it was charged.** `card_surcharge_fee` and `total` are stored on the order, so nothing already sold moves; a refund still returns what was charged.
+
+3. **Where a tender is chosen for a new sale, the label says +5%:** the till, the admin's Mark-paid choices (`public/retail-admin/04-orders.js`) and the phone's (`public/m.html`). The till's settle-screen line reads `Card fee 5%`, because it only ever shows the sale being made.
+
+4. **Where a stored fee is shown, the label carries no rate:** the admin order detail, the phone order detail and the printed receipt (`lib/feie.js`) read `Card fee ¥X`. Those screens show orders charged at 4% as well as 5%, and a rate beside them would be false for one or the other. The amount is always the one charged.
+
+5. **Words:** numerals only, plus the rate dropped from the stored-fee label (`Card fee · 外卡手续费`, the §450 composed pair without its rate). Declared in `docs/tacet-delivery-vocabulary.md` v1.358.

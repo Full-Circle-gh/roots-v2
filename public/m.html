@@ -3556,7 +3556,7 @@ function askRefundAmount(o){
 const PAY_METHODS=[['cash','Cash','现金'],['bank_transfer','Bank transfer','银行转账'],
   // §451 — one choice for WeChat and Alipay; the terminal charges them the same.
   ['wechat_alipay_offline','WeChat / Alipay (off app)','微信 / 支付宝（线下）'],['other','Other','其他'],
-  ['intl_card','International card +4%','外卡 +4%']];
+  ['intl_card','International card +5%','外卡 +5%']];
 reg('markPaid', ()=>{
   if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); if(!o||o._id==null) return;
@@ -51755,8 +51755,9 @@ function orderBreakdown(o){
   const rows=[[['Subtotal','小计'],money(CUR,o.subtotal!=null?o.subtotal:o.total)]];
   if(Number(o.shipping_fee)>0) rows.push([['Shipping','运费'],money(CUR,o.shipping_fee)]);
   if(Number(o.packing_fee)>0) rows.push([['Packing','打包费'],money(CUR,o.packing_fee)]);
-  // §450 — the international-card 4%, inside the total like the two above.
-  if(Number(o.card_surcharge_fee)>0) rows.push([['Card fee 4%','外卡手续费 4%'],money(CUR,o.card_surcharge_fee)]);
+  // §450 — the international-card fee, inside the total like the two above.
+  // §501 — no rate: an order keeps the fee it was charged (4% before 2026-10-27, 5% after).
+  if(Number(o.card_surcharge_fee)>0) rows.push([['Card fee','外卡手续费'],money(CUR,o.card_surcharge_fee)]);
   return rows;
 }
 // §474 — why a till discount was given, in the reader's language. The four

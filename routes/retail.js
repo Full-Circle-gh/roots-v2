@@ -23396,11 +23396,11 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
       points_amount: credit.pointsAmount, balance_used: credit.balanceUsed, due: total,
     });
   }
-  /* ── §450 · AN INTERNATIONAL CARD CARRIES ITS 4% ─────────────────────────
+  /* ── §450 · AN INTERNATIONAL CARD CARRIES ITS FEE ─────────────────────────
      Added to the CASH figure, after credit, because that is what the card is
      charged and what the acquirer takes its fee on; points and wallet are not
      card money. `total` stays the one figure the terminal is keyed with, the
-     payment row records and a refund caps against, so the 4% is refunded with
+     payment row records and a refund caps against, so the fee is refunded with
      the order (Ash's decision). card_surcharge_fee says how much of it is the
      fee, for the receipt line and the money checks. The server computes it;
      the till only previews the same lib/card-surcharge.js arithmetic. */
@@ -23894,7 +23894,7 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
                                     voucher_amount: voucherDiscount,
                                     // §474 — the hand discount the server charged.
                                     manual_discount_amount: manualDiscountAmount,
-                                    // §450 — the intl-card 4%, already inside `total`.
+                                    // §450 — the intl-card fee, already inside `total`.
                                     card_surcharge_fee: cardFee,
                                     // What was charged, so the caller can print
                                     // it without a second read (audit I-03).
@@ -31250,7 +31250,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   // money actually arrived. Ignored for any other transition.
   const offlinePay = status === 'paid' && OFFLINE_PAY_METHODS.has(pay_method) ? pay_method : null;
   if (offlinePay) { sets.push('payment_method = ?'); params.push(offlinePay); }
-  /* §450 — the international-card 4%, on THIS path too (Ash: a QR order paid at
+  /* §450 — the international-card fee, on THIS path too (Ash: a QR order paid at
      the counter, or one marked paid in the office, pays what a till sale pays).
      Worked from the cash figure with any earlier fee taken out first, so the
      tender named NOW decides it: an order created on the card and settled in

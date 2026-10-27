@@ -798,7 +798,7 @@ button{font:inherit;color:inherit;margin:0}
 .wal.on{border-color:var(--td-text);background:var(--td-raised)}
 .wal.on .rad{border-color:var(--td-text)}
 .wal.on .rad::after{content:"";width:11px;height:11px;border-radius:50%;background:var(--td-text)}
-/* §500 — the international card, last and set apart: a mis-tap adds 4%. */
+/* §500 — the international card, last and set apart: a mis-tap adds 5%. */
 .wal.sep{margin-top:16px}
 /* §500 — the cash box, under Cash once picked. */
 .cashbox{
@@ -1361,9 +1361,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     optAtLeast:   ['At least ', '至少 '],              // shop-menu.js:2177
     optCount:     ['', ' 项'],                         // shop-menu.js:2175 (L_N_CN)
     optAdd:       ['Add', '添加'],                     // m.html:19223, as installAdd above
-    // §450 — the 4% an international card adds, named beside the amount it
+    // §450 — the fee an international card adds, named beside the amount it
     // moved. Composed by Claude, declared in the vocabulary doc v1.320.
-    cardFee:      ['Card fee 4%', '外卡手续费 4%'],      // vocab: composed §450
+    cardFee:      ['Card fee 5%', '外卡手续费 5%'],      // vocab: composed §450, 5% §501
     /* §457 — holding a bill and the list of held bills. 挂单 is the word
        Chinese counter systems use for exactly this act; nothing live in the
        product named it. Both composed by Claude, declared in the vocabulary
@@ -1401,11 +1401,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     { v: 'cash',           en: 'Cash',              cn: '现金' },
     { v: 'bank_transfer',  en: 'Bank transfer',     cn: '银行转账' },
     { v: 'other',          en: 'Other',             cn: '其他' },
-    // §450 — adds 4% to what the card takes (lib/card-surcharge.js), and the
+    // §450 — adds 5% (§501; it was 4%) to what the card takes (lib/card-surcharge.js), and the
     // label says so BEFORE the tap. Last, and set apart from the rest (§500):
     // a mis-tap here charges a local customer 4% for nothing. Composed pair,
     // declared in the vocabulary doc v1.320.
-    { v: 'intl_card',      en: 'International card +4%', cn: '外卡 +4%', sep: true }
+    { v: 'intl_card',      en: 'International card +5%', cn: '外卡 +5%', sep: true }
   ];
 
   /* ====================================================================
@@ -3368,17 +3368,17 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     return Math.max(0, Math.round((settleDue() - creditOffer().applied) * 100) / 100);
   }
   function creditApplied() { return creditOffer().applied; }
-  /* §450 — the international card's 4%, on what the CARD takes: the residual
+  /* §450 — the international card's fee (5% since §501), on what the CARD takes: the residual
      after credit, never the gross. The same arithmetic as lib/card-surcharge.js
      (whole fen, rounded) — a preview only; the server computes the figure it
      charges and the done screen reads that one back. */
-  var CARD_FEE_PCT = 4;
+  var CARD_FEE_PCT = 5;                  // §501 — was 4; lib/card-surcharge.js
   function cardFee() {
     if (S.wallet !== 'intl_card') return 0;
     var fen = Math.round(cashDue() * 100);
     return fen > 0 ? Math.round(fen * CARD_FEE_PCT / 100) / 100 : 0;
   }
-  // What the terminal is keyed with: the residual plus the card's 4%.
+  // What the terminal is keyed with: the residual plus the card's fee.
   function chargeDue() { return Math.round((cashDue() + cardFee()) * 100) / 100; }
   /* The tender to record when CREDIT settled the whole bill and no wallet took
      anything. Points lead because they apply first and are the larger half of
@@ -3778,7 +3778,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // included, and a character that never renders is still one nobody checked
     // against a source.)
     if (cr.applied > 0) subline += ' · ' + esc(T('total')) + ' ' + money(settleDue());
-    // §450 — the big number moves by the card's 4% the moment it is picked, and
+    // §450 — the big number moves by the card's fee the moment it is picked, and
     // the subline names the part that moved it, so "why is it more?" is
     // answered on the screen the customer is looking at.
     var fee = cardFee();
@@ -4262,7 +4262,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     }).then(function (j) {
       S.busy = false;
       if (!j || !j.success) { S.err = T('didNotSave'); render(); return; }
-      // The server's row comes back whole; its total carries the card's 4%
+      // The server's row comes back whole; its total carries the card's fee
       // when that was the tender (§450), so it is read rather than r.total.
       var row = j.data || {};
       S.done = { id: r.id, order_no: r.order_no, wallet: S.wallet,

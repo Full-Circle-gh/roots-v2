@@ -397,9 +397,10 @@ section('7 · an order carrying the intl-card fee adds up only because the fee i
   // The fee sits OUTSIDE the credit MAX: a bill points cover in full has no
   // card fee, and one they cover in part is surcharged on the remainder only.
   const { cardSurcharge, CARD_SURCHARGE_PCT } = require('../lib/card-surcharge');
-  is(CARD_SURCHARGE_PCT, 4, 'the rate is 4%');
-  is(cardSurcharge('intl_card', 70), 2.8, '¥70 on the card → ¥2.80');
-  is(cardSurcharge('intl_card', 12.34), 0.49, 'rounded to the fen: ¥12.34 → ¥0.49');
+  // §501 — 5% from 2026-10-27 (it was 4%).
+  is(CARD_SURCHARGE_PCT, 5, 'the rate is 5%');
+  is(cardSurcharge('intl_card', 70), 3.5, '¥70 on the card → ¥3.50');
+  is(cardSurcharge('intl_card', 12.34), 0.62, 'rounded to the fen: ¥12.34 → ¥0.62 (61.7 fen)');
   is(cardSurcharge('intl_card', 0), 0, 'nothing left for the card → no fee');
   is(cardSurcharge('wechat_offline', 70), 0, 'every other tender → no fee');
 }
