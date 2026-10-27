@@ -663,6 +663,11 @@ button{font:inherit;color:inherit;margin:0}
   border-radius:var(--r-control);padding:10px 14px;
 }
 .terr[hidden]{display:none}
+/* §502 — the same box saying something that went RIGHT elsewhere: an order
+   paid on the customer's phone. Sage, not brick: it is news, not a failure. */
+.terr.ok{color:var(--td-sage-ink);background:var(--td-sage-tint)}
+/* §502 — the customer chose WeChat Pay on their phone. */
+.wrow .who i.wx{color:var(--td-sage-ink)}
 
 /* ---- §183 option sheet: the store picker's sheet, with questions in it ----
    Same .ssheet body as every other decision on this till, so the sheet a
@@ -1304,6 +1309,14 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // done
     completed:    ['Completed', '已完成'],             // vocab: delivered + counter
     paid:         ['Paid', '已付款'],                  // vocab: paid, all
+    // §502 — a QR order that left the waiting list without this till: paid on
+    // the customer's phone, or cancelled. Said with its number, never as a
+    // failure. All four copied whole.
+    payConfirmed: ['Payment confirmed', '支付成功'],   // routes/retail.js status notice (paid)
+    cancelledSt:  ['Cancelled', '已取消'],             // admin: 26-print.js:386
+    refundedSt:   ['Refunded', '已退款'],              // admin: 26-print.js:386
+    // The customer chose WeChat Pay on their phone. The tag on the row.
+    wxPay:        ['WeChat Pay', '微信支付'],          // admin: 03-dashboard.js PAY_LBL
     printReceipt: ['Print receipt', '打印小票'],       // admin: 04-orders.js
     newOrder:     ['New order', '新建订单'],           // admin: retail-admin.html:2218
     // failure — the generic locked sentence, reused rather than re-minted
@@ -1491,6 +1504,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        read — and a counter that says nothing is waiting when something is is
        the one wrong answer this list must never give. */
     pend: null, pane: 'menu', pendTimer: null, pendES: null, cxArm: false,
+    // §502 — a line of news for the rail ("12 · Payment confirmed"), not an
+    // error. Cleared by a timer, or by the next order opened.
+    note: '',
     // Has the cashier picked a pane since the last sale ended? Their choice
     // outranks the default until reset() clears it.
     paneTouched: false,
@@ -2622,6 +2638,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // customer knows.
       var rows = (j.data || []).filter(function (o) { return o.shop_order_code != null; });
       noteArrivals(rows);
+      // §502 — the order open in the rail has left the list: paid on the
+      // customer's phone, most likely. Checked whether or not the list is
+      // drawn, so the settle screen learns it too.
+      if (S.recall && !rows.some(function (o) { return o.id === S.recall.id; })) checkRecallStill();
       if (quiet) return;
       S.pend = rows;
       autoPane();
@@ -2642,9 +2662,66 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (first) S.pendSeen = {};
     var fresh = false;
     rows.forEach(function (o) {
-      if (!S.pendSeen[o.id]) { S.pendSeen[o.id] = 1; fresh = true; }
+      // §502 — remembered but not rung for: a customer paying on their phone
+      // is not coming to the counter, and the knock is how the counter is
+      // told someone is.
+      if (!S.pendSeen[o.id]) { S.pendSeen[o.id] = 1; if (!payingOnPhone(o)) fresh = true; }
     });
     if (fresh && !first) playKnock();
+  }
+
+  /* §502 — A QR ORDER WHOSE CUSTOMER CHOSE WECHAT PAY ON THEIR PHONE.
+     routes/shop-menu.js writes 'wechat' on such an order from the moment it is
+     placed. It is on this list only for the few seconds WeChat takes to confirm
+     the money, unless the customer gives up and walks to the counter; then the
+     cashier settles it like any other, and Mark paid overwrites the tender. */
+  function payingOnPhone(o) { return !!o && o.payment_method === 'wechat'; }
+
+  /* §502 — AN ORDER THAT LEFT THE WAITING LIST WITHOUT THIS TILL.
+     Reported 2026-10-27, TC001860: the customer paid with WeChat on their
+     phone, the till listed the order in the seconds before WeChat confirmed,
+     the cashier opened it, and Mark paid came back "did not save" with the
+     order stuck on screen. It was paid. Nothing had failed.
+
+     So the order comes off the list and out of the rail, and the till says
+     what happened to it, with its number: paid, cancelled or refunded. A
+     message, not an error, and it clears itself. */
+  var _noteTimer = null;
+  function settledElsewhere(id, status) {
+    var code = null;
+    S.pend = (S.pend || []).filter(function (o) {
+      if (o.id === id) code = o.shop_order_code;
+      return o.id !== id;
+    });
+    if (S.recall && S.recall.id === id) {
+      code = S.recall.code;
+      S.recall = null; S.lines = []; S.sel = null; S.cxArm = false;
+      S.wallet = null; S.useP = false; S.useB = false; S.cashIn = ''; S.disc = null;
+      S.view = 'till'; S.pane = 'pend'; S.paneTouched = true;
+    }
+    var word = status === 'cancelled' ? T('cancelledSt')
+             : status === 'refunded'  ? T('refundedSt')
+             : T('payConfirmed');
+    S.err = '';
+    S.note = (code != null ? code + ' · ' : '') + word;
+    if (_noteTimer) clearTimeout(_noteTimer);
+    _noteTimer = setTimeout(function () { S.note = ''; render(); }, 10000);
+    render();
+  }
+
+  /* The open order is no longer on the list the server just sent. Asked once,
+     by id, rather than assumed: the list is capped at 50, so absence alone is
+     not proof. */
+  function checkRecallStill() {
+    var r = S.recall;
+    if (!r || r.loading || r.checking || S.busy) return;
+    r.checking = true;
+    api('/api/retail-admin/orders/' + r.id).then(function (j) {
+      if (S.recall !== r) return;
+      r.checking = false;
+      var st = j && j.success && j.data ? j.data.status : null;
+      if (st && st !== 'pending_payment' && !S.busy) settledElsewhere(r.id, st);
+    }).catch(function () { if (S.recall === r) r.checking = false; });
   }
 
   // "Default to Pending when something is waiting, Menu when nothing is."
@@ -2701,7 +2778,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       h += '<button class="wrow" type="button" data-recall="' + o.id + '">'
          + '<span class="n">' + esc(String(o.shop_order_code)) + '</span>'
          + '<span class="who"><b>' + esc(o.recipient_name || '') + '</b>'
-         + (meta ? '<i>' + esc(meta) + '</i>' : '') + '</span>'
+         + (meta ? '<i>' + esc(meta) + '</i>' : '')
+         // §502 — the customer is paying on their phone. Usually it is gone
+         // from this list a few seconds later; if they give up and walk over,
+         // it is still here to be settled.
+         + (payingOnPhone(o) ? '<i class="wx">' + esc(T('wxPay')) + '</i>' : '') + '</span>'
          + '<span class="amt">' + money(o.total) + '</span>'
          + '</button>';
     });
@@ -2733,6 +2814,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // here without a word.
     if (!holdNow()) return render();
     S.lines = []; S.sel = null; S.customer = null;
+    S.note = '';
     S.recall = {
       id: o.id, order_no: o.order_no, code: o.shop_order_code,
       name: o.recipient_name || '', total: Number(o.total) || 0, loading: true
@@ -2747,6 +2829,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     api('/api/retail-admin/orders/' + o.id).then(function (j) {
       if (!S.recall || S.recall.id !== o.id) return;   // they moved on
       if (!j || !j.success || !j.data) { S.recall.loading = false; return render(); }
+      // §502 — already paid (or cancelled) since the list was read. Said, not
+      // offered for payment.
+      if (j.data.status && j.data.status !== 'pending_payment') return settledElsewhere(o.id, j.data.status);
       S.lines = (j.data.items || []).map(function (it) {
         return {
           id: it.product_id,
@@ -3719,8 +3804,12 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        That is the second half of the report. */
     var te = $('till-err');
     if (te) {
-      te.hidden = !(S.view === 'till' && S.err);
-      te.textContent = S.err || '';
+      // §502 — the same box carries S.note, news rather than a failure, when
+      // there is no error to say.
+      var tmsg = S.err || S.note || '';
+      te.hidden = !(S.view === 'till' && tmsg);
+      te.className = 'terr' + (!S.err && S.note ? ' ok' : '');
+      te.textContent = tmsg;
     }
 
     // THE BAR IS THE ORDER, FOLDED. On a phone the sheet is closed by default,
@@ -4261,6 +4350,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       body: JSON.stringify(mode.recallPayload(S))
     }).then(function (j) {
       S.busy = false;
+      // §502 — refused because it is no longer waiting: paid on the customer's
+      // phone (TC001860), or cancelled. That is not "did not save".
+      if (j && j.error === 'invalid_transition' && j.from) {
+        settledElsewhere(r.id, j.from);
+        loadPend();
+        return;
+      }
       if (!j || !j.success) { S.err = T('didNotSave'); render(); return; }
       // The server's row comes back whole; its total carries the card's fee
       // when that was the tender (§450), so it is read rather than r.total.
@@ -4297,7 +4393,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
      The list drops it locally the moment it lands, on the same reasoning the
      paid path gives: a cashier who cancels 12 and still sees 12 will cancel it
      twice, and the second attempt would meet an order that is no longer
-     cancellable. */
+     cancellable.
+
+     §502 — ONLY AN UNPAID ORDER. The same route cancels a paid order too, and
+     that sends the money back through WeChat; from this button, on a row paid
+     on the customer's phone a moment ago, that would be a refund nobody meant.
+     `expect_from` has the server refuse unless the order is still
+     pending_payment when the request gets there. */
   function cancelOrder() {
     if (!S.recall || S.recall.loading || S.busy) return;
     // Arming clears whatever the LAST attempt said. An error left standing over
@@ -4307,10 +4409,17 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     S.busy = true; S.err = ''; render();
     api('/api/retail-admin/orders/' + r.id + '/status', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'cancelled' })
+      // §502 — only from unpaid: see the note above this function.
+      body: JSON.stringify({ status: 'cancelled', expect_from: 'pending_payment' })
     }).then(function (j) {
       S.busy = false; S.cxArm = false;
       if (!j || !j.success) {
+        // §502 — it was paid (or cancelled) in the meantime: say which.
+        if (j && j.error === 'invalid_transition' && j.from) {
+          settledElsewhere(r.id, j.from);
+          loadPend();
+          return;
+        }
         /* THE ORDER MOVED WHILE THE LIST WAS STALE, which is not a save that
            failed. This till re-reads every fifteen seconds and the customer can
            now cancel from their own page (routes/shop-menu.js), so the row the

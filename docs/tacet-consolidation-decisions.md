@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.586
+# Tacet shared-core consolidation — decisions record, v4.587
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-27 · v4.587 — **§502 · A QR ORDER PAID ON THE CUSTOMER'S PHONE IS NOT LEFT STUCK ON THE TILL — DECIDED BY ASH.** Reported by Ash with the slip for TC001860: *"customer paid directly with wechat, the order showed on the till, I couldn't complete it"*; on the cause, *"actually it shouldnt show on the till at all i think, its already paid and the slip is out"*; the plan was put to Ash and approved (*"go"*). A WeChat Pay order is 'wechat' from the moment it is placed, tagged on the till's list and not rung for; an order that turns out paid comes off the till as "<number> · Payment confirmed", never "did not save"; the till's Cancel can only cancel an unpaid order. Hiding these orders outright was considered and rejected. Nothing composed.
 
 2026-10-27 · v4.586 — **§501 · THE INTERNATIONAL CARD ADDS 5%, NOT 4% — AMENDS §450 — DECIDED BY ASH.** Ash: *"change international card to 5% commission, not 4%"*. `CARD_SURCHARGE_PCT` and the till's preview go to 5, the tender labels say +5%, and the fee line in the order history and on the receipt loses its rate so an order charged 4% before today is not shown as 5%.
 
@@ -33431,3 +33433,25 @@ Checked by hand in a real browser before it shipped (typing, no match, switching
 4. **Where a stored fee is shown, the label carries no rate:** the admin order detail, the phone order detail and the printed receipt (`lib/feie.js`) read `Card fee ¥X`. Those screens show orders charged at 4% as well as 5%, and a rate beside them would be false for one or the other. The amount is always the one charged.
 
 5. **Words:** numerals only, plus the rate dropped from the stored-fee label (`Card fee · 外卡手续费`, the §450 composed pair without its rate). Declared in `docs/tacet-delivery-vocabulary.md` v1.358.
+
+## §502 — A QR ORDER PAID ON THE CUSTOMER'S PHONE IS NOT LEFT STUCK ON THE TILL
+
+**2026-10-27 · DECIDED BY ASH.** Reported with the slip for TC001860: the customer paid with WeChat Pay in the QR menu, the order showed on the till, and Mark paid said "That did not save" and would not let it go. The order was paid and its slip had printed; nothing had failed.
+
+**The cause.** An order paid in the page was written with the placeholder tender `offline` and only became `wechat` a second or two later, when the pay page created the charge. In that gap the till listed it as an order owed at the counter and knocked. When WeChat confirmed the money, the order became paid (for a counter order, `delivered` at once), and the till read the server's 409 on Mark paid as a failed save, leaving the order stuck in the rail.
+
+Ash's first instinct was that such an order should not show on the till at all. **Rejected as stated:** a customer whose WeChat payment fails or who closes WeChat's sheet walks to the counter, and a till that hid every WeChat Pay order could not find their number. Put to Ash and approved: show it, tagged, and silent.
+
+### Rules
+
+1. **A QR order the customer chose to pay in the page is `wechat` from the moment it is written** (`routes/shop-menu.js`, `PLACEHOLDER_TENDER`). Every other QR order keeps `offline`. Staff's Mark paid still overwrites the tender with what actually arrived. Nothing that reads `wechat` on an unpaid order acts on it without the charge's `out_trade_no`, which still comes only from the pay page.
+
+2. **On the till's waiting list such an order carries the tag `WeChat Pay` and does not knock.** It is remembered as seen, so it never knocks later. It can still be opened and settled like any other.
+
+3. **An order that has left the waiting list without this till is said, not failed.** On opening it, on Mark paid, on Cancel, or when the 15-second read no longer lists the open order (checked by id, since the list is capped), a status other than `pending_payment` takes it off the list and out of the rail and shows `<number> · Payment confirmed` (or `Cancelled`, `Refunded`) in the rail's message box, in sage rather than brick, cleared after ten seconds. Any other refusal still says "That did not save" and keeps the order open.
+
+4. **The till's Cancel can only cancel an unpaid order.** `PATCH /api/retail-admin/orders/:id/status` takes an optional `expect_from`; when it is given and the order's status differs, the move is refused with the usual 409 `invalid_transition`. The till sends `expect_from: 'pending_payment'`, so it can never cancel a paid order, which would refund it. A caller that omits it (the admin, the phone) keeps every transition it had.
+
+5. **Words:** nothing composed. `Payment confirmed · 支付成功` (routes/retail.js, the paid status notice), `Cancelled · 已取消` and `Refunded · 已退款` (public/retail-admin/26-print.js), and `WeChat Pay · 微信支付` (public/retail-admin/03-dashboard.js) are copied whole, declared in `docs/tacet-delivery-vocabulary.md` v1.359. A composed "paying on phone" label was considered and dropped in favour of the live pair, which says the same thing to a cashier.
+
+`scripts/test_till_paid_elsewhere.js` runs the till's own functions and the route's guard: the placeholder, the tag and the silent knock, each path that meets a paid order, the cancel guard both ways, and the words. It goes red with the fix taken out.

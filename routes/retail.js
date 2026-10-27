@@ -31074,7 +31074,7 @@ router.patch('/api/retail-admin/orders/:id/note', requireRetailAdmin, express.js
 
 router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const { status, reason, staff_note, pay_method } = req.body || {};
+  const { status, reason, staff_note, pay_method, expect_from } = req.body || {};
   const def = STATUS_TRANSITIONS[status];
   if (!def) return res.status(400).json({ success: false, error: 'invalid_status' });
 
@@ -31100,7 +31100,13 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
 
   const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
-  if (!def.prev.includes(o.status)) {
+  /* §502 — `expect_from`: the caller names the status it saw, and the move
+     happens only from that one. The till's Cancel sends 'pending_payment': a
+     QR order paid on the customer's phone a moment ago is otherwise a paid
+     order, and cancelling a paid order sends the money back. Optional; a
+     caller that omits it gets every transition it always had. Same 409 as
+     any other refused move, so callers already read it. */
+  if (!def.prev.includes(o.status) || (expect_from != null && String(expect_from) !== o.status)) {
     return res.status(409).json({ success: false, error: 'invalid_transition', from: o.status, to: status });
   }
 
