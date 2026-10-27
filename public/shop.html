@@ -6615,7 +6615,17 @@ function ctaRoute(t){
       if(ev.target.closest('a,button,form')){ ev.preventDefault(); ev.stopPropagation(); }
     },true);
   }
-  try{ state.lang=localStorage.getItem('shop_lang')||'en'; }catch{}
+  // WHICH LANGUAGE (§503): the customer's own toggle first, then a ?lang= in
+  // the address, then the phone's language — the QR menu's order (langScript
+  // in routes/shop-menu.js). It read the toggle only and fell back to English,
+  // so a Chinese phone opening the shop for the first time got English, and no
+  // link could open it in Chinese — Alipay's 手机网站支付 accepts Chinese sites
+  // only (found 2026-10-27).
+  try{ state.lang=localStorage.getItem('shop_lang')||''; }catch{}
+  if(state.lang!=='en'&&state.lang!=='cn'){
+    let q=''; try{ q=new URLSearchParams(location.search).get('lang')||''; }catch{}
+    state.lang=(q==='en'||q==='cn')?q:(String(navigator.language||'').toLowerCase().indexOf('zh')===0?'cn':'en');
+  }
   try{ state.token=localStorage.getItem('shop_token')||''; }catch{}
   // Finish any OAuth round-trip first (sets state.token from the handoff code).
   await consumeOauthRedirect();
