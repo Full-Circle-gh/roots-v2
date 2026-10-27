@@ -33466,3 +33466,27 @@ Ash's first instinct was that such an order should not show on the till at all. 
 5. **Words:** nothing composed. `Payment confirmed · 支付成功` (routes/retail.js, the paid status notice), `Cancelled · 已取消` and `Refunded · 已退款` (public/retail-admin/26-print.js), and `WeChat Pay · 微信支付` (public/retail-admin/03-dashboard.js) are copied whole, declared in `docs/tacet-delivery-vocabulary.md` v1.359. A composed "paying on phone" label was considered and dropped in favour of the live pair, which says the same thing to a cashier.
 
 `scripts/test_till_paid_elsewhere.js` runs the till's own functions and the route's guard: the placeholder, the tag and the silent knock, each path that meets a paid order, the cancel guard both ways, and the words. It goes red with the fix taken out.
+
+## §504 — A DELIVERY IS NOT ADDED TWICE: THE SHELF SAYS WHAT IS ON ITS WAY, AND RECEIVE SAYS WHAT WAS ALREADY ADDED BY HAND
+
+**2026-10-27 · DECIDED BY ASH.** Ash reported that Yuexiu's count "always becomes not correct". A read-only pass over 60 days of its stock ledger (`scripts/diagnose_store_stock_drift.js`, run through the Read-only prod query workflow on its own branch, not merged) found the count goes wrong around deliveries more than anywhere else:
+
+- After 107 of 650 transfer receipts, somebody took units off by hand within a day (177 units off).
+- Before 40 receipts, somebody had already raised the same product by hand in the 24 hours before (72 units), usually on the phone's stock screen as the boxes came in. The receipt then added the same goods again. Example: Choco-Hazel Bars, 23 Oct. 10 were added by hand that morning, a transfer of 5 was counted in at 11:20, and 6 were taken off at 12:01.
+- Hand fixes made right after a delivery are mostly "missing" (the record was too high). Tianhe shows the same pattern.
+
+Put to Ash with three options: warn only, warn and have the receipt subtract what was added by hand, or refuse hand increases while a delivery is on its way. **Ash chose warn only, and make them look.** It changes nothing about how a receipt moves stock. The other two were rejected for now. Auto-subtracting changes the receipt's arithmetic, and the units are written as if they arrived when the record says something else. Refusing would also stop a genuine top-up from somewhere else.
+
+### Rules
+
+1. **The phone's stock screen says what is on its way to this shop.** A product with goods in transit to this location (`restock_orders.goods_state = 'in_transit'` and `to_store_id` = this location, summed over `COALESCE(qty_sent, qty_requested)`) carries `On its way N · Count it in when it arrives.` on its card. This applies in both modes, add and recount. `GET /api/retail-admin/stores/:id/stock` returns it as `incoming_qty` on every row shape, including the add-only one. It is not the shelf total that §46 keeps from an add-only operator; it is what is on the van, and the add-only kitchen is exactly who adds by hand.
+
+2. **Receive says what was added by hand since the goods left.** `GET /api/restock/:id` returns `hand_added` (and `hand_added_by`, the names) per line while the transfer is in transit. It is the net of this location's hand-written stock rows for that product (`adjust`, `manual`, `count`, `kitchen_add`, `kitchen_recount`) since `dispatched_at`, shown only when above 0. The line shows `Already added by hand +N · names`. Derived from the ledger, never stored, the same rule §39 and B3 apply to in-transit.
+
+3. **"Everything arrived" leaves those lines for a person.** The band fills every other uncounted line at what was sent, as before. A line with something added by hand is left blank, the screen says `Some lines are still uncounted.`, and someone types what is really there or ticks the line. A tick or a typed number is a person looking, which is the point. The confirm screen lists those lines with the same note.
+
+4. **Nothing else moves.** No receipt, count or add changes its arithmetic. Stock still moves only when a receipt is confirmed, by exactly the counted figures.
+
+5. **Words.** `On its way · 在途` is copied whole (the stock-requests pill). `Count it in when it arrives. · 到货后再清点入库。` is lifted from the Receive screen's live `Still on its way. Count it in when it arrives. · 仍在途中，到货后再清点入库。`. `Some lines are still uncounted. · 仍有未点数的项目。` is copied whole. `Already added by hand · 已手动加库存` is composed by Claude from live fragments. All are declared in `docs/tacet-delivery-vocabulary.md` v1.361.
+
+`scripts/test_delivery_double_add_warning.js` checks both derivations against a real database and the phone's screens.

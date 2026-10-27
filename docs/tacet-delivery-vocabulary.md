@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.361 · 2026-10-27 · A DELIVERY IS NOT ADDED TWICE — 1 STRING COMPOSED BY CLAUDE (`已手动加库存`), BUILT FROM LIVE FRAGMENTS; ONE LIFTED, TWO COPIED WHOLE.** §504 has the phone's stock screen say what is on its way to the shop, and the Receive screen say what was already added by hand. See *A delivery is not added twice (§504)*.
+
 **v1.360 · 2026-10-27 · ONE-TAP ALIPAY ON THE QR MENU — NOTHING COMPOSED; FOUR PAIRS COPIED WHOLE.** §496 rule 9 (amended 2026-10-27) adds Alipay to the QR menu. The choice in the basket's pay row and in the "please choose" pop-up is `Alipay · 支付宝`, copied whole from the web shop's checkout row (`public/shop.html`, `coRenderPay`); the till's tag for an order being paid with Alipay on the phone is the same pair, from the admin's `PAY_LBL` (`public/retail-admin/03-dashboard.js`), beside v1.359's `WeChat Pay · 微信支付`. The order page for an Alipay order still waiting says `Waiting for payment… · 等待付款确认…` and offers `Pay with Alipay · 支付宝支付`, both copied whole from the mini app's own Alipay page (`miniapp/pages/alipay-pay/alipay-pay.js`, `waiting` and `title`). Rejected: the web shop's `Pay with Alipay · 支付宝付款`, because the mini app's `支付宝支付` is the pair a customer paying with Alipay on a phone already meets. The Alipay mark beside the label is a line drawing (支 in a rounded square), not text.
 
 **v1.359 · 2026-10-27 · A QR ORDER PAID ON THE CUSTOMER'S PHONE — NOTHING COMPOSED; FOUR PAIRS COPIED WHOLE.** §502 lets the till say what happened to an order that left its waiting list: `Payment confirmed · 支付成功`, copied whole from the paid status notice in `routes/retail.js`; `Cancelled · 已取消` and `Refunded · 已退款`, copied whole from the status map in `public/retail-admin/26-print.js`. Each is shown after the order's number (`12 · 支付成功`). The row tag for an order the customer is paying on their phone is `WeChat Pay · 微信支付`, copied whole from `public/retail-admin/03-dashboard.js` (`PAY_LBL`). Considered and not minted: a composed `Paying on phone · 手机支付中`; the live pair names the same fact and needs no new string. Nothing is retired. Rules 1 to 7 unchanged.
@@ -14613,3 +14615,16 @@ An order in `awaiting_restock` is PAID and held. It reaches that state two ways:
 | Order timeline step (after Paid) | Waiting for stock | 等待补货 |
 
 `{items}` is the held lines only, names from `waiting_items` on `GET /api/retail/orders/:id` and `GET /api/retail/payment/status/:id`. It is empty, and nothing here shows, for any order that is not parked right now. Locked by `scripts/test_parked_order_says_why.js`.
+
+## A delivery is not added twice (§504)
+
+Two screens on the phone. The stock screen's product card says what is on its way to this shop. A line on Receive says what was already added by hand since the goods left.
+
+| Where | EN | CN | Source |
+|---|---|---|---|
+| Stock screen card, and nowhere else new | On its way {n} | 在途 {n} | **COPIED WHOLE.** `On its way · 在途`, the stock-requests pill in `public/m.html` and `public/retail-admin/16-purchasing.js`. The number follows it with no label of its own. |
+| Stock screen card, after it | Count it in when it arrives. | 到货后再清点入库。 | **LIFTED.** The second sentence of the Receive screen's live `Still on its way. Count it in when it arrives. · 仍在途中，到货后再清点入库。`, split at the full stop on both sides. |
+| Receive line, under `sent N` | Already added by hand +{n} · {names} | 已手动加库存 +{n} · {names} | **COMPOSED by Claude (Opus), 2026-10-27**, from live fragments: `已` (done), `手动` (by hand, as in `先添加,再手动填写供应商与价格。`), and `加库存` (the stock screen's own name, `无法打开“加库存”。`). Names are names and are not translated. **Rejected:** `Added today · 今天已加` (the stock screen's live pair). It says "today", and this figure counts from when the goods were sent, which can be yesterday. Also rejected: `手动` alone, which reads as the word "manual" on a button rather than a fact about this line. |
+| Receive, after "Everything arrived" leaves a line | Some lines are still uncounted. | 仍有未点数的项目。 | **COPIED WHOLE.** The Receive screen's own refusal when a confirm finds an uncounted line (`xfrConfirm`). |
+
+Locked by `scripts/test_delivery_double_add_warning.js`.

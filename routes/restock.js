@@ -60,6 +60,9 @@ const _kready = require('../lib/kitchen-ready');
 // "What today's batch owes" (§84). Beside _kready for the same reason: the
 // arithmetic lives in one module because two surfaces ask for it.
 const _owed = require('../lib/batch-owed');
+// "What was already added by hand since these goods left" (§504), so Receive can
+// say so before the same delivery goes on the shelf twice.
+const _handAdded = require('../lib/delivery-hand-added');
 function _broadcastRestock(orderId, kind, actorUserId) {
   if (!_events || !_events.broadcast) return;
   try {
@@ -1655,7 +1658,7 @@ router.get('/api/restock/:id', requireRestockAccess, kitchenScopedOrder, (req, r
   const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
   const items = tdb().prepare('SELECT * FROM restock_items WHERE restock_id = ? ORDER BY id').all(order.id);
-  res.json({ success: true, data: { ...order, items: _attachRecorded(order, items) } });
+  res.json({ success: true, data: { ...order, items: _handAdded.attachHandAdded(tdb(), order, _attachRecorded(order, items)) } });
 });
 
 // ── Create order ───────────────────────────────────────────────────────────
