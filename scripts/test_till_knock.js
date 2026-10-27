@@ -64,7 +64,8 @@ function pendWorld() {
     String,
   };
   vm.createContext(ctx);
-  vm.runInContext(fn('noteArrivals') + fn('loadPend'), ctx);
+  // §502 — noteArrivals asks payingOnPhone whether a new row should ring.
+  vm.runInContext(fn('noteArrivals') + fn('payingOnPhone') + fn('loadPend'), ctx);
   w.load = (quiet) => { ctx.loadPend(quiet); return tick(); };
   return w;
 }

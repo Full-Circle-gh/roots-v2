@@ -4912,7 +4912,15 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       // would render as a raw string in the admin's tender picker and reconcile
       // against nothing — the same mistake as the invented status above, one
       // column over.
-      const PLACEHOLDER_TENDER = 'offline';
+      //
+      // §502 — EXCEPT AN ORDER THE CUSTOMER IS PAYING ON THEIR PHONE, which is
+      // 'wechat' from the moment it exists. The pay page wrote it a second or
+      // two later (leg 2, below), and in that gap the till listed the order as
+      // one owed at the counter and rang for it — TC001860, 2026-10-27, settled
+      // by WeChat while the cashier was trying to. The till reads 'wechat' on a
+      // waiting order as "being paid on the phone": tagged, not rung for. Staff's
+      // Mark-paid still overwrites it if the customer gives up and pays here.
+      const PLACEHOLDER_TENDER = payInPage ? 'wechat' : 'offline';
       const info = h.prepare(`
         INSERT INTO retail_orders (
           order_no, customer_id, status, payment_method,
@@ -5609,7 +5617,8 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
     // WeChat rail stamps it before returning.
     //
     // THE TENDER MOVES OFF 'offline' HERE TOO. The submit handler writes
-    // 'offline' as a placeholder because nobody has paid at that point and
+    // 'offline' as a placeholder (or, since §502, 'wechat' already when the
+    // customer chose WeChat Pay in the page) because nobody has paid at that point and
     // staff's Mark-paid would name the real one; a charge signed against the
     // merchant IS the real one, and leaving the placeholder would file a WeChat
     // payment under the tender the books use for cash. If this charge is never
