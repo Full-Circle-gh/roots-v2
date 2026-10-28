@@ -8790,7 +8790,10 @@ function renderPreview() {
   // the per-keystroke rebuild (and its product fetches) is skipped. The few
   // readers of the phone DOM cope with its absence: the toolbar hides, Locate
   // falls back to the stage's own highlight, the timers skip.
-  if (effectiveStage() === 'desktop') { _phoneStale = true; return; }
+  // The inspector still has to open or close for the selection made on the
+  // stage, so positionFloatingToolbar (which runs its show/hide) is called
+  // here too.
+  if (effectiveStage() === 'desktop') { _phoneStale = true; requestAnimationFrame(positionFloatingToolbar); return; }
   _phoneStale = false;
   const mount = $('#phone-content');
   mount.innerHTML = '';
@@ -8994,6 +8997,11 @@ function ensureFloatingToolbar() {
 function positionFloatingToolbar() {
   const tb = ensureFloatingToolbar();
   const id = state.selectedId;
+  // The inspector's show/hide runs on every path out of here. It used to run
+  // only at the end, after the phone-only work, so on the desktop stage a
+  // selected block never opened its settings — and the Website page (§503),
+  // which is desktop only, could not be edited at all.
+  if (window.cfPositionInspector) window.cfPositionInspector();
   if (!id || effectiveStage() === 'desktop') { tb.style.display = 'none'; return; }
   const wrap = document.querySelector(`#phone-content .block-wrap[data-id="${id}"]`);
   if (!wrap) { tb.style.display = 'none'; return; }
@@ -9025,10 +9033,6 @@ function positionFloatingToolbar() {
   tb.style.top = top + 'px';
   tb.style.left = left + 'px';
 
-  // Canvas-first: the floating inspector rides alongside the toolbar, anchored
-  // to the same block. This hook already fires on render / canvas-scroll /
-  // resize — exactly when the panel needs to follow.
-  if (window.cfPositionInspector) window.cfPositionInspector();
 }
 
 function renderBlockBody(b) {
