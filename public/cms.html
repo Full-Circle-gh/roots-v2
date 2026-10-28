@@ -1329,6 +1329,10 @@
   /* `display: flex` above overrides `[hidden] { display:none }`; restore, or
      the Phone stage shows the website frame under the phone. */
   .desktop-stage[hidden] { display: none; }
+  /* While the settings panel is open on the desktop stage, the stage gives
+     up the panel's width (320px + its 24px edge + a 20px gap) so the page
+     scales down beside the panel instead of sitting under it. */
+  html[data-layout="canvas"] .canvas.stage-desktop.insp-open .desktop-stage { padding-right: 344px; box-sizing: border-box; }
   .ds-bar {
     display: flex; align-items: center; gap: 12px; min-height: 34px; margin-bottom: 10px;
     font: 500 12px var(--f-sans); color: var(--text-2);
@@ -1633,6 +1637,15 @@
     font-size: 13px; font-weight: 500; color: var(--text-1);
     text-transform: capitalize;
   }
+  /* Close: clears the selection, which hides the panel. */
+  .inspector-head .type-row .insp-close {
+    margin-left: auto; width: 26px; height: 26px; border: 0; border-radius: var(--r-sm);
+    background: transparent; color: var(--text-2); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  }
+  .inspector-head .type-row .insp-close:hover { background: var(--bg-elev-2); color: var(--text-1); }
+  .inspector-head .type-row .insp-close:focus-visible { outline: 2px solid var(--tacet-ink); outline-offset: 1px; }
+  .inspector-head .type-row .insp-close svg { width: 14px; height: 14px; }
 
   /* Per-block behaviour note — explains conditional/dynamic blocks (e.g.
      "hides when the customer has no active order") that used to print inline
@@ -6127,6 +6140,10 @@ function initCanvasLayout() {
     // On the desktop stage the phone DOM is not built; the selection lives in
     // the stage frame, and the inspector must still show for it.
     panel.hidden = !(id && (wrap || effectiveStage() === 'desktop'));
+    // On the desktop stage the page makes room for the open panel; the
+    // stage's ResizeObserver rescales the frame to the narrower width.
+    const canvas = document.querySelector('.canvas');
+    if (canvas) canvas.classList.toggle('insp-open', !panel.hidden && effectiveStage() === 'desktop');
   };
 
   // ── dismiss the drawer on outside click / Esc ──
@@ -11330,10 +11347,12 @@ function renderInspector() {
       <div class="type-row">
         <div class="icon">${ICONS[b.type] || ''}</div>
         <div class="type">${(T(BLOCK_META[b.type]?.name, BLOCK_META[b.type]?.name_cn) || b.type).replace('_', ' ')}</div>
+        <button type="button" class="insp-close" id="insp-close" title="${T('Close', '关闭')}" aria-label="${T('Close', '关闭')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
     </div>
     ${BLOCK_META[b.type]?.editorNote ? `<div class="insp-note">${T(BLOCK_META[b.type].editorNote, BLOCK_META[b.type].editorNote_cn)}</div>` : ''}
     <div class="inspector-body" id="inspector-body"></div>`;
+  $('#insp-close').addEventListener('click', () => { state.selectedId = null; render(); });
   const body = $('#inspector-body');
   switch (b.type) {
     case 'announcement_bar': buildAnnouncementForm(body, b); break;
@@ -16144,6 +16163,8 @@ window.addEventListener('message', (ev) => {
   if (ev.origin !== location.origin || !ev.data || !_stageIframe || ev.source !== _stageIframe.contentWindow) return;
   if (ev.data.type === 'cms:stage-ready') { _stageReady = true; sizeDesktopStage(); pushDraftToStage(); }
   else if (ev.data.type === 'cms:select') { if (ev.data.id && ev.data.id !== state.selectedId) selectBlock(ev.data.id); }
+  // Esc inside the frame: keys go to the frame once a block is clicked there.
+  else if (ev.data.type === 'cms:deselect') { if (state.selectedId) { state.selectedId = null; render(); } }
 });
 
 // Mode state for the drawer. 'draft' = preview the unpublished draft using
