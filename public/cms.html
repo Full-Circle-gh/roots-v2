@@ -8679,7 +8679,7 @@ function makeBlock(type) {
       id, type,
       kicker_en: 'Find us online', kicker_cn: '',
       title_en: '', title_cn: '',
-      tripadvisor_url: '', happycow_url: '', instagram: '',
+      tripadvisor_url: '', happycow_url: '', happycow_rating: '', happycow_reviews: '', instagram: '',
       whatsapp: '', whatsapp_text_en: "Hi Roots, I found you on your website.",
       chat_button: true,
       email: '', wechat_id: '', wechat_qr_url: '',
@@ -14489,6 +14489,15 @@ function buildContactLinksForm(m, b) {
     txt(b[key], v => updateBlockSilent(b.id, { [key]: v.trim() }), ph)));
   one('TripAdvisor', 'tripadvisor_url', 'https://www.tripadvisor.com/…');
   one('HappyCow', 'happycow_url', 'https://www.happycow.net/…');
+  // HappyCow has no public API, so its stars are typed here (§503 r.26);
+  // TripAdvisor's are read live from its link. Count label composed (v1.365).
+  const rateRow = document.createElement('div');
+  rateRow.style.cssText = 'display:flex;gap:10px;';
+  rateRow.append(
+    field(T('Rating', '评分'), '', num(b.happycow_rating, v => updateBlockSilent(b.id, { happycow_rating: v === '' || v == null ? '' : Math.max(0, Math.min(5, Math.round(Number(v) * 10) / 10)) }), { min: 0, max: 5, step: 0.1 })),
+    field(T('Number of reviews', '评价数'), '', num(b.happycow_reviews, v => updateBlockSilent(b.id, { happycow_reviews: v === '' || v == null ? '' : Math.max(0, Math.floor(Number(v))) }), { min: 0, step: 1 })),
+  );
+  secContent.appendChild(rateRow);
   one('Instagram', 'instagram', 'livewithroots');
   one('WhatsApp', 'whatsapp', '+86 186 …');
   secContent.appendChild(field(T('First message', '开场消息'), '',

@@ -32842,6 +32842,30 @@ function readOnboardingSettings() {
   };
 }
 
+// ── Star ratings for the website's contact block (§503 rules 23–24) ─────
+// Public: site.html calls it. Answers only for TripAdvisor listings that a
+// contact_links block in this tenant's published or draft Website layout
+// links to, so the API quota cannot be spent on anyone else's listing.
+router.get('/api/retail/website/ratings', async (req, res) => {
+  try {
+    const { locationIdFromUrl, ratingFor } = require('../lib/tripadvisor');
+    const ids = new Set();
+    for (const key of ['website.layout', 'cms.draft.website_layout']) {
+      for (const b of readLayoutStored(key)) {
+        if (b && b.type === 'contact_links') { const id = locationIdFromUrl(b.tripadvisor_url); if (id) ids.add(id); }
+      }
+    }
+    const asked = String(req.query.ta || '');
+    if (!ids.has(asked)) return res.json({ success: true, data: { tripadvisor: null } });
+    const referer = 'https://' + String(req.hostname || '').toLowerCase().replace(/[^a-z0-9.\-]/g, '') + '/';
+    const tripadvisor = await ratingFor(asked, { referer });
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.json({ success: true, data: { tripadvisor } });
+  } catch (e) {
+    res.json({ success: true, data: { tripadvisor: null } });
+  }
+});
+
 // ── The website's own title, description and share picture (§503 r.15) ──
 // storefront_config 'website.meta', public as cfg.website.meta. Takes effect
 // when saved (no draft), like the web shop's Title, menu and footer. Cleaned
