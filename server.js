@@ -736,10 +736,23 @@ function serveShop(req, res) {
   res.sendFile(path.join(__dirname, 'public', 'shop.html'));
 }
 // The brand website (decisions §503): a domain registered with
-// serves = 'site' opens public/site.html instead of the web shop.
+// serves = 'site' opens public/site.html instead of the web shop. Its title,
+// description and share tags are written in here, from the tenant's own
+// config, because link previews and ad crawlers never run the page's
+// scripts (§503 rule 16). The editor's /site-preview copy is noindex (rule 17).
+const { PLACEHOLDER: SITE_HEAD_PLACEHOLDER, buildSiteHead } = require('./lib/site-head');
 function serveSite(req, res) {
   res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'site.html'));
+  const preview = req.path === '/site-preview';
+  require('./middleware/public-tenant').publicTenantScope(req, res, () => {
+    let html;
+    try { html = fs.readFileSync(path.join(__dirname, 'public', 'site.html'), 'utf8'); }
+    catch (e) { return res.status(500).send('Website unavailable'); }
+    let head = SITE_HEAD_PLACEHOLDER;
+    try { head = buildSiteHead(require('./lib/store-config').loadConfig(), { host: req.hostname, preview }); }
+    catch (e) { /* the page still works with its plain title; its script sets the real one */ }
+    res.type('html').send(html.replace(SITE_HEAD_PLACEHOLDER, head));
+  });
 }
 
 // Host router for '/'. This served the kitchen SPA shell until §78; the
