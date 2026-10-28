@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.591
+# Tacet shared-core consolidation — decisions record, v4.592
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-28 · v4.592 — **§503 AMENDED · A CONTACT-AND-REVIEWS BLOCK AND A FLOATING WHATSAPP BUTTON ON THE WEBSITE — DECIDED BY ASH.** Ash: *"i want the website to have also the connector to our tripadvisor , happy cow , instegram . whatsapp live chat , email"*, then the details. A website-only block, `contact_links`, shows TripAdvisor, HappyCow, Instagram, WhatsApp, email and WeChat (ID and QR code); when it has a WhatsApp number and its switch is on, `public/site.html` adds a floating WhatsApp chat button. Strings: live pairs copied, four composed (vocabulary v1.364). No change to `.gitignore` or CI.
 
 2026-10-28 · v4.591 — **§503 AMENDED · THE WEBSITE HAS ITS OWN TITLE, SEARCH DESCRIPTION AND SHARE PICTURE, WRITTEN INTO THE PAGE BY THE SERVER — DECIDED BY ASH.** Offered after the website copy was rewritten for ads, since the website shared the web shop's title and description: *"Yes, do it"*. `website.meta` holds the brand site's title, description and share picture, edited on the Website page of the Mini App Editor; `serveSite` writes them, with Open Graph tags, a canonical link and, on the editor's preview path, `noindex`, into `public/site.html` before sending it. Strings: live pairs copied, one composed (vocabulary v1.363). No change to `.gitignore` or CI.
 
@@ -33524,3 +33526,15 @@ Ash: *"Yes, do it"*, after being told that the website shared the web shop's bro
 17. **The editor's preview of the website is never indexed.** On `/site-preview` the server adds `<meta name="robots" content="noindex">` and no canonical link, so search engines do not list the back office's copy of the site.
 
 18. **Words:** `Site title · 网站标题`, `Description · 描述`, their two notes, `Share picture · 分享图片` and `Website · 网站` are copied whole. One note is composed and declared in `docs/tacet-delivery-vocabulary.md` v1.363: the share picture's note.
+
+### Amended 2026-10-28 — contact, reviews and a WhatsApp chat button
+
+Ash: *"i want the website to have also the connector to our tripadvisor , happy cow , instegram . whatsapp live chat , email"*. Proposed and accepted: one block for the links and a floating chat button, with WeChat added because WhatsApp and Instagram are blocked in mainland China without a VPN or a roaming SIM.
+
+19. **`contact_links` is a website-only block** (`BLOCK_META` `website_only`, on `ALLOWED_BLOCK_TYPES`, drawn by `public/shop/blocks.js`, no mini-app branch). It carries a small heading and a title, then up to six entries, each shown only when filled: a TripAdvisor link and a HappyCow link (https only), an Instagram handle (letters, digits, `.` and `_`; it links to `instagram.com/<handle>`), a WhatsApp number (digits only; it links to `wa.me/<number>` with a first message the office writes), an email address (shown as text a visitor can copy, with a `mailto:` link) and WeChat (the ID as copyable text, and a QR code picture). The icons are monochrome line drawings, not the platforms' logos.
+
+20. **The floating WhatsApp button belongs to that block.** When a `contact_links` block on the published Website page has a WhatsApp number and its *chat button* switch is on, `public/site.html` puts a round WhatsApp button in the bottom corner of every screen, clear of the phone's safe area, opening the same `wa.me` link. It has no words, only the icon and an accessible name, so it needs no translation. It is off on the editor's stage, where every link is inert.
+
+21. **These are links, not a live chat on the site.** Nothing is stored or sent by the website; a visitor's message goes from their own WhatsApp or mail app. The site gains no inbox and no data about the visitor.
+
+22. **Words:** `Small heading · 小标题`, `Title · 标题`, `Email · 邮箱`, `WeChat · 微信` and `QR code · 二维码` are copied whole; the platform names stay as written. Four strings are composed and declared in `docs/tacet-delivery-vocabulary.md` v1.364: the block's name and description, the first-message field's label and the chat-button switch.
