@@ -2824,6 +2824,8 @@
 .shop-blocks .sb-cl-name { font-family: var(--f-bear); font-size: calc(calc(30 * var(--u)) * var(--font-scale)); line-height: 1.15; }
 .shop-blocks .sb-cl-sub { font-family: var(--f-aleo); font-size: calc(calc(22 * var(--u)) * var(--font-scale)); opacity: 0.8; overflow-wrap: anywhere; }
 .shop-blocks .sb-cl-copy { user-select: all; }
+/* An ID or an address is one word to copy: it never breaks inside itself. */
+.shop-blocks .sb-cl-sub.sb-cl-copy { overflow-wrap: normal; word-break: keep-all; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shop-blocks .sb-cl-qr { flex: none; width: calc(140 * var(--u)); height: calc(140 * var(--u)); object-fit: contain; background: #fff; border-radius: calc(10 * var(--u)); }
 
 @media (min-width: 768px) {
