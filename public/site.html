@@ -69,6 +69,13 @@
 
   @media (max-width:640px){ .bar-nav a{display:none;} }
 
+  /* The floating WhatsApp button (§503 rule 20): bottom corner, clear of the
+     phone's safe area, an icon with an accessible name and no words. */
+  .wa-fab{position:fixed;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:30;width:56px;height:56px;border-radius:50%;background:var(--forest);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.18);text-decoration:none;}
+  .wa-fab:focus-visible{outline:3px solid var(--ink);outline-offset:3px;}
+  .wa-fab svg{width:28px;height:28px;}
+  .cms-stage .wa-fab{display:none;}
+
   /* Editor desktop stage (?stage=1): the same click targets and Dusk ring as
      public/shop.html's stage, so the two pages edit alike. */
   .cms-stage .sb-blk-outer{cursor:pointer;}
@@ -222,6 +229,23 @@ async function render(){
   view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layout)+'</div>';
   ShopBlocks.startTimers(view);
   stageHighlight(true);
+  renderChatButton(layout);
+}
+
+// The floating WhatsApp button (§503 rule 20): from the first contact block
+// that has a number and its chat switch on. Never on the editor's stage.
+function renderChatButton(layout){
+  let fab=document.getElementById('waFab');
+  const b=(layout||[]).find(x=>x&&x.type==='contact_links'&&x.chat_button!==false);
+  const href=(!STAGE_MODE&&b&&ShopBlocks.contactWhatsapp)?ShopBlocks.contactWhatsapp(b):'';
+  if(!href){ if(fab) fab.remove(); return; }
+  if(!fab){
+    fab=document.createElement('a'); fab.id='waFab'; fab.className='wa-fab';
+    fab.target='_blank'; fab.rel='noopener'; fab.setAttribute('aria-label','WhatsApp');
+    fab.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.2-4.2A8.5 8.5 0 1 1 20.5 12z"/><path d="M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.5-2-1-1 .8c-1-.4-2-1.4-2.4-2.4l.8-1-1-2z"/></svg>';
+    document.body.appendChild(fab);
+  }
+  fab.href=href;
 }
 
 (async function boot(){

@@ -5711,6 +5711,7 @@ const ICONS = {
   // §503 — website-only blocks.
   fact_band:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="10" rx="1"/><path d="M8 7v10M14 7v10"/></svg>',
   steps:            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="5" cy="18" r="2"/><path d="M10 6h11M10 12h11M10 18h11"/></svg>',
+  contact_links:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M9 11h6M9 14h4"/></svg>',
 };
 
 // Preview device presets — covers the popular phones our customers use.
@@ -5764,6 +5765,8 @@ const BLOCK_META = {
   // Names and descriptions composed, declared in tacet-delivery-vocabulary v1.362.
   fact_band:        { website_only: true, name: 'Promise band', name_cn: '品牌承诺', desc: 'A strong colour band with up to 4 short facts', desc_cn: '醒目的色带 · 最多 4 条简短要点' },
   steps:            { website_only: true, name: 'Steps',        name_cn: '步骤',     desc: 'Up to 4 numbered steps, such as how to order', desc_cn: '最多 4 个编号步骤 · 例如如何下单' },
+  // §503 rule 19 — name and description composed (vocabulary v1.364).
+  contact_links:    { website_only: true, name: 'Contact & reviews', name_cn: '联系与评价', desc: 'TripAdvisor, HappyCow, Instagram, WhatsApp, email and WeChat', desc_cn: 'TripAdvisor、HappyCow、Instagram、WhatsApp、邮箱和微信' },
 };
 
 const state = {
@@ -8655,6 +8658,16 @@ function makeBlock(type) {
       ],
       bg_color: 'forest-kale', fg_color: 'white', accent_color: 'lime-leaf',
     };
+    case 'contact_links': return {
+      id, type,
+      kicker_en: 'Find us online', kicker_cn: '',
+      title_en: '', title_cn: '',
+      tripadvisor_url: '', happycow_url: '', instagram: '',
+      whatsapp: '', whatsapp_text_en: "Hi Roots, I found you on your website.",
+      chat_button: true,
+      email: '', wechat_id: '', wechat_qr_url: '',
+      bg_color: 'oat-milk', fg_color: 'ink', accent_color: 'forest-kale',
+    };
     case 'steps': return {
       id, type,
       kicker_en: '', kicker_cn: '',
@@ -9088,7 +9101,8 @@ function renderBlockBody(b) {
       return d;
     }
     case 'fact_band':
-    case 'steps': {
+    case 'steps':
+    case 'contact_links': {
       d.className = 'b-website-only';
       d.innerHTML = `<div class="placeholder">${ICONS[b.type]}</div>`;
       return d;
@@ -11344,6 +11358,7 @@ function renderInspector() {
     case 'promo_cards':      buildPromoCardsForm(body, b); break;
     case 'fact_band':        buildFactBandForm(body, b); break;
     case 'steps':            buildStepsForm(body, b); break;
+    case 'contact_links':    buildContactLinksForm(body, b); break;
     case 'order_tracker':    buildOrderTrackerForm(body, b); break;
     case 'notification_bar': buildNotificationBarForm(body, b); break;
   }
@@ -14435,6 +14450,43 @@ function buildStepsForm(m, b) {
         imgPicker(it.image_url, ({ url }) => set({ image_url: url }, true))));
     },
   });
+  websiteColours(m, b, { bg: 'oat-milk', fg: 'ink', accent: 'forest-kale' });
+}
+
+// §503 rule 19 — the website's contact and review links. Each entry shows on
+// the site only when filled. Platform names stay as written; the first-message
+// label and the chat-button switch are composed (vocabulary v1.364).
+function buildContactLinksForm(m, b) {
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
+    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
+  secContent.appendChild(field(T('Title', '标题'), '',
+    txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
+  const one = (label, key, ph) => secContent.appendChild(field(label, '',
+    txt(b[key], v => updateBlockSilent(b.id, { [key]: v.trim() }), ph)));
+  one('TripAdvisor', 'tripadvisor_url', 'https://www.tripadvisor.com/…');
+  one('HappyCow', 'happycow_url', 'https://www.happycow.net/…');
+  one('Instagram', 'instagram', 'livewithroots');
+  one('WhatsApp', 'whatsapp', '+86 186 …');
+  secContent.appendChild(field(T('First message', '开场消息'), '',
+    txtPair(b.whatsapp_text_en, b.whatsapp_text_cn, ({ en, cn }) => updateBlockSilent(b.id, { whatsapp_text_en: en, whatsapp_text_cn: cn }))));
+  const row = document.createElement('div');
+  row.className = 'field';
+  row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = b.chat_button !== false;
+  box.addEventListener('change', () => updateBlock(b.id, { chat_button: box.checked }));
+  const lbl = document.createElement('label');
+  lbl.style.cssText = 'cursor:pointer;font-size:13px;font-weight:500;';
+  lbl.textContent = T('Show a WhatsApp chat button on every screen', '在每个屏幕显示 WhatsApp 聊天按钮');
+  lbl.addEventListener('click', () => { box.checked = !box.checked; box.dispatchEvent(new Event('change')); });
+  row.appendChild(box); row.appendChild(lbl);
+  secContent.appendChild(row);
+  one(T('Email', '邮箱'), 'email', 'hello@example.com');
+  one(T('WeChat', '微信'), 'wechat_id', '');
+  secContent.appendChild(field(T('QR code', '二维码'), '',
+    imgPicker(b.wechat_qr_url, ({ url }) => updateBlock(b.id, { wechat_qr_url: url || '' }))));
   websiteColours(m, b, { bg: 'oat-milk', fg: 'ink', accent: 'forest-kale' });
 }
 
