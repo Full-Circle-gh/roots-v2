@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.588
+# Tacet shared-core consolidation — decisions record, v4.589
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-28 · v4.589 — **§503 · A BRAND WEBSITE, EDITED AS ITS OWN PAGE IN THE MINI APP EDITOR, SERVED ON A DOMAIN THE TENANT MARKS AS ITS WEBSITE — AMENDS §496 RULE 2 FOR SUCH A HOST — DECIDED BY ASH.** Ash: *"i want to change it to a introduction website . the idea of this website is to introduce outside of china our brand"*, for *"Expats or tourists coming to China"*, at *"www.rootskitchenchina.com"*; on the mock-up, *"it looks ok, i want to be able to edit in the tacet editor"*; then *"Yes, go ahead"* on a separate Website page in the same editor. The editor gains a `website` page (one more entry in `lib/page-layout.js` `ALLOWED_PAGES`), edited on the desktop stage only; `tenant_domains` gains `serves` (`shop` · `site`); a host marked `site` serves the new `public/site.html`, which draws the `website` layout with the web shop's own block engine. The web shop, its Home and the mini app are unchanged. Strings: three live pairs copied, two composed (vocabulary v1.361). No change to `.gitignore` or CI.
 
 2026-10-27 · v4.588 — **§496 rule 9 AMENDED · ALIPAY ON THE QR MENU IS ONE-TAP 手机网站支付, OUTSIDE WECHAT ONLY, BEHIND ITS OWN SWITCH — DECIDED BY ASH.** Offered the uploaded 收款码 with a payment screenshot (the web shop's flow), Ash: *"i dont want it like this . when its H5 i want an integrated alipay fumction"*, and on showing it only outside WeChat: *"correct"*; then *"Build the one-tap Alipay menu code switched off"*. The menu gains an Alipay choice that sends the customer to the Alipay app through `alipay.trade.wap.pay` and settles through the existing Alipay notify, with a trade-state query from the order page as the fallback. It is off until `SHOP_QR_ALIPAY=1` AND Alipay's keys are set; neither is today, and no Alipay account can yet sign 手机网站支付. The till tags such an order "Alipay" and does not ring for it (§502). Found while building it, and fixed here because the Alipay page depends on it: a QR order is `delivered` the moment it is paid, so the order page, which read `paid` only, told a customer who reopened an order paid on their phone to pay at the counter; it now reads both, for WeChat too. Strings are live pairs (vocabulary v1.360); nothing composed. No change to `.gitignore` or CI.
 
@@ -33466,3 +33468,30 @@ Ash's first instinct was that such an order should not show on the till at all. 
 5. **Words:** nothing composed. `Payment confirmed · 支付成功` (routes/retail.js, the paid status notice), `Cancelled · 已取消` and `Refunded · 已退款` (public/retail-admin/26-print.js), and `WeChat Pay · 微信支付` (public/retail-admin/03-dashboard.js) are copied whole, declared in `docs/tacet-delivery-vocabulary.md` v1.359. A composed "paying on phone" label was considered and dropped in favour of the live pair, which says the same thing to a cashier.
 
 `scripts/test_till_paid_elsewhere.js` runs the till's own functions and the route's guard: the placeholder, the tag and the silent knock, each path that meets a paid order, the cancel guard both ways, and the words. It goes red with the fix taken out.
+
+## §503 — A BRAND WEBSITE, EDITED AS ITS OWN PAGE IN THE MINI APP EDITOR
+
+**2026-10-28 · DECIDED BY ASH.** Ash wants `shop.rootskitchenchina.com` to stop being the only web face of Roots: *"i want to change it to a introduction website . the idea of this website is to introduce outside of china our brand , what we do , our producs . to be able to adverise it on google ads , facebook integrams etc"*. Asked who the site is for: *"Expats or tourists coming to China"*. Asked where: *"www.rootskitchenchina.com"*, keeping `shop.` as it is; and on whether the old domain stays the brand's own: *"it is . tacet is moving to tacetapp.cn"*. Shown a mock-up: *"it looks ok, i want to be able to edit in the tacet editor"*. Offered a separate Website page in the existing editor rather than a second editor: *"Yes, go ahead"*.
+
+**Why a page and not an editor.** §272 rejected a second editor (every change twice, two publish states, drift). A page is the unit the editor already has: `ALLOWED_PAGES` says a new page needs no schema change, and every draft, publish, revert and preview route already takes `?page=`. The website is a different page from the shop's Home, not a `show_on` filter of it: it sells nothing, links to nothing in the shop, and is written for a reader who cannot buy.
+
+### Rules
+
+1. **`website` is a CMS page** (`lib/page-layout.js`). Its layout is stored, drafted, published and served exactly like the other five. The mini app receives `website.layout` in `/api/retail/config` and draws nothing from it.
+
+2. **It is edited on the desktop stage only.** In `public/cms.html` the Website page forces the Desktop stage and disables Phone, with the reason in the tooltip: the website adapts to a phone by itself, and the phone stage draws with the mini app's renderer, which is not what a visitor sees. The stage frame for this page is `/site-preview?draft=1&stage=1`, the same `cms:draft` / `cms:select` / `cms:stage-ready` protocol as §273. The "is it linked from Home" panel is hidden, because the website is reached by its address, not from Home.
+
+3. **The website is `public/site.html`, not `public/shop.html`.** It loads `public/shop/blocks.js` and `blocks.css`, the web shop's block engine, and draws `website.layout` with it, honouring `show_on` the way the web shop does. It has no basket, sign-in, search or shop routes. A block's button that leads into the shop (a product, a category, the basket) is inert there; a full `https://` link opens. The page title and wordmark come from the same settings as the web shop's.
+
+4. **A domain says what it serves.** `tenant_domains.serves` is `shop` (the default, every existing row) or `site`. `lookupStorefrontHost` returns it; `/` and the deep-link fallback serve `site.html` for a `site` host and `shop.html` otherwise. A `site` host is never the tenant's customer origin: `lib/shop-qr.js` `publicOriginFor` reads `shop` rows only, so a QR menu never points at the brand site. The platform console's Domains card sets `serves` when a domain is added and shows it in the list.
+
+5. **AMENDS §496 rule 2 for a host registered as a tenant's domain.** §496 sends every page request on the old `rootskitchenchina.com` hosts to `food.`. A host that is an active `tenant_domains` row is now passed through to the storefront router first, so `www.rootskitchenchina.com`, once registered as Roots' `site` domain, serves the brand site. Every other old host, and `/api`, `/assets`, `/track` and `/.well-known` everywhere, keep §496's behaviour.
+
+6. **The brand site is served from outside the mainland.** `rootskitchenchina.com` has no ICP filing, so after the §496 move to the mainland server the brand site cannot be served from that server. It stays on the Hong Kong server, or another server outside the mainland, which also suits the readers it is for and the ad networks that send them. Whoever carries out §496 rule 5(d) decides where it goes before the Hong Kong server is switched off.
+
+7. **Turning it on is a data change on production, made only with Ash's OK.** Nothing serves `www.` differently until a `tenant_domains` row for `www.rootskitchenchina.com` with `serves = 'site'` exists for Roots. Until then `www.` keeps forwarding to `food.`.
+
+8. **Not in this change, each its own later PR:** website-only blocks for the parts of the mock-up the engine has no block for (the promise band, the numbered steps, the shop list, the moving slogan banner); ad tracking (Google and Meta tags) and the cookie consent banner they need for European visitors.
+
+9. **Words:** `Website · 网站` and `Web shop · 网页商店` are copied whole from live pairs. Two pairs are composed and declared in `docs/tacet-delivery-vocabulary.md` v1.361: the Website page's one-line description, and the Phone button's tooltip on that page. The Desktop button's existing tooltip on the other pages is reworded from "the website" to "the web shop", since there are now two web surfaces; its Chinese takes the live `网页商店`.
+
