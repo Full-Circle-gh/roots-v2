@@ -1692,6 +1692,69 @@
       (items ? '<ol class="sb-steps-list sb-steps-n' + list.length + '">' + items + '</ol>' : '') + '</div></div>';
   };
 
+  // contact_links (§503 rule 19, website only) ------------------------------
+  // Review sites, social and chat, each shown only when filled. Every address
+  // is rebuilt here from a cleaned value, never taken as typed: https links
+  // only, an Instagram handle of [A-Za-z0-9._], a WhatsApp number of digits.
+  // Icons are monochrome line drawings, not the platforms' logos.
+  var CONTACT_ICONS = {
+    tripadvisor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="13" r="3.5"/><circle cx="16.5" cy="13" r="3.5"/><circle cx="7.5" cy="13" r=".8" fill="currentColor"/><circle cx="16.5" cy="13" r=".8" fill="currentColor"/><path d="M4 9.5C6.5 7 9 6.5 12 6.5s5.5.5 8 3M12 9.5l-1.5 2h3z"/></svg>',
+    happycow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20c0-8 5-14 15-15-1 10-7 15-15 15z"/><path d="M5 20c3-4 6-7 10-10"/></svg>',
+    instagram: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17" cy="7" r=".9" fill="currentColor"/></svg>',
+    whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.2-4.2A8.5 8.5 0 1 1 20.5 12z"/><path d="M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.5-2-1-1 .8c-1-.4-2-1.4-2.4-2.4l.8-1-1-2z"/></svg>',
+    email: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/></svg>',
+    wechat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 9.5c-.5-3-3.3-5-6.5-5C4.9 4.5 2 7 2 10c0 1.7.9 3.2 2.3 4.2L3.8 16l2.3-1.1c.8.2 1.6.4 2.4.4"/><path d="M22 14.5c0-2.8-2.7-5-6-5s-6 2.2-6 5 2.7 5 6 5c.7 0 1.4-.1 2-.3l2 1-.5-1.7c1.5-.9 2.5-2.3 2.5-4z"/></svg>',
+  };
+  function contactUrl(u) {
+    var v = String(u || '').trim();
+    return /^https:\/\/[^\s"'<>]+$/i.test(v) ? v : '';
+  }
+  function contactHandle(h) { return String(h || '').trim().replace(/^@/, '').replace(/[^A-Za-z0-9._]/g, '').slice(0, 30); }
+  function contactDigits(n) { return String(n || '').replace(/\D/g, '').slice(0, 15); }
+  function contactEmail(e) {
+    var v = String(e || '').trim();
+    return /^[^\s@"'<>]+@[^\s@"'<>]+\.[^\s@"'<>]+$/.test(v) ? v : '';
+  }
+  // The WhatsApp link the block and the floating button share.
+  function contactWhatsapp(b) {
+    var n = contactDigits(b && b.whatsapp);
+    if (!n) return '';
+    var msg = pick(b.whatsapp_text_en, b.whatsapp_text_cn);
+    return 'https://wa.me/' + n + (msg ? '?text=' + encodeURIComponent(msg) : '');
+  }
+  renderers.contact_links = function (b) {
+    var items = [];
+    var ta = contactUrl(b.tripadvisor_url), hc = contactUrl(b.happycow_url);
+    var ig = contactHandle(b.instagram), wa = contactWhatsapp(b), em = contactEmail(b.email);
+    var wc = String(b.wechat_id || '').trim().slice(0, 40), qr = absUrl(b.wechat_qr_url || '');
+    function link(key, href, name, sub) {
+      return '<a class="sb-cl-item" href="' + attr(href) + '" target="_blank" rel="noopener">' +
+        '<span class="sb-cl-ico">' + CONTACT_ICONS[key] + '</span>' +
+        '<span class="sb-cl-txt"><span class="sb-cl-name">' + escapeHtml(name) + '</span>' +
+        (sub ? '<span class="sb-cl-sub">' + escapeHtml(sub) + '</span>' : '') + '</span></a>';
+    }
+    if (ta) items.push(link('tripadvisor', ta, 'TripAdvisor', ''));
+    if (hc) items.push(link('happycow', hc, 'HappyCow', ''));
+    if (ig) items.push(link('instagram', 'https://www.instagram.com/' + ig + '/', 'Instagram', '@' + ig));
+    if (wa) items.push(link('whatsapp', wa, 'WhatsApp', '+' + contactDigits(b.whatsapp)));
+    if (em) items.push('<a class="sb-cl-item" href="mailto:' + attr(em) + '">' +
+      '<span class="sb-cl-ico">' + CONTACT_ICONS.email + '</span>' +
+      '<span class="sb-cl-txt"><span class="sb-cl-name">' + (CN() ? '邮箱' : 'Email') + '</span>' +
+      '<span class="sb-cl-sub sb-cl-copy">' + escapeHtml(em) + '</span></span></a>');
+    if (wc || qr) items.push('<div class="sb-cl-item sb-cl-wechat">' +
+      '<span class="sb-cl-ico">' + CONTACT_ICONS.wechat + '</span>' +
+      '<span class="sb-cl-txt"><span class="sb-cl-name">' + (CN() ? '微信' : 'WeChat') + '</span>' +
+      (wc ? '<span class="sb-cl-sub sb-cl-copy">' + escapeHtml(wc) + '</span>' : '') + '</span>' +
+      (qr ? '<img class="sb-cl-qr" src="' + attr(qr) + '" alt="" loading="lazy">' : '') + '</div>');
+    if (!items.length) return '';
+    var kicker = pick(b.kicker_en, b.kicker_cn), title = pick(b.title_en, b.title_cn);
+    var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink'), accent = color(b.accent_color || 'forest-kale');
+    return '<div class="sb-cl" style="background:' + attr(bg) + ';color:' + attr(fg) + ';--cl-accent:' + attr(accent) + '">' +
+      (kicker ? '<div class="sb-cl-kicker">' + escapeHtml(kicker) + '</div>' : '') +
+      (title ? '<div class="sb-cl-title">' + escapeHtml(title) + '</div>' : '') +
+      '<div class="sb-cl-grid">' + items.join('') + '</div></div>';
+  };
+
   // favorites_block --------------------------------------------------------
   // Items come from the host (ctx.config.favorites — customer's wishlist).
   renderers.favorites_block = function (b) {
@@ -2135,7 +2198,9 @@
     }, 4500));
   }
 
+  // The floating chat button on the website reads the same link (§503 r.20).
   global.ShopBlocks = {
+    contactWhatsapp: contactWhatsapp,
     setContext: setContext,
     render: render,
     forSurface: forSurface,
