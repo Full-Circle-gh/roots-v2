@@ -301,6 +301,9 @@ function renderChatButton(layout){
     });
   }
   if(STAGE_MODE){
+    // Esc closes the editor's settings panel; once a block is clicked here the
+    // keys come to this frame, not the editor, so it is passed up.
+    document.addEventListener('keydown',ev=>{ if(ev.key==='Escape'){ try{ parent.postMessage({type:'cms:deselect'},location.origin); }catch(e){} } });
     // Clicks: a block selects itself in the editor; everything else is inert.
     document.addEventListener('click',ev=>{
       const blk=ev.target.closest('.sb-blk-outer');
