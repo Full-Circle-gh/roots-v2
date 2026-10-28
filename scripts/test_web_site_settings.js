@@ -130,8 +130,13 @@ yes(/width: 1280px;/.test(CMS) && /const scale = Math\.min\(1, w \/ 1280\);/.tes
 yes(/type: 'cms:draft',/.test(CMS) && /layout: state\.draft\.map\(b => \(\{ \.\.\.b, show_on: showOnFor\(b\) \}\)\)/.test(CMS),
   'every preview render posts the draft with show_on made explicit');
 yes(/pushDraftToStage\(\);\n  renderStageBar\(\);/.test(slice(CMS, 'function renderPreview() {', "const mount = $('#phone-content');")), 'renderPreview() feeds the stage first');
-yes(/if \(effectiveStage\(\) === 'desktop'\) \{ _phoneStale = true; return; \}/.test(CMS) && /else if \(_phoneStale\) \{\n    renderPreview\(\);/.test(CMS),
+yes(/if \(effectiveStage\(\) === 'desktop'\) \{ _phoneStale = true; requestAnimationFrame\(positionFloatingToolbar\); return; \}/.test(CMS) && /else if \(_phoneStale\) \{\n    renderPreview\(\);/.test(CMS),
   'the hidden phone DOM is not rebuilt per keystroke on the desktop stage, and is rebuilt when the phone stage returns');
+// The inspector's show/hide must run before the desktop early return, or a
+// block selected on the desktop stage never opens its settings (found on the
+// Website page, §503, which has no phone stage to fall back to).
+yes(/const id = state\.selectedId;\n(?:  \/\/[^\n]*\n)*  if \(window\.cfPositionInspector\) window\.cfPositionInspector\(\);\n  if \(!id \|\| effectiveStage\(\) === 'desktop'\)/.test(slice(CMS, 'function positionFloatingToolbar() {', "const wrap = document.querySelector")),
+  'a block selected on the desktop stage opens its settings');
 yes(/panel\.hidden = !\(id && \(wrap \|\| effectiveStage\(\) === 'desktop'\)\);/.test(CMS), 'the floating inspector still shows for a block selected on the desktop stage');
 yes(/ev\.data\.type === 'cms:select'/.test(CMS) && /selectBlock\(ev\.data\.id\)/.test(CMS), 'a click in the frame selects the block in the editor');
 yes(/ev\.source !== _stageIframe\.contentWindow\) return;/.test(CMS), '…and only the stage frame is listened to');
