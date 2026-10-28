@@ -1628,6 +1628,11 @@
         out += '<div class="sb-st-eta">' + (CN() ? '约 ' + eta + ' 分钟送达' : '~' + eta + ' min delivery') + '</div>';
       }
       if (addressV) out += '<div class="sb-st-row"><span class="sb-st-icon">📍</span><span class="sb-st-val">' + escapeHtml(addressV) + '</span></div>';
+      // §503 rule 11 — in English, the Chinese address under the English one,
+      // large, for a visitor to show a taxi driver. Off unless switched on.
+      if (b.show_cn_address === true && !CN() && s.address_cn && s.address_en) {
+        out += '<div class="sb-st-cnaddr" lang="zh-CN">' + escapeHtml(s.address_cn) + '</div>';
+      }
       if (s.phone) out += '<a class="sb-st-row" href="tel:' + attr(s.phone) + '"><span class="sb-st-icon">📞</span><span class="sb-st-val sb-st-phone">' + escapeHtml(s.phone) + '</span></a>';
       if (ctaLabel && s.cta_target) {
         out += ctaWrap(s.cta_target, '<div class="sb-st-cta" style="' +
@@ -1638,6 +1643,53 @@
     return '<div class="sb-store-blk" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' +
       (kicker ? '<div class="sb-st-kicker">' + escapeHtml(kicker) + '</div>' : '') +
       '<div class="sb-st-cards">' + cards + '</div></div>';
+  };
+
+  // fact_band (§503, website only) ------------------------------------------
+  // A strong colour band of up to four short facts: a big line and a small one.
+  renderers.fact_band = function (b) {
+    var items = (Array.isArray(b.items) ? b.items : []).slice(0, 4).filter(function (it) {
+      return it && (pick(it.title_en, it.title_cn) || pick(it.body_en, it.body_cn));
+    });
+    if (!items.length) return '';
+    var bg = color(b.bg_color || 'forest-kale'), fg = color(b.fg_color || 'white');
+    var accent = color(b.accent_color || 'lime-leaf');
+    return '<div class="sb-fact" style="background:' + attr(bg) + ';color:' + attr(fg) + ';--fact-accent:' + attr(accent) + '">' +
+      '<div class="sb-fact-row sb-fact-n' + items.length + '">' + items.map(function (it) {
+        var t = pick(it.title_en, it.title_cn), d = pick(it.body_en, it.body_cn);
+        return '<div class="sb-fact-item">' +
+          (t ? '<div class="sb-fact-t">' + escapeHtml(t) + '</div>' : '') +
+          (d ? '<div class="sb-fact-b">' + escapeHtml(d) + '</div>' : '') + '</div>';
+      }).join('') + '</div></div>';
+  };
+
+  // steps (§503, website only) ----------------------------------------------
+  // A heading, an intro and up to four numbered steps, each with an optional
+  // picture (a QR code, a screenshot). The number is the step's place.
+  renderers.steps = function (b) {
+    var list = (Array.isArray(b.steps) ? b.steps : []).slice(0, 4).filter(function (it) {
+      return it && (pick(it.title_en, it.title_cn) || pick(it.body_en, it.body_cn) || it.image_url);
+    });
+    var kicker = pick(b.kicker_en, b.kicker_cn), title = pick(b.title_en, b.title_cn), body = pick(b.body_en, b.body_cn);
+    if (!list.length && !title) return '';
+    var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
+    var accent = color(b.accent_color || 'forest-kale');
+    var head = (kicker ? '<div class="sb-steps-kicker">' + escapeHtml(kicker) + '</div>' : '') +
+      (title ? '<div class="sb-steps-title">' + escapeHtml(title) + '</div>' : '') +
+      (body ? '<div class="sb-steps-body">' + escapeHtml(body) + '</div>' : '');
+    var items = list.map(function (it, i) {
+      var t = pick(it.title_en, it.title_cn), d = pick(it.body_en, it.body_cn);
+      var img = absUrl(it.image_url || '');
+      return '<li class="sb-step">' +
+        '<div class="sb-step-n">' + (i + 1) + '</div>' +
+        (t ? '<div class="sb-step-t">' + escapeHtml(t) + '</div>' : '') +
+        (d ? '<div class="sb-step-b">' + escapeHtml(d) + '</div>' : '') +
+        (img ? '<img class="sb-step-img" src="' + attr(img) + '" alt="" loading="lazy">' : '') +
+        '</li>';
+    }).join('');
+    return '<div class="sb-steps" style="background:' + attr(bg) + ';color:' + attr(fg) + ';--steps-accent:' + attr(accent) + '">' +
+      '<div class="sb-steps-in">' + (head ? '<div class="sb-steps-head">' + head + '</div>' : '') +
+      (items ? '<ol class="sb-steps-list sb-steps-n' + list.length + '">' + items + '</ol>' : '') + '</div></div>';
   };
 
   // favorites_block --------------------------------------------------------

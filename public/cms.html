@@ -5708,6 +5708,9 @@ const ICONS = {
   plus:             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
   image_placeholder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
   promo_cards:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="7" height="14" rx="1"/><rect x="11" y="5" width="7" height="14" rx="1"/><path d="M20 5h1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-1"/></svg>',
+  // §503 — website-only blocks.
+  fact_band:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="10" rx="1"/><path d="M8 7v10M14 7v10"/></svg>',
+  steps:            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="5" cy="18" r="2"/><path d="M10 6h11M10 12h11M10 18h11"/></svg>',
 };
 
 // Preview device presets — covers the popular phones our customers use.
@@ -5757,6 +5760,10 @@ const BLOCK_META = {
   promo_cards:      { name: 'Promo cards',      name_cn: '促销卡片',   desc: 'Tall picture cards customers swipe sideways — up to 5, each with its own link and dates', desc_cn: '可左右滑动的竖版图片卡片 · 最多 5 张 · 每张可设链接和日期',
     editorNote: 'On the Shop landing page these cards also show at the top of the mini app\'s Shop tab. A card outside its dates is hidden by itself.',
     editorNote_cn: '放在「商品」页时,这些卡片也会显示在小程序「商品」标签页顶部。不在日期内的卡片会自动隐藏。' },
+  // §503 — website-only: offered on the Website page alone, no mini-app branch.
+  // Names and descriptions composed, declared in tacet-delivery-vocabulary v1.362.
+  fact_band:        { website_only: true, name: 'Promise band', name_cn: '品牌承诺', desc: 'A strong colour band with up to 4 short facts', desc_cn: '醒目的色带 · 最多 4 条简短要点' },
+  steps:            { website_only: true, name: 'Steps',        name_cn: '步骤',     desc: 'Up to 4 numbered steps, such as how to order', desc_cn: '最多 4 个编号步骤 · 例如如何下单' },
 };
 
 const state = {
@@ -7079,6 +7086,7 @@ async function switchPage(newPage) {
   try { localStorage.setItem('cms_page', newPage); } catch {}
   updatePagePickerLabel();
   await loadPage();
+  buildPalette();   // the Website page offers its own blocks (§503)
   applyStage();
   // Keep the live-mirror iframe in sync if it's mounted.
   pingMirror({ page: newPage });
@@ -7868,7 +7876,8 @@ function _savePaletteOrder(order) {
   try { localStorage.setItem(PALETTE_ORDER_KEY, JSON.stringify(order)); } catch {}
 }
 function _orderedPaletteEntries() {
-  const all = Object.entries(BLOCK_META).filter(([, m]) => !m.hidden);
+  // §503 — a website-only block is offered on the Website page and nowhere else.
+  const all = Object.entries(BLOCK_META).filter(([, m]) => !m.hidden && (!m.website_only || state.page === 'website'));
   const saved = _loadPaletteOrder();
   if (!saved || !Array.isArray(saved)) return all;
   const byType = Object.fromEntries(all);
@@ -8598,6 +8607,29 @@ function makeBlock(type) {
       id, type,
       cards: [{ id: uid(), image_url: '', target: '', start_at: '', end_at: '' }],
     };
+    // §503 — website-only. English sample words so the stage shows the shape;
+    // the Chinese side is left for the office to write.
+    case 'fact_band': return {
+      id, type,
+      items: [
+        { id: uid(), title_en: 'Since 2017', title_cn: '', body_en: 'Cooking for nearly a decade', body_cn: '' },
+        { id: uid(), title_en: '100% plant-based', title_cn: '', body_en: 'Every dish, every jar', body_cn: '' },
+        { id: uid(), title_en: 'No junk', title_cn: '', body_en: 'No additives, preservatives or refined sugar', body_cn: '' },
+      ],
+      bg_color: 'forest-kale', fg_color: 'white', accent_color: 'lime-leaf',
+    };
+    case 'steps': return {
+      id, type,
+      kicker_en: '', kicker_cn: '',
+      title_en: 'How to order', title_cn: '',
+      body_en: '', body_cn: '',
+      steps: [
+        { id: uid(), title_en: 'Get WeChat', title_cn: '', body_en: '', body_cn: '', image_url: '' },
+        { id: uid(), title_en: 'Add your card', title_cn: '', body_en: '', body_cn: '', image_url: '' },
+        { id: uid(), title_en: 'Scan our code', title_cn: '', body_en: '', body_cn: '', image_url: '' },
+      ],
+      bg_color: 'oat-milk', fg_color: 'ink', accent_color: 'forest-kale',
+    };
     case 'video_banner': return {
       id, type,
       // 'banner' — fixed-height in-page band. 'fullscreen' — covers the whole
@@ -9016,6 +9048,12 @@ function renderBlockBody(b) {
           `<div class="cta-btn ${escapeAttr(c.style || 'primary')}"${(c.style || 'primary') === 'primary' ? btnPreviewStyle(b.btn_color) : ''}>${biLabel(c.label_en, c.label_cn)}</div>`
         ).join('')}</div>`;
       }
+      return d;
+    }
+    case 'fact_band':
+    case 'steps': {
+      d.className = 'b-website-only';
+      d.innerHTML = `<div class="placeholder">${ICONS[b.type]}</div>`;
       return d;
     }
     case 'promo_cards': {
@@ -11267,6 +11305,8 @@ function renderInspector() {
     case 'leaderboard':      buildLeaderboardForm(body, b); break;
     case 'video_banner':     buildVideoForm(body, b); break;
     case 'promo_cards':      buildPromoCardsForm(body, b); break;
+    case 'fact_band':        buildFactBandForm(body, b); break;
+    case 'steps':            buildStepsForm(body, b); break;
     case 'order_tracker':    buildOrderTrackerForm(body, b); break;
     case 'notification_bar': buildNotificationBarForm(body, b); break;
   }
@@ -11363,6 +11403,16 @@ function buildChromeSection(body, b) {
   // Universal "Show on" control — which of the two customer surfaces draw
   // this block. Reads the effective value (server default for a saved block,
   // the local copy of that table for one just added) and writes it explicit.
+  // The Website page IS the website; which surface draws a block is not a
+  // question there (§503 rule 13).
+  if (state.page !== 'website') buildShowOnSection(body, b);
+
+  // Universal "Frame, radius & width" controls — a collapsed section at the
+  // bottom of every block's inspector (set once, rarely reopened).
+  buildFrameSection(body, b);
+}
+
+function buildShowOnSection(body, b) {
   const secShow = inspectorSection(body, b.type, 'show', T('Show on', '显示位置'));
   const current = showOnFor(b);
   secShow.appendChild(field(T('Show on', '显示位置'),
@@ -11379,9 +11429,9 @@ function buildChromeSection(body, b) {
       '网页版暂无钱包、通知和订单页面,因此本模块默认不在网页版显示,除非你打开它。');
     secShow.appendChild(n);
   }
+}
 
-  // Universal "Frame, radius & width" controls — a collapsed section at the
-  // bottom of every block's inspector (set once, rarely reopened).
+function buildFrameSection(body, b) {
   const sec = inspectorSection(body, b.type, 'frame', T('Frame, radius & width', '边框、圆角与宽度'));
 
   // Frame colour (— none — clears it)
@@ -14238,6 +14288,119 @@ function buildPromoCardsForm(m, b) {
   secContent.appendChild(listWrap);
 }
 
+// ── §503 — the website's own blocks ───────────────────────────────────
+// A list of up to `max` items edited in place: move, remove, add. Shared by
+// the promise band and the steps; each item's fields come from `fill`.
+// Structural edits repaint the stage; typing saves quietly.
+function websiteItemList(host, b, key, { max, label, addLabel, blank, fill }) {
+  if (!Array.isArray(b[key])) { b[key] = []; updateBlockSilent(b.id, { [key]: [] }); }
+  const list = document.createElement('div');
+  list.style.cssText = 'display:flex;flex-direction:column;gap:14px;margin-top:10px;';
+  host.appendChild(list);
+  const write = (next) => { b[key] = next; updateBlock(b.id, { [key]: next }); };
+  const setItem = (idx, patch, loud) => {
+    const next = b[key].slice();
+    next[idx] = { ...next[idx], ...patch };
+    b[key] = next;
+    if (loud) updateBlock(b.id, { [key]: next }); else updateBlockSilent(b.id, { [key]: next });
+  };
+  const render = () => {
+    list.innerHTML = '';
+    b[key].forEach((it, idx) => {
+      const card = document.createElement('div');
+      card.style.cssText = 'border:1px solid var(--line-soft);border-radius:8px;padding:12px;background:var(--bg-pane);';
+      const head = document.createElement('div');
+      head.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:8px;';
+      head.innerHTML = `<b style="flex:1;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);">${label(idx + 1)}</b>`;
+      const mk = (text, title, onClick, disabled) => {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'btn';
+        btn.textContent = text; btn.title = title; btn.setAttribute('aria-label', title);
+        btn.disabled = !!disabled;
+        btn.onclick = onClick;
+        return btn;
+      };
+      const move = (dir) => {
+        const to = idx + dir, next = b[key].slice();
+        [next[idx], next[to]] = [next[to], next[idx]];
+        write(next); render();
+      };
+      head.appendChild(mk('↑', T('Move up', '上移'), () => move(-1), idx === 0));
+      head.appendChild(mk('↓', T('Move down', '下移'), () => move(1), idx === b[key].length - 1));
+      head.appendChild(mk(T('Remove', '删除'), T('Remove', '删除'), () => {
+        const next = b[key].slice(); next.splice(idx, 1); write(next); render();
+      }));
+      card.appendChild(head);
+      fill(card, it, (patch, loud) => { setItem(idx, patch, loud); if (loud) render(); });
+      list.appendChild(card);
+    });
+    if (b[key].length < max) {
+      const addBtn = document.createElement('button');
+      addBtn.type = 'button'; addBtn.className = 'btn btn-primary';
+      addBtn.style.cssText = 'align-self:flex-start;margin-top:4px;';
+      addBtn.textContent = addLabel(b[key].length, max);
+      addBtn.onclick = () => { write(b[key].concat([{ id: uid(), ...blank }])); render(); };
+      list.appendChild(addBtn);
+    }
+  };
+  render();
+}
+
+function websiteColours(m, b, defaults) {
+  const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
+    sel(b.bg_color || defaults.bg, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
+    sel(b.fg_color || defaults.fg, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  secColours.appendChild(field(T('Accent colour', '强调色'), '',
+    sel(b.accent_color || defaults.accent, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+}
+
+const FACT_BAND_MAX = 4;
+function buildFactBandForm(m, b) {
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  websiteItemList(secContent, b, 'items', {
+    max: FACT_BAND_MAX,
+    label: n => B(`Card ${n}`, `卡片 ${n}`),
+    addLabel: (n, max) => T(`+ Add card (${n} of ${max})`, `+ 添加卡片(${n} / ${max})`),
+    blank: { title_en: '', title_cn: '', body_en: '', body_cn: '' },
+    fill: (card, it, set) => {
+      card.appendChild(field(T('Title', '标题'), '',
+        txtPair(it.title_en, it.title_cn, ({ en, cn }) => set({ title_en: en, title_cn: cn }))));
+      card.appendChild(field(T('Text', '正文'), '',
+        txtPair(it.body_en, it.body_cn, ({ en, cn }) => set({ body_en: en, body_cn: cn }))));
+    },
+  });
+  websiteColours(m, b, { bg: 'forest-kale', fg: 'white', accent: 'lime-leaf' });
+}
+
+const STEPS_MAX = 4;
+function buildStepsForm(m, b) {
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
+    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
+  secContent.appendChild(field(T('Title', '标题'), '',
+    txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
+  secContent.appendChild(field(T('Text', '正文'), '',
+    txtPair(b.body_en, b.body_cn, ({ en, cn }) => updateBlockSilent(b.id, { body_en: en, body_cn: cn }), {}, { multiline: true, rows: 3 })));
+  // Step labels composed, declared in tacet-delivery-vocabulary v1.362.
+  websiteItemList(secContent, b, 'steps', {
+    max: STEPS_MAX,
+    label: n => B(`Step ${n}`, `第 ${n} 步`),
+    addLabel: () => T('+ Add step', '+ 添加步骤'),
+    blank: { title_en: '', title_cn: '', body_en: '', body_cn: '', image_url: '' },
+    fill: (card, it, set) => {
+      card.appendChild(field(T('Title', '标题'), '',
+        txtPair(it.title_en, it.title_cn, ({ en, cn }) => set({ title_en: en, title_cn: cn }))));
+      card.appendChild(field(T('Text', '正文'), '',
+        txtPair(it.body_en, it.body_cn, ({ en, cn }) => set({ body_en: en, body_cn: cn }), {}, { multiline: true, rows: 2 })));
+      card.appendChild(field(T('Picture', '图片'), '',
+        imgPicker(it.image_url, ({ url }) => set({ image_url: url }, true))));
+    },
+  });
+  websiteColours(m, b, { bg: 'oat-milk', fg: 'ink', accent: 'forest-kale' });
+}
+
 function buildStoreInfoForm(m, b) {
   // Migrate legacy single-store top-level fields into stores[0] the first
   // time the form opens, so the repeater is the only source of truth.
@@ -14252,6 +14415,23 @@ function buildStoreInfoForm(m, b) {
 
   secContent.appendChild(field(T('Small heading', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
+
+  // §503 rule 11 — on the website, in English, show the Chinese address
+  // under the English one for a visitor to show a taxi driver. Off by
+  // default; the mini app does not read it. Label composed (vocabulary v1.362).
+  const cnRow = document.createElement('div');
+  cnRow.className = 'field';
+  cnRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+  const cnBox = document.createElement('input');
+  cnBox.type = 'checkbox';
+  cnBox.checked = b.show_cn_address === true;
+  cnBox.addEventListener('change', () => updateBlock(b.id, { show_cn_address: cnBox.checked ? true : undefined }));
+  const cnLbl = document.createElement('label');
+  cnLbl.style.cssText = 'cursor:pointer;font-size:13px;font-weight:500;';
+  cnLbl.textContent = T('On the website, also show the Chinese address (for taxi drivers)', '在网站上同时显示中文地址(方便给出租车司机看)');
+  cnLbl.addEventListener('click', () => { cnBox.checked = !cnBox.checked; cnBox.dispatchEvent(new Event('change')); });
+  cnRow.appendChild(cnBox); cnRow.appendChild(cnLbl);
+  secContent.appendChild(cnRow);
 
   secColours.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
@@ -16093,7 +16273,7 @@ document.addEventListener('keydown', (e) => {
     return { id: b.id, type: b.type, name: m.name, name_cn: m.name_cn };
   });
   const palette = () => Object.entries(BLOCK_META)
-    .filter(([, m]) => !m.hidden)
+    .filter(([, m]) => !m.hidden && !m.website_only)   // the shell has no Website page (§503)
     .map(([type, m]) => ({ type, name: m.name, name_cn: m.name_cn, desc: m.desc, desc_cn: m.desc_cn, note: m.editorNote, note_cn: m.editorNote_cn }));
   const selectedBlock = () => (state.selectedId == null
     ? null
