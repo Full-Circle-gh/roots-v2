@@ -2711,3 +2711,97 @@
   .shop-blocks .sb-fsd-editorial .sb-fsd-cards { margin-top: 0; }
   .shop-blocks .sb-fsd-title { font-size: 44px; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   WEBSITE-ONLY BLOCKS (§503) — the brand website's promise band and steps,
+   and the Stores block's Chinese address line. Phone sizes in --u like every
+   block above; from 768px both bands run the full width of the window with
+   fixed px type, the way the PC-native blocks do.
+   ════════════════════════════════════════════════════════════════════════ */
+.shop-blocks .sb-fact { padding: calc(40 * var(--u)) calc(36 * var(--u)); }
+.shop-blocks .sb-fact-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(32 * var(--u)) calc(28 * var(--u)); }
+.shop-blocks .sb-fact-row.sb-fact-n1 { grid-template-columns: 1fr; }
+.shop-blocks .sb-fact-t {
+  font-family: var(--f-gothic);
+  font-size: calc(calc(52 * var(--u)) * var(--font-scale));
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--fact-accent);
+}
+.shop-blocks .sb-fact-b {
+  font-family: var(--f-aleo);
+  font-size: calc(calc(24 * var(--u)) * var(--font-scale));
+  line-height: 1.35;
+  margin-top: calc(10 * var(--u));
+  opacity: 0.9;
+}
+
+.shop-blocks .sb-steps { padding: calc(56 * var(--u)) calc(36 * var(--u)); }
+.shop-blocks .sb-steps-kicker {
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--steps-accent);
+}
+.shop-blocks .sb-steps-title {
+  font-family: var(--f-bear);
+  font-size: calc(calc(52 * var(--u)) * var(--font-scale));
+  line-height: 1.05;
+  margin-top: calc(12 * var(--u));
+  text-wrap: balance;
+}
+.shop-blocks .sb-steps-body {
+  font-family: var(--f-aleo);
+  font-size: calc(calc(26 * var(--u)) * var(--font-scale));
+  line-height: 1.5;
+  margin-top: calc(18 * var(--u));
+  opacity: 0.85;
+  white-space: pre-line;
+}
+.shop-blocks .sb-steps-list { list-style: none; margin: calc(36 * var(--u)) 0 0; padding: 0; display: grid; gap: calc(22 * var(--u)); }
+.shop-blocks .sb-step {
+  border: calc(3 * var(--u)) solid currentColor;
+  border-radius: calc(24 * var(--u));
+  padding: calc(30 * var(--u)) calc(28 * var(--u));
+  display: flex; flex-direction: column; gap: calc(12 * var(--u));
+}
+.shop-blocks .sb-step-n { font-family: var(--f-num); font-size: calc(calc(64 * var(--u)) * var(--font-scale)); line-height: 1; color: var(--steps-accent); }
+.shop-blocks .sb-step-t { font-family: var(--f-bear); font-size: calc(calc(36 * var(--u)) * var(--font-scale)); line-height: 1.1; }
+.shop-blocks .sb-step-b { font-family: var(--f-aleo); font-size: calc(calc(24 * var(--u)) * var(--font-scale)); line-height: 1.45; opacity: 0.85; white-space: pre-line; }
+.shop-blocks .sb-step-img { display: block; width: calc(200 * var(--u)); max-width: 100%; height: auto; border-radius: calc(12 * var(--u)); margin-top: calc(8 * var(--u)); }
+
+.shop-blocks .sb-st-cnaddr {
+  margin-top: calc(10 * var(--u));
+  font-family: var(--f-yuan);
+  font-weight: 700;
+  font-size: calc(calc(30 * var(--u)) * var(--font-scale));
+  line-height: 1.35;
+  user-select: all;
+}
+
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="fact_band"],
+  .shop-blocks .sb-blk-outer[data-block-type="steps"] {
+    width: 100vw; max-width: none; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-fact { padding: 32px max(40px, calc((100vw - 1120px) / 2)); }
+  .shop-blocks .sb-fact-row { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px 32px; }
+  .shop-blocks .sb-fact-t { font-size: 36px; }
+  .shop-blocks .sb-fact-b { font-size: 15px; margin-top: 8px; }
+
+  .shop-blocks .sb-steps { padding: 80px max(40px, calc((100vw - 1120px) / 2)); }
+  .shop-blocks .sb-steps-kicker { font-size: 13px; }
+  .shop-blocks .sb-steps-title { font-size: 52px; max-width: 18ch; margin-top: 12px; }
+  .shop-blocks .sb-steps-body { font-size: 18px; max-width: 46ch; margin-top: 16px; }
+  .shop-blocks .sb-steps-list { margin-top: 40px; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .shop-blocks .sb-step { border-width: 2px; border-radius: 20px; padding: 28px; gap: 12px; }
+  .shop-blocks .sb-step-n { font-size: 44px; }
+  .shop-blocks .sb-step-t { font-size: 28px; }
+  .shop-blocks .sb-step-b { font-size: 16px; }
+  .shop-blocks .sb-step-img { width: 120px; border-radius: 10px; margin-top: auto; }
+
+  .shop-blocks .sb-st-cnaddr { font-size: 20px; margin-top: 8px; }
+}

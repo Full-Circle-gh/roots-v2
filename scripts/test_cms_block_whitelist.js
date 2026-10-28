@@ -53,8 +53,12 @@ const allowed = srv.ALLOWED;
 const metaSrc = slice(CMS, 'const BLOCK_META = {', '\n};');
 const palette = [];
 const hidden = [];
+// §503 — a block marked website_only is drawn by the web engine alone (the
+// brand website, public/site.html) and has no mini-app branch by design.
+const websiteOnly = new Set();
 for (const m of metaSrc.matchAll(/^  ([a-z_]+):\s*\{([^\n]*)/gm)) {
   (/hidden:\s*true/.test(m[2]) ? hidden : palette).push(m[1]);
+  if (/website_only:\s*true/.test(m[2])) websiteOnly.add(m[1]);
 }
 yes(palette.length >= 20, `the palette was read (${palette.length} types, ${hidden.length} hidden)`);
 
@@ -70,7 +74,11 @@ section('2 · …and both customer renderers draw it');
 
 for (const t of palette) {
   yes(new RegExp(`renderers\\.${t} = function`).test(BLOCKS), `${t} has a web renderer`);
-  yes(new RegExp(`type === '${t}'`).test(WXML), `${t} has a mini-app branch`);
+  if (websiteOnly.has(t)) {
+    yes(!new RegExp(`type === '${t}'`).test(WXML), `${t} is website only, with no mini-app branch`);
+  } else {
+    yes(new RegExp(`type === '${t}'`).test(WXML), `${t} has a mini-app branch`);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
