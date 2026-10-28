@@ -34,6 +34,7 @@
     catGrid: {},  // `${category_id||'all'}|${limit}` -> products[]
     topup: null,  // storefront top-up packages (public endpoint)
     lb: {},       // `${metric}|${period}|${topN}|${reveal}` -> leaderboard rows
+    ta: {},       // TripAdvisor location id -> rating (null while in flight / none)
   };
   var BASE = '';    // same-origin; absUrl prefixes only protocol-relative roots
 
@@ -1709,6 +1710,21 @@
     var v = String(u || '').trim();
     return /^https:\/\/[^\s"'<>]+$/i.test(v) ? v : '';
   }
+  // The TripAdvisor listing id in its link (…-d34751233-…), as the server reads it.
+  function contactTaId(u) {
+    var m = contactUrl(u).match(/^https:\/\/(?:www\.)?tripadvisor\.[a-z.]+\/[^\s]*?-d(\d{3,12})-/i);
+    return m ? m[1] : '';
+  }
+  // Stars line: "★★★★★ 4.5 · 12 reviews", the shop's own review line (§503 r.27).
+  function contactStars(rating, count, graphic) {
+    var r = Number(rating), n = Math.max(0, Math.floor(Number(count) || 0));
+    if (!(r > 0 && r <= 5)) return '';
+    var full = Math.round(r);
+    var stars = graphic
+      ? '<img class="sb-cl-ta" src="' + attr(graphic) + '" alt="' + attr(r.toFixed(1)) + '">'
+      : '<span class="sb-cl-stars" aria-hidden="true">' + '★'.repeat(full) + '<span class="sb-cl-off">' + '★'.repeat(5 - full) + '</span></span>';
+    return '<span class="sb-cl-rate">' + stars + '<span>' + r.toFixed(1) + (n ? ' · ' + n + ' ' + (CN() ? '条评价' : 'reviews') : '') + '</span></span>';
+  }
   function contactHandle(h) { return String(h || '').trim().replace(/^@/, '').replace(/[^A-Za-z0-9._]/g, '').slice(0, 30); }
   function contactDigits(n) { return String(n || '').replace(/\D/g, '').slice(0, 15); }
   function contactEmail(e) {
@@ -1727,14 +1743,19 @@
     var ta = contactUrl(b.tripadvisor_url), hc = contactUrl(b.happycow_url);
     var ig = contactHandle(b.instagram), wa = contactWhatsapp(b), em = contactEmail(b.email);
     var wc = String(b.wechat_id || '').trim().slice(0, 40), qr = absUrl(b.wechat_qr_url || '');
-    function link(key, href, name, sub) {
+    function link(key, href, name, sub, rateHtml) {
       return '<a class="sb-cl-item" href="' + attr(href) + '" target="_blank" rel="noopener">' +
         '<span class="sb-cl-ico">' + CONTACT_ICONS[key] + '</span>' +
         '<span class="sb-cl-txt"><span class="sb-cl-name">' + escapeHtml(name) + '</span>' +
+        (rateHtml || '') +
         (sub ? '<span class="sb-cl-sub">' + escapeHtml(sub) + '</span>' : '') + '</span></a>';
     }
-    if (ta) items.push(link('tripadvisor', ta, 'TripAdvisor', ''));
-    if (hc) items.push(link('happycow', hc, 'HappyCow', ''));
+    // TripAdvisor: read live by the server from its API (§503 r.23); its own
+    // rating graphic is shown as served (r.25). HappyCow: typed by hand (r.26).
+    var taRate = caches.ta[contactTaId(b.tripadvisor_url)];
+    if (ta) items.push(link('tripadvisor', (taRate && taRate.web_url) || ta, 'TripAdvisor', '',
+      taRate ? contactStars(taRate.rating, taRate.num_reviews, taRate.rating_image_url) : ''));
+    if (hc) items.push(link('happycow', hc, 'HappyCow', '', contactStars(b.happycow_rating, b.happycow_reviews, '')));
     if (ig) items.push(link('instagram', 'https://www.instagram.com/' + ig + '/', 'Instagram', '@' + ig));
     if (wa) items.push(link('whatsapp', wa, 'WhatsApp', '+' + contactDigits(b.whatsapp)));
     if (em) items.push('<a class="sb-cl-item" href="mailto:' + attr(em) + '">' +
@@ -2002,8 +2023,12 @@
     return Array.isArray(blocks) ? blocks.filter(showsOnWeb) : [];
   }
 
+  // The layout last drawn, so startTimers warms the page actually showing —
+  // the brand website (§503) draws `website.layout`, not Home's.
+  var lastRendered = null;
   function render(blocks) {
     if (!Array.isArray(blocks)) return '';
+    lastRendered = blocks;
     var html = '';
     for (var i = 0; i < blocks.length; i++) {
       var b = blocks[i];
@@ -2055,6 +2080,19 @@
           .then(function (d) { caches.topup = listOf(d); fireRerender(); })
           .catch(function () {});
       }
+      // contact_links: the TripAdvisor rating, read by the server (§503 r.23).
+      if (b.type === 'contact_links') {
+        var taId = contactTaId(b.tripadvisor_url);
+        if (taId && !(taId in caches.ta)) {
+          caches.ta[taId] = null;   // mark in-flight; null also means "no stars"
+          fetchJson('/api/retail/website/ratings?ta=' + encodeURIComponent(taId))
+            .then(function (d) {
+              var t = d && d.data ? d.data.tripadvisor : (d && d.tripadvisor);
+              if (t && t.rating) { caches.ta[taId] = t; fireRerender(); }
+            })
+            .catch(function () {});
+        }
+      }
       if (b.type === 'leaderboard') {
         var key = (b.metric || 'lifetime_spend') + '|' + (b.period || 'month') + '|' +
           Math.max(3, Math.min(10, b.top_n || 5)) + '|' + (b.reveal_mode || 'first_char');
@@ -2090,7 +2128,7 @@
     stopTimers();
     if (!rootEl) return;
     initCarousels(rootEl);
-    var blocks = ctx.config && ctx.config.home && ctx.config.home.layout;
+    var blocks = lastRendered || (ctx.config && ctx.config.home && ctx.config.home.layout);
     warmLazyData(blocks);
     tickHandle = setInterval(function () { tick(rootEl); }, 1000);
     // Refresh flash sales every 60s so newly-started/ended deals appear.

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.592
+# Tacet shared-core consolidation — decisions record, v4.593
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-28 · v4.593 — **§503 AMENDED · STAR RATINGS ON THE CONTACT BLOCK: TRIPADVISOR LIVE THROUGH ITS OFFICIAL API, HAPPYCOW TYPED BY HAND — DECIDED BY ASH.** Ash: *"it should show the star rate live update from those websites"*; offered an official API for TripAdvisor or reading the sites' pages, and told that TripAdvisor refuses automated reads (403) and has no such rule for its API: *"API + manual"*. The server reads the rating, review count and rating graphic from the TripAdvisor Content API once a day per listing (`lib/tripadvisor.js`, `GET /api/retail/website/ratings`); HappyCow's rating and count are fields the office types. No change to `.gitignore` or CI; production needs `TRIPADVISOR_API_KEY` in `.env`.
 
 2026-10-28 · v4.592 — **§503 AMENDED · A CONTACT-AND-REVIEWS BLOCK AND A FLOATING WHATSAPP BUTTON ON THE WEBSITE — DECIDED BY ASH.** Ash: *"i want the website to have also the connector to our tripadvisor , happy cow , instegram . whatsapp live chat , email"*, then the details. A website-only block, `contact_links`, shows TripAdvisor, HappyCow, Instagram, WhatsApp, email and WeChat (ID and QR code); when it has a WhatsApp number and its switch is on, `public/site.html` adds a floating WhatsApp chat button. Strings: live pairs copied, four composed (vocabulary v1.364). No change to `.gitignore` or CI.
 
@@ -33538,3 +33540,17 @@ Ash: *"i want the website to have also the connector to our tripadvisor , happy 
 21. **These are links, not a live chat on the site.** Nothing is stored or sent by the website; a visitor's message goes from their own WhatsApp or mail app. The site gains no inbox and no data about the visitor.
 
 22. **Words:** `Small heading · 小标题`, `Title · 标题`, `Email · 邮箱`, `WeChat · 微信` and `QR code · 二维码` are copied whole; the platform names stay as written. Four strings are composed and declared in `docs/tacet-delivery-vocabulary.md` v1.364: the block's name and description, the first-message field's label and the chat-button switch.
+
+### Amended 2026-10-28 — star ratings on the contact block
+
+Ash: *"it should show the star rate live update from those websites"*, then *"API + manual"*.
+
+23. **TripAdvisor's stars come from its official Content API, never from its pages.** TripAdvisor refuses automated reads of its listing pages (a 403 on 2026-10-28) and its terms forbid them; the Content API is the sanctioned route. `lib/tripadvisor.js` reads `/location/{id}/details` for the location id in the block's TripAdvisor link (`-d<digits>-`), keeps the rating, review count, TripAdvisor's own rating graphic and the listing link, and holds the answer in memory for 24 hours per listing, so a listing costs about thirty calls a month against the free 5,000. A failed read keeps the last good answer; with no answer at all the block shows the link without stars. The key is `TRIPADVISOR_API_KEY` in the server's environment, one platform key, not per tenant.
+
+24. **The ratings endpoint answers only for listings this tenant's website uses.** `GET /api/retail/website/ratings` is public (the website calls it), and returns stars for a TripAdvisor id only when a `contact_links` block in the tenant's published or draft Website layout points at it, so nobody can spend the quota on other listings.
+
+25. **TripAdvisor's display rules are kept:** its rating graphic is shown as served, beside the review count, and the entry links to the listing on TripAdvisor.
+
+26. **HappyCow's stars are typed by hand.** HappyCow has no public API. The block gains `happycow_rating` (0 to 5, one decimal) and `happycow_reviews`; when both are set the entry shows the stars, the rating and the count.
+
+27. **Words:** `Rating · 评分` and the shop's own `4.5 · 12 reviews` / `条评价` line are copied whole; one label, the review count field, is composed and declared in `docs/tacet-delivery-vocabulary.md`.
