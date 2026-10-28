@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F2E7DF">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Website</title>
+<!--
+  The brand website (decisions §503). Served on a domain the tenant marks
+  `serves = 'site'` (tenant_domains), and inside the editor at
+  /site-preview?draft=1&stage=1. It draws the `website` page layout with the
+  web shop's own block engine (public/shop/blocks.js) and nothing else: no
+  basket, sign-in, search or shop routes. A block button that leads into the
+  shop is inert here; a full https:// link opens.
+-->
+<style>
+  /* Brand fonts: the same files and family names public/shop.html declares,
+     because blocks.css reads the --f-* names below. */
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/LilitaOne.ttf') format('truetype'); unicode-range:U+0024,U+0025,U+0030-0039,U+00A5; font-display:swap; }
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Lilita One'; src:url('/assets/fonts/LilitaOne.ttf') format('truetype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'League Gothic'; src:url('/assets/fonts/LeagueGothic.ttf') format('truetype'); font-display:swap; }
+  @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW5.ttf') format('truetype'); font-weight:500; font-display:swap; }
+  @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW7.ttf') format('truetype'); font-weight:700; font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --olive:#6A6E2D; --lime:#CCD900;
+    --accent:#365329;            /* overridden from tenant config at runtime */
+    --paper:#fff; --line:rgba(0,0,0,.08); --muted:#7c7c72;
+    --f-bear:'Bear Serif','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
+    --f-num:'Lilita One','Bear Serif','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
+    --f-toni:'Toni Grotesk','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,sans-serif;
+    --f-gothic:'League Gothic','DF Yuan','PingFang SC','Hiragino Sans GB','Bebas Neue',sans-serif;
+    --f-aleo:'Aleo','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
+    --f-yuan:'DF Yuan','PingFang SC','Hiragino Sans GB',sans-serif;
+    --wrap:1180px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{font-family:var(--f-aleo);background:var(--oat);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}
+
+  header.site-bar{position:sticky;top:0;z-index:20;background:var(--oat);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px);}
+  .bar-in{max-width:var(--wrap);margin:0 auto;padding:14px max(20px,env(safe-area-inset-right,0px)) 14px max(20px,env(safe-area-inset-left,0px));display:flex;align-items:center;justify-content:space-between;gap:16px;}
+  .wordmark{font-family:var(--f-bear);font-size:26px;line-height:1;color:var(--ink);text-decoration:none;}
+  .bar-nav{display:flex;align-items:center;gap:22px;font-size:15px;}
+  .bar-nav a{text-decoration:none;}
+  .bar-nav a:hover{text-decoration:underline;text-underline-offset:4px;}
+  .lang{display:flex;border:1.5px solid var(--ink);border-radius:999px;overflow:hidden;}
+  .lang button{font:inherit;font-size:13px;background:none;border:0;padding:5px 11px;cursor:pointer;color:var(--ink);}
+  .lang button.active{background:var(--ink);color:var(--oat);}
+
+  main{flex:1;}
+  .empty{max-width:560px;margin:80px auto;padding:0 20px;text-align:center;color:var(--muted);font-size:16px;line-height:1.5;}
+
+  footer{border-top:1px solid var(--line);background:#fff;}
+  .foot-in{max-width:var(--wrap);margin:0 auto;padding:26px max(20px,env(safe-area-inset-right,0px)) calc(26px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px));display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:13px;}
+  .foot-in .fm{font-family:var(--f-bear);color:var(--accent);font-size:18px;}
+  .foot-links{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px 22px;}
+  .foot-links a{text-decoration:none;}
+  .foot-links a:hover{text-decoration:underline;}
+
+  @media (max-width:640px){ .bar-nav a{display:none;} }
+
+  /* Editor desktop stage (?stage=1): the same click targets and Dusk ring as
+     public/shop.html's stage, so the two pages edit alike. */
+  .cms-stage .sb-blk-outer{cursor:pointer;}
+  .cms-stage .sb-blk-outer:hover{outline:2px dashed rgba(110,103,175,.55);outline-offset:2px;}
+  .cms-stage .sb-blk-outer.cms-selected{outline:2px solid #6E67AF;outline-offset:2px;box-shadow:0 0 0 5px rgba(110,103,175,.18);}
+</style>
+<link rel="stylesheet" href="/assets/shop/blocks.css">
+<script src="/assets/shop/blocks.js"></script>
+</head>
+<body>
+<header class="site-bar">
+  <div class="bar-in">
+    <a class="wordmark" id="wordmark" href="/"></a>
+    <nav class="bar-nav" id="barNav" aria-label="Main">
+      <span id="navLinks" style="display:contents"></span>
+      <div class="lang" id="langToggle">
+        <button type="button" data-lang="en">EN</button><button type="button" data-lang="cn">中</button>
+      </div>
+    </nav>
+  </div>
+</header>
+<main id="view"></main>
+<footer>
+  <div class="foot-in">
+    <span class="fm" id="footBrand"></span>
+    <span id="footMeta"></span>
+    <div class="foot-links" id="footLinks" hidden></div>
+  </div>
+</footer>
+<script>
+'use strict';
+const state={config:{},lang:'en',products:null,brand:''};
+let STAGE_MODE=false, stageSel=null, stageKey=null, stageIdKey=null;
+const $=s=>document.querySelector(s);
+
+async function api(path){
+  const r=await fetch(path,{headers:{'Accept':'application/json','x-lang':state.lang==='cn'?'cn':'en'}});
+  if(!r.ok) throw new Error(path+' → '+r.status);
+  const j=await r.json();
+  return j&&('data'in j)?j.data:j;
+}
+
+// Theme: the subset of public/shop.html applyTheme() this page uses — the
+// published palette and the display/body families, uploaded families included.
+function loadBrandFonts(fonts){
+  const fmt=u=>{ const m=String(u).toLowerCase().match(/\.(woff2|woff|otf|ttf)(?:[?#]|$)/);
+    return m?({woff2:'woff2',woff:'woff',otf:'opentype',ttf:'truetype'}[m[1]]):''; };
+  const seen=new Set(), rules=[];
+  [fonts.display,fonts.body].forEach(f=>{
+    if(!f||!f.url||!f.family||!/^https:\/\//i.test(f.url)) return;
+    const fam=String(f.family).replace(/'/g,''); if(seen.has(fam)) return; seen.add(fam);
+    const f2=fmt(f.url); rules.push(`@font-face{font-family:'${fam}';src:url('${f.url}')${f2?` format('${f2}')`:''};font-display:swap;}`);
+  });
+  if(!rules.length) return;
+  const el=document.createElement('style'); el.id='brandFonts'; el.textContent=rules.join('\n'); document.head.appendChild(el);
+}
+function applyTheme(cfg){
+  const t=(cfg&&cfg.theme)||{}, p=t.palette||{}, root=document.documentElement;
+  const setVar=(k,v)=>{ if(v) root.style.setProperty(k,v); };
+  setVar('--oat',p.surface); setVar('--ink',p.ink); setVar('--forest',p.primary);
+  setVar('--lime',p.accent); setVar('--olive',p.muted);
+  const CJK="'DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,sans-serif";
+  loadBrandFonts(t.fonts||{});
+  const fam=f=>(f&&f.family)?`'${String(f.family).replace(/'/g,'')}', ${CJK}`:'';
+  setVar('--f-bear',fam(t.fonts&&t.fonts.display));
+  setVar('--f-aleo',fam(t.fonts&&t.fonts.body));
+  const hex=p.primary||'#365329';
+  root.style.setProperty('--accent',hex);
+  const m=document.querySelector('meta[name=theme-color]'); if(m) m.setAttribute('content',p.surface||'#F2E7DF');
+}
+function brandName(cfg){
+  const w=cfg&&cfg.brand&&cfg.brand.me_footer&&cfg.brand.me_footer.wordmark_text;
+  return (w&&String(w).trim())||'';
+}
+// The website's words come from the same settings as the web shop's
+// (cfg.web.site, back office → Web store configuration): title, description,
+// footer line and footer links. Header menu items that point outside (https)
+// show; the web shop's own home/shop items do not belong here.
+function siteCfg(){ const w=state.config&&state.config.web; return (w&&w.site&&typeof w.site==='object')?w.site:{}; }
+function pick(en,cn){ return (state.lang==='cn'?(cn||en):(en||cn))||''; }
+function renderChrome(){
+  const site=siteCfg();
+  $('#wordmark').textContent=state.brand;
+  $('#footBrand').textContent=state.brand;
+  $('#footMeta').textContent=pick(site.footer_en,site.footer_cn);
+  const nav=$('#navLinks'); nav.innerHTML='';
+  for(const it of (Array.isArray(site.nav)?site.nav:[])){
+    if(!/^https:\/\//i.test(it&&it.target||'')) continue;
+    const a=document.createElement('a'); a.href=it.target; a.target='_blank'; a.rel='noopener';
+    a.textContent=pick(it.label_en,it.label_cn); nav.appendChild(a);
+  }
+  const row=$('#footLinks'); row.innerHTML='';
+  const links=Array.isArray(site.links)?site.links:[];
+  for(const l of links){ const a=document.createElement('a'); a.href=l.url; a.target='_blank'; a.rel='noopener'; a.textContent=pick(l.label_en,l.label_cn); row.appendChild(a); }
+  row.hidden=!links.length;
+  document.title=pick(site.title_en,site.title_cn)||state.brand||'Website';
+  let desc=document.querySelector('meta[name="description"]');
+  const d=pick(site.description_en,site.description_cn);
+  if(d){ if(!desc){ desc=document.createElement('meta'); desc.name='description'; document.head.appendChild(desc); } desc.content=d; }
+  else if(desc){ desc.remove(); }
+  document.documentElement.lang=state.lang==='cn'?'zh-CN':'en';
+  document.querySelectorAll('#langToggle button').forEach(b=>b.classList.toggle('active',b.dataset.lang===state.lang));
+}
+
+function stageHighlight(scroll){
+  if(!STAGE_MODE) return;
+  document.querySelectorAll('.sb-blk-outer.cms-selected').forEach(el=>el.classList.remove('cms-selected'));
+  if(!stageSel) return;
+  const el=document.querySelector('.sb-blk-outer[data-block-id="'+CSS.escape(stageSel)+'"]');
+  if(!el) return;
+  el.classList.add('cms-selected');
+  if(scroll){ const r=el.getBoundingClientRect(); if(r.bottom<0||r.top>window.innerHeight) el.scrollIntoView({block:'center',behavior:'smooth'}); }
+}
+
+// Products the layout names by id (manual grids, a featured product, a
+// bundle), plus a base pull for the grids that choose their own — the same
+// pre-fetch as public/shop.html renderHome().
+function layoutProductIds(layout){
+  const ids=new Set();
+  for(const b of layout){ (b.product_ids||[]).forEach(id=>id&&ids.add(id)); if(b.product_id) ids.add(b.product_id); if(b.bundle_product_id) ids.add(b.bundle_product_id); }
+  return [...ids];
+}
+async function loadProducts(layout){
+  let base=[]; try{ base=(await api('/api/retail/products?limit=100'))||[]; }catch(e){}
+  const refIds=layoutProductIds(layout);
+  if(refIds.length){
+    try{
+      const ref=(await api('/api/retail/products?ids='+refIds.join(',')+'&bundle_components=1&limit=200'))||[];
+      const map=new Map(base.map(p=>[p.id,p])); for(const p of ref) map.set(p.id,p); base=[...map.values()];
+    }catch(e){}
+  }
+  return base;
+}
+
+async function render(){
+  const view=$('#view');
+  const published=state.config&&state.config.website&&state.config.website.layout;
+  const layout=(window.ShopBlocks&&Array.isArray(published))?ShopBlocks.forSurface(published):[];
+  if(!layout.length){
+    // On the stage, the editor's own live pair (public/cms.html) says what to
+    // do; a visitor sees the brand's header and footer around an empty body.
+    view.innerHTML=STAGE_MODE?'<p class="empty">'+(state.lang==='cn'?'添加模块':'Add a block')+'</p>':'';
+    return;
+  }
+  if(!state.products) state.products=await loadProducts(layout);
+  ShopBlocks.stopTimers();
+  ShopBlocks.setContext({ lang:state.lang, products:state.products, categories:[], flashSales:[], config:state.config });
+  view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layout)+'</div>';
+  ShopBlocks.startTimers(view);
+  stageHighlight(true);
+}
+
+(async function boot(){
+  const qs=new URLSearchParams(location.search);
+  const DRAFT_MODE=qs.get('draft')==='1';
+  STAGE_MODE=DRAFT_MODE&&qs.get('stage')==='1';
+  if(STAGE_MODE) document.documentElement.classList.add('cms-stage');
+  try{ state.lang=localStorage.getItem('site_lang')||'en'; }catch(e){}
+  if(!['en','cn'].includes(state.lang)) state.lang='en';
+  if(DRAFT_MODE){ try{ state.config=await api('/api/retail-admin/storefront/preview-config')||{}; }catch(e){} }
+  if(!state.config||!Object.keys(state.config).length){ try{ state.config=await api('/api/retail/config')||{}; }catch(e){ state.config={}; } }
+  applyTheme(state.config);
+  state.brand=brandName(state.config);
+  renderChrome();
+
+  if(window.ShopBlocks) ShopBlocks.onRerender(()=>render());
+  document.getElementById('langToggle').addEventListener('click',ev=>{
+    const b=ev.target.closest('button[data-lang]'); if(!b||STAGE_MODE) return;
+    state.lang=b.dataset.lang; try{ localStorage.setItem('site_lang',state.lang); }catch(e){}
+    renderChrome(); render();
+  });
+  // A block's button: a full https:// link opens; anything that leads into
+  // the shop (product, category, basket, account) has nowhere to go here.
+  document.addEventListener('click',ev=>{
+    if(STAGE_MODE) return;
+    const el=ev.target.closest('[data-cta-target]'); if(!el) return;
+    ev.preventDefault();
+    const t=String(el.getAttribute('data-cta-target')||'');
+    if(/^https:\/\//i.test(t)) window.open(t,'_blank','noopener');
+  });
+
+  if(DRAFT_MODE){
+    window.addEventListener('message',async ev=>{
+      if(ev.origin!==location.origin||!ev.data) return;
+      if(ev.data.type==='cms:draft'&&STAGE_MODE){
+        const layout=Array.isArray(ev.data.layout)?ev.data.layout:[];
+        const key=JSON.stringify(layout);
+        const langChanged=!!(ev.data.lang&&ev.data.lang!==state.lang);
+        stageSel=ev.data.selectedId||null;
+        if(key===stageKey&&!langChanged){ stageHighlight(true); return; }
+        stageKey=key;
+        state.config.website=state.config.website||{};
+        state.config.website.layout=layout;
+        if(langChanged){ state.lang=ev.data.lang; renderChrome(); }
+        const idKey=layoutProductIds(layout).sort().join(',');
+        if(idKey!==stageIdKey){ stageIdKey=idKey; state.products=null; }
+        render();
+        return;
+      }
+      if(ev.data.type!=='cms:reload') return;
+      try{ state.config=await api('/api/retail-admin/storefront/preview-config')||state.config; }catch(e){}
+      state.products=null; render();
+    });
+  }
+  if(STAGE_MODE){
+    // Clicks: a block selects itself in the editor; everything else is inert.
+    document.addEventListener('click',ev=>{
+      const blk=ev.target.closest('.sb-blk-outer');
+      if(blk){
+        ev.preventDefault(); ev.stopPropagation();
+        const id=blk.getAttribute('data-block-id');
+        if(id){ stageSel=id; stageHighlight(false); try{ parent.postMessage({type:'cms:select',id},location.origin); }catch(e){} }
+        return;
+      }
+      if(ev.target.closest('a,button,form')){ ev.preventDefault(); ev.stopPropagation(); }
+    },true);
+  }
+  await render();
+  if(STAGE_MODE){ try{ parent.postMessage({type:'cms:stage-ready'},location.origin); }catch(e){} }
+})();
+</script>
+</body>
+</html>

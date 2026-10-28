@@ -5840,6 +5840,9 @@ const PAGES = [
   { id: 'categories', name: 'Shop landing', cn: '商品',   desc: 'Opens from buttons that link to it. Its promo cards also show at the top of the Shop tab', desc_cn: '从链接到此页的按钮打开。页内的促销卡片也会显示在「商品」标签页顶部' },
   { id: 'membership', name: 'Membership',   cn: '会员',   desc: 'Roots Club tier perks, benefits, hero',                            desc_cn: '萌芽会员等级权益、福利、主图' },
   { id: 'onboarding', name: 'Onboarding',   cn: '欢迎',   desc: 'First-launch welcome — shown before the customer reaches Home',     desc_cn: '首次启动欢迎页 — 在顾客进入首页前显示' },
+  // The brand website (public/site.html), edited on the desktop stage only —
+  // decisions §503. desc_cn composed, declared in tacet-delivery-vocabulary v1.361.
+  { id: 'website',    name: 'Website',      cn: '网站',   desc: 'Brand website — what visitors see at your website address',        desc_cn: '品牌网站 — 访客打开您的网站地址时看到的页面' },
 ];
 
 const TAB_LABELS = {
@@ -7156,8 +7159,9 @@ async function getHomeLayout(force) {
 async function renderLinkStatus() {
   const el = $('#link-status');
   if (!el) return;
-  // Home doesn't need this — it's the entry point.
-  if (state.page === 'home') { el.hidden = true; return; }
+  // Home doesn't need this — it's the entry point. The Website is reached by
+  // its address, not from Home (§503).
+  if (state.page === 'home' || state.page === 'website') { el.hidden = true; return; }
   // Onboarding is reached by auto-redirect (or the Tour link on Me),
   // not by a Home block — so the link-from-Home check would always
   // say "unlinked" and confuse the operator. Show gating controls instead.
@@ -15690,14 +15694,19 @@ function _lpClose() { const d = document.getElementById('live-preview-drawer'); 
 // the inspector opens on that block, exactly as on the phone. Every
 // renderPreview() posts the whole draft (`cms:draft`) into the frame, so the
 // page redraws as the office types, without waiting for the 800ms save.
-// Only Home reaches the website, so any other page forces the phone stage
-// and the Desktop button is disabled with the reason in its tooltip.
+// Only Home reaches the web shop, so the mini app pages force the phone stage
+// and the Desktop button is disabled with the reason in its tooltip. The
+// Website page (§503) is the other way round: desktop only, drawn by
+// public/site.html at /site-preview, and the Phone button is the disabled one.
 // ═══════════════════════════════════════════════════════════════════════
 let _stageIframe = null;
 let _stageReady = false;
 let _stageObserver = null;
 
-function stageAllowed() { return state.page === 'home'; }
+function stageAllowed() { return state.page === 'home' || state.page === 'website'; }
+function stageSrc() {
+  return (state.page === 'website' ? '/site-preview' : '/shop-preview') + '?draft=1&stage=1';
+}
 
 function setStage(stage) {
   state.stage = (stage === 'phone') ? 'phone' : 'desktop';
@@ -15711,6 +15720,7 @@ function effectiveStage() {
   // The phone editor shell (cms-mobile.html) embeds this page as its faithful
   // phone preview; there the stage is the phone, whatever the desktop chose.
   if (window.__fcPreviewEmbed) return 'phone';
+  if (state.page === 'website') return 'desktop';
   return (state.stage === 'desktop' && stageAllowed()) ? 'desktop' : 'phone';
 }
 
@@ -15728,11 +15738,22 @@ function applyStage() {
       if (b.dataset.stage === 'desktop') {
         b.disabled = !stageAllowed();
         if (!stageAllowed()) {
-          b.dataset.tiEn = 'Only Home is on the website — the other pages are mini app only';
-          b.dataset.tiCn = '只有首页在网页版上 — 其他页面仅小程序';
+          b.dataset.tiEn = 'Only Home is on the web shop — the other pages are mini app only';
+          b.dataset.tiCn = '只有首页在网页商店上 — 其他页面仅小程序';
         } else {
           b.dataset.tiEn = 'Edit the website as customers see it on a computer';
           b.dataset.tiCn = '按顾客在电脑上看到的样子编辑网页版';
+        }
+        b.title = state.lang === 'cn' ? b.dataset.tiCn : b.dataset.tiEn;
+      } else if (b.dataset.stage === 'phone') {
+        // Composed pair, declared in tacet-delivery-vocabulary v1.361 (§503).
+        b.disabled = state.page === 'website';
+        if (b.disabled) {
+          b.dataset.tiEn = 'The website is edited on Desktop — it adapts to phones by itself';
+          b.dataset.tiCn = '网站在电脑模式下编辑 — 在手机上会自动适配';
+        } else {
+          b.dataset.tiEn = 'Edit the mini app as customers see it on a phone';
+          b.dataset.tiCn = '按顾客在手机上看到的样子编辑小程序';
         }
         b.title = state.lang === 'cn' ? b.dataset.tiCn : b.dataset.tiEn;
       }
@@ -15750,13 +15771,23 @@ function applyStage() {
 }
 
 function mountDesktopStage() {
-  if (_stageIframe) return;
+  if (_stageIframe) {
+    // Home and the Website draw in different pages; switching between them
+    // reloads the frame, which posts cms:stage-ready again.
+    if (_stageIframe.dataset.src !== stageSrc()) {
+      _stageReady = false;
+      _stageIframe.dataset.src = stageSrc();
+      _stageIframe.src = stageSrc();
+    }
+    return;
+  }
   const view = document.getElementById('ds-view');
   if (!view) return;
   const ifr = document.createElement('iframe');
   ifr.id = 'desktop-stage-iframe';
   ifr.title = 'Website, as customers see it on a computer';
-  ifr.src = '/shop-preview?draft=1&stage=1';
+  ifr.dataset.src = stageSrc();
+  ifr.src = stageSrc();
   view.appendChild(ifr);
   _stageIframe = ifr;
   _stageReady = false;
@@ -15853,11 +15884,11 @@ let _lpMode = 'draft';
 let _lpDevice = 'phone';
 function _lpUrl() {
   const page = (typeof state === 'object' && state?.page) || 'home';
-  if (_lpDevice === 'desktop') {
+  if (_lpDevice === 'desktop' || page === 'website') {
     const params = new URLSearchParams();
     if (_lpMode === 'draft') params.set('draft', '1');
     const q = params.toString();
-    return '/shop-preview' + (q ? '?' + q : '');
+    return (page === 'website' ? '/site-preview' : '/shop-preview') + (q ? '?' + q : '');
   }
   const params = new URLSearchParams({ page, preview: '1' });
   if (_lpMode === 'draft') params.set('draft', '1');
@@ -16123,7 +16154,9 @@ document.addEventListener('keydown', (e) => {
   const postReady = () => {
     POST({
       evt: 'ready',
-      pages: PAGES.map(p => ({ id: p.id, name: p.name, cn: p.cn })),
+      // The Website page is edited on the desktop stage only (§503), which
+      // the phone editor shell does not have.
+      pages: PAGES.filter(p => p.id !== 'website').map(p => ({ id: p.id, name: p.name, cn: p.cn })),
       // §325 — the universal Corner radius choices, from the inspector's own
       // list. (The frame's colour is a colour: the Design sheet has it.)
       corners: CORNER_RADIUS_OPTIONS.map(o => ({ value: o.value, label: o.label })),

@@ -118,10 +118,14 @@ section('3 · the editor stage: Desktop first, the phone second');
 
 yes(/stage: 'desktop',/.test(CMS), 'the stage preference defaults to desktop');
 yes(/state\.stage = localStorage\.getItem\(STAGE_KEY\) \|\| 'desktop'/.test(CMS), '…and is read back as desktop when nothing was chosen');
-yes(/function stageAllowed\(\) \{ return state\.page === 'home'; \}/.test(CMS), 'only Home may use the desktop stage');
+// §503: the Website page is the second page on a desktop stage, and the only
+// one where the phone stage is not offered.
+yes(/function stageAllowed\(\) \{ return state\.page === 'home' \|\| state\.page === 'website'; \}/.test(CMS), 'only Home and the Website may use the desktop stage');
+yes(/if \(state\.page === 'website'\) return 'desktop';/.test(CMS), 'the Website is always on the desktop stage');
 yes(/return \(state\.stage === 'desktop' && stageAllowed\(\)\) \? 'desktop' : 'phone';/.test(CMS), 'off Home the phone stage is what shows');
 yes(/b\.disabled = !stageAllowed\(\);/.test(CMS), 'the Desktop button is disabled off Home');
-yes(/ifr\.src = '\/shop-preview\?draft=1&stage=1';/.test(CMS), 'the desktop stage is the real web shop in draft + stage mode');
+yes(/ifr\.src = stageSrc\(\);/.test(CMS) && /\(state\.page === 'website' \? '\/site-preview' : '\/shop-preview'\) \+ '\?draft=1&stage=1'/.test(CMS),
+  'the desktop stage is the real web shop (Home) or the brand website (Website), in draft + stage mode');
 yes(/width: 1280px;/.test(CMS) && /const scale = Math\.min\(1, w \/ 1280\);/.test(CMS), 'rendered 1280px wide and scaled to the canvas');
 yes(/type: 'cms:draft',/.test(CMS) && /layout: state\.draft\.map\(b => \(\{ \.\.\.b, show_on: showOnFor\(b\) \}\)\)/.test(CMS),
   'every preview render posts the draft with show_on made explicit');

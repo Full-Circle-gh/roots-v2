@@ -33493,5 +33493,5 @@ Ash's first instinct was that such an order should not show on the till at all. 
 
 8. **Not in this change, each its own later PR:** website-only blocks for the parts of the mock-up the engine has no block for (the promise band, the numbered steps, the shop list, the moving slogan banner); ad tracking (Google and Meta tags) and the cookie consent banner they need for European visitors.
 
-9. **Words:** `Website · 网站` and `Web shop · 网页商店` are copied whole from live pairs. Two pairs are composed and declared in `docs/tacet-delivery-vocabulary.md` v1.361: the Website page's one-line description, and the Phone button's tooltip on that page. The Desktop button's existing tooltip on the other pages is reworded from "the website" to "the web shop", since there are now two web surfaces; its Chinese takes the live `网页商店`.
+9. **Words:** `Website · 网站`, `Web shop · 网页商店` and `Add a block · 添加模块` are copied whole from live pairs. Two pairs are composed and declared in `docs/tacet-delivery-vocabulary.md` v1.361: the Website page's one-line description, and the Phone button's tooltip on that page. The Desktop button's existing tooltip on the other pages is reworded from "the website" to "the web shop", since there are now two web surfaces; its Chinese takes the live `网页商店`.
 

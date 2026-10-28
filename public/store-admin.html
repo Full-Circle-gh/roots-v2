@@ -879,7 +879,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   function renderDomains(t, j){
     const panel = $('#spPanel'); if (!panel) return;
     const list = (j.domains||[]).map(d => {
-      const star = d.isPrimary ? '<span class="pill active" style="margin-left:6px">primary</span>' : '';
+      const star = (d.isPrimary ? '<span class="pill active" style="margin-left:6px">primary</span>' : '') +
+        (d.serves === 'site' ? '<span class="pill open" style="margin-left:6px">website</span>' : '');
       const acts = '<div class="acts">' +
         (d.isPrimary ? '' : '<button class="btn btn-sm" data-dom-primary="'+d.id+'">Make primary</button>') +
         (d.status==='active' ? '<button class="btn btn-sm" data-dom-status="'+d.id+'" data-to="disabled">Disable</button>' : '<button class="btn btn-sm" data-dom-status="'+d.id+'" data-to="active">Enable</button>') +
@@ -892,6 +893,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       '<div class="det-sec"><h4>Add domain · 新增域名</h4>' +
         '<div class="field"><input type="text" id="dom-host" placeholder="shop.example.com" autocapitalize="off" spellcheck="false"></div>' +
         '<div class="row2" style="margin-bottom:10px"><select id="dom-kind" style="flex:1"><option value="custom">Custom (BYO) · 自有域名</option><option value="subdomain">Platform subdomain · 平台子域名</option></select></div>' +
+        // What the domain opens (decisions §503): the web shop, or the brand website.
+        '<div class="row2" style="margin-bottom:10px"><select id="dom-serves" style="flex:1"><option value="shop">Web shop · 网页商店</option><option value="site">Website · 网站</option></select></div>' +
         '<div class="zh" style="margin-bottom:10px;line-height:1.5">Custom domains start <b>pending</b> until you point DNS at the server and TLS/ICP are ready, then Enable. Customers reach the storefront at the <b>primary</b> domain. · 自有域名先为待验证,完成 DNS、TLS/ICP 后启用;顾客通过主域名访问门店。</div>' +
         '<button class="btn btn-brass" id="dom-add" style="width:100%;padding:11px">Add domain · 新增</button>' +
       '</div>';
@@ -904,7 +907,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     $('#dom-add').addEventListener('click', () => {
       const host = $('#dom-host').value.trim().toLowerCase();
       if (!host){ spMsg('Enter a domain · 请输入域名','err'); return; }
-      api('/api/store-admin/tenants/'+t.id+'/domains',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ host, kind:$('#dom-kind').value })})
+      api('/api/store-admin/tenants/'+t.id+'/domains',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ host, kind:$('#dom-kind').value, serves:$('#dom-serves').value })})
         .then(r=>{ if(r.success){ toast('Added'); secDomains(t); } else spMsg(r.error||'Failed','err'); }).catch(()=>{});
     });
   }
