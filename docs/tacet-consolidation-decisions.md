@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.589
+# Tacet shared-core consolidation — decisions record, v4.590
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-28 · v4.590 — **§503 AMENDED · THE WEBSITE'S MISSING PARTS: TWO NEW BLOCKS, TWO REUSED — DECIDED BY ASH.** Ash: *"Yes, build them"*, on building the four mock-up parts the engine had no block for (§503 rule 8). Two are new website-only blocks, `fact_band` (the promise band) and `steps` (numbered steps); the shop list is the existing Stores block (`store_info`), which gains a switch to show the Chinese address under the English one; the moving slogan is the existing announcement bar in its marquee mode. Strings: pairs copied where live, seven composed (vocabulary v1.362). No change to `.gitignore` or CI.
 
 2026-10-28 · v4.589 — **§503 · A BRAND WEBSITE, EDITED AS ITS OWN PAGE IN THE MINI APP EDITOR, SERVED ON A DOMAIN THE TENANT MARKS AS ITS WEBSITE — AMENDS §496 RULE 2 FOR SUCH A HOST — DECIDED BY ASH.** Ash: *"i want to change it to a introduction website . the idea of this website is to introduce outside of china our brand"*, for *"Expats or tourists coming to China"*, at *"www.rootskitchenchina.com"*; on the mock-up, *"it looks ok, i want to be able to edit in the tacet editor"*; then *"Yes, go ahead"* on a separate Website page in the same editor. The editor gains a `website` page (one more entry in `lib/page-layout.js` `ALLOWED_PAGES`), edited on the desktop stage only; `tenant_domains` gains `serves` (`shop` · `site`); a host marked `site` serves the new `public/site.html`, which draws the `website` layout with the web shop's own block engine. The web shop, its Home and the mini app are unchanged. Strings: three live pairs copied, two composed (vocabulary v1.361). No change to `.gitignore` or CI.
 
@@ -33495,3 +33497,16 @@ Ash's first instinct was that such an order should not show on the till at all. 
 
 9. **Words:** `Website · 网站`, `Web shop · 网页商店` and `Add a block · 添加模块` are copied whole from live pairs. Two pairs are composed and declared in `docs/tacet-delivery-vocabulary.md` v1.361: the Website page's one-line description, and the Phone button's tooltip on that page. The Desktop button's existing tooltip on the other pages is reworded from "the website" to "the web shop", since there are now two web surfaces; its Chinese takes the live `网页商店`.
 
+### Amended 2026-10-28 — the website's missing parts (rule 8, built)
+
+Ash: *"Yes, build them"*. Of the four parts of the mock-up that rule 8 left for later, two needed a new block and two were already in the engine.
+
+10. **Two new block types, website only:** `fact_band` (a strong colour band of up to four short facts, each a big line and a small line) and `steps` (a heading, an intro and up to four numbered steps, each with an optional picture such as a QR code). Both are on `ALLOWED_BLOCK_TYPES`, both have a web renderer in `public/shop/blocks.js`, and neither has a mini-app branch: `BLOCK_META` marks them `website_only`, the editor offers them in the palette of the Website page alone, and the phone editor shell does not offer them. `scripts/test_cms_block_whitelist.js` requires a mini-app branch of every palette type except a `website_only` one.
+
+11. **The shop list is the Stores block** (`store_info`), which already carries name, address, hours and the live open dot for any number of shops. It gains `show_cn_address`: when on and the page is in English, the shop's Chinese address shows under the English one, larger, for a visitor to show a taxi driver. It is off by default, so no existing Stores block changes. The mini app does not read it.
+
+12. **The moving slogan is the announcement bar** in its existing *Marquee* animation, which the web engine already draws. Nothing is added for it.
+
+13. **On the Website page the editor hides the *Show on* section.** The page is the website; which surface draws a block is not a question there.
+
+14. **Words:** live pairs are copied for every field label the two blocks share with existing ones (`Title · 标题`, `Text · 正文`, `Small heading · 小标题`, `Picture · 图片`, the colour and move/remove labels, `+ Add card · + 添加卡片`). Seven strings are composed and declared in `docs/tacet-delivery-vocabulary.md` v1.362: the two blocks' names and descriptions, `Step N · 第 N 步`, `+ Add step · + 添加步骤`, and the Stores switch's label.
