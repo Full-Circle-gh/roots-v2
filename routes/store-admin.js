@@ -370,8 +370,8 @@ const DOMAIN_RE = /^(?=.{4,253}$)([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$/;
 router.get('/api/store-admin/tenants/:id/domains', requirePlatformAdmin('view'), (req, res) => {
   const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Store not found · 未找到店铺' });
-  const rows = db.prepare('SELECT id, host, kind, status, is_primary, created_at FROM tenant_domains WHERE tenant_id = ? ORDER BY is_primary DESC, id ASC').all(t.id)
-    .map(d => ({ id: d.id, host: d.host, kind: d.kind, status: d.status, isPrimary: !!d.is_primary, createdAt: d.created_at }));
+  const rows = db.prepare('SELECT id, host, kind, status, is_primary, serves, created_at FROM tenant_domains WHERE tenant_id = ? ORDER BY is_primary DESC, id ASC').all(t.id)
+    .map(d => ({ id: d.id, host: d.host, kind: d.kind, status: d.status, isPrimary: !!d.is_primary, serves: d.serves === 'site' ? 'site' : 'shop', createdAt: d.created_at }));
   res.json({ success: true, domains: rows, backendHost: STORE_BACKEND_HOST });
 });
 
@@ -388,9 +388,11 @@ router.post('/api/store-admin/tenants/:id/domains', requirePlatformAdmin('tenant
   // Custom (BYO) domains start 'pending' until DNS/ICP/TLS are verified; a free
   // platform subdomain can serve immediately.
   const status = ['active', 'pending', 'disabled'].includes(req.body.status) ? req.body.status : (kind === 'custom' ? 'pending' : 'active');
-  registerTenantDomain(t.id, host, { kind, status, primary: false });
+  // What the domain opens: the web shop (default) or the brand website (§503).
+  const serves = req.body.serves === 'site' ? 'site' : 'shop';
+  registerTenantDomain(t.id, host, { kind, status, primary: false, serves });
   const row = db.prepare('SELECT id FROM tenant_domains WHERE host = ?').get(host);
-  logAudit(req, { action: 'domain.add', targetType: 'tenant', targetId: t.id, meta: { host, kind, status } });
+  logAudit(req, { action: 'domain.add', targetType: 'tenant', targetId: t.id, meta: { host, kind, status, serves } });
   res.json({ success: true, id: row && row.id });
 });
 

@@ -178,6 +178,10 @@ const LEGACY_KITCHEN_HOSTS = new Set([
 ]);
 app.use((req, res, next) => {
   if (!LEGACY_KITCHEN_HOSTS.has((req.hostname || '').toLowerCase())) return next();
+  // A legacy host a tenant has registered as one of its domains is that
+  // tenant's now — www.rootskitchenchina.com as Roots' brand website, once its
+  // row exists — and goes to the host router below (decisions §503 rule 5).
+  if (require('./middleware/public-tenant').lookupStorefrontHost(req.hostname)) return next();
   const p = req.path;
   if (p.startsWith('/api/') || p.startsWith('/assets/') ||
       p.startsWith('/track') || p.startsWith('/.well-known/')) return next();
@@ -731,6 +735,12 @@ function serveShop(req, res) {
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'shop.html'));
 }
+// The brand website (decisions §503): a domain registered with
+// serves = 'site' opens public/site.html instead of the web shop.
+function serveSite(req, res) {
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'site.html'));
+}
 
 // Host router for '/'. This served the kitchen SPA shell until §78; the
 // `requireAuth` import that gated it went with the page, since a redirect to
@@ -748,9 +758,11 @@ app.get('/', (req, res) => {
   if (host === STORE_HOST) {
     return serveRetailAdmin(req, res);
   }
-  // A registered storefront domain → the public customer website.
-  if (lookupStorefrontHost(req.hostname)) {
-    return serveShop(req, res);
+  // A registered storefront domain → the public customer website: the brand
+  // site for a 'site' domain, the web shop for every other.
+  const storefront = lookupStorefrontHost(req.hostname);
+  if (storefront) {
+    return storefront.serves === 'site' ? serveSite(req, res) : serveShop(req, res);
   }
   /* Everything else (food.* / app.* / bare domain) used to serve the kitchen
      SPA. §78 deleted it, and this is the door left forwarding to the app the
@@ -911,6 +923,11 @@ app.get('/storefront', (req, res) => {
 // host it falls back to the default (Roots) catalogue. Safe + public (the page
 // only reads public /api/retail/* data). Remove once real domains are live.
 app.get('/shop-preview', serveShop);
+// The brand website on the back-office host, for the editor's desktop stage
+// (/site-preview?draft=1&stage=1) and its live-preview drawer — §503. Public
+// for the same reason as /shop-preview: the page reads only public data, and
+// the draft overlay it asks for is itself admin-gated.
+app.get('/site-preview', serveSite);
 
 /* The Full Circle landing page is GONE (§270). It pitched a retired brand with
    a placeholder contact address (audit A1), and nothing linked to it. /full-circle
@@ -1083,8 +1100,10 @@ app.use((req, res) => {
   // On a storefront host, unknown GET paths are client-side SPA routes
   // (/product/123, /cart, …) — serve the shell so deep links and refreshes
   // keep their URL instead of bouncing to '/'.
-  if (req.method === 'GET' && lookupStorefrontHost(req.hostname)) {
-    return serveShop(req, res);
+  if (req.method === 'GET') {
+    // The brand website has no client routes; an unknown path opens it.
+    const storefront = lookupStorefrontHost(req.hostname);
+    if (storefront) return storefront.serves === 'site' ? serveSite(req, res) : serveShop(req, res);
   }
   res.redirect('/');
 });

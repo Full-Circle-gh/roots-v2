@@ -36,11 +36,15 @@ function lookupStorefrontHost(host) {
     const h = normalizeHost(host);
     if (!h) return null;
     const row = db.prepare(
-      `SELECT t.id AS tenant_id, t.status AS tenant_status
+      `SELECT t.id AS tenant_id, t.status AS tenant_status, d.serves AS serves
          FROM tenant_domains d JOIN tenants t ON t.id = d.tenant_id
         WHERE d.host = ? AND d.status = 'active'`
     ).get(h);
-    if (row && row.tenant_status === 'active') return { tenantId: row.tenant_id };
+    // `serves`: 'shop' (public/shop.html) or 'site' (the brand website,
+    // public/site.html) — decisions §503. Anything else reads as a shop.
+    if (row && row.tenant_status === 'active') {
+      return { tenantId: row.tenant_id, serves: row.serves === 'site' ? 'site' : 'shop' };
+    }
   } catch (e) { /* tenant_domains not present yet → not a storefront host */ }
   return null;
 }

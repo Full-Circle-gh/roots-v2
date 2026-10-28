@@ -127,6 +127,10 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_tenant_user_sessions_user ON tenant_user_sessions(tenant_user_id);
 `);
+// What a domain serves (decisions §503): 'shop' is the web shop
+// (public/shop.html), 'site' the brand website (public/site.html). Every row
+// that existed before the column is a shop.
+try { db.exec("ALTER TABLE tenant_domains ADD COLUMN serves TEXT NOT NULL DEFAULT 'shop'"); } catch (e) { /* already added */ }
 
 // Existing DBs predating product_catalog_mode get the column via ALTER. New
 // tenants default to 'self'; Roots is flipped to 'upstream' by the migration
