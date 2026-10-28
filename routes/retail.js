@@ -32842,6 +32842,25 @@ function readOnboardingSettings() {
   };
 }
 
+// ── The website's own title, description and share picture (§503 r.15) ──
+// storefront_config 'website.meta', public as cfg.website.meta. Takes effect
+// when saved (no draft), like the web shop's Title, menu and footer. Cleaned
+// on the way in here and again on the way out by lib/site-head.js, which
+// serveSite uses to write it into public/site.html.
+router.get('/api/retail-admin/cms/website-meta', requireRetailAdmin, (req, res) => {
+  const { normalizeWebsiteMeta } = require('../lib/site-head');
+  const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'website.meta'").get();
+  let raw = null; try { raw = row ? JSON.parse(row.value_json) : null; } catch { raw = null; }
+  res.json({ success: true, data: normalizeWebsiteMeta(raw) });
+});
+
+router.put('/api/retail-admin/cms/website-meta', requireRetailAdmin, express.json({ limit: '16kb' }), (req, res) => {
+  const { normalizeWebsiteMeta } = require('../lib/site-head');
+  const meta = normalizeWebsiteMeta(req.body);
+  writeLayout('website.meta', JSON.stringify(meta), req.user.id);
+  res.json({ success: true, data: meta });
+});
+
 router.get('/api/retail-admin/cms/onboarding-settings', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: readOnboardingSettings() });
 });

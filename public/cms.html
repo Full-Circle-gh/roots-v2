@@ -7167,9 +7167,11 @@ async function getHomeLayout(force) {
 async function renderLinkStatus() {
   const el = $('#link-status');
   if (!el) return;
-  // Home doesn't need this — it's the entry point. The Website is reached by
-  // its address, not from Home (§503).
-  if (state.page === 'home' || state.page === 'website') { el.hidden = true; return; }
+  // Home doesn't need this — it's the entry point.
+  if (state.page === 'home') { el.hidden = true; return; }
+  // The Website is reached by its address, not from Home (§503); this strip
+  // holds its own title, description and share picture instead (rule 15).
+  if (state.page === 'website') { await renderWebsiteMeta(el); return; }
   // Onboarding is reached by auto-redirect (or the Tour link on Me),
   // not by a Home block — so the link-from-Home check would always
   // say "unlinked" and confuse the operator. Show gating controls instead.
@@ -7256,6 +7258,41 @@ async function addLinkFromHomeToCurrentPage() {
 // "Show to" dropdown (new / version / always / off), a manual
 // "Re-show to all" button that bumps cfg.onboarding.version, and two
 // "EN · CN" label inputs for the SKIP / NEXT footer buttons.
+// ── The website's title, description and share picture (§503 rule 15) ──
+// Saved as typed (debounced), and live at once: these are not part of the
+// page's draft. The server writes them into the page (lib/site-head.js).
+async function renderWebsiteMeta(el) {
+  let meta = { title_en: '', title_cn: '', description_en: '', description_cn: '', image_url: '' };
+  try { const r = await api('/api/retail-admin/cms/website-meta'); meta = r.data || meta; }
+  catch (e) { toast('Failed to load: ' + e.message, 'err'); }
+  if (state.page !== 'website') return;   // the office moved on while it loaded
+  el.hidden = false;
+  el.className = 'link-status website-meta';
+  el.innerHTML = '';
+  let timer = null;
+  const save = (patch, now) => {
+    Object.assign(meta, patch);
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try { const r = await api('/api/retail-admin/cms/website-meta', { method: 'PUT', body: meta }); meta = r.data || meta; }
+      catch (e) { toast('Failed: ' + e.message, 'err'); }
+    }, now ? 0 : 700);
+  };
+  const box = document.createElement('div');
+  box.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 18px;flex:1;min-width:0;';
+  box.appendChild(field(T('Site title', '网站标题'),
+    T('Browser tab and search results. Blank = your brand name.', '浏览器标签页与搜索结果。留空 = 品牌名。'),
+    txtPair(meta.title_en, meta.title_cn, ({ en, cn }) => save({ title_en: en, title_cn: cn }))));
+  box.appendChild(field(T('Description', '描述'),
+    T('One or two sentences for search results.', '一两句话,用于搜索结果。'),
+    txtPair(meta.description_en, meta.description_cn, ({ en, cn }) => save({ description_en: en, description_cn: cn }), {}, { multiline: true, rows: 2 })));
+  // Note composed, declared in tacet-delivery-vocabulary v1.363.
+  box.appendChild(field(T('Share picture', '分享图片'),
+    T('Shown when the link is shared on WeChat, Facebook or WhatsApp. Blank = the first picture on the page.', '链接在微信、Facebook 或 WhatsApp 上分享时显示。留空 = 页面上的第一张图片。'),
+    imgPicker(meta.image_url, ({ url }) => save({ image_url: url || '' }, true))));
+  el.appendChild(box);
+}
+
 async function renderOnboardingSettings(el) {
   let s = {
     show_to: 'new', version: 1,
