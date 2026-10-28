@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.590
+# Tacet shared-core consolidation — decisions record, v4.591
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-28 · v4.591 — **§503 AMENDED · THE WEBSITE HAS ITS OWN TITLE, SEARCH DESCRIPTION AND SHARE PICTURE, WRITTEN INTO THE PAGE BY THE SERVER — DECIDED BY ASH.** Offered after the website copy was rewritten for ads, since the website shared the web shop's title and description: *"Yes, do it"*. `website.meta` holds the brand site's title, description and share picture, edited on the Website page of the Mini App Editor; `serveSite` writes them, with Open Graph tags, a canonical link and, on the editor's preview path, `noindex`, into `public/site.html` before sending it. Strings: live pairs copied, one composed (vocabulary v1.363). No change to `.gitignore` or CI.
 
 2026-10-28 · v4.590 — **§503 AMENDED · THE WEBSITE'S MISSING PARTS: TWO NEW BLOCKS, TWO REUSED — DECIDED BY ASH.** Ash: *"Yes, build them"*, on building the four mock-up parts the engine had no block for (§503 rule 8). Two are new website-only blocks, `fact_band` (the promise band) and `steps` (numbered steps); the shop list is the existing Stores block (`store_info`), which gains a switch to show the Chinese address under the English one; the moving slogan is the existing announcement bar in its marquee mode. Strings: pairs copied where live, seven composed (vocabulary v1.362). No change to `.gitignore` or CI.
 
@@ -33510,3 +33512,15 @@ Ash: *"Yes, build them"*. Of the four parts of the mock-up that rule 8 left for 
 13. **On the Website page the editor hides the *Show on* section.** The page is the website; which surface draws a block is not a question there.
 
 14. **Words:** live pairs are copied for every field label the two blocks share with existing ones (`Title · 标题`, `Text · 正文`, `Small heading · 小标题`, `Picture · 图片`, the colour and move/remove labels, `+ Add card · + 添加卡片`). Seven strings are composed and declared in `docs/tacet-delivery-vocabulary.md` v1.362: the two blocks' names and descriptions, `Step N · 第 N 步`, `+ Add step · + 添加步骤`, and the Stores switch's label.
+
+### Amended 2026-10-28 — the website's own title, description and share picture
+
+Ash: *"Yes, do it"*, after being told that the website shared the web shop's browser-tab title and search description, which are the text Google Ads and search weigh most.
+
+15. **`website.meta` is the brand site's own words for search and sharing:** `title_en/cn` (80 characters), `description_en/cn` (200) and `image_url` (a path on this site or an https address). It lives in `storefront_config`, is public through `/api/retail/config` as `cfg.website.meta`, and takes effect when saved, like the web shop's *Title, menu and footer* (it is not part of the page's draft and publish). It is edited in a card at the top of the Website page in the Mini App Editor, through `GET` / `PUT /api/retail-admin/cms/website-meta`. Blank falls back to the web shop's title and description, then to the brand name; a blank picture falls back to the first picture on the published page.
+
+16. **The server writes it into the page.** Link previews (WeChat, Facebook, WhatsApp) and ad crawlers read a page's raw HTML and do not run its scripts, so a title set in the browser alone is invisible to them. `serveSite` builds the `<title>`, `meta description`, Open Graph and Twitter-card tags and a canonical link (`lib/site-head.js`, escaped, English first because the site is for visitors from abroad) and puts them in place of `site.html`'s placeholder title. `public/site.html` then reads the same `website.meta` first for the browser tab when the language changes.
+
+17. **The editor's preview of the website is never indexed.** On `/site-preview` the server adds `<meta name="robots" content="noindex">` and no canonical link, so search engines do not list the back office's copy of the site.
+
+18. **Words:** `Site title · 网站标题`, `Description · 描述`, their two notes, `Share picture · 分享图片` and `Website · 网站` are copied whole. One note is composed and declared in `docs/tacet-delivery-vocabulary.md` v1.363: the share picture's note.
