@@ -11481,10 +11481,53 @@ function buildChromeSection(body, b) {
   // The Website page IS the website; which surface draws a block is not a
   // question there (§503 rule 13).
   if (state.page !== 'website') buildShowOnSection(body, b);
+  // The brand's character over the block's corner — Website page only (§503 r.30).
+  if (state.page === 'website') buildCharacterSection(body, b);
 
   // Universal "Frame, radius & width" controls — a collapsed section at the
   // bottom of every block's inspector (set once, rarely reopened).
   buildFrameSection(body, b);
+}
+
+// §503 rules 28–31 — the tenant's own cast, as the product editor's colophon
+// reads it. No cast, no section. A block stores the key and a side.
+let _brandCast = null;   // null = not asked yet; [] = this tenant has none
+function buildCharacterSection(body, b) {
+  const sec = inspectorSection(body, b.type, 'character', T('IP character', '角色'));
+  const draw = (cast) => {
+    sec.innerHTML = '';
+    if (!cast.length) { const s = sec.closest('.insp-sec'); if (s) s.remove(); return; }
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:6px;';
+    const tile = (key, label, inner) => {
+      const t = document.createElement('button');
+      t.type = 'button';
+      t.title = label; t.setAttribute('aria-label', label);
+      t.style.cssText = 'aspect-ratio:1;border-radius:8px;border:2px solid ' + ((b.character || '') === key ? 'var(--tacet-ink)' : 'var(--line-soft)') +
+        ';background:var(--bg-pane);display:flex;align-items:center;justify-content:center;padding:4px;cursor:pointer;font-size:11px;color:var(--text-2);';
+      t.innerHTML = inner;
+      t.onclick = () => { updateBlock(b.id, { character: key || undefined }); };
+      return t;
+    };
+    grid.appendChild(tile('', T('None', '无'), escapeHtml(T('None', '无'))));
+    for (const c of cast) {
+      grid.appendChild(tile(c.key, c.label, `<img src="/assets/brand/cutout/ip-${encodeURIComponent(c.key)}.png" alt="" style="max-width:100%;max-height:100%;object-fit:contain">`));
+    }
+    sec.appendChild(grid);
+    if (b.character) {
+      sec.appendChild(field('', '',
+        sel(b.character_side === 'left' ? 'left' : 'right', [
+          { value: 'left',  label: T('Left', '左') },
+          { value: 'right', label: T('Right', '右') },
+        ], v => updateBlock(b.id, { character_side: v }))));
+    }
+  };
+  if (_brandCast) { draw(_brandCast); return; }
+  // Not empty while the cast loads: renderInspector removes empty sections.
+  sec.textContent = '…';
+  api('/api/retail-admin/brand/signature')
+    .then(r => { _brandCast = (r && Array.isArray(r.characters)) ? r.characters.filter(c => c && /^[a-z0-9-]{1,30}$/.test(c.key)) : []; draw(_brandCast); })
+    .catch(() => { _brandCast = []; draw(_brandCast); });
 }
 
 function buildShowOnSection(body, b) {
