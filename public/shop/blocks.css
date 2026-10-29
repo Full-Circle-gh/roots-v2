@@ -2874,3 +2874,17 @@
   .shop-blocks .sb-blk-outer[data-block-type="steps"],
   .shop-blocks .sb-blk-outer[data-block-type="contact_links"] { --char-inset: max(40px, calc((100vw - 1120px) / 2)); }
 }
+
+/* Stores map and directions (§503 r.37–39). The map box stays collapsed until
+   the page draws a map into it (site.html adds .is-live), so a surface that
+   does not draw maps shows nothing. */
+.shop-blocks .sb-st-map { display: none; }
+.shop-blocks .sb-st-map.is-live { display: block; height: calc(420 * var(--u)); border-radius: calc(20 * var(--u)); overflow: hidden; margin-bottom: calc(22 * var(--u)); cursor: pointer; }
+.shop-blocks .sb-st-dir { display: flex; flex-wrap: wrap; gap: calc(12 * var(--u)); margin-top: calc(18 * var(--u)); }
+.shop-blocks .sb-st-dir-btn { font-family: var(--f-toni); font-weight: 700; font-size: calc(calc(20 * var(--u)) * var(--font-scale)); letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; color: inherit; border: calc(3 * var(--u)) solid currentColor; border-radius: 999px; padding: calc(12 * var(--u)) calc(22 * var(--u)); }
+@media (min-width: 768px) {
+  .shop-blocks .sb-st-map.is-live { height: 380px; border-radius: 18px; margin-bottom: 20px; cursor: grab; }
+  .shop-blocks .sb-st-dir { gap: 10px; margin-top: 16px; }
+  .shop-blocks .sb-st-dir-btn { font-size: 13px; border-width: 2px; padding: 9px 16px; }
+  .shop-blocks .sb-st-dir-btn:hover { background: rgba(0, 0, 0, .06); }
+}

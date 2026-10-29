@@ -237,6 +237,55 @@ async function render(){
   ShopBlocks.startTimers(view);
   stageHighlight(true);
   renderChatButton(layout);
+  drawStoreMaps(view);
+}
+
+// The Stores block's live map (§503 r.37–39): Amap, with the public,
+// referer-restricted JS key the web shop's address picker uses. With no key or
+// a failed SDK the box stays collapsed and the block reads as before. On a
+// phone the map takes no drags (the page scrolls past it) and a tap opens the
+// phone's map app; on a computer it can be dragged and zoomed.
+let mapsCfg; let amapP=null;
+function loadAmap(cfg){
+  if(amapP) return amapP;
+  amapP=new Promise((resolve,reject)=>{
+    window.__siteMapReady=()=>resolve();
+    if(cfg.security) window._AMapSecurityConfig={securityJsCode:cfg.security};
+    const s=document.createElement('script');
+    s.src='https://webapi.amap.com/maps?v=2.0&key='+encodeURIComponent(cfg.key)+'&callback=__siteMapReady';
+    s.async=true; s.onerror=()=>reject(new Error('amap_load_failed'));
+    document.head.appendChild(s);
+    setTimeout(()=>reject(new Error('amap_timeout')),15000);
+  });
+  return amapP;
+}
+function openInMapApp(p){
+  const ua=navigator.userAgent||'';
+  if(/iPhone|iPad|iPod/i.test(ua)) location.href='https://maps.apple.com/?ll='+p.lat+','+p.lng+'&q='+encodeURIComponent(p.name||'');
+  else if(/Android/i.test(ua)) location.href='geo:'+p.lat+','+p.lng+'?q='+p.lat+','+p.lng+'('+encodeURIComponent(p.name||'')+')';
+}
+async function drawStoreMaps(root){
+  const boxes=[...root.querySelectorAll('.sb-st-map:not([data-drawn])')];
+  if(!boxes.length) return;
+  boxes.forEach(b=>b.setAttribute('data-drawn','1'));
+  if(mapsCfg===undefined){ try{ mapsCfg=await api('/api/retail/maps-config'); }catch(e){ mapsCfg=null; } }
+  if(!mapsCfg||mapsCfg.provider!=='amap') return;
+  try{ await loadAmap(mapsCfg); }catch(e){ return; }
+  const touch=matchMedia('(pointer: coarse)').matches;
+  for(const box of boxes){
+    let pins=[]; try{ pins=JSON.parse(box.getAttribute('data-pins')||'[]'); }catch(e){}
+    pins=pins.filter(p=>p&&isFinite(p.lat)&&isFinite(p.lng));
+    if(!pins.length||!box.isConnected) continue;
+    box.classList.add('is-live');
+    try{
+      const map=new AMap.Map(box,{zoom:16,center:[pins[0].lng,pins[0].lat],lang:'en',resizeEnable:true,
+        dragEnable:!touch,zoomEnable:!touch,scrollWheel:false,doubleClickZoom:!touch,touchZoom:!touch});
+      const markers=pins.map(p=>new AMap.Marker({position:[p.lng,p.lat],title:p.name||''}));
+      map.add(markers);
+      if(pins.length>1) map.setFitView(markers);
+      if(touch&&!STAGE_MODE) box.addEventListener('click',()=>openInMapApp(pins[0]));
+    }catch(e){ box.classList.remove('is-live'); }
+  }
 }
 
 // The floating WhatsApp button (§503 rule 20): from the first contact block
