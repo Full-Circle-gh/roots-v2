@@ -5203,9 +5203,10 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   // AFTER the commit and fire-and-forget: a dead printer must not roll back an
   // order that is otherwise good. autoPrintOrder records the outcome itself.
   //
-  // CLAIMED FIRST, like the pay page's counter fallback: 'queued' is written
-  // before the slip goes, so a customer who opens their order page while this
-  // print is still in flight does not send a second one from there.
+  // CLAIMED FIRST: 'queued' is written before the slip goes, so the paid
+  // path — which skips only a ticket already 'printed' — cannot send a
+  // second one while this print is still in flight. The payment page does
+  // not print an unpaid phone-pay order (§507).
   if (!payInPage) {
     try {
       tdb().prepare(
@@ -5733,47 +5734,35 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
       `</div>` +
     `</details>`;
 
-  /* FALLING BACK TO THE COUNTER SENDS THE TICKET (fix, 2026-10-26).
+  /* THE COUNTER SCREEN DOES NOT PRINT (§507, Ash 2026-10-29).
 
-     An order placed with "WeChat Pay" chosen does not print on submit: §50
-     prints the in-page rail ON PAID, so the kitchen is not handed a drink
-     nobody has paid for. But every road below that ends at counter() — a
-     phone-camera browser that cannot run WeChat Pay (§50's second ruling), a
-     failed OAuth or prepay — sends that customer to the till, and the paid
-     transition that would have printed never comes from here. The customer
-     was told "Pay at the counter" while the kitchen heard nothing. Ash hit
-     exactly that on 2026-10-26: TC001828, Chrome, WeChat Pay chosen, no slip.
+     An order placed with WeChat Pay or Alipay does not print on submit: §50
+     prints that rail when the money arrives, so the kitchen is not handed a
+     drink nobody has paid for. Every failed road below lands on counter() —
+     a phone-camera browser, a failed sign-in, a charge that could not be
+     built — and from 2026-10-26 (TC001828) that screen printed the slip
+     anyway. The tender is already 'wechat' or 'alipay' from the moment the
+     order is placed (§502), and the receipt prints "Paid by" plus that
+     tender, so the paper said WeChat had been paid when it had not. In the
+     order the payment was still waiting. That print also set print_status
+     to printed, so the cashier settling it on the till stayed quiet and the
+     method that actually took the money never reached a slip.
 
-     So an unpaid order reaching this screen is now printed, the same slip the
-     counter rail prints on submit.
+     The slip prints when the money arrives, and only then. WeChat's or
+     Alipay's notify goes through markOrderPaid, and the cashier's Mark paid
+     on the till does the same; both call autoPrintOrder. A customer who
+     chose the counter in the first place still prints on submit — that
+     order never arrives here with a phone-pay tender.
 
-     CLAIMED BEFORE IT PRINTS. print_status is only written when the printer
-     answers, a second or two later, so two loads of this page inside that
-     window would both see "not printed" and send two slips. The UPDATE takes
-     the order from no status to 'queued' in one statement; only the request
-     that wins it prints. A slip that FAILED stays 'failed' and is not retried
-     from here: the cashier's settle goes through autoPrintOrder, whose guard
-     skips only a 'printed' QR ticket, so a failed one still prints then. Only
-     'printed' and 'failed' are read anywhere else (04-orders.js, m.html), so
-     the short-lived 'queued' changes nothing they show. */
-  const counter = () => {
-    if (order.status === 'pending_payment') {
-      try {
-        const won = tdb().prepare(
-          `UPDATE retail_orders SET print_status = 'queued'
-            WHERE id = ? AND print_status IS NULL AND status = 'pending_payment'`
-        ).run(order.id).changes === 1;
-        if (won) autoPrintOrder(order.id);
-      } catch (e) { console.warn('[shop-menu/pay counter print]', order.order_no, e.message); }
-    }
-    return payScreen(req, res, {
-      status: 200, order, main: COUNTER_MAIN, shop,
-      // Offered only while the order is still unpaid and still this shop's to
-      // cancel. Past that the money has moved or the kitchen has it, and the
-      // answer is a person at the counter rather than a button here.
-      extra: order.status === 'pending_payment' ? cancelBlock : '',
-    });
-  };
+     The screen itself is unchanged. The customer is still told to pay at
+     the counter. */
+  const counter = () => payScreen(req, res, {
+    status: 200, order, main: COUNTER_MAIN, shop,
+    // Offered only while the order is still unpaid and still this shop's to
+    // cancel. Past that the money has moved or the kitchen has it, and the
+    // answer is a person at the counter rather than a button here.
+    extra: order.status === 'pending_payment' ? cancelBlock : '',
+  });
 
   /* §496 rule 9 — ONE-TAP ALIPAY. An order placed with Alipay chosen.
 
@@ -5790,9 +5779,9 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
      browser to Alipay by itself, so a customer who returns to the order cannot
      be thrown into a payment they did not ask for.
 
-     Every other road is the counter, which prints the slip (2026-10-26): inside
+     Every other road is the counter, which does not print (§507): inside
      WeChat, where Alipay cannot open; the rail switched off since the order was
-     placed; a charge that could not be built. */
+     placed; a charge that could not be built. The slip waits for the money. */
   if (order.payment_method === 'alipay' && order.status === 'pending_payment') {
     if (!aliReady() || inWeChat(req)) return counter();
     if (req.query.ali === 'go') {

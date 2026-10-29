@@ -1433,6 +1433,8 @@ const soldOut = (row) => /class="sold"/.test(row);
         await settle();
         assert.strictEqual(paySlips.length, 1, 'a counter order did not print on submit');
         assert.ok(paySlips[0].content.includes('Lin'), 'the name to call is not on the slip');
+        assert.ok(paySlips[0].content.includes('Paid by') && paySlips[0].content.includes('offline'),
+          'the counter slip lost its tender line');
         // …and the till settling it does not print a second slip.
         const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
         retail.autoPrintOrder(oid);
@@ -1466,12 +1468,13 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.ok(/请到收银台付款。/.test(body), 'a camera-app scan was left with nothing to do');
       });
 
-      // THE TILL MUST HEAR ABOUT IT (fix, 2026-10-26: TC001828). A WeChat order
-      // does not print on submit, so when the payment page sends its customer to
-      // the counter instead, that page is the only thing left that can hand the
-      // kitchen the slip. Two loads at once — a refresh, a phone retrying — must
-      // still make ONE slip, and the till settling it must not make another.
-      await checkAsync('WECHAT CHOSEN, OPENED OUTSIDE WECHAT: the counter fallback prints ONE slip', async () => {
+      // THE SLIP WAITS FOR THE MONEY (§507, Ash 2026-10-29). A WeChat order
+      // does not print on submit, and sending the customer to the counter
+      // does not print either: the paper would say "Paid by wechat" while the
+      // order is still unpaid, and that print would stop the till from
+      // printing the method that actually took the money. Two loads at once
+      // still make nothing. The slip comes when the order is paid.
+      await checkAsync('WECHAT CHOSEN, OPENED OUTSIDE WECHAT: the counter fallback prints nothing, and paying prints once', async () => {
         await resetOrderLimit();
         paySlips.length = 0;
         const r = await post(`/s/${LIVE}/order`, {
@@ -1488,14 +1491,24 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.ok(/请到收银台付款。/.test(await a.text()), 'the fallback page no longer sends them to the till');
         await b.text();
         await settle();
-        assert.strictEqual(paySlips.length, 1, `the counter fallback sent ${paySlips.length} slips, not one`);
-        assert.ok(paySlips[0].content.includes('Fang'), 'the name to call is not on the slip');
+        assert.strictEqual(paySlips.length, 0, `the counter fallback sent ${paySlips.length} slips for an order nobody paid`);
         const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
         assert.strictEqual(db.prepare('SELECT print_status FROM retail_orders WHERE id = ?').get(oid).print_status,
-          'printed', 'the slip went but the drawer was not told');
+          null, 'the unpaid fallback stamped a print and would silence the till');
+        const unpaid = require(path.join(ROOT, 'lib', 'feie.js')).renderOrder(
+          'receipt', db.prepare('SELECT * FROM retail_orders WHERE id = ?').get(oid), [], 'Shop');
+        assert.ok(!unpaid.includes('Paid by'), 'an unpaid WeChat order was called paid on the slip');
+        // What markOrderPaid does before it prints: the order is no longer waiting.
+        db.prepare("UPDATE retail_orders SET status = 'delivered' WHERE id = ?").run(oid);
         retail.autoPrintOrder(oid);
         await settle();
-        assert.strictEqual(paySlips.length, 1, 'settling it at the till printed a second slip');
+        assert.strictEqual(paySlips.length, 1, 'paying never reached the kitchen');
+        assert.ok(paySlips[0].content.includes('Fang'), 'the name to call is not on the slip');
+        assert.ok(paySlips[0].content.includes('Paid by') && paySlips[0].content.includes('wechat'),
+          'a paid WeChat order did not say so on the slip');
+        retail.autoPrintOrder(oid);
+        await settle();
+        assert.strictEqual(paySlips.length, 1, 'settling it again printed a second slip');
       });
 
       await checkAsync('the payment page sends them to WeChat for an openid, and nowhere else', async () => {
@@ -1993,14 +2006,22 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.strictEqual(aliSlips.length, 1, 'opening the paid order printed again');
       });
 
-      await checkAsync('INSIDE WECHAT an Alipay order goes to the counter, which prints it', async () => {
+      await checkAsync('INSIDE WECHAT an Alipay order goes to the counter and does not print until it is paid', async () => {
         aliSlips.length = 0;
         const o = await placeAli('Wu');
         const res = await fetch(`http://127.0.0.1:${PORT}${o.r.json.data.pay_url}`, { redirect: 'manual', headers: ALI_WX_UA });
         assert.strictEqual(res.status, 200, 'WeChat was sent to Alipay, which it does not open');
         assert.ok(/请到收银台付款。/.test(await res.text()), 'the customer was left with nothing to do');
         await settle();
-        assert.strictEqual(aliSlips.length, 1, 'the counter fallback did not print');
+        assert.strictEqual(aliSlips.length, 0, 'the counter fallback printed an Alipay order nobody had paid');
+        assert.strictEqual(db.prepare('SELECT print_status FROM retail_orders WHERE id = ?').get(o.row.id).print_status,
+          null, 'the unpaid fallback stamped a print');
+        db.prepare("UPDATE retail_orders SET status = 'delivered' WHERE id = ?").run(o.row.id);
+        retail.autoPrintOrder(o.row.id);
+        await settle();
+        assert.strictEqual(aliSlips.length, 1, 'paying never reached the kitchen');
+        assert.ok(aliSlips[0].includes('Paid by') && aliSlips[0].includes('alipay'),
+          'a paid Alipay order did not say so on the slip');
       });
 
       await checkAsync('CANCELLING asks Alipay first, then closes the trade so it cannot be paid later', async () => {

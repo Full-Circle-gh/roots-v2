@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+2026-10-29 · v4.600 — **§507 · A QR ORDER PAID ON THE PHONE PRINTS ONLY WHEN THE MONEY HAS ARRIVED — DECIDED BY ASH.** Ash: the QR menu's WeChat Pay sometimes prints a receipt that says paid by WeChat when the customer has not paid; the order in Tacet still shows that WeChat as unpaid (he described it as offline WeChat Pay); the slip came out by itself, without the till, and should come out only when someone actually pays with WeChat. The 2026-10-26 counter-screen print is what did it, and it is reversed. No new words. No change to `.gitignore` or CI.
+
 2026-10-29 · v4.600 — **§507 · A CONVERSATION OPEN ON THE COMPUTER SHOWS ON THE PHONE, AND THE OTHER WAY ROUND — ASKED BY ASH:** *"I want that conversation on the computer will be sync on mobile and vice versa"*. The thread already lived in one place. Each screen read it once and then held what it had read: the computer's Feedback tab loaded on first open and never again, the phone's inbox was fetched at boot, and the live watermark that nudges both screens looked at orders, customers and stock. A reply typed on one device was invisible on the other until a reload. The customer's website and mini app had the same hole while the conversation stayed open. The watermark now includes the thread and its turns, and how many are marked handled. It does not include the read stamps, because opening a thread writes those and a signature that moved on a read would make every open screen read again. The computer refetches while the Feedback tab or the open conversation is up, and again when that tab is opened; the phone refetches while the inbox or a conversation is up, on the same nudge, the same 60-second backstop, a pull, and every time the inbox is opened. A half-typed reply is left where it was. The website and the mini app re-read an open conversation every 8 seconds, and the website's list of reports with them; the customer's read stamp is written only when a store reply is still unread. Two logins that were never linked stay two conversations — this does not merge customers. No new words. No schema change. No change to `.gitignore` or CI. See §507.
 
 2026-10-29 · v4.599 — **§84 AMENDED · GZGROCERY ORDERS NO LONGER STOP AT ZERO — DECIDED BY ASH.** Ash: *"ok lets fix #1 first"*. §84 left gzgrocery clamped on the belief that it had no order-ingest path; `scripts/gzgrocery-order-daemon.js` has been one since 2026-06-27. Its decrement clamped at 0, so during §85's pre-order window gzgrocery was re-offered the full allowance after every sale and the kitchen never saw what was owed. The order path now takes a delta with no floor, as Meituan and Eleme do; the inferred ERP pickup path keeps its clamp. Code: `scripts/gzgrocery-order-daemon.js` `processOrder`.
@@ -33728,3 +33730,23 @@ The conversation is the feedback thread (`retail_feedback` and `retail_feedback_
 4. **The customer's two screens re-read while the conversation is open.** The website and the mini app have no admin stream. Each re-reads every 8 seconds, and the website's list of that person's reports does too. The read stamp is written only when a store reply is still unread, so a re-read of a conversation they have already seen does not write.
 5. **Words:** none. The screens already name this a conversation.
 6. **Two logins stay two conversations.** A website account and a WeChat account that were never linked are still two customers, even when they share a phone number. This does not merge them. Merging would move wallet, points and orders, and that was not asked.
+
+## §507 — A QR ORDER PAID ON THE PHONE PRINTS ONLY WHEN THE MONEY HAS ARRIVED
+
+**2026-10-29 · DECIDED BY ASH.** Ash: the QR menu's WeChat Pay sometimes prints a receipt that says paid by WeChat when the payment was not made. Opening the order in Tacet, the payment is still the unpaid WeChat tender — he described it as offline WeChat Pay. The slip came out on its own, without anyone using the till. It should print only when someone actually pays with WeChat.
+
+**The cause.** An order the customer chose to pay on their phone is tendered `wechat` (or `alipay`) from the moment it is placed (§502), so the till does not ring for it, and the receipt prints `Paid by` plus that tender. Since 2026-10-26 the payment page printed that slip on every road that sent the customer to the counter — opened outside WeChat, a failed sign-in, a charge that could not be built — while the order was still `pending_payment`. The paper said the money had arrived. That print also set `print_status` to `printed`, so when the cashier later marked the order paid the till stayed quiet and the method that actually took the money never reached a slip. The 2026-10-26 print was itself a fix for TC001828, where the kitchen heard nothing. It is reversed here: a slip that names a payment which did not happen is the worse of the two.
+
+### Rules
+
+1. **The counter screen on the QR payment page does not print.** It still tells the customer to pay at the counter. `counter()` in `routes/shop-menu.js` no longer calls `autoPrintOrder`.
+
+2. **The slip prints when the money arrives, and only then.** WeChat's notify and Alipay's go through `markOrderPaid`, and the cashier's Mark paid does the same. Both call `autoPrintOrder`. One slip, with the tender that took the money.
+
+3. **A counter order still prints on submit.** A customer who chose the counter, not WeChat or Alipay, is unchanged (§44, 2026-10-10). This rule is only the phone-pay fallback.
+
+4. **Alipay uses the same screen, so it waits too.** An Alipay order that cannot open Alipay used to print "Paid by alipay" unpaid, for the same reason. It now waits for Alipay or for the till.
+
+5. **An unpaid phone-pay tender is not printed as paid.** If a WeChat or Alipay slip is ever rendered while the order is still `pending_payment`, `lib/feie.js` leaves off the `Paid by` line. The counter slip's own `Paid by offline` line stays: that slip is meant to exist before the money, and it does not grow an unpaid label.
+
+6. **Words:** nothing composed. `Paid by` is the receipt's existing English line.
