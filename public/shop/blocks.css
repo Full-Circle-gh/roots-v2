@@ -2875,6 +2875,40 @@
   .shop-blocks .sb-blk-outer[data-block-type="contact_links"] { --char-inset: max(40px, calc((100vw - 1120px) / 2)); }
 }
 
+/* menu_showcase (§503 rule 33) — café-only dishes. Phone: a sideways swipe of
+   cards; from 768px a full-width band with a grid that fills its rows. */
+.shop-blocks .sb-menu { padding: calc(56 * var(--u)) 0 calc(56 * var(--u)) calc(36 * var(--u)); }
+.shop-blocks .sb-menu-kicker { font-family: var(--f-toni); font-weight: 700; font-size: calc(calc(20 * var(--u)) * var(--font-scale)); letter-spacing: 0.14em; text-transform: uppercase; color: var(--menu-accent); padding-right: calc(36 * var(--u)); }
+.shop-blocks .sb-menu-title { font-family: var(--f-bear); font-size: calc(calc(60 * var(--u)) * var(--font-scale)); line-height: 1.02; margin-top: calc(10 * var(--u)); padding-right: calc(36 * var(--u)); }
+.shop-blocks .sb-menu-line { font-family: var(--f-gothic); font-size: calc(calc(34 * var(--u)) * var(--font-scale)); text-transform: uppercase; letter-spacing: 0.03em; margin-top: calc(8 * var(--u)); opacity: 0.85; padding-right: calc(36 * var(--u)); }
+.shop-blocks .sb-menu-grid { display: flex; gap: calc(22 * var(--u)); overflow-x: auto; scroll-snap-type: x mandatory; margin-top: calc(30 * var(--u)); padding: 0 calc(36 * var(--u)) calc(8 * var(--u)) 0; -webkit-overflow-scrolling: touch; }
+.shop-blocks .sb-menu-card { flex: 0 0 calc(440 * var(--u)); scroll-snap-align: start; background: rgba(255, 255, 255, .6); border-radius: calc(24 * var(--u)); overflow: hidden; display: flex; flex-direction: column; }
+.shop-blocks .sb-menu-img { aspect-ratio: 1 / 1; overflow: hidden; }
+.shop-blocks .sb-menu-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s cubic-bezier(.16, 1, .3, 1); }
+.shop-blocks .sb-menu-body { padding: calc(22 * var(--u)) calc(24 * var(--u)) calc(26 * var(--u)); display: flex; flex-direction: column; gap: calc(8 * var(--u)); }
+.shop-blocks .sb-menu-row { display: flex; align-items: baseline; justify-content: space-between; gap: calc(16 * var(--u)); }
+.shop-blocks .sb-menu-name { font-family: var(--f-bear); font-size: calc(calc(32 * var(--u)) * var(--font-scale)); line-height: 1.1; }
+.shop-blocks .sb-menu-price { font-family: var(--f-num); font-size: calc(calc(32 * var(--u)) * var(--font-scale)); color: var(--menu-accent); white-space: nowrap; }
+.shop-blocks .sb-menu-text { font-family: var(--f-aleo); font-size: calc(calc(23 * var(--u)) * var(--font-scale)); line-height: 1.45; opacity: 0.85; }
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="menu_showcase"] {
+    width: 100vw; max-width: none; position: relative; left: 50%; transform: translateX(-50%);
+    --char-inset: max(40px, calc((100vw - 1120px) / 2));
+  }
+  .shop-blocks .sb-menu { padding: 72px max(40px, calc((100vw - 1120px) / 2)); }
+  .shop-blocks .sb-menu-kicker { font-size: 16px; padding: 0; }
+  .shop-blocks .sb-menu-title { font-size: 56px; margin-top: 10px; padding: 0; }
+  .shop-blocks .sb-menu-line { font-size: 26px; margin-top: 6px; padding: 0; }
+  .shop-blocks .sb-menu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; overflow: visible; margin-top: 36px; padding: 0; }
+  .shop-blocks .sb-menu-n3 { grid-template-columns: repeat(3, 1fr); }
+  .shop-blocks .sb-menu-card { border-radius: 20px; }
+  .shop-blocks .sb-menu-card:hover .sb-menu-img img { transform: scale(1.04); }
+  .shop-blocks .sb-menu-body { padding: 18px 20px 22px; gap: 6px; }
+  .shop-blocks .sb-menu-name { font-size: 22px; }
+  .shop-blocks .sb-menu-price { font-size: 22px; }
+  .shop-blocks .sb-menu-text { font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) { .shop-blocks .sb-menu-img img { transition: none; } }
 /* Stores map and directions (§503 r.37–39). The map box stays collapsed until
    the page draws a map into it (site.html adds .is-live), so a surface that
    does not draw maps shows nothing. */

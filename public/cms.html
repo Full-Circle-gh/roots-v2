@@ -5725,6 +5725,7 @@ const ICONS = {
   fact_band:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="10" rx="1"/><path d="M8 7v10M14 7v10"/></svg>',
   steps:            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="5" cy="18" r="2"/><path d="M10 6h11M10 12h11M10 18h11"/></svg>',
   contact_links:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M9 11h6M9 14h4"/></svg>',
+  menu_showcase:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><circle cx="12" cy="13" r="3"/><path d="M3 4v6M5 4v6M3 7h2M4 10v10M20 4c-1.5 1-2 3-2 6h2v10"/></svg>',
 };
 
 // Preview device presets — covers the popular phones our customers use.
@@ -5780,6 +5781,8 @@ const BLOCK_META = {
   steps:            { website_only: true, name: 'Steps',        name_cn: '步骤',     desc: 'Up to 4 numbered steps, such as how to order', desc_cn: '最多 4 个编号步骤 · 例如如何下单' },
   // §503 rule 19 — name and description composed (vocabulary v1.364).
   contact_links:    { website_only: true, name: 'Contact & reviews', name_cn: '联系与评价', desc: 'TripAdvisor, HappyCow, Instagram, WhatsApp, email and WeChat', desc_cn: 'TripAdvisor、HappyCow、Instagram、WhatsApp、邮箱和微信' },
+  // §503 rule 33 — name and description composed (vocabulary v1.366).
+  menu_showcase:    { website_only: true, name: 'Menu showcase', name_cn: '菜单展示', desc: 'Up to 10 dishes, each with a photo, name, price and a line', desc_cn: '最多 10 道菜 · 每道配图片、名称、价格和一句介绍' },
 };
 
 const state = {
@@ -8675,6 +8678,14 @@ function makeBlock(type) {
       ],
       bg_color: 'forest-kale', fg_color: 'white', accent_color: 'lime-leaf',
     };
+    case 'menu_showcase': return {
+      id, type,
+      kicker_en: 'Only at the Ramada Pearl lobby · Eat in only', kicker_cn: '',
+      title_en: 'Open toasts', title_cn: '',
+      body_en: 'Small toast, big flex.', body_cn: '',
+      items: [{ id: uid(), name_en: '', name_cn: '', price: '', text_en: '', text_cn: '', image_url: '' }],
+      bg_color: 'oat-milk', fg_color: 'ink', accent_color: 'berry-punch',
+    };
     case 'contact_links': return {
       id, type,
       kicker_en: 'Find us online', kicker_cn: '',
@@ -9123,7 +9134,8 @@ function renderBlockBody(b) {
     }
     case 'fact_band':
     case 'steps':
-    case 'contact_links': {
+    case 'contact_links':
+    case 'menu_showcase': {
       d.className = 'b-website-only';
       d.innerHTML = `<div class="placeholder">${ICONS[b.type]}</div>`;
       return d;
@@ -11382,6 +11394,7 @@ function renderInspector() {
     case 'fact_band':        buildFactBandForm(body, b); break;
     case 'steps':            buildStepsForm(body, b); break;
     case 'contact_links':    buildContactLinksForm(body, b); break;
+    case 'menu_showcase':    buildMenuShowcaseForm(body, b); break;
     case 'order_tracker':    buildOrderTrackerForm(body, b); break;
     case 'notification_bar': buildNotificationBarForm(body, b); break;
   }
@@ -14563,6 +14576,36 @@ function buildContactLinksForm(m, b) {
   secContent.appendChild(field(T('QR code', '二维码'), '',
     imgPicker(b.wechat_qr_url, ({ url }) => updateBlock(b.id, { wechat_qr_url: url || '' }))));
   websiteColours(m, b, { bg: 'oat-milk', fg: 'ink', accent: 'forest-kale' });
+}
+
+// §503 rule 33 — dishes served at the café, not for sale online. One block
+// per group (platters, toasts). The price is typed as it should read.
+const MENU_SHOWCASE_MAX = 10;
+function buildMenuShowcaseForm(m, b) {
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
+    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
+  secContent.appendChild(field(T('Title', '标题'), '',
+    txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
+  secContent.appendChild(field(T('Text', '正文'), '',
+    txtPair(b.body_en, b.body_cn, ({ en, cn }) => updateBlockSilent(b.id, { body_en: en, body_cn: cn }))));
+  websiteItemList(secContent, b, 'items', {
+    max: MENU_SHOWCASE_MAX,
+    label: n => B(`Card ${n}`, `卡片 ${n}`),
+    addLabel: (n, max) => T(`+ Add card (${n} of ${max})`, `+ 添加卡片(${n} / ${max})`),
+    blank: { name_en: '', name_cn: '', price: '', text_en: '', text_cn: '', image_url: '' },
+    fill: (card, it, set) => {
+      card.appendChild(field(T('Picture', '图片'), '',
+        imgPicker(it.image_url, ({ url }) => set({ image_url: url || '' }, true))));
+      card.appendChild(field(T('Name', '名称'), '',
+        txtPair(it.name_en, it.name_cn, ({ en, cn }) => set({ name_en: en, name_cn: cn }))));
+      card.appendChild(field(T('Price', '价格'), '',
+        txt(it.price, v => set({ price: v.trim().slice(0, 20) }), '¥30')));
+      card.appendChild(field(T('Text', '正文'), '',
+        txtPair(it.text_en, it.text_cn, ({ en, cn }) => set({ text_en: en, text_cn: cn }), {}, { multiline: true, rows: 2 })));
+    },
+  });
+  websiteColours(m, b, { bg: 'oat-milk', fg: 'ink', accent: 'berry-punch' });
 }
 
 let _mapStores = null;   // §503 r.37 — shops with a position, for the map
