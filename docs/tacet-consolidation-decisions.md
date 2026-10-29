@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.597
+# Tacet shared-core consolidation — decisions record, v4.598
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,7 +22,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-29 · v4.597 — **§503 AMENDED · A LIVE MAP AND ONE-TAP DIRECTIONS IN THE STORES BLOCK — DECIDED BY ASH.** Ash: *"need to see the live map with the location . if someone click on it on mobile it will show the location in the map for direction"*; offered both shops or Yuexiu only: *"only yueiu"*, then *"go ahead build everythnig you recommend"*. A Stores-block shop linked to a shop in Shops carries its position; the website draws an Amap map with its pin and Apple Maps / Google Maps / Amap direction links. No new words. No change to `.gitignore` or CI.
+2026-10-29 · v4.598 — **§503 AMENDED · A LIVE MAP AND ONE-TAP DIRECTIONS IN THE STORES BLOCK — DECIDED BY ASH.** Ash: *"need to see the live map with the location . if someone click on it on mobile it will show the location in the map for direction"*; offered both shops or Yuexiu only: *"only yueiu"*, then *"go ahead build everythnig you recommend"*. A Stores-block shop linked to a shop in Shops carries its position; the website draws an Amap map with its pin and Apple Maps / Google Maps / Amap direction links. No new words. No change to `.gitignore` or CI.
+
+2026-10-29 · v4.597 — **§504 · EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS; THE THREE BLACK-FILLED DRAWINGS ARE VARIANTS — DECIDED BY ASH.** Found while placing characters on the website (§503 rule 28): eight of the ten `ip-<key>` files held another key's drawing. Ash, asked whether the three black-filled drawings are separate characters: *"Variants, build it"*. The files are swapped so each key shows its drawing, the three keys with no drawing of their own (`soilsoul`, `kombucha-gang`, `hula`) are relabelled as the black variants, and a one-off migration remaps every stored key so no product page or website block changes picture. No change to `.gitignore` or CI.
 
 2026-10-29 · v4.596 — **§503 AMENDED · A MENU SHOWCASE BLOCK FOR THE CAFÉ-ONLY DISHES — DECIDED BY ASH.** Ash: *"i want to add another block that doesnt show actually product for sale , more about the special thing we offer only in ramada hotel . im reffering to open toasts and dip platters"*. A website-only block, `menu_showcase`: a heading, a line, and up to 10 dishes, each a photo, name, price (typed as shown) and one line. Two composed strings (vocabulary v1.366). No change to `.gitignore` or CI.
 
@@ -33602,3 +33604,42 @@ Ash: *"need to see the live map with the location . if someone click on it on mo
 39. **Directions are one tap, in the visitor's own map app.** Under each placed shop: *Apple Maps*, *Google Maps* and *Amap* links, built from the position. On a phone the map does not take drags (the page scrolls past it) and a tap opens the phone's map app: Apple Maps on an iPhone or iPad, the default map app (`geo:`) on Android. On a computer the map can be dragged and zoomed. App names are not translated.
 
 40. **Yuexiu only, for Roots.** The Tianhe address is a kitchen in a tech park, not somewhere to visit, so only Yuexiu is placed on the website's map.
+
+## §504 — EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS
+
+Found 2026-10-29 while placing characters on the website (§503 rule 28). The ten
+`ip-<key>` files under `public/brand/`, `public/brand/cutout/` and
+`miniapp/assets/brand/` did not hold the drawings their keys name: `radishes`
+was a running broccoli, `peas` the flexing character, `hula` a pea pod, and so
+on; only `mushroom` was right. The product editor's picker labelled the wrong
+drawings, and the category auto-pick filed radishes under broccoli. There are
+seven drawings, three of them twice (black-filled and white line): onion, radish
+trio and skater cucumber; then broccoli, the flexing character, the pea pod and
+the mushroom. Nothing called "Soil & Soul", "Kombucha" or "Hula" exists.
+
+Ash, asked whether the black-filled drawings are separate characters or
+variants: *"Variants, build it"*.
+
+1. **Every key's file shows the drawing its label names.** `onion`, `radishes`,
+   `skater`, `broccoli`, `flex`, `peas` and `mushroom` hold those drawings (the
+   white-line version where there are two).
+2. **The black-filled drawings keep the three keys that had no drawing.** Keys
+   are stored data, so they are not renamed: `soilsoul` is the black onion
+   (labelled "Onion (black)"), `kombucha-gang` the black skater ("Skater
+   (black)"), `hula` the black radishes ("Radishes (black)").
+3. **What customers see does not change.** A one-off migration
+   (`ip_character_files_match_keys_v1` in `database.js`) moves every stored key
+   to the key that now holds the same drawing, on `products`,
+   `store_products` and the `character` of every block in the website layout and
+   its draft. It is a single simultaneous mapping, never one key after another,
+   because the remap is a permutation.
+4. **The category auto-pick follows the names.** Root vegetables now get the
+   radishes, legumes the peas, protein the flexing character. The two rows that
+   live categories actually hit keep their picture: sauces and dips (and the
+   fallback) the black onion, drinks the white skater (`skater`, where
+   `kombucha-gang` now holds the black one).
+5. **The mini app follows on republish.** Its images are packaged, so it shows
+   the new pairing only after a republish from the main folder; until then its
+   product pages show the old file for a remapped key. Republish in the same
+   sitting as the deploy.
+6. **Words:** the labels are English-only data, as before. Nothing is composed.

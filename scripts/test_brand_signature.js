@@ -85,7 +85,7 @@ check('the cast is the same ten characters, in the same order', () => {
     'soilsoul', 'skater', 'kombucha-gang', 'flex', 'radishes',
     'mushroom', 'peas', 'onion', 'broccoli', 'hula',
   ]);
-  assert.strictEqual(ROOTS.characters[0].label, 'Soil & Soul');
+  assert.strictEqual(ROOTS.characters[0].label, 'Onion (black)');
 });
 
 check('every character has an image file on disk', () => {
@@ -115,7 +115,7 @@ check('the category map still files every character it used to', () => {
   const cases = [
     ['Sauces & dips', 'soilsoul'],
     ['Nut butter / spread', 'skater'],
-    ['Kombucha', 'kombucha-gang'],
+    ['Kombucha', 'skater'],
     ['Protein powder', 'flex'],
     ['Root vegetables', 'radishes'],
     ['Mushroom', 'mushroom'],
