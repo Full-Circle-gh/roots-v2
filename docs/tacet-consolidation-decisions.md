@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.595
+# Tacet shared-core consolidation — decisions record, v4.596
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-29 · v4.596 — **§503 AMENDED · A LIVE MAP AND ONE-TAP DIRECTIONS IN THE STORES BLOCK — DECIDED BY ASH.** Ash: *"need to see the live map with the location . if someone click on it on mobile it will show the location in the map for direction"*; offered both shops or Yuexiu only: *"only yueiu"*, then *"go ahead build everythnig you recommend"*. A Stores-block shop linked to a shop in Shops carries its position; the website draws an Amap map with its pin and Apple Maps / Google Maps / Amap direction links. No new words. No change to `.gitignore` or CI.
 
 2026-10-29 · v4.595 — **§503 AMENDED · THE WEBSITE HAS NO LANGUAGE SWITCH; VISITORS SEE ENGLISH — DECIDED BY ASH.** Ash: *"remove the toggle its not neccesary"*. `public/site.html` loses its EN/中 switch and always shows English to visitors; the editor's stage still follows the editor's language. No change to `.gitignore` or CI.
 
@@ -33574,3 +33576,15 @@ Ash: *"as you recommend"*, to a character beside section headings first, the str
 ### Amended 2026-10-29 — no language switch on the website
 
 32. **Visitors see the website in English, with no switch.** Ash: *"remove the toggle its not neccesary"*. The site is written for visitors from abroad (§503), and its Chinese fields are mostly empty, so the switch mostly led to a half-English page. `public/site.html` no longer draws the EN/中 switch or remembers a choice, and always renders English for visitors. Blocks keep their Chinese fields; on the editor's stage the page still follows the editor's EN/中, so whoever writes the Chinese can see it. Bringing a Chinese version back is a later decision.
+
+### Amended 2026-10-29 — a live map and directions in the Stores block
+
+Ash: *"need to see the live map with the location . if someone click on it on mobile it will show the location in the map for direction"*, then *"only yueiu"* and *"go ahead build everythnig you recommend"*.
+
+37. **A shop in the Stores block is placed on the map by choosing it from Shops.** The editor's *Place the point on a map* list offers the tenant's own shops (`/api/retail-admin/shops`); choosing one copies its `lat` / `lng` (as stored, the Chinese map grid used by Amap) onto the block's shop, and its Chinese address too when that field is empty. Nobody types coordinates. A shop not placed has no pin and no direction links.
+
+38. **The map is Amap, drawn by the website page.** Google Maps does not load in mainland China; Amap works there and abroad. The engine (`public/shop/blocks.js`) draws a map box with the pins' positions; `public/site.html` loads the Amap JS SDK with the public, referer-restricted key from `/api/retail/maps-config` (the web shop's address picker uses the same) and draws an English-labelled map with a pin per shop. With no key, or if the SDK fails, the box is removed and the block reads as before. The key's allowed domains in the Amap console must include the website's host.
+
+39. **Directions are one tap, in the visitor's own map app.** Under each placed shop: *Apple Maps*, *Google Maps* and *Amap* links, built from the position. Tapping the map opens Apple Maps on an iPhone or iPad and Google Maps elsewhere. App names are not translated.
+
+40. **Yuexiu only, for Roots.** The Tianhe address is a kitchen in a tech park, not somewhere to visit, so only Yuexiu is placed on the website's map.
