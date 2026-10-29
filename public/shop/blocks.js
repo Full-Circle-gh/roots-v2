@@ -1994,7 +1994,21 @@
     var cls = 'sb-blk-outer sb-corner-' + corner +
       (frameOn ? ' framed' : '') + (fullBleed ? ' bleed' : '') + (fill ? ' fill' : '');
     var style = frameOn ? ('border-color:' + attr(frameColor)) : '';
-    return '<div class="' + cls + '" data-block-type="' + attr(b.type) + '" data-block-id="' + attr(b.id || '') + '" style="' + style + '">' + inner + '</div>';
+    return '<div class="' + cls + '" data-block-type="' + attr(b.type) + '" data-block-id="' + attr(b.id || '') + '" style="' + style + '">' + inner + blockCharacter(b) + '</div>';
+  }
+
+  // The brand's character peeking over a block's top corner (§503 rules
+  // 28–30): the tenant's own cast, chosen per block on the Website page. A key
+  // is all a block stores; the picture is the transparent cut-out. White lines
+  // on a dark block. Decoration only: no alt text, no clicks.
+  function blockCharacter(b) {
+    var key = String(b.character || '');
+    if (!/^[a-z0-9-]{1,30}$/.test(key)) return '';
+    var side = b.character_side === 'left' ? 'left' : 'right';
+    var bg = b.bg_color || b.panel_bg_color || '';
+    var light = bg && btnText(bg) === '#FFFFFF';
+    return '<img class="sb-char sb-char-' + side + (light ? ' sb-char-light' : '') + '" src="/assets/brand/cutout/ip-' + key +
+      '.png" alt="" aria-hidden="true" loading="lazy" onerror="this.remove()">';
   }
 
   // ── Public API ───────────────────────────────────────────────────────────

@@ -2849,3 +2849,28 @@
   .shop-blocks .sb-cl-rate { font-size: 14px; gap: 8px; margin-top: 2px; }
   .shop-blocks .sb-cl-ta { height: 16px; }
 }
+
+/* The brand's character peeking over a block's top corner (§503 r.28–30).
+   Half over the edge, a slow bob that keeps it visible at rest (it never
+   fades in), still for visitors who ask for less motion. */
+.shop-blocks .sb-char {
+  position: absolute; top: 0; z-index: 3; pointer-events: none;
+  width: calc(150 * var(--u)); height: auto;
+  transform: translateY(-48%);
+  animation: sb-char-bob 4.5s ease-in-out infinite;
+}
+.shop-blocks .sb-char-right { right: var(--char-inset, calc(24 * var(--u))); }
+.shop-blocks .sb-char-left  { left: var(--char-inset, calc(24 * var(--u))); }
+.shop-blocks .sb-char-light { filter: invert(1); }
+@keyframes sb-char-bob {
+  0%, 100% { transform: translateY(-48%) rotate(-2deg); }
+  50%      { transform: translateY(-54%) rotate(2deg); }
+}
+@media (prefers-reduced-motion: reduce) { .shop-blocks .sb-char { animation: none; } }
+@media (min-width: 768px) {
+  .shop-blocks .sb-char { width: 120px; }
+  /* On the full-width bands the corner is the content's edge, not the window's. */
+  .shop-blocks .sb-blk-outer[data-block-type="fact_band"],
+  .shop-blocks .sb-blk-outer[data-block-type="steps"],
+  .shop-blocks .sb-blk-outer[data-block-type="contact_links"] { --char-inset: max(40px, calc((100vw - 1120px) / 2)); }
+}
