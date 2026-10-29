@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.594
+# Tacet shared-core consolidation — decisions record, v4.595
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-29 · v4.595 — **§503 AMENDED · THE WEBSITE HAS NO LANGUAGE SWITCH; VISITORS SEE ENGLISH — DECIDED BY ASH.** Ash: *"remove the toggle its not neccesary"*. `public/site.html` loses its EN/中 switch and always shows English to visitors; the editor's stage still follows the editor's language. No change to `.gitignore` or CI.
 
 2026-10-29 · v4.594 — **§503 AMENDED · THE BRAND'S CHARACTERS PEEK OVER THE WEBSITE'S BLOCKS — DECIDED BY ASH.** Ash: *"i dont see enough of our ip characters . do you have them ? maybe we can add some more of them to the websirte ?"*; offered a character beside section headings or a strip of all of them, with the first recommended: *"as you recommend"*. Any block on the Website page may carry one of the tenant's own characters (`lib/brand-signature.js`), drawn by the web engine peeking over the block's top corner. No new words. No change to `.gitignore` or CI.
 
@@ -33568,3 +33570,7 @@ Ash: *"as you recommend"*, to a character beside section headings first, the str
 30. **The web engine draws it, on the Website page only.** `wrapBlock` in `public/shop/blocks.js` adds the character to a block that has one: at the block's top left or right corner, half over the edge, with a slow bob that stops for visitors who ask for less motion. It is decoration (no alt text, no clicks). The editor offers the choice (character, and left or right) only on the Website page, so the web shop and the mini app are unchanged.
 
 31. **Words:** `IP character · 角色` (product editor), `None · 无`, `Left · 左` and `Right · 右` are copied whole. Nothing is composed.
+
+### Amended 2026-10-29 — no language switch on the website
+
+32. **Visitors see the website in English, with no switch.** Ash: *"remove the toggle its not neccesary"*. The site is written for visitors from abroad (§503), and its Chinese fields are mostly empty, so the switch mostly led to a half-English page. `public/site.html` no longer draws the EN/中 switch or remembers a choice, and always renders English for visitors. Blocks keep their Chinese fields; on the editor's stage the page still follows the editor's EN/中, so whoever writes the Chinese can see it. Bringing a Chinese version back is a later decision.
