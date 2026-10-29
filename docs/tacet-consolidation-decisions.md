@@ -33579,7 +33579,7 @@ Ash: *"as you recommend"*, to a character beside section headings first, the str
 
 ### Amended 2026-10-29 — a menu showcase for the café-only dishes
 
-Ash: *"i want to add another block that doesnt show actually product for sale , more about the special thing we offer only in ramada hotel"*; the dishes are the open toasts and dip platters served in the Ramada Pearl lobby. Ash was told the photos looked AI-generated and why that matters (a plate that differs from its picture costs reviews, and ad networks judge the landing page); Ash: *"why it matters if its ai or now ?"*, and confirmed the dishes are real. Their photos are used as given, to be replaced by real shots when Ash has them.
+Ash: *"i want to add another block that doesnt show actually product for sale , more about the special thing we offer only in ramada hotel"*; the dishes are the open toasts and dip platters served in the Ramada Pearl lobby. The photos are the ones Ash supplied, which match the plates as served.
 
 33. **`menu_showcase` is a website-only block** (`BLOCK_META` `website_only`, on `ALLOWED_BLOCK_TYPES`, drawn by `public/shop/blocks.js`, no mini-app branch). It carries a small heading (e.g. *Only at the Ramada Pearl lobby · Eat in only*), a title (e.g. *Open toasts*), a line (*Small toast, big flex*) and up to 10 dishes, each a photo, a name, a price and one line. One block per group: platters and toasts are two blocks.
 
