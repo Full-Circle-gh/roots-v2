@@ -1766,14 +1766,25 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
    the mini app's own 24rpx/28rpx padding converted at a 390px phone. The fill
    is this sheet's existing veil — the one .err and .pw button already use —
    rather than a second near-white literal invented for one control. */
-.oc{display:flex;align-items:center;justify-content:space-between;gap:10px;
+.oc{display:flex;align-items:center;justify-content:space-between;gap:12px;
   width:100%;padding:12.5px 14px;margin-top:7px;cursor:pointer;
   border:1.5px solid var(--ink);border-radius:7px;
   background:rgba(255,255,255,.72);color:var(--ink);
   font-family:inherit;font-size:16px;text-align:left}
-.oc-l{min-width:0;overflow-wrap:anywhere}
+.oc-l{min-width:0;flex:1;overflow-wrap:anywhere}
 .oc-d{flex:none;font-variant-numeric:tabular-nums;font-size:12.5px;
   color:var(--olive)}
+/* §505 — size ranks. Lilita digits via --f-num, same as every figure on this
+   page. Olive on #2…; #1 flips to the ink ground the picker already uses for
+   a chosen answer, with lime on the numeral — Roots accent, not a new chip. */
+.oc-rank{flex:none;font-family:var(--f-num);font-size:15px;letter-spacing:.02em;
+  font-variant-numeric:tabular-nums;min-width:1.6em;color:var(--olive)}
+.oc.top{background:var(--ink);color:var(--oat)}
+.oc.top .oc-rank{color:var(--lime)}
+.oc.top .oc-d{color:var(--oat);opacity:.85}
+/* Quiet line above the size list — same register as .og-lim. */
+.sz-why{font-size:12px;color:var(--ink);opacity:.62;margin:8px 0 2px;
+  overflow-wrap:anywhere}
 /* Ticked. The ground flips rather than a tick appearing beside the label:
    a checkbox glyph at this size is a smaller target than the row it marks. */
 /* Ticked. The ground flips rather than a tick appearing beside the label:
@@ -2706,7 +2717,10 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // heading and the button label are miniapp/pages/product/product.js's own
   // ('选择规格' / 'Choose a size', and '选择规格' / 'CHOOSE A SIZE'), and
   // public/shop.html carries the identical pair for the same two controls.
-  `L_SIZE=${JSON.stringify(bi('Choose a size', '选择规格'))};` +
+  `L_SIZE=${JSON.stringify(bi('Choose a size', '选择规格'))},` +
+  // §505 — why the sizes are numbered. Pair declared in
+  // docs/tacet-delivery-vocabulary.md v1.367; 热销 is the live volume word.
+  `L_RANK=${JSON.stringify(bi('Ranked by best sellers', '按热销排序'))};` +
   // THE TENANT'S CURRENCY, ALL THREE PARTS OF IT, read off the bar's own data
   // attributes rather than baked in here: this script is built once at module
   // load and the currency is resolved per request (§0 — no currency literal in
@@ -2999,7 +3013,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      a button to confirm it would be a second tap for nothing. */
   `var openSizes=function(b){var card=b.closest?b.closest('.it'):null;if(!card)return;` +
   `var btns=card.querySelectorAll('.vadds .add');if(!btns.length)return;` +
-  `var h='<div class=\"og\">';` +
+  // §505 — ranks follow DOM order, which buildMenu already sorted by sales.
+  `var h='<div class=\"sz-why\">'+L_RANK+'</div><div class=\"og\">';` +
   `for(var i=0;i<btns.length;i++){var m=btns[i];` +
   `var out=m.getAttribute('data-out')==='1';` +
   // A size with no label typed against it still has to be choosable, so it
@@ -3010,8 +3025,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var le=m.getAttribute('data-vl-en')||'',lc=m.getAttribute('data-vl-cn')||'';` +
   `if(!le&&!lc){le=m.getAttribute('data-en')||'';lc=m.getAttribute('data-cn')||''}` +
   `var lab=bi(le||lc,lc||le);` +
-  `h+='<button type=\"button\" class=\"oc'+(out?' out':'')+'\"'+(out?' disabled':'')+` +
+  `h+='<button type=\"button\" class=\"oc'+(i===0?' top':'')+(out?' out':'')+'\"'+(out?' disabled':'')+` +
   `' data-vpick=\"'+m.getAttribute('data-add')+'\">'+` +
+  `'<span class=\"oc-rank\">#'+(i+1)+'</span>'+` +
   `'<span class=\"oc-l\">'+lab+'</span>'+` +
   `'<span class=\"oc-d\">'+(out?L_OUT:money(parseFloat(m.getAttribute('data-p'))||0))+'</span>'+` +
   `'</button>'}` +

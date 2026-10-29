@@ -2767,7 +2767,10 @@ function boxOf(text) {
       const st = await page.evaluate(() => ({
         open: !document.getElementById('sheet').hidden,
         title: document.getElementById('sheetT').innerText.replace(/\s+/g, ' ').trim(),
+        why: ((document.querySelector('#sheetB .sz-why .l-en') || {}).textContent || '').trim(),
         rows: Array.from(document.querySelectorAll('.oc[data-vpick]')).map(b => ({
+          rank: (b.querySelector('.oc-rank') || {}).textContent || '',
+          top: b.classList.contains('top'),
           label: (b.querySelector('.oc-l .l-en') || {}).textContent || '',
           side: (b.querySelector('.oc-d .l-en') || b.querySelector('.oc-d') || {}).textContent || '',
           disabled: !!b.disabled,
@@ -2776,7 +2779,10 @@ function boxOf(text) {
       }));
       assert.ok(st.open, 'the size picker did not open');
       assert.match(st.title, /Choose a size/, `the heading was: ${JSON.stringify(st.title)}`);
+      assert.strictEqual(st.why, 'Ranked by best sellers', `rank line: ${JSON.stringify(st.why)}`);
       assert.deepStrictEqual(st.rows.map(r => r.label), ['250g', '500g'], JSON.stringify(st.rows));
+      assert.deepStrictEqual(st.rows.map(r => r.rank), ['#1', '#2'], JSON.stringify(st.rows));
+      assert.ok(st.rows[0].top && !st.rows[1].top, 'only #1 wears the top style');
       // RULE 1A's SHAPE, APPLIED TO SIZES: the dead one is drawn and says so,
       // and the live one still sells. Omitting it would leave a customer
       // wondering whether the big jar exists.
@@ -2913,6 +2919,19 @@ function boxOf(text) {
       }, EN_VAR);
       assert.deepStrictEqual(labels, ['500g', '250g'],
         `sales did not reorder the sizes: ${JSON.stringify(labels)}`);
+      // Open the picker: #1 must be the best seller (500g), not the operator's first.
+      await page.evaluate((n) => {
+        const card = Array.from(document.querySelectorAll('.it'))
+          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
+        card.querySelector('.pf .add').click();
+      }, EN_VAR);
+      const ranks = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('.oc[data-vpick]')).map(b => ({
+          rank: (b.querySelector('.oc-rank') || {}).textContent || '',
+          label: (b.querySelector('.oc-l .l-en') || {}).textContent || '',
+        })));
+      assert.deepStrictEqual(ranks, [{ rank: '#1', label: '500g' }, { rank: '#2', label: '250g' }],
+        `ranks did not follow sales: ${JSON.stringify(ranks)}`);
     });
 
     await check('a nutrition value and its unit are drawn by ONE face', async () => {
