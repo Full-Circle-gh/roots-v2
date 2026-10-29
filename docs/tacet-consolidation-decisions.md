@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.593
+# Tacet shared-core consolidation — decisions record, v4.594
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-29 · v4.594 — **§503 AMENDED · THE BRAND'S CHARACTERS PEEK OVER THE WEBSITE'S BLOCKS — DECIDED BY ASH.** Ash: *"i dont see enough of our ip characters . do you have them ? maybe we can add some more of them to the websirte ?"*; offered a character beside section headings or a strip of all of them, with the first recommended: *"as you recommend"*. Any block on the Website page may carry one of the tenant's own characters (`lib/brand-signature.js`), drawn by the web engine peeking over the block's top corner. No new words. No change to `.gitignore` or CI.
 
 2026-10-28 · v4.593 — **§503 AMENDED · STAR RATINGS ON THE CONTACT BLOCK: TRIPADVISOR LIVE THROUGH ITS OFFICIAL API, HAPPYCOW TYPED BY HAND — DECIDED BY ASH.** Ash: *"it should show the star rate live update from those websites"*; offered an official API for TripAdvisor or reading the sites' pages, and told that TripAdvisor refuses automated reads (403) and has no such rule for its API: *"API + manual"*. The server reads the rating, review count and rating graphic from the TripAdvisor Content API once a day per listing (`lib/tripadvisor.js`, `GET /api/retail/website/ratings`); HappyCow's rating and count are fields the office types. No change to `.gitignore` or CI; production needs `TRIPADVISOR_API_KEY` in `.env`.
 
@@ -33554,3 +33556,15 @@ Ash: *"it should show the star rate live update from those websites"*, then *"AP
 26. **HappyCow's stars are typed by hand.** HappyCow has no public API. The block gains `happycow_rating` (0 to 5, one decimal) and `happycow_reviews`; when both are set the entry shows the stars, the rating and the count.
 
 27. **Words:** `Rating · 评分` and the shop's own `4.5 · 12 reviews` / `条评价` line are copied whole; one label, the review count field, is composed and declared in `docs/tacet-delivery-vocabulary.md`.
+
+### Amended 2026-10-29 — the brand's characters on the website
+
+Ash: *"as you recommend"*, to a character beside section headings first, the strip of all characters left for later.
+
+28. **The cast is the tenant's own, from `lib/brand-signature.js`.** The editor reads it from `GET /api/retail-admin/brand/signature`, the same answer the product editor's colophon uses; a tenant with no characters sees no picker, so nothing of Roots reaches another shop. A block stores only the character's key.
+
+29. **The pictures are cut-outs of the existing drawings.** `public/brand/cutout/ip-<key>.png` are the ten `public/brand/ip-<key>.jpg` drawings with the white paper made transparent (ink kept, trimmed, 480px), so a character sits on any background. On a block whose background is dark the web engine shows it in white lines.
+
+30. **The web engine draws it, on the Website page only.** `wrapBlock` in `public/shop/blocks.js` adds the character to a block that has one: at the block's top left or right corner, half over the edge, with a slow bob that stops for visitors who ask for less motion. It is decoration (no alt text, no clicks). The editor offers the choice (character, and left or right) only on the Website page, so the web shop and the mini app are unchanged.
+
+31. **Words:** `IP character · 角色` (product editor), `None · 无`, `Left · 左` and `Right · 右` are copied whole. Nothing is composed.
