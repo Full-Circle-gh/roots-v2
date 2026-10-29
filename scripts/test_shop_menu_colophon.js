@@ -115,10 +115,10 @@ function seed() {
     (id, name_en, name_cn, sku, sell_price, is_active, is_published, category,
      description_blocks, colophon_character, colophon_tagline_en, colophon_tagline_cn)
     VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?)`);
-  // 'drink' is what ROOTS_AUTO_MAP files under kombucha-gang. The map is Roots'
+  // 'drink' is what ROOTS_AUTO_MAP files under skater. The map is Roots'
   // own and is asserted through the module below, never re-spelled here.
   prod.run(P_AUTO,  'Colo Auto',  '签名自动', '__colo_auto',  10, 'drink',  CHIPS, null,      null, null);
-  prod.run(P_PICK,  'Colo Pick',  '签名指定', '__colo_pick',  11, 'drink',  CHIPS, 'skater',  null, null);
+  prod.run(P_PICK,  'Colo Pick',  '签名指定', '__colo_pick',  11, 'drink',  CHIPS, 'peas',    null, null);
   // §243 — a FOOD product always has something to say now (the allergen
   // card's shared-facility trace line), so §120's "nothing to say, no sheet"
   // is tested on a product that is not food, and the bare food product below
@@ -224,7 +224,7 @@ function sheetFor(html, nameEn) {
   check('a character the office picked wins over the auto pick', () => {
     const auto = brandSignature.resolveCharacter(roots, '', 'drink');
     const sheet = sheetFor(page, 'Colo Pick');
-    assert.ok(sheet.includes('/assets/brand/ip-skater.jpg'), 'the stored character is not drawn');
+    assert.ok(sheet.includes('/assets/brand/ip-peas.jpg'), 'the stored character is not drawn');
     assert.ok(!sheet.includes(`ip-${auto}.jpg`), 'the auto pick overrode the office');
   });
 
@@ -299,17 +299,17 @@ function sheetFor(html, nameEn) {
   });
 
   await checkAsync('...and an OVERRIDE cannot smuggle Roots\' cast onto it either', async () => {
-    // Colo Pick stores 'skater' — a Roots key. resolveCharacter honours an
+    // Colo Pick stores 'peas' — a Roots key. resolveCharacter honours an
     // override as-is, so this is the one route by which another tenant could
     // still end up drawing Roots' mascot, and it is only closed because the
     // cast check runs inside the module. If that ever loosens, this goes red.
     const r = await get({ Host: T_HOST });
     const sheet = sheetFor(r.body, 'Colo Pick');
     const keeps = brandSignature.resolveCharacter(
-      brandSignature.signatureFor({ id: T_OTHER, name: 'Colophon Fixture Co' }), 'skater', 'drink');
-    if (!keeps) assert.ok(!sheet.includes('ip-skater.jpg'),
+      brandSignature.signatureFor({ id: T_OTHER, name: 'Colophon Fixture Co' }), 'peas', 'drink');
+    if (!keeps) assert.ok(!sheet.includes('ip-peas.jpg'),
       'the module drops the override for a castless shop, but the page drew it anyway');
-    else assert.ok(sheet.includes('ip-skater.jpg'),
+    else assert.ok(sheet.includes('ip-peas.jpg'),
       'the module keeps the override, but the page dropped it');
   });
 

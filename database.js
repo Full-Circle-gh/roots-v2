@@ -1891,7 +1891,7 @@ addColumn('products', 'page_template',           'TEXT');
 // brand tagline as the page sign-off. By default we auto-pick the
 // character by product category and use "From Soil to Soul" as the line,
 // but the office can override either per product:
-//   colophon_character  — IP key like 'soilsoul' / 'skater' / 'kombucha-gang' / 'flex' / 'radishes' / 'mushroom' / 'peas' / 'onion' / 'broccoli' / 'hula'. Blank → auto-pick.
+//   colophon_character  — IP key from ROOTS_CHARACTERS in lib/brand-signature.js (read its label, not the key: §504). Blank → auto-pick.
 //   colophon_tagline_*  — bilingual override of "From Soil to Soul". Blank → default.
 addColumn('products', 'colophon_character',     'TEXT');
 addColumn('products', 'colophon_tagline_en',    'TEXT');
@@ -3223,7 +3223,7 @@ try {
       id: 'home_story_tail',
       type: 'story_break',
       bg_color: 'lime-leaf',
-      ip_image: '/assets/brand/ip-kombucha-gang.jpg',
+      ip_image: '/assets/brand/ip-skater.jpg',
       kicker_en: 'NO. 03 · WHO WE ARE', kicker_cn: '第三 · 我们是谁',
       title_en: 'No fakers.\nNo fillers.', title_cn: '无虚假。\n无填料。',
       body_en: '100% plant. Made from scratch. Real ferment, real fruit, real veg.',
@@ -6144,6 +6144,49 @@ try {
   const freed = db.prepare("UPDATE store_products SET sku = NULL WHERE COALESCE(is_active, 1) = 0 AND sku IS NOT NULL").run();
   if (freed.changes) console.log('[store_products] freed', freed.changes, 'sku(s) from deleted rows');
 } catch (e) { console.error('[store_products] schema migration failed:', e); }
+
+// ── One-off: Roots' character keys follow their files (§504) ────────────────
+//
+// Eight of the ten public/brand/ip-<key> files held another key's drawing; the
+// files now show the drawing their key names. This moves every stored key to
+// the key that now holds the SAME drawing, so no product page or website block
+// changes picture. It is one simultaneous CASE mapping, never key by key: the
+// remap is a permutation, so a sequence of updates would chase its own tail.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('ip_character_files_match_keys_v1');
+  if (!ran) {
+    const REMAP = {
+      skater: 'onion', 'kombucha-gang': 'skater', flex: 'hula', radishes: 'broccoli',
+      peas: 'flex', onion: 'radishes', broccoli: 'kombucha-gang', hula: 'peas',
+    };
+    const olds = Object.keys(REMAP);
+    const caseSql = 'CASE colophon_character ' + olds.map(() => 'WHEN ? THEN ? ').join('') + 'END';
+    const caseArgs = Object.entries(REMAP).flat();
+    const inList = olds.map(() => '?').join(',');
+    db.transaction(() => {
+      for (const table of ['products', 'store_products']) {
+        const r = db.prepare(`UPDATE ${table} SET colophon_character = ${caseSql} WHERE colophon_character IN (${inList})`)
+          .run(...caseArgs, ...olds);
+        console.log(`[migration] ip_character_files_match_keys_v1: ${table} ${r.changes} row(s)`);
+      }
+      for (const key of ['website.layout', 'cms.draft.website_layout']) {
+        const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = ?").get(key);
+        if (!row) continue;
+        let blocks = [];
+        try { blocks = JSON.parse(row.value_json); } catch {}
+        if (!Array.isArray(blocks)) continue;
+        let n = 0;
+        for (const b of blocks) {
+          if (b && typeof b.character === 'string' && REMAP[b.character]) { b.character = REMAP[b.character]; n++; }
+        }
+        if (!n) continue;
+        db.prepare("UPDATE storefront_config SET value_json = ? WHERE key = ?").run(JSON.stringify(blocks), key);
+        console.log(`[migration] ip_character_files_match_keys_v1: ${key} ${n} block(s)`);
+      }
+      db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('ip_character_files_match_keys_v1');
+    })();
+  }
+} catch (e) { console.error('[migration ip_character_files_match_keys_v1]', e); }
 
 // ── One-off: seed unit_cost from the most recent received retail PO line ──────
 //

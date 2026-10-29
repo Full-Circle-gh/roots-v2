@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.595
+# Tacet shared-core consolidation — decisions record, v4.596
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-29 · v4.596 — **§504 · EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS; THE THREE BLACK-FILLED DRAWINGS ARE VARIANTS — DECIDED BY ASH.** Found while placing characters on the website (§503 rule 28): eight of the ten `ip-<key>` files held another key's drawing. Ash, asked whether the three black-filled drawings are separate characters: *"Variants, build it"*. The files are swapped so each key shows its drawing, the three keys with no drawing of their own (`soilsoul`, `kombucha-gang`, `hula`) are relabelled as the black variants, and a one-off migration remaps every stored key so no product page or website block changes picture. No change to `.gitignore` or CI.
 
 2026-10-29 · v4.595 — **§503 AMENDED · THE WEBSITE HAS NO LANGUAGE SWITCH; VISITORS SEE ENGLISH — DECIDED BY ASH.** Ash: *"remove the toggle its not neccesary"*. `public/site.html` loses its EN/中 switch and always shows English to visitors; the editor's stage still follows the editor's language. No change to `.gitignore` or CI.
 
@@ -33574,3 +33576,42 @@ Ash: *"as you recommend"*, to a character beside section headings first, the str
 ### Amended 2026-10-29 — no language switch on the website
 
 32. **Visitors see the website in English, with no switch.** Ash: *"remove the toggle its not neccesary"*. The site is written for visitors from abroad (§503), and its Chinese fields are mostly empty, so the switch mostly led to a half-English page. `public/site.html` no longer draws the EN/中 switch or remembers a choice, and always renders English for visitors. Blocks keep their Chinese fields; on the editor's stage the page still follows the editor's EN/中, so whoever writes the Chinese can see it. Bringing a Chinese version back is a later decision.
+
+## §504 — EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS
+
+Found 2026-10-29 while placing characters on the website (§503 rule 28). The ten
+`ip-<key>` files under `public/brand/`, `public/brand/cutout/` and
+`miniapp/assets/brand/` did not hold the drawings their keys name: `radishes`
+was a running broccoli, `peas` the flexing character, `hula` a pea pod, and so
+on; only `mushroom` was right. The product editor's picker labelled the wrong
+drawings, and the category auto-pick filed radishes under broccoli. There are
+seven drawings, three of them twice (black-filled and white line): onion, radish
+trio and skater cucumber; then broccoli, the flexing character, the pea pod and
+the mushroom. Nothing called "Soil & Soul", "Kombucha" or "Hula" exists.
+
+Ash, asked whether the black-filled drawings are separate characters or
+variants: *"Variants, build it"*.
+
+1. **Every key's file shows the drawing its label names.** `onion`, `radishes`,
+   `skater`, `broccoli`, `flex`, `peas` and `mushroom` hold those drawings (the
+   white-line version where there are two).
+2. **The black-filled drawings keep the three keys that had no drawing.** Keys
+   are stored data, so they are not renamed: `soilsoul` is the black onion
+   (labelled "Onion (black)"), `kombucha-gang` the black skater ("Skater
+   (black)"), `hula` the black radishes ("Radishes (black)").
+3. **What customers see does not change.** A one-off migration
+   (`ip_character_files_match_keys_v1` in `database.js`) moves every stored key
+   to the key that now holds the same drawing, on `products`,
+   `store_products` and the `character` of every block in the website layout and
+   its draft. It is a single simultaneous mapping, never one key after another,
+   because the remap is a permutation.
+4. **The category auto-pick follows the names.** Root vegetables now get the
+   radishes, legumes the peas, protein the flexing character. The two rows that
+   live categories actually hit keep their picture: sauces and dips (and the
+   fallback) the black onion, drinks the white skater (`skater`, where
+   `kombucha-gang` now holds the black one).
+5. **The mini app follows on republish.** Its images are packaged, so it shows
+   the new pairing only after a republish from the main folder; until then its
+   product pages show the old file for a remapped key. Republish in the same
+   sitting as the deploy.
+6. **Words:** the labels are English-only data, as before. Nothing is composed.
