@@ -33687,4 +33687,10 @@ most likely to want should be first.
 5. **No new setting.** Popularity ranking is the QR menu's rule for sizes, not
    an opt-in. The operator's drag order remains the fallback and the control
    everywhere else.
-6. **Words:** none composed — size labels are already on the product.
+6. **The buyer sees the ranks.** Amended 2026-10-29 (Ash): the size sheet shows
+   a quiet line `Ranked by best sellers · 按热销排序`, and every size row
+   carries `#1`, `#2`, `#3`… in sales order. `#1` uses the picker's existing
+   selected-row look (ink ground, oat type, lime on the numeral). Numerals are
+   the same in both languages. Roots customer tokens only — not Tacet admin.
+7. **Words:** size labels are already on the product. The subtitle pair is
+   declared in `docs/tacet-delivery-vocabulary.md` v1.367.
