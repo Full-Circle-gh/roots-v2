@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.595
+# Tacet shared-core consolidation — decisions record, v4.596
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-29 · v4.596 — **§503 AMENDED · A MENU SHOWCASE BLOCK FOR THE CAFÉ-ONLY DISHES — DECIDED BY ASH.** Ash: *"i want to add another block that doesnt show actually product for sale , more about the special thing we offer only in ramada hotel . im reffering to open toasts and dip platters"*. A website-only block, `menu_showcase`: a heading, a line, and up to 10 dishes, each a photo, name, price (typed as shown) and one line. Two composed strings (vocabulary v1.366). No change to `.gitignore` or CI.
 
 2026-10-29 · v4.595 — **§503 AMENDED · THE WEBSITE HAS NO LANGUAGE SWITCH; VISITORS SEE ENGLISH — DECIDED BY ASH.** Ash: *"remove the toggle its not neccesary"*. `public/site.html` loses its EN/中 switch and always shows English to visitors; the editor's stage still follows the editor's language. No change to `.gitignore` or CI.
 
@@ -33574,3 +33576,15 @@ Ash: *"as you recommend"*, to a character beside section headings first, the str
 ### Amended 2026-10-29 — no language switch on the website
 
 32. **Visitors see the website in English, with no switch.** Ash: *"remove the toggle its not neccesary"*. The site is written for visitors from abroad (§503), and its Chinese fields are mostly empty, so the switch mostly led to a half-English page. `public/site.html` no longer draws the EN/中 switch or remembers a choice, and always renders English for visitors. Blocks keep their Chinese fields; on the editor's stage the page still follows the editor's EN/中, so whoever writes the Chinese can see it. Bringing a Chinese version back is a later decision.
+
+### Amended 2026-10-29 — a menu showcase for the café-only dishes
+
+Ash: *"i want to add another block that doesnt show actually product for sale , more about the special thing we offer only in ramada hotel"*; the dishes are the open toasts and dip platters served in the Ramada Pearl lobby. The photos are the ones Ash supplied, which match the plates as served.
+
+33. **`menu_showcase` is a website-only block** (`BLOCK_META` `website_only`, on `ALLOWED_BLOCK_TYPES`, drawn by `public/shop/blocks.js`, no mini-app branch). It carries a small heading (e.g. *Only at the Ramada Pearl lobby · Eat in only*), a title (e.g. *Open toasts*), a line (*Small toast, big flex*) and up to 10 dishes, each a photo, a name, a price and one line. One block per group: platters and toasts are two blocks.
+
+34. **The price is text, typed as it should read** (`¥85`). The block sells nothing and links nowhere, and a typed price carries no currency of the platform's choosing.
+
+35. **The dish photos ship with the site** (`public/brand/menu/`), 900px JPEGs of the pictures Ash supplied. A dish without a photo shows its name, price and line without a picture.
+
+36. **Words:** `Small heading · 小标题`, `Title · 标题`, `Text · 正文`, `Picture · 图片`, `Name · 名称`, `Price · 价格`, `+ Add card · + 添加卡片`, `Card N · 卡片 N` are copied whole. The block's name and description are composed and declared in `docs/tacet-delivery-vocabulary.md` v1.366.
