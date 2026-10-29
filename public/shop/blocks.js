@@ -1776,6 +1776,31 @@
       '<div class="sb-cl-grid">' + items.join('') + '</div></div>';
   };
 
+  // menu_showcase (§503 rule 33, website only) ------------------------------
+  // Dishes served at the café: photo, name, price (typed as shown) and a line.
+  // Sells nothing and links nowhere.
+  renderers.menu_showcase = function (b) {
+    var items = (Array.isArray(b.items) ? b.items : []).slice(0, 10).filter(function (it) {
+      return it && pick(it.name_en, it.name_cn);
+    });
+    var kicker = pick(b.kicker_en, b.kicker_cn), title = pick(b.title_en, b.title_cn), body = pick(b.body_en, b.body_cn);
+    if (!items.length && !title) return '';
+    var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink'), accent = color(b.accent_color || 'berry-punch');
+    var cards = items.map(function (it) {
+      var img = absUrl(it.image_url || ''), price = String(it.price || '').slice(0, 20), text = pick(it.text_en, it.text_cn);
+      return '<div class="sb-menu-card">' +
+        (img ? '<div class="sb-menu-img"><img src="' + attr(img) + '" alt="' + attr(pick(it.name_en, it.name_cn)) + '" loading="lazy"></div>' : '') +
+        '<div class="sb-menu-body"><div class="sb-menu-row"><div class="sb-menu-name">' + escapeHtml(pick(it.name_en, it.name_cn)) + '</div>' +
+        (price ? '<div class="sb-menu-price">' + escapeHtml(price) + '</div>' : '') + '</div>' +
+        (text ? '<div class="sb-menu-text">' + escapeHtml(text) + '</div>' : '') + '</div></div>';
+    }).join('');
+    return '<div class="sb-menu" style="background:' + attr(bg) + ';color:' + attr(fg) + ';--menu-accent:' + attr(accent) + '">' +
+      (kicker ? '<div class="sb-menu-kicker">' + escapeHtml(kicker) + '</div>' : '') +
+      (title ? '<div class="sb-menu-title">' + escapeHtml(title) + '</div>' : '') +
+      (body ? '<div class="sb-menu-line">' + escapeHtml(body) + '</div>' : '') +
+      (cards ? '<div class="sb-menu-grid sb-menu-n' + items.length + '">' + cards + '</div>' : '') + '</div>';
+  };
+
   // favorites_block --------------------------------------------------------
   // Items come from the host (ctx.config.favorites — customer's wishlist).
   renderers.favorites_block = function (b) {

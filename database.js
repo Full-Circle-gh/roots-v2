@@ -6173,7 +6173,7 @@ try {
         const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = ?").get(key);
         if (!row) continue;
         let blocks = [];
-        try { blocks = JSON.parse(row.value_json); } catch {}
+        try { blocks = JSON.parse(row.value_json); } catch { /* unreadable layout: nothing to remap, leave it as stored */ }
         if (!Array.isArray(blocks)) continue;
         let n = 0;
         for (const b of blocks) {
