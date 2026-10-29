@@ -67,6 +67,7 @@ const { tdb } = require('../lib/tenant-db');
 const { isShopCode } = require('../lib/shop-code');
 const { getCategoryTree } = require('../lib/category-tree');
 const qrCatOrder = require('../lib/qr-menu-category-order');
+const qrVariantSales = require('../lib/qr-variant-sales');
 const { themeToCssVars, sanitizeTheme,
         DIGIT_SUBSTITUTE, DIGIT_RANGE } = require('../lib/brand-theme');
 const inventory = require('../lib/inventory');
@@ -522,8 +523,8 @@ function buildMenu(shop) {
            -- name at two different prices, and the size written nowhere: not a
            -- choice
            -- presented badly, a duplicate listing. variant_sort is the
-           -- operator's own drag-to-reorder position in the back office and is
-           -- what orders the picker.
+           -- operator's own drag-to-reorder position in the back office; on
+           -- this menu §505 puts sales first and uses it as the tie-break.
            p.variant_group_id, p.variant_label, p.variant_label_cn, p.variant_sort,
            -- Does a photo EXIST for this product? Mirrors resolveProductImage,
            -- including its variant-sibling fallback, so the two never disagree.
@@ -566,7 +567,8 @@ function buildMenu(shop) {
   /* §129 · SIBLINGS COLLAPSE INTO ONE CARD, by the mini app's own grid rule
      (miniapp/pages/shop/shop.js _collapseVariants): group by variant_group_id,
      the representative is the group owner where it is listed and otherwise the
-     lowest variant_sort, and the members keep the operator's order.
+     lowest variant_sort. §505 ranks the members by sales on this menu; the
+     operator's variant_sort is the tie-break.
 
      ONLY WHEN TWO OR MORE ARE ACTUALLY LISTED ON THIS SHOP. A group whose other
      sizes the operator did not put on this menu is not a group here — it is a
@@ -583,6 +585,7 @@ function buildMenu(shop) {
      SOLD OUT ONLY WHEN EVERY SIZE IS. One size being out is what the picker
      greys, not what removes the card — the same relation §120's rule 1A has
      between a dead extra and the drink it belongs to. */
+  const salesUnits = qrVariantSales.unitsByProduct(shop.location_id);
   const vGroups = new Map();
   for (const r of listings) {
     if (!r.variant_group_id) continue;
@@ -598,6 +601,7 @@ function buildMenu(shop) {
     if (vSeen.has(gid)) continue;
     vSeen.add(gid);
     const sorted = members.slice().sort((a, b) =>
+      ((salesUnits.get(b.store_product_id) || 0) - (salesUnits.get(a.store_product_id) || 0)) ||
       ((a.variant_sort == null ? 0 : a.variant_sort) - (b.variant_sort == null ? 0 : b.variant_sort)) ||
       String(a.variant_label || '').localeCompare(String(b.variant_label || '')) ||
       (a.store_product_id - b.store_product_id));
