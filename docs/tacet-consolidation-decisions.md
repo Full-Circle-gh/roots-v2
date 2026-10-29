@@ -33687,10 +33687,29 @@ most likely to want should be first.
 5. **No new setting.** Popularity ranking is the QR menu's rule for sizes, not
    an opt-in. The operator's drag order remains the fallback and the control
    everywhere else.
-6. **The buyer sees the ranks.** Amended 2026-10-29 (Ash): the size sheet shows
-   a quiet line `Ranked by best sellers · 按热销排序`, and every size row
-   carries `#1`, `#2`, `#3`… in sales order. `#1` uses the picker's existing
-   selected-row look (ink ground, oat type, lime on the numeral). Numerals are
-   the same in both languages. Roots customer tokens only — not Tacet admin.
-7. **Words:** size labels are already on the product. The subtitle pair is
-   declared in `docs/tacet-delivery-vocabulary.md` v1.367.
+6. **Size order only, no size ranks on the sheet.** Amended 2026-10-29 (Ash):
+   *"BUT ITS NOT ABOUT SIZE, WE TALK ABOUT PLATTERS SPREADS TYPES"*. The numbered
+   `#1` `#2` treatment belongs on option answers (spreads / sides), not on jar
+   sizes — see §506. This section still reorders sizes by sales silently.
+7. **Words:** size labels are already on the product.
+
+## §506 — ON THE QR MENU, PLATTER SPREADS / SIDE TYPES ARE RANKED BY HOW MUCH THEY SELL
+
+Asked 2026-10-29 after §505 shipped size ranks by mistake. Ash: the buyer
+should see platter **spread / side types** ranked, not size variants.
+
+1. **Within each question, sales first.** On the QR option picker, answers of
+   one question (`retail_product_option_choices`) sort by how often that
+   `choice_id` appears on paid shop lines at this location (QR + till, last 30
+   whole days ending yesterday — same window as §505 / §499). The office's
+   `sort_order` is the tie-break. A question with one answer is left alone.
+2. **Every askable question.** Dressings, crunchy sides, bite picks, milk —
+   whatever the product asks. There is no separate "platter" type in the
+   schema; the ranking is the option picker itself.
+3. **The buyer sees the ranks.** Quiet line `Ranked by best sellers · 按热销排序`
+   under the question, and `#1`, `#2`, `#3`… on each answer. `#1`'s numeral is
+   lime; the row does NOT flip to ink (that look already means ticked).
+4. **Counts from `options_json`.** Each posted `choice_id` counts once per
+   order-line qty; a repeated pick (two of the same bite) counts twice.
+5. **Words:** the subtitle pair is already declared in
+   `docs/tacet-delivery-vocabulary.md` v1.367.
