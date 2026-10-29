@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.597
+# Tacet shared-core consolidation — decisions record, v4.598
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-29 · v4.598 — **§503 AMENDED · A LIVE MAP AND ONE-TAP DIRECTIONS IN THE STORES BLOCK — DECIDED BY ASH.** Ash: *"need to see the live map with the location . if someone click on it on mobile it will show the location in the map for direction"*; offered both shops or Yuexiu only: *"only yueiu"*, then *"go ahead build everythnig you recommend"*. A Stores-block shop linked to a shop in Shops carries its position; the website draws an Amap map with its pin and Apple Maps / Google Maps / Amap direction links. No new words. No change to `.gitignore` or CI.
 
 2026-10-29 · v4.597 — **§504 · EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS; THE THREE BLACK-FILLED DRAWINGS ARE VARIANTS — DECIDED BY ASH.** Found while placing characters on the website (§503 rule 28): eight of the ten `ip-<key>` files held another key's drawing. Ash, asked whether the three black-filled drawings are separate characters: *"Variants, build it"*. The files are swapped so each key shows its drawing, the three keys with no drawing of their own (`soilsoul`, `kombucha-gang`, `hula`) are relabelled as the black variants, and a one-off migration remaps every stored key so no product page or website block changes picture. No change to `.gitignore` or CI.
 
@@ -33590,6 +33592,18 @@ Ash: *"i want to add another block that doesnt show actually product for sale , 
 35. **The dish photos ship with the site** (`public/brand/menu/`), 900px JPEGs of the pictures Ash supplied. A dish without a photo shows its name, price and line without a picture.
 
 36. **Words:** `Small heading · 小标题`, `Title · 标题`, `Text · 正文`, `Picture · 图片`, `Name · 名称`, `Price · 价格`, `+ Add card · + 添加卡片`, `Card N · 卡片 N` are copied whole. The block's name and description are composed and declared in `docs/tacet-delivery-vocabulary.md` v1.366.
+
+### Amended 2026-10-29 — a live map and directions in the Stores block
+
+Ash: *"need to see the live map with the location . if someone click on it on mobile it will show the location in the map for direction"*, then *"only yueiu"* and *"go ahead build everythnig you recommend"*.
+
+37. **A shop in the Stores block is placed on the map by choosing it from Shops.** The editor's *Place the point on a map* list, on the Website page, offers the tenant's own shops (`/api/retail-admin/stores`, which carries each shop's position); choosing one copies its `lat` / `lng` (as stored, the Chinese map grid used by Amap) onto the block's shop, and its Chinese address too when that field is empty. Nobody types coordinates. A shop not placed has no pin and no direction links.
+
+38. **The map is Amap, drawn by the website page.** Google Maps does not load in mainland China; Amap works there and abroad. The engine (`public/shop/blocks.js`) draws a map box with the pins' positions; `public/site.html` loads the Amap JS SDK with the public, referer-restricted key from `/api/retail/maps-config` (the web shop's address picker uses the same) and draws an English-labelled map with a pin per shop. With no key, or if the SDK fails, the box is removed and the block reads as before. The key's allowed domains in the Amap console must include the website's host.
+
+39. **Directions are one tap, in the visitor's own map app.** Under each placed shop: *Apple Maps*, *Google Maps* and *Amap* links, built from the position. On a phone the map does not take drags (the page scrolls past it) and a tap opens the phone's map app: Apple Maps on an iPhone or iPad, the default map app (`geo:`) on Android. On a computer the map can be dragged and zoomed. App names are not translated.
+
+40. **Yuexiu only, for Roots.** The Tianhe address is a kitchen in a tech park, not somewhere to visit, so only Yuexiu is placed on the website's map.
 
 ## §504 — EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS
 

@@ -14608,6 +14608,7 @@ function buildMenuShowcaseForm(m, b) {
   websiteColours(m, b, { bg: 'oat-milk', fg: 'ink', accent: 'berry-punch' });
 }
 
+let _mapStores = null;   // §503 r.37 — shops with a position, for the map
 function buildStoreInfoForm(m, b) {
   // Migrate legacy single-store top-level fields into stores[0] the first
   // time the form opens, so the repeater is the only source of truth.
@@ -14668,6 +14669,14 @@ function buildStoreInfoForm(m, b) {
     b.stores = next;
     updateBlock(b.id, { stores: next });
   };
+  // The shops that can be placed on the map (§503 r.37), loaded once.
+  if (state.page === 'website' && _mapStores === null) {
+    _mapStores = [];
+    api('/api/retail-admin/stores').then(r => {
+      _mapStores = ((r && r.data) || []).filter(st => Number(st.lat) && Number(st.lng));
+      renderCards();
+    }).catch(() => {});
+  }
 
   const renderCards = () => {
     cardsHost.innerHTML = '';
@@ -14702,6 +14711,25 @@ function buildStoreInfoForm(m, b) {
         txtPair(s.name_en, s.name_cn, ({ en, cn }) => setFields({ name_en: en, name_cn: cn }))));
       card.appendChild(field(T('Address', '地址'), '',
         txtPair(s.address_en, s.address_cn, ({ en, cn }) => setFields({ address_en: en, address_cn: cn }))));
+      // §503 r.37 — on the Website page, place this shop on the map by
+      // choosing it from Shops: its position (and, when empty, its Chinese
+      // address) is copied onto the card. Nobody types coordinates.
+      if (state.page === 'website') {
+        const opts = [{ value: '', label: T('— none —', '— 无 —') }]
+          .concat((_mapStores || []).map(st => ({ value: String(st.id), label: st.name_en || st.name_cn || st.code || ('#' + st.id) })));
+        card.appendChild(field(T('Place the point on a map', '在地图上标记'), '',
+          sel(s.store_id ? String(s.store_id) : '', opts, v => {
+            const st = (_mapStores || []).find(x => String(x.id) === v);
+            const next = b.stores.slice();
+            const cur = { ...next[idx] };
+            if (!st) { delete cur.store_id; delete cur.lat; delete cur.lng; }
+            else {
+              cur.store_id = st.id; cur.lat = Number(st.lat) || ''; cur.lng = Number(st.lng) || '';
+              if (!cur.address_cn && st.address) cur.address_cn = st.address;
+            }
+            next[idx] = cur; writeStores(next); renderCards();
+          })));
+      }
       card.appendChild(field(T('Hours label', '营业时间标签'), T('Just the text shown — e.g. "10:00 – 21:00" or "Mon–Sat · 10am–9pm".', '仅显示的文字 — 例如「10:00 – 21:00」或「周一至周六 · 上午 10 点 – 晚 9 点」。'),
         txtPair(s.hours_en, s.hours_cn, ({ en, cn }) => setFields({ hours_en: en, hours_cn: cn }))));
 

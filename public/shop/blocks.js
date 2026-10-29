@@ -1604,6 +1604,14 @@
       }];
     }
     if (!raw || !raw.length) return '';
+    // §503 r.37–39: a shop placed from Shops carries its position (the Chinese
+    // map grid Amap uses). The page draws the map; links are built here.
+    function pos(s) {
+      var la = Number(s && s.lat), ln = Number(s && s.lng);
+      return (isFinite(la) && isFinite(ln) && la !== 0 && ln !== 0 && Math.abs(la) <= 90 && Math.abs(ln) <= 180) ? { lat: la, lng: ln } : null;
+    }
+    var pins = raw.map(function (s) { var p = pos(s); return p ? { lat: p.lat, lng: p.lng, name: pick(s.name_en, s.name_cn) } : null; })
+      .filter(Boolean);
     var now = new Date();
     var hr = now.getHours() + now.getMinutes() / 60;
     var kicker = pick(b.kicker_en, b.kicker_cn);
@@ -1635,15 +1643,25 @@
         out += '<div class="sb-st-cnaddr" lang="zh-CN">' + escapeHtml(s.address_cn) + '</div>';
       }
       if (s.phone) out += '<a class="sb-st-row" href="tel:' + attr(s.phone) + '"><span class="sb-st-icon">📞</span><span class="sb-st-val sb-st-phone">' + escapeHtml(s.phone) + '</span></a>';
+      var p = pos(s);
+      if (p) {
+        var nm = encodeURIComponent(pick(s.name_en, s.name_cn) || '');
+        out += '<div class="sb-st-dir">' +
+          '<a class="sb-st-dir-btn" href="https://maps.apple.com/?ll=' + p.lat + ',' + p.lng + '&q=' + nm + '" target="_blank" rel="noopener">Apple Maps</a>' +
+          '<a class="sb-st-dir-btn" href="https://www.google.com/maps/search/?api=1&query=' + p.lat + ',' + p.lng + '" target="_blank" rel="noopener">Google Maps</a>' +
+          '<a class="sb-st-dir-btn" href="https://uri.amap.com/marker?position=' + p.lng + ',' + p.lat + '&name=' + nm + '&coordinate=gaode&callnative=1" target="_blank" rel="noopener">Amap</a>' +
+          '</div>';
+      }
       if (ctaLabel && s.cta_target) {
         out += ctaWrap(s.cta_target, '<div class="sb-st-cta" style="' +
           (btnBg ? 'background:' + attr(btnBg) + ';color:' + attr(btnFg) : '') + '">' + escapeHtml(ctaLabel) + '</div>');
       }
       return out + '</div>';
     }).join('');
+    var map = pins.length ? '<div class="sb-st-map" data-pins="' + attr(JSON.stringify(pins)) + '"></div>' : '';
     return '<div class="sb-store-blk" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' +
       (kicker ? '<div class="sb-st-kicker">' + escapeHtml(kicker) + '</div>' : '') +
-      '<div class="sb-st-cards">' + cards + '</div></div>';
+      map + '<div class="sb-st-cards">' + cards + '</div></div>';
   };
 
   // fact_band (§503, website only) ------------------------------------------
