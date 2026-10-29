@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.596
+# Tacet shared-core consolidation — decisions record, v4.597
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-29 · v4.597 — **§84 AMENDED · GZGROCERY ORDERS NO LONGER STOP AT ZERO — DECIDED BY ASH.** Ash: *"ok lets fix #1 first"*. §84 left gzgrocery clamped on the belief that it had no order-ingest path; `scripts/gzgrocery-order-daemon.js` has been one since 2026-06-27. Its decrement clamped at 0, so during §85's pre-order window gzgrocery was re-offered the full allowance after every sale and the kitchen never saw what was owed. The order path now takes a delta with no floor, as Meituan and Eleme do; the inferred ERP pickup path keeps its clamp. Code: `scripts/gzgrocery-order-daemon.js` `processOrder`.
 
 2026-10-29 · v4.596 — **§503 AMENDED · A MENU SHOWCASE BLOCK FOR THE CAFÉ-ONLY DISHES — DECIDED BY ASH.** Ash: *"i want to add another block that doesnt show actually product for sale , more about the special thing we offer only in ramada hotel . im reffering to open toasts and dip platters"*. A website-only block, `menu_showcase`: a heading, a line, and up to 10 dishes, each a photo, name, price (typed as shown) and one line. Two composed strings (vocabulary v1.366). No change to `.gitignore` or CI.
 
@@ -9432,6 +9434,20 @@ reaches us as an OBSERVED DROP in the ERP's own stock, reconciled by an operator
 overshot is a phantom the kitchen would cook for. **The two are not the same fact and must not share
 a mechanism** — which is also why gzgrocery's owed units simply do not arise: an ERP drop we
 reconcile is a sale that already happened, not a promise waiting on a batch.
+
+**AMENDED 2026-10-29 (v4.597) — THE PREMISE ABOVE WAS WRONG, AND GZGROCERY ORDERS NOW GO NEGATIVE
+LIKE MEITUAN AND ELEME. DECIDED BY ASH:** *"ok lets fix #1 first"*, after being shown the bug in
+plain words. gzgrocery DOES have an order-ingest path, and had one before this section was written:
+`scripts/gzgrocery-order-daemon.js` (added 2026-06-27, running live as `gzgrocery-orders`) reads
+each order's lines off the gzgrocery admin and takes them off the Tianhe shelf with reason
+`gzgrocery_order`. Those are real order lines, the "fact" kind this paragraph says may carry a debt
+— and that path clamped at 0. With §85 publishing `shelf + preorder_qty` to gzgrocery, the clamp
+meant every sale against an empty shelf was forgotten, gzgrocery was re-offered the full allowance
+after each one, and the kitchen's owed count never saw them; 3 such swallowed sales on fresh lines
+were found on the live ledger for the 60 days to 2026-10-29. The order path now passes a delta with
+no floor (the Meituan/Eleme shape), and its void reversal adds back the same delta. **What this
+paragraph says about the ERP pickup drop still stands:** `scripts/guanyi-daemon.js`'s inferred
+pickup keeps its clamp (it is in `shadow` on the box, so it writes nothing today).
 
 **THE TRUTH GOES NEGATIVE; THE NUMBER WE PUBLISH DOES NOT.** `bundle-stock.rawStockAt` returns the
 raw column and `sellableAt` passes it straight through for a non-bundle, so an unclamped shelf would

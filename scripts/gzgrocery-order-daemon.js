@@ -490,10 +490,16 @@ function processOrder(o, items, skuMap, storeId, shipTo) {
     const applied = [];
     for (const it of ours) {
       const cur = curQty(storeId, it.product_id);
-      const next = Math.max(0, cur - it.qty);
+      // §84 amended: NO CLAMP AT 0, same as Meituan and Eleme. A sale against
+      // an empty shelf is stock owed, and the negative shelf is what the
+      // kitchen's owed count reads and what runs the §85 pre-order allowance
+      // down. Clamped, every sale was forgotten and gzgrocery was re-offered
+      // the full allowance. A delta, so adjustStock re-reads inside its own
+      // transaction; `next` is only for the note.
+      const next = cur - it.qty;
       if (MODE === 'live') {
         adjustStock({
-          storeId, productId: it.product_id, newPhysicalQty: next,
+          storeId, productId: it.product_id, deltaQty: -it.qty,
           actorLabel: 'gzgrocery-order', reason: 'gzgrocery_order',
           note: `gzgrocery order ${o.orderNo || o.orderId}: ${it.sku} ×${it.qty} (${cur}→${next})`,
         });
@@ -520,7 +526,7 @@ function processOrder(o, items, skuMap, storeId, shipTo) {
       const next = cur + it.qty;
       if (MODE === 'live') {
         adjustStock({
-          storeId, productId: it.product_id, newPhysicalQty: next,
+          storeId, productId: it.product_id, deltaQty: it.qty,
           actorLabel: 'gzgrocery-order', reason: 'gzgrocery_order_reverse',
           note: `gzgrocery order ${o.orderNo || o.orderId} ${o.status}: +${it.sku} ×${it.qty} (${cur}→${next})`,
         });
