@@ -5206,7 +5206,7 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   // CLAIMED FIRST: 'queued' is written before the slip goes, so the paid
   // path — which skips only a ticket already 'printed' — cannot send a
   // second one while this print is still in flight. The payment page does
-  // not print an unpaid phone-pay order (§507).
+  // not print an unpaid phone-pay order (§508).
   if (!payInPage) {
     try {
       tdb().prepare(
@@ -5734,7 +5734,7 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
       `</div>` +
     `</details>`;
 
-  /* THE COUNTER SCREEN DOES NOT PRINT (§507, Ash 2026-10-29).
+  /* THE COUNTER SCREEN DOES NOT PRINT (§508, Ash 2026-10-29).
 
      An order placed with WeChat Pay or Alipay does not print on submit: §50
      prints that rail when the money arrives, so the kitchen is not handed a
@@ -5779,7 +5779,7 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
      browser to Alipay by itself, so a customer who returns to the order cannot
      be thrown into a payment they did not ask for.
 
-     Every other road is the counter, which does not print (§507): inside
+     Every other road is the counter, which does not print (§508): inside
      WeChat, where Alipay cannot open; the rail switched off since the order was
      placed; a charge that could not be built. The slip waits for the money. */
   if (order.payment_method === 'alipay' && order.status === 'pending_payment') {

@@ -1468,7 +1468,7 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.ok(/请到收银台付款。/.test(body), 'a camera-app scan was left with nothing to do');
       });
 
-      // THE SLIP WAITS FOR THE MONEY (§507, Ash 2026-10-29). A WeChat order
+      // THE SLIP WAITS FOR THE MONEY (§508, Ash 2026-10-29). A WeChat order
       // does not print on submit, and sending the customer to the counter
       // does not print either: the paper would say "Paid by wechat" while the
       // order is still unpaid, and that print would stop the till from

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.600
+# Tacet shared-core consolidation — decisions record, v4.601
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,7 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-29 · v4.600 — **§507 · A QR ORDER PAID ON THE PHONE PRINTS ONLY WHEN THE MONEY HAS ARRIVED — DECIDED BY ASH.** Ash: the QR menu's WeChat Pay sometimes prints a receipt that says paid by WeChat when the customer has not paid; the order in Tacet still shows that WeChat as unpaid (he described it as offline WeChat Pay); the slip came out by itself, without the till, and should come out only when someone actually pays with WeChat. The 2026-10-26 counter-screen print is what did it, and it is reversed. No new words. No change to `.gitignore` or CI.
+2026-10-29 · v4.601 — **§508 · A QR ORDER PAID ON THE PHONE PRINTS ONLY WHEN THE MONEY HAS ARRIVED — DECIDED BY ASH.** Ash: the QR menu's WeChat Pay sometimes prints a receipt that says paid by WeChat when the customer has not paid; the order in Tacet still shows that WeChat as unpaid (he described it as offline WeChat Pay); the slip came out by itself, without the till, and should come out only when someone actually pays with WeChat. The 2026-10-26 counter-screen print is what did it, and it is reversed. No new words. No change to `.gitignore` or CI.
 
 2026-10-29 · v4.600 — **§507 · A CONVERSATION OPEN ON THE COMPUTER SHOWS ON THE PHONE, AND THE OTHER WAY ROUND — ASKED BY ASH:** *"I want that conversation on the computer will be sync on mobile and vice versa"*. The thread already lived in one place. Each screen read it once and then held what it had read: the computer's Feedback tab loaded on first open and never again, the phone's inbox was fetched at boot, and the live watermark that nudges both screens looked at orders, customers and stock. A reply typed on one device was invisible on the other until a reload. The customer's website and mini app had the same hole while the conversation stayed open. The watermark now includes the thread and its turns, and how many are marked handled. It does not include the read stamps, because opening a thread writes those and a signature that moved on a read would make every open screen read again. The computer refetches while the Feedback tab or the open conversation is up, and again when that tab is opened; the phone refetches while the inbox or a conversation is up, on the same nudge, the same 60-second backstop, a pull, and every time the inbox is opened. A half-typed reply is left where it was. The website and the mini app re-read an open conversation every 8 seconds, and the website's list of reports with them; the customer's read stamp is written only when a store reply is still unread. Two logins that were never linked stay two conversations — this does not merge customers. No new words. No schema change. No change to `.gitignore` or CI. See §507.
 
@@ -33731,7 +33731,7 @@ The conversation is the feedback thread (`retail_feedback` and `retail_feedback_
 5. **Words:** none. The screens already name this a conversation.
 6. **Two logins stay two conversations.** A website account and a WeChat account that were never linked are still two customers, even when they share a phone number. This does not merge them. Merging would move wallet, points and orders, and that was not asked.
 
-## §507 — A QR ORDER PAID ON THE PHONE PRINTS ONLY WHEN THE MONEY HAS ARRIVED
+## §508 — A QR ORDER PAID ON THE PHONE PRINTS ONLY WHEN THE MONEY HAS ARRIVED
 
 **2026-10-29 · DECIDED BY ASH.** Ash: the QR menu's WeChat Pay sometimes prints a receipt that says paid by WeChat when the payment was not made. Opening the order in Tacet, the payment is still the unpaid WeChat tender — he described it as offline WeChat Pay. The slip came out on its own, without anyone using the till. It should print only when someone actually pays with WeChat.
 
