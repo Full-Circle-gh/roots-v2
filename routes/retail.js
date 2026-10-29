@@ -16009,6 +16009,28 @@ function _dashActivitySignature(tenantId) {
                           WHERE reason IN ('gzgrocery_order','gzgrocery_order_reverse')`).get();
     parts.push(g.m);
   } catch (e) { parts.push('g?'); }
+  // A conversation (retail_feedback + its turns). Orders and customers moving
+  // do not move this, so without it a reply typed on the phone never nudges
+  // the computer, and the other way round. Read stamps are deliberately NOT
+  // in here: opening a thread writes admin_read_at / customer_read_at, and a
+  // signature that moved on a read would nudge every open screen into reading
+  // again. Handled DOES count — marking a thread done on one device is a
+  // change the other device has to show. `h` is the count of handled rows so
+  // putting one BACK (handled_at cleared) moves the signature too; MAX would
+  // not, once any other thread had been handled later.
+  try {
+    const f = d.prepare(`
+      SELECT COUNT(*) n, MAX(id) mid,
+             COALESCE(SUM(CASE WHEN handled_at IS NULL THEN 0 ELSE 1 END), 0) h,
+             MAX(last_customer_msg_at) lc, MAX(last_admin_msg_at) la
+        FROM retail_feedback`).get();
+    parts.push(f.n, f.mid, f.h, f.lc, f.la);
+  } catch (e) { parts.push('f?'); }
+  try {
+    const m = d.prepare(`
+      SELECT COUNT(*) n, MAX(id) mid FROM retail_feedback_messages`).get();
+    parts.push(m.n, m.mid);
+  } catch (e) { parts.push('m?'); }
   return parts.join('|');
 }
 

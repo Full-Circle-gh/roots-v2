@@ -1824,6 +1824,10 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      "In store · 0 today" at 10am over six paid till and QR sales. The old
      figures stay up until the new ones land, so there is no loading flash. */
   if(route==='sales') state.chanTried=false;
+  /* The inbox is re-read on every entry. A conversation answered on the
+     computer since this phone last opened it is a fact about now, and a list
+     taken at boot would still be that morning's. */
+  if(route==='inbox') loadInbox();
   state.stack.push({route,title:s.title}); render(); }
 /* LEAVING IS THE LAST PAUSE. The receive screen writes on a pause rather than
    on a button, so the pause the operator never waited out has to be spent here
@@ -6217,14 +6221,18 @@ reg('invSeg', v=>{ state.invSeg=v; render(); });
 reg('openReply', who=>{
   state.reply=who; state.reviewsSeen.add(who); state.replyErr=null; state.replyBusy=false;
   const r=findReview(who);
-  state.thread = (r&&r.stream==='feedback'&&r.id!=null) ? {id:r.id,loading:true,msgs:null,err:null} : null;
+  state.thread = (r&&r.stream==='feedback'&&r.id!=null) ? {id:r.id,loading:true,msgs:null,err:null,draft:''} : null;
   render();
   if(state.thread) loadThread(r.id);
 });
-function loadThread(id){
-  api('/feedback/'+id).then(d=>{
+function loadThread(id, quiet){
+  // The promise is the point of `quiet`. A live refresh waits on it and then
+  // paints; if this returned nothing, that paint would run on the old turns
+  // and the new ones would sit in state until some later redraw.
+  return api('/feedback/'+id).then(d=>{
     if(!state.thread||state.thread.id!==id) return;
-    state.thread={id, loading:false, err:null,
+    const draft=state.thread.draft||'';
+    state.thread={id, loading:false, err:null, draft,
       msgs:Array.isArray(d&&d.messages)?d.messages:[],
       photos:(()=>{ let ph=d&&d.photos; if(typeof ph==='string'){ try{ ph=JSON.parse(ph||'[]'); }catch(e){ ph=[]; } }
         return Array.isArray(ph)?ph:[]; })(),
@@ -6232,14 +6240,47 @@ function loadThread(id){
       // buildFeedbackThread returns customer_name and the phone threw it away,
       // so the sheet's title fell back to the list key and read "fb:1".
       name:(d&&d.customer_name)||null};
-    render();
+    if(!quiet) render();
   }).catch(e=>{
     if(!state.thread||state.thread.id!==id) return;
     if(String(e.message)==='auth') return;
-    state.thread={id, loading:false, msgs:null, err:E('Could not load the conversation.','无法加载对话。')};
+    if(quiet) return;   // a failed quiet refresh leaves the conversation as it was
+    state.thread={id, loading:false, msgs:null, err:E('Could not load the conversation.','无法加载对话。'), draft:state.thread.draft||''};
     render();
   });
 }
+/* The inbox list, or a conversation open on top of it. A reply that landed
+   on the computer is fetched here; the caller's own render paints it, so
+   this does not rebuild the screen by itself. The open thread is re-read
+   only when its row in the list has moved — GET /feedback/:id stamps the
+   thread read, and re-reading it on every order nudge would be a write. */
+function inboxOnScreen(){
+  const top=state.stack.length?state.stack[state.stack.length-1]:null;
+  if(top&&top.route==='inbox') return true;
+  return !!(state.thread&&state.thread.id!=null);
+}
+function fbRowStamp(id){
+  const r=(DB.feedback||[]).find(x=>x.id===id);
+  if(!r) return '';
+  return [r.replies, r.needsReply?1:0, r.handled?1:0, (r.text&&r.text[0])||'', (r.time&&r.time[0])||''].join('|');
+}
+let _fbWatchSeq=0;
+function refreshConversation(){
+  if(!inboxOnScreen()) return Promise.resolve();
+  const seq=++_fbWatchSeq;
+  const id=state.thread&&state.thread.id!=null?state.thread.id:null;
+  const before=id!=null?fbRowStamp(id):null;
+  return api('/feedback').then(r=>{
+    if(seq!==_fbWatchSeq) return;
+    const rows=Array.isArray(r)?r:(r&&r.data);
+    if(rows) DB.feedback=rows.map(mapFeedback);
+    if(id==null||!state.thread||state.thread.id!==id) return;
+    const after=fbRowStamp(id);
+    if(state.thread.msgs&&after===before&&before!=='') return;
+    return loadThread(id, true);
+  }).catch(()=>{ /* a failed quiet refresh leaves the inbox as it was */ });
+}
+reg('fbDraft', v=>{ if(state.thread) state.thread.draft=String(v==null?'':v); });
 const findReview=k=>DB.reviews.find(x=>revKey(x)===k)||DB.feedback.find(x=>revKey(x)===k);
 /* §325 — THE INBOX'S WRITES, ON THE SERVER'S KEYS (lib/cap-routes.js): every
    /reviews write (hide, restore, reply) is reviews:moderate; every /feedback
@@ -6263,8 +6304,8 @@ reg('sendReplyText', t=>{
     // A public review reply is one shot, so the sheet is done. A thread is a
     // conversation: stay in it and show the turn that was just sent, the way
     // the desktop drawer re-renders itself after a send.
-    if(state.thread){ const el=document.getElementById('mReply'); if(el) el.value='';
-      state.thread={...state.thread,loading:true}; render(); loadThread(state.thread.id); }
+    if(state.thread){ state.thread.draft=''; const el=document.getElementById('mReply'); if(el) el.value='';
+      state.thread={...state.thread,loading:true,draft:''}; render(); loadThread(state.thread.id); }
     else { state.reply=null; render(); }
     showToast(T('Reply sent','回复已发送'));
     loadInbox();
@@ -44867,7 +44908,7 @@ function sheetReply(){
          <span style="font-size:14px;color:var(--brick-ink)">${state.replyErr}</span></div>`:''}
        ${th||!canW?'':`<div style="font-size:13px;color:var(--text-secondary)">${foot}</div>`}</div>
      ${canW?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:10px">
-       ${th?`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:52px;max-height:120px;resize:none"></textarea>`:''}
+       ${th?`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:52px;max-height:120px;resize:none" oninput="APP.cmd('fbDraft',this.value)">${escAttr((state.thread&&state.thread.draft)||'')}</textarea>`:''}
        <button class="btn2" style="width:100%" ${state.replyBusy?'disabled':''} onclick="APP.cmd('sendReplyText',(document.getElementById('mReply')||{}).value)">${state.replyBusy?T('Sending…','发送中…'):T('Send reply','发送回复')}</button>
        ${th?`<div style="font-size:12px;color:var(--text-secondary);text-align:center">${foot}</div>`:''}</div>`:''}</div>`;
 }
@@ -49946,6 +49987,7 @@ function refreshNow(){
   if(state.refreshing) return;
   state.refreshing=true; render();
   const jobs=[mSettled(loadLive())];
+  if(inboxOnScreen()) jobs.push(mSettled(refreshConversation()));
   if(state.tab==='orders') jobs.push(mSettled(loadOrdersPage()));
   if(state.tab==='customers') jobs.push(mSettled(loadCustomers()));
   /* The catalogue is this tab's paged list in exactly the same sense, and it
@@ -50083,6 +50125,7 @@ function mLiveTick(){
       state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); } }).catch(()=>{})),
   ];
   if(state.tab==='orders'||state.detailId!=null) jobs.push(mSettled(refreshOrders()));
+  if(inboxOnScreen()) jobs.push(mSettled(refreshConversation()));
   Promise.all(jobs).then(()=>{ _mLive.busy=false; state.refreshedAt=Date.now(); render(); });
 }
 /* SOMETHING ACTUALLY MOVED — the whole board, the way a pull does it, without
@@ -50101,6 +50144,7 @@ function mLiveRefreshAll(){
   _mLive.dirty=false; _mLive.busy=true;
   const jobs=[mSettled(loadLive())];
   if(state.tab==='orders'||state.detailId!=null) jobs.push(mSettled(refreshOrders()));
+  if(inboxOnScreen()) jobs.push(mSettled(refreshConversation()));
   Promise.all(jobs).then(()=>{ _mLive.busy=false; state.refreshedAt=Date.now(); render(); });
 }
 /* Coalesce a burst into one refresh — a dispatch run moves a dozen orders in a
