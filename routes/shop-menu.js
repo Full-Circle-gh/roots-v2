@@ -442,6 +442,23 @@ function attachOptions(shop, listings) {
   const byProduct = productOptions.questionsForProducts(tdb(), pids, { isChoiceSoldOut, isChoiceSwitchedOff });
   if (!byProduct.size) return;
 
+  // §506 — SPREADS / SIDES RANK BY SALES. Within each question, most-picked
+  // answers first at this shop; the office's sort_order is the tie-break
+  // (stable index from questionsForProducts). Sizes are a different axis (§505)
+  // and are not what the buyer asked to see numbered.
+  const choiceSales = qrVariantSales.unitsByChoice(shop.location_id);
+  for (const qs of byProduct.values()) {
+    for (const q of qs) {
+      if (!q.choices || q.choices.length < 2) continue;
+      q.choices = q.choices
+        .map((c, i) => ({ c, i }))
+        .sort((a, b) =>
+          ((choiceSales.get(b.c.id) || 0) - (choiceSales.get(a.c.id) || 0)) ||
+          (a.i - b.i))
+        .map(x => x.c);
+    }
+  }
+
   // A PICTURE BESIDE EACH CHOICE (lib/choice-photo.js) — the linked product's
   // photo, served through this menu's own choice route below so the page never
   // carries the linked product's id. A choice with none keeps the bare row.
@@ -1774,16 +1791,17 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
 .oc-l{min-width:0;flex:1;overflow-wrap:anywhere}
 .oc-d{flex:none;font-variant-numeric:tabular-nums;font-size:12.5px;
   color:var(--olive)}
-/* §505 — size ranks. Lilita digits via --f-num, same as every figure on this
-   page. Olive on #2…; #1 flips to the ink ground the picker already uses for
-   a chosen answer, with lime on the numeral — Roots accent, not a new chip. */
+/* §506 — answer ranks (platter spreads / sides), not sizes. Lilita digits via
+   --f-num. Olive on #2…; lime on #1. Whole-row ink fill is NOT used here: that
+   look already means "ticked" (.oc.on), and a best-seller that stayed ink while
+   another answer was chosen would look like two ticks. */
 .oc-rank{flex:none;font-family:var(--f-num);font-size:15px;letter-spacing:.02em;
   font-variant-numeric:tabular-nums;min-width:1.6em;color:var(--olive)}
-.oc.top{background:var(--ink);color:var(--oat)}
-.oc.top .oc-rank{color:var(--lime)}
-.oc.top .oc-d{color:var(--oat);opacity:.85}
-/* Quiet line above the size list — same register as .og-lim. */
-.sz-why{font-size:12px;color:var(--ink);opacity:.62;margin:8px 0 2px;
+.oc.best .oc-rank{color:var(--lime)}
+.oc.on .oc-rank{color:var(--oat);opacity:.85}
+.oc.on.best .oc-rank{color:var(--lime);opacity:1}
+/* Quiet line under a question — same register as .og-lim. */
+.sz-why{font-size:12px;color:var(--ink);opacity:.62;margin:-3px 0 4px;
   overflow-wrap:anywhere}
 /* Ticked. The ground flips rather than a tick appearing beside the label:
    a checkbox glyph at this size is a smaller target than the row it marks. */
@@ -2718,7 +2736,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // ('选择规格' / 'Choose a size', and '选择规格' / 'CHOOSE A SIZE'), and
   // public/shop.html carries the identical pair for the same two controls.
   `L_SIZE=${JSON.stringify(bi('Choose a size', '选择规格'))},` +
-  // §505 — why the sizes are numbered. Pair declared in
+  // §506 — why the answers (spreads / sides) are numbered. Pair declared in
   // docs/tacet-delivery-vocabulary.md v1.367; 热销 is the live volume word.
   `L_RANK=${JSON.stringify(bi('Ranked by best sellers', '按热销排序'))};` +
   // THE TENANT'S CURRENCY, ALL THREE PARTS OF IT, read off the bar's own data
@@ -2952,6 +2970,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      were authored before §153. */
   `var lt=limTxt(g);` +
   `if(lt)h+='<div class=\"og-lim\">'+bi(lt[0],lt[1])+'</div>';` +
+  // §506 — ranks when there is more than one answer to pick among.
+  `var rank=g.choices.length>1;` +
+  `if(rank)h+='<div class=\"sz-why\">'+L_RANK+'</div>';` +
   /* AT THE CEILING, every answer not already on stops taking taps. Measured
      once for the whole group rather than per row — it is a fact about the
      question, not about any one answer. */
@@ -2971,7 +2992,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      inside it and a disabled button swallows the tap meant for the −. Its +
      is dimmed instead and the click handler refuses the add. */
   `h+='<button type=\"button\" class=\"oc'+(g.multi?' multi':'')+(g.rep?' rep':'')+` +
-  `(on?' on':'')+(c.out?' out':'')+(cap?' cap':'')+'\"'+` +
+  `(on?' on':'')+(c.out?' out':'')+(cap?' cap':'')+(rank&&j===0?' best':'')+'\"'+` +
   `((c.out||(cap&&!g.rep))?' disabled':'')+' data-og=\"'+g.id+'\" data-oc=\"'+c.id+'\">'+` +
   /* THE BOX IS EMPTY OR IT HAS A TICK, and it is only drawn for a question
      that accepts more than one answer. A single-answer question keeps the
@@ -2982,6 +3003,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      the customer is looking, not choosing. data-big is the choice route
      without a width; the viewer asks it for the hero width. */
   `(gi?(c.img?'<img class=\"oc-i\" src=\"'+esc(c.img)+'&w=160\" data-big=\"'+esc(c.img)+'\" alt=\"\" loading=\"lazy\" decoding=\"async\">':'<span class=\"oc-i\"></span>'):'')+` +
+  `(rank?'<span class=\"oc-rank\">#'+(j+1)+'</span>':'')+` +
   `'<span class=\"oc-l\">'+bi(c.en,c.cn)+'</span>'+` +
   `'<span class=\"oc-d\">'+(c.out?L_OUT:(c.d?('+'+money(c.d)):''))+'</span>'+` +
   /* THE − n + COUNTER of a repeatable answer. The row itself is the +, so a
@@ -3013,8 +3035,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      a button to confirm it would be a second tap for nothing. */
   `var openSizes=function(b){var card=b.closest?b.closest('.it'):null;if(!card)return;` +
   `var btns=card.querySelectorAll('.vadds .add');if(!btns.length)return;` +
-  // §505 — ranks follow DOM order, which buildMenu already sorted by sales.
-  `var h='<div class=\"sz-why\">'+L_RANK+'</div><div class=\"og\">';` +
+  // Sizes stay a plain picker — §506's numbered ranks are for spreads/sides
+  // (option answers), which is what Ash asked to show the buyer.
+  `var h='<div class=\"og\">';` +
   `for(var i=0;i<btns.length;i++){var m=btns[i];` +
   `var out=m.getAttribute('data-out')==='1';` +
   // A size with no label typed against it still has to be choosable, so it
@@ -3025,9 +3048,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var le=m.getAttribute('data-vl-en')||'',lc=m.getAttribute('data-vl-cn')||'';` +
   `if(!le&&!lc){le=m.getAttribute('data-en')||'';lc=m.getAttribute('data-cn')||''}` +
   `var lab=bi(le||lc,lc||le);` +
-  `h+='<button type=\"button\" class=\"oc'+(i===0?' top':'')+(out?' out':'')+'\"'+(out?' disabled':'')+` +
+  `h+='<button type=\"button\" class=\"oc'+(out?' out':'')+'\"'+(out?' disabled':'')+` +
   `' data-vpick=\"'+m.getAttribute('data-add')+'\">'+` +
-  `'<span class=\"oc-rank\">#'+(i+1)+'</span>'+` +
   `'<span class=\"oc-l\">'+lab+'</span>'+` +
   `'<span class=\"oc-d\">'+(out?L_OUT:money(parseFloat(m.getAttribute('data-p'))||0))+'</span>'+` +
   `'</button>'}` +

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QR size picker · ranked — Roots design</title>
+<title>QR option picker · ranked spreads — Roots design</title>
 <style>
   /* Roots customer tokens — lib/brand-theme.js defaultTheme(), same vars the
      live QR menu emits. Not Tacet admin (Paper / Dusk / Inter). */
@@ -66,7 +66,6 @@
     .grid { grid-template-columns: 1fr; justify-items: center; }
   }
 
-  /* Phone is chrome only — the screen inside is the Roots page */
   .phone {
     width: 320px;
     background: #111;
@@ -106,9 +105,7 @@
     background: linear-gradient(135deg, #c8b8a4, #8f846f);
     margin-bottom: 8px;
   }
-  .menu-bg .nm {
-    font-family: var(--f-bear); font-size: 14px;
-  }
+  .menu-bg .nm { font-family: var(--f-bear); font-size: 14px; }
   .menu-bg .pr {
     font-family: var(--f-bear); font-size: 13.5px;
     letter-spacing: .04em; margin-top: 4px;
@@ -119,12 +116,11 @@
     background: rgba(0,0,0,.42);
   }
 
-  /* Sheet — matches routes/shop-menu.js */
   .sheet {
     position: absolute; left: 0; right: 0; bottom: 0;
     background: var(--oat);
     border-top: 2px solid var(--ink);
-    max-height: 72%;
+    max-height: 78%;
     display: flex; flex-direction: column;
     animation: up .45s cubic-bezier(.2,.8,.2,1) both;
   }
@@ -145,13 +141,6 @@
   .sheet-n {
     font-size: 12.5px; color: var(--olive); margin-top: 2px;
   }
-  /* Same register as .og-lim on the live option picker */
-  .sheet-why {
-    margin-top: 6px;
-    font-size: 12px;
-    color: var(--ink);
-    opacity: .62;
-  }
   .sheet-x {
     position: relative; width: 32px; height: 32px; flex: none;
     border: 2px solid var(--ink); background: transparent;
@@ -166,10 +155,23 @@
 
   .sheet-b {
     flex: 1; overflow-y: auto;
-    padding: 4px 14px 22px;
+    padding: 4px 14px 18px;
   }
 
-  /* .oc — byte-faithful to shop-menu.js */
+  .og { margin-top: 10px; }
+  .og:first-child { margin-top: 6px; }
+  .og-q {
+    font-family: var(--f-bear); font-size: 14.5px; letter-spacing: .02em;
+  }
+  .og-req { color: var(--olive); }
+  /* Same register as .og-lim / live .sz-why */
+  .sz-why {
+    margin: 4px 0 2px;
+    font-size: 12px;
+    color: var(--ink);
+    opacity: .62;
+  }
+
   .oc {
     display: flex; align-items: center; gap: 12px;
     width: 100%;
@@ -184,10 +186,10 @@
     font-size: 16px;
     text-align: left;
   }
-  .oc:first-child { margin-top: 10px; }
+  .oc:first-of-type { margin-top: 8px; }
 
-  /* Rank — Lilita digits like every other figure on the Roots menu */
-  .rank {
+  /* §506 — lime on #1 only. Whole-row ink = ticked (.oc.on), not best-seller. */
+  .oc-rank {
     flex: none;
     font-family: var(--f-num);
     font-size: 15px;
@@ -196,24 +198,19 @@
     min-width: 1.6em;
     color: var(--olive);
   }
-  .oc.top .rank {
-    color: var(--ink);
-  }
-  /* #1 only: lime pill on ink — same lime the + chip and basket bar use */
-  .oc.top {
+  .oc.best .oc-rank { color: var(--lime); }
+  .oc.on {
     background: var(--ink);
     color: var(--oat);
   }
-  .oc.top .rank {
-    color: var(--lime);
-  }
-  .oc.top .oc-d { color: var(--oat); opacity: .85; }
+  .oc.on .oc-rank { color: var(--oat); opacity: .85; }
+  .oc.on.best .oc-rank { color: var(--lime); opacity: 1; }
+  .oc.on .oc-d { color: var(--oat); opacity: .85; }
 
-  .oc-main { flex: 1; min-width: 0; }
   .oc-l {
+    flex: 1; min-width: 0;
     font-family: var(--f-bear);
     font-size: 16px;
-    display: block;
     overflow-wrap: anywhere;
   }
   .oc-d {
@@ -223,8 +220,23 @@
     color: var(--olive);
     font-family: var(--f-num);
   }
-  .oc.out { cursor: not-allowed; opacity: .42; }
-  .oc.out .oc-l { text-decoration: line-through; }
+
+  .sheet-f {
+    flex: none;
+    padding: 12px 14px 16px;
+    border-top: 2px solid var(--ink);
+  }
+  .sheet-f button {
+    width: 100%;
+    border: 2px solid var(--ink);
+    background: var(--lime);
+    color: var(--ink);
+    font-family: var(--f-bear);
+    font-size: 14px;
+    letter-spacing: .06em;
+    padding: 14px 12px;
+    cursor: pointer;
+  }
 
   .notes { padding-top: 4px; }
   .notes h2 {
@@ -285,11 +297,11 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Size ranks · Roots customer design</h1>
+  <h1>Spread / side ranks · Roots customer design</h1>
   <p class="lede">
-    Same tokens as the live QR menu (<code>lib/brand-theme.js</code>):
-    Bear Serif + Aleo, oat / ink / lime / olive. <strong>#1</strong> uses the
-    selected-row treatment the picker already knows (ink ground); lime marks the rank.
+    §506 — platter <strong>types</strong> (option answers), not jar sizes.
+    Same tokens as the live QR menu. <strong>#1</strong> gets lime on the
+    numeral only; ink ground still means ticked.
   </p>
 
   <div class="swatch" aria-hidden="true">
@@ -310,7 +322,7 @@
       <div class="screen lang-en" id="screen">
         <div class="notch"></div>
         <div class="menu-bg" aria-hidden="true">
-          <div class="card"><div class="ph"></div><div class="nm">Hummus Platter</div><div class="pr">from ¥68</div></div>
+          <div class="card"><div class="ph"></div><div class="nm">Hummus Platter</div><div class="pr">¥68</div></div>
           <div class="card"><div class="ph"></div><div class="nm">Quinoa Salad</div><div class="pr">¥42</div></div>
           <div class="card"><div class="ph"></div><div class="nm">Kombucha</div><div class="pr">from ¥29</div></div>
         </div>
@@ -319,53 +331,79 @@
           <div class="sheet-h">
             <div class="sheet-ht">
               <div class="sheet-t">
-                <span class="l-en">Choose a size</span>
-                <span class="l-cn">选择规格</span>
+                <span class="l-en">Choose your options</span>
+                <span class="l-cn">选择选项</span>
               </div>
               <div class="sheet-n">
                 <span class="l-en">Hummus Platter</span>
                 <span class="l-cn">鹰嘴豆泥拼盘</span>
               </div>
-              <div class="sheet-why">
-                <span class="l-en">Ranked by best sellers</span>
-                <span class="l-cn">按热销排序</span>
-              </div>
             </div>
             <button type="button" class="sheet-x" aria-label="Close"><span></span><span></span></button>
           </div>
           <div class="sheet-b">
-            <button type="button" class="oc top">
-              <span class="rank">#1</span>
-              <span class="oc-main">
+            <div class="og">
+              <div class="og-q">
+                <span class="l-en">Choose a spread</span>
+                <span class="l-cn">选择酱料</span>
+                <span class="og-req">*</span>
+              </div>
+              <div class="sz-why">
+                <span class="l-en">Ranked by best sellers</span>
+                <span class="l-cn">按热销排序</span>
+              </div>
+              <button type="button" class="oc best on">
+                <span class="oc-rank">#1</span>
                 <span class="oc-l">
-                  <span class="l-en">Large</span>
-                  <span class="l-cn">大份</span>
+                  <span class="l-en">Classic hummus</span>
+                  <span class="l-cn">经典鹰嘴豆泥</span>
                 </span>
-              </span>
-              <span class="oc-d">¥98</span>
-            </button>
-            <button type="button" class="oc">
-              <span class="rank">#2</span>
-              <span class="oc-main">
+              </button>
+              <button type="button" class="oc">
+                <span class="oc-rank">#2</span>
                 <span class="oc-l">
-                  <span class="l-en">Regular</span>
-                  <span class="l-cn">标准</span>
+                  <span class="l-en">Beetroot hummus</span>
+                  <span class="l-cn">甜菜根鹰嘴豆泥</span>
                 </span>
-              </span>
-              <span class="oc-d">¥68</span>
-            </button>
-            <button type="button" class="oc out" disabled>
-              <span class="rank">#3</span>
-              <span class="oc-main">
+              </button>
+              <button type="button" class="oc">
+                <span class="oc-rank">#3</span>
                 <span class="oc-l">
-                  <span class="l-en">Small</span>
-                  <span class="l-cn">小份</span>
+                  <span class="l-en">Muhammara</span>
+                  <span class="l-cn">穆哈马拉</span>
                 </span>
-              </span>
-              <span class="oc-d">
-                <span class="l-en">Sold out</span>
-                <span class="l-cn">售罄</span>
-              </span>
+                <span class="oc-d">+¥6</span>
+              </button>
+            </div>
+            <div class="og">
+              <div class="og-q">
+                <span class="l-en">Crunchy sides</span>
+                <span class="l-cn">酥脆配菜</span>
+              </div>
+              <div class="sz-why">
+                <span class="l-en">Ranked by best sellers</span>
+                <span class="l-cn">按热销排序</span>
+              </div>
+              <button type="button" class="oc best">
+                <span class="oc-rank">#1</span>
+                <span class="oc-l">
+                  <span class="l-en">Pita chips</span>
+                  <span class="l-cn">皮塔脆片</span>
+                </span>
+              </button>
+              <button type="button" class="oc">
+                <span class="oc-rank">#2</span>
+                <span class="oc-l">
+                  <span class="l-en">Crudités</span>
+                  <span class="l-cn">生鲜蔬菜条</span>
+                </span>
+              </button>
+            </div>
+          </div>
+          <div class="sheet-f">
+            <button type="button">
+              <span class="l-en">Add to basket · ¥68</span>
+              <span class="l-cn">加入购物篮 · ¥68</span>
             </button>
           </div>
         </div>
@@ -375,16 +413,16 @@
     <div class="notes">
       <h2>Roots rules applied</h2>
       <ol>
-        <li><strong>Fonts</strong> — Bear Serif on titles and size names; Aleo on the page; Lilita One on <code>#1</code> and prices (same digit fix as the live menu).</li>
-        <li><strong>Palette</strong> — only <code>--oat --ink --lime --olive --forest</code>. No Tacet Paper/Dusk.</li>
-        <li><strong>Rows</strong> — same <code>.oc</code> as the live picker: 1.5px ink, 7px radius, white veil.</li>
-        <li><strong>#1</strong> — uses the existing selected-row look (ink ground + oat type) with lime on the rank, so it feels native, not stuck on.</li>
-        <li><strong>Subtitle</strong> — same quiet opacity as option limit hints (<code>.og-lim</code>).</li>
+        <li><strong>Surface</strong> — option answers (spreads / sides), opened by <em>Choose options</em>. Not the size sheet.</li>
+        <li><strong>Fonts</strong> — Bear Serif on questions and answer names; Aleo on the page; Lilita One on <code>#1</code> and prices.</li>
+        <li><strong>Palette</strong> — only <code>--oat --ink --lime --olive --forest</code>.</li>
+        <li><strong>#1</strong> — lime on the numeral; ink ground only when the row is ticked.</li>
+        <li><strong>Subtitle</strong> — quiet line under each question, same opacity as <code>.og-lim</code>.</li>
       </ol>
 
       <div class="pass">
         <h3>Ready to ship</h3>
-        <p>This is the Roots treatment. Say go and it goes on the live QR size picker with the vocabulary pair recorded.</p>
+        <p>Open a platter → Choose options → spreads show #1 / #2 by sales. Size picker stays plain.</p>
       </div>
     </div>
   </div>

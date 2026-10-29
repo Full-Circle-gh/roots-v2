@@ -2767,10 +2767,10 @@ function boxOf(text) {
       const st = await page.evaluate(() => ({
         open: !document.getElementById('sheet').hidden,
         title: document.getElementById('sheetT').innerText.replace(/\s+/g, ' ').trim(),
+        // §506 — numbered ranks belong on spreads/sides, not on this size sheet.
         why: ((document.querySelector('#sheetB .sz-why .l-en') || {}).textContent || '').trim(),
+        ranks: Array.from(document.querySelectorAll('.oc[data-vpick] .oc-rank')).map(r => r.textContent),
         rows: Array.from(document.querySelectorAll('.oc[data-vpick]')).map(b => ({
-          rank: (b.querySelector('.oc-rank') || {}).textContent || '',
-          top: b.classList.contains('top'),
           label: (b.querySelector('.oc-l .l-en') || {}).textContent || '',
           side: (b.querySelector('.oc-d .l-en') || b.querySelector('.oc-d') || {}).textContent || '',
           disabled: !!b.disabled,
@@ -2779,10 +2779,9 @@ function boxOf(text) {
       }));
       assert.ok(st.open, 'the size picker did not open');
       assert.match(st.title, /Choose a size/, `the heading was: ${JSON.stringify(st.title)}`);
-      assert.strictEqual(st.why, 'Ranked by best sellers', `rank line: ${JSON.stringify(st.why)}`);
+      assert.strictEqual(st.why, '', `size sheet must not show rank line: ${JSON.stringify(st.why)}`);
+      assert.deepStrictEqual(st.ranks, [], `size sheet must not number rows: ${JSON.stringify(st.ranks)}`);
       assert.deepStrictEqual(st.rows.map(r => r.label), ['250g', '500g'], JSON.stringify(st.rows));
-      assert.deepStrictEqual(st.rows.map(r => r.rank), ['#1', '#2'], JSON.stringify(st.rows));
-      assert.ok(st.rows[0].top && !st.rows[1].top, 'only #1 wears the top style');
       // RULE 1A's SHAPE, APPLIED TO SIZES: the dead one is drawn and says so,
       // and the live one still sells. Omitting it would leave a customer
       // wondering whether the big jar exists.
@@ -2892,46 +2891,6 @@ function boxOf(text) {
       assert.ok(Math.abs(m.rowR - 23.9) < 0.6,
         `nutrition row value is ${m.rowR}px, want 23.9 (40rpx x 1.15 x .52)`);
       assert.strictEqual(m.band, 1, 'the image band did not render');
-    });
-
-    await check('§505 sizes rank by sales, most units first', async () => {
-      // Operator order is 250g then 500g. After the large size sells more at
-      // this shop, the picker must lead with 500g. paid_at is yesterday so the
-      // §499/§505 window (30 days ending last night) includes it.
-      const { shopDaysAgo } = require(path.join(ROOT, 'lib', 'shop-clock.js'));
-      const qrSales = require(path.join(ROOT, 'lib', 'qr-variant-sales.js'));
-      const oid = 991505;
-      db.prepare(`INSERT INTO retail_orders
-        (id, order_no, status, fulfillment_type, store_id, channel, shop_entry_method,
-         subtotal, total, paid_at, placed_at)
-        VALUES (?, '__R-505', 'paid', 'counter', ?, 'shop', 'till', 76, 76, ?, ?)`)
-        .run(oid, LOC, shopDaysAgo(1) + ' 12:00:00', shopDaysAgo(1) + ' 12:00:00');
-      db.prepare(`INSERT INTO retail_order_items
-        (order_id, product_id, name_en, name_cn, qty, unit_price, line_total)
-        VALUES (?, ?, ?, ?, 5, 76, 380)`).run(oid, P_V2, EN_VAR, '测试规格罐');
-      qrSales.clearMemoForTests();
-      await page.goto(`http://127.0.0.1:${PORT}/s/${CODE}?lang=en`, { waitUntil: 'domcontentloaded' });
-      const labels = await page.evaluate((n) => {
-        const card = Array.from(document.querySelectorAll('.it'))
-          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
-        if (!card) return null;
-        return Array.from(card.querySelectorAll('.vadds .add')).map(b => b.getAttribute('data-vl-en'));
-      }, EN_VAR);
-      assert.deepStrictEqual(labels, ['500g', '250g'],
-        `sales did not reorder the sizes: ${JSON.stringify(labels)}`);
-      // Open the picker: #1 must be the best seller (500g), not the operator's first.
-      await page.evaluate((n) => {
-        const card = Array.from(document.querySelectorAll('.it'))
-          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
-        card.querySelector('.pf .add').click();
-      }, EN_VAR);
-      const ranks = await page.evaluate(() =>
-        Array.from(document.querySelectorAll('.oc[data-vpick]')).map(b => ({
-          rank: (b.querySelector('.oc-rank') || {}).textContent || '',
-          label: (b.querySelector('.oc-l .l-en') || {}).textContent || '',
-        })));
-      assert.deepStrictEqual(ranks, [{ rank: '#1', label: '500g' }, { rank: '#2', label: '250g' }],
-        `ranks did not follow sales: ${JSON.stringify(ranks)}`);
     });
 
     await check('a nutrition value and its unit are drawn by ONE face', async () => {
@@ -3116,6 +3075,110 @@ function boxOf(text) {
       assert.strictEqual(b.slabW, 412, `the slab is not full-bleed at 412: ${b.slabW}`);
       assert.strictEqual(a.overflow, 0, `the page scrolls sideways at 390 by ${a.overflow}px`);
       assert.strictEqual(b.overflow, 0, `the page scrolls sideways at 412 by ${b.overflow}px`);
+    });
+
+    await check('§505 sizes reorder by sales, most units first (no numbered ranks)', async () => {
+      // Operator order is 250g then 500g. After the large size sells more at
+      // this shop, the picker must lead with 500g. paid_at is yesterday so the
+      // §499/§505 window (30 days ending last night) includes it. Numbered
+      // ranks are §506's job on option answers — not here.
+      const { shopDaysAgo } = require(path.join(ROOT, 'lib', 'shop-clock.js'));
+      const qrSales = require(path.join(ROOT, 'lib', 'qr-variant-sales.js'));
+      const oid = 991505;
+      db.prepare(`INSERT INTO retail_orders
+        (id, order_no, status, fulfillment_type, store_id, channel, shop_entry_method,
+         subtotal, total, paid_at, placed_at)
+        VALUES (?, '__R-505', 'paid', 'counter', ?, 'shop', 'till', 76, 76, ?, ?)`)
+        .run(oid, LOC, shopDaysAgo(1) + ' 12:00:00', shopDaysAgo(1) + ' 12:00:00');
+      db.prepare(`INSERT INTO retail_order_items
+        (order_id, product_id, name_en, name_cn, qty, unit_price, line_total)
+        VALUES (?, ?, ?, ?, 5, 76, 380)`).run(oid, P_V2, EN_VAR, '测试规格罐');
+      qrSales.clearMemoForTests();
+      await page.goto(`http://127.0.0.1:${PORT}/s/${CODE}?lang=en`, { waitUntil: 'domcontentloaded' });
+      const labels = await page.evaluate((n) => {
+        const card = Array.from(document.querySelectorAll('.it'))
+          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
+        if (!card) return null;
+        return Array.from(card.querySelectorAll('.vadds .add')).map(b => b.getAttribute('data-vl-en'));
+      }, EN_VAR);
+      assert.deepStrictEqual(labels, ['500g', '250g'],
+        `sales did not reorder the sizes: ${JSON.stringify(labels)}`);
+      await page.evaluate((n) => {
+        const card = Array.from(document.querySelectorAll('.it'))
+          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
+        card.querySelector('.pf .add').click();
+      }, EN_VAR);
+      const sheet = await page.evaluate(() => ({
+        labels: Array.from(document.querySelectorAll('.oc[data-vpick] .oc-l .l-en'))
+          .map(e => e.textContent || ''),
+        ranks: Array.from(document.querySelectorAll('.oc[data-vpick] .oc-rank'))
+          .map(e => e.textContent || ''),
+      }));
+      assert.deepStrictEqual(sheet.labels, ['500g', '250g'],
+        `picker order did not follow sales: ${JSON.stringify(sheet.labels)}`);
+      assert.deepStrictEqual(sheet.ranks, [],
+        `size picker must stay unnumbered: ${JSON.stringify(sheet.ranks)}`);
+    });
+
+    await check('§506 option answers rank by sales, with #1 #2 on the sheet', async () => {
+      // Operator order is Full sugar then Half sugar. Sell Half sugar more at
+      // this shop; the option sheet must lead with it and mark #1 / #2. Same
+      // 30-day window as §505; qty on the line multiplies the choice count.
+      const { shopDaysAgo } = require(path.join(ROOT, 'lib', 'shop-clock.js'));
+      const qrSales = require(path.join(ROOT, 'lib', 'qr-variant-sales.js'));
+      const half = db.prepare(
+        `SELECT c.id AS id, c.option_id AS oid FROM retail_product_option_choices c
+           JOIN retail_product_options o ON o.id = c.option_id
+          WHERE o.product_id = ? AND c.label_en = ?`
+      ).get(P_ASK, 'Half sugar');
+      assert.ok(half && half.id, 'fixture Half sugar choice is missing');
+      const oid = 991506;
+      const opts = JSON.stringify([{
+        option_id: half.oid, choice_id: half.id,
+        question_en: 'Sugar level', question_cn: '糖度',
+        label: 'Half sugar', label_cn: '半糖', delta: 0,
+      }]);
+      db.prepare(`INSERT INTO retail_orders
+        (id, order_no, status, fulfillment_type, store_id, channel, shop_entry_method,
+         subtotal, total, paid_at, placed_at)
+        VALUES (?, '__R-506', 'paid', 'counter', ?, 'shop', 'till', 40, 40, ?, ?)`)
+        .run(oid, LOC, shopDaysAgo(1) + ' 12:00:00', shopDaysAgo(1) + ' 12:00:00');
+      db.prepare(`INSERT INTO retail_order_items
+        (order_id, product_id, name_en, name_cn, qty, unit_price, line_total, options_json)
+        VALUES (?, ?, ?, ?, 7, 40, 280, ?)`)
+        .run(oid, P_ASK, EN_ASK, '测试提问饮品', opts);
+      qrSales.clearMemoForTests();
+      await page.goto(`http://127.0.0.1:${PORT}/s/${CODE}?lang=en`, { waitUntil: 'domcontentloaded' });
+      await page.evaluate(() => {
+        try { localStorage.clear(); } catch (e) { /* private mode */ }
+        try { sessionStorage.clear(); } catch (e) { /* private mode */ }
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.evaluate((name) => {
+        const card = Array.from(document.querySelectorAll('.it'))
+          .find(c => (c.querySelector('.t .l-en') || {}).textContent === name);
+        card.querySelector('.add').click();
+      }, EN_ASK);
+      const st = await page.evaluate(() => {
+        const sugarQ = Array.from(document.querySelectorAll('.og')).find(g =>
+          ((g.querySelector('.og-q .l-en') || {}).textContent || '') === 'Sugar level');
+        if (!sugarQ) return null;
+        return {
+          why: ((sugarQ.querySelector('.sz-why .l-en') || {}).textContent || '').trim(),
+          rows: Array.from(sugarQ.querySelectorAll('.oc')).map(b => ({
+            rank: (b.querySelector('.oc-rank') || {}).textContent || '',
+            best: b.classList.contains('best'),
+            label: (b.querySelector('.oc-l .l-en') || {}).textContent || '',
+          })),
+        };
+      });
+      assert.ok(st, 'Sugar level group is not on the option sheet');
+      assert.strictEqual(st.why, 'Ranked by best sellers',
+        `rank line under the question: ${JSON.stringify(st.why)}`);
+      assert.deepStrictEqual(st.rows, [
+        { rank: '#1', best: true, label: 'Half sugar' },
+        { rank: '#2', best: false, label: 'Full sugar' },
+      ], `option ranks did not follow sales: ${JSON.stringify(st.rows)}`);
     });
 
     await check('a shop with no listings still puts its empty state on screen', async () => {
