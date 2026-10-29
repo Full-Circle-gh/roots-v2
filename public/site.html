@@ -49,7 +49,11 @@
 
   header.site-bar{position:sticky;top:0;z-index:20;background:var(--oat);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px);}
   .bar-in{max-width:var(--wrap);margin:0 auto;padding:14px max(20px,env(safe-area-inset-right,0px)) 14px max(20px,env(safe-area-inset-left,0px));display:flex;align-items:center;justify-content:space-between;gap:16px;}
-  .wordmark{font-family:var(--f-bear);font-size:26px;line-height:1;color:var(--ink);text-decoration:none;}
+  .wordmark{font-family:var(--f-bear);font-size:26px;line-height:1;color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;}
+  /* The brand's own wordmark picture (brand.me_footer.wordmark_image), the
+     same one the mini app's footer shows; the name is the fallback. */
+  .wordmark img{height:40px;width:auto;display:block;}
+  .foot-in .fm img{height:28px;width:auto;display:block;}
   .bar-nav{display:flex;align-items:center;gap:22px;font-size:15px;}
   .bar-nav a{text-decoration:none;}
   .bar-nav a:hover{text-decoration:underline;text-underline-offset:4px;}
@@ -146,6 +150,11 @@ function applyTheme(cfg){
   root.style.setProperty('--accent',hex);
   const m=document.querySelector('meta[name=theme-color]'); if(m) m.setAttribute('content',p.surface||'#F2E7DF');
 }
+// The wordmark picture, when the brand has one: a path on this site or https.
+function brandMark(cfg){
+  const u=cfg&&cfg.brand&&cfg.brand.me_footer&&cfg.brand.me_footer.wordmark_image;
+  return (u&&/^(\/(?!\/)|https:\/\/)[^\s"'<>]+$/.test(String(u)))?String(u):'';
+}
 function brandName(cfg){
   const w=cfg&&cfg.brand&&cfg.brand.me_footer&&cfg.brand.me_footer.wordmark_text;
   return (w&&String(w).trim())||'';
@@ -158,8 +167,13 @@ function siteCfg(){ const w=state.config&&state.config.web; return (w&&w.site&&t
 function pick(en,cn){ return (state.lang==='cn'?(cn||en):(en||cn))||''; }
 function renderChrome(){
   const site=siteCfg();
-  $('#wordmark').textContent=state.brand;
-  $('#footBrand').textContent=state.brand;
+  const mark=brandMark(state.config);
+  for(const [id,el] of [['wordmark',$('#wordmark')],['footBrand',$('#footBrand')]]){
+    el.textContent='';
+    if(mark){ const img=document.createElement('img'); img.src=mark; img.alt=state.brand||''; el.appendChild(img); }
+    else el.textContent=state.brand;
+  }
+  $('#wordmark').setAttribute('aria-label',state.brand||'');
   $('#footMeta').textContent=pick(site.footer_en,site.footer_cn);
   const nav=$('#navLinks'); nav.innerHTML='';
   for(const it of (Array.isArray(site.nav)?site.nav:[])){
