@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.599
+# Tacet shared-core consolidation — decisions record, v4.600
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-29 · v4.600 — **§507 · A CONVERSATION OPEN ON THE COMPUTER SHOWS ON THE PHONE, AND THE OTHER WAY ROUND — ASKED BY ASH:** *"I want that conversation on the computer will be sync on mobile and vice versa"*. The thread already lived in one place. Each screen read it once and then held what it had read: the computer's Feedback tab loaded on first open and never again, the phone's inbox was fetched at boot, and the live watermark that nudges both screens looked at orders, customers and stock. A reply typed on one device was invisible on the other until a reload. The customer's website and mini app had the same hole while the conversation stayed open. The watermark now includes the thread and its turns, and how many are marked handled. It does not include the read stamps, because opening a thread writes those and a signature that moved on a read would make every open screen read again. The computer refetches while the Feedback tab or the open conversation is up, and again when that tab is opened; the phone refetches while the inbox or a conversation is up, on the same nudge, the same 60-second backstop, a pull, and every time the inbox is opened. A half-typed reply is left where it was. The website and the mini app re-read an open conversation every 8 seconds, and the website's list of reports with them; the customer's read stamp is written only when a store reply is still unread. Two logins that were never linked stay two conversations — this does not merge customers. No new words. No schema change. No change to `.gitignore` or CI. See §507.
 
 2026-10-29 · v4.599 — **§84 AMENDED · GZGROCERY ORDERS NO LONGER STOP AT ZERO — DECIDED BY ASH.** Ash: *"ok lets fix #1 first"*. §84 left gzgrocery clamped on the belief that it had no order-ingest path; `scripts/gzgrocery-order-daemon.js` has been one since 2026-06-27. Its decrement clamped at 0, so during §85's pre-order window gzgrocery was re-offered the full allowance after every sale and the kitchen never saw what was owed. The order path now takes a delta with no floor, as Meituan and Eleme do; the inferred ERP pickup path keeps its clamp. Code: `scripts/gzgrocery-order-daemon.js` `processOrder`.
 
@@ -33713,3 +33715,16 @@ should see platter **spread / side types** ranked, not size variants.
    order-line qty; a repeated pick (two of the same bite) counts twice.
 5. **Words:** the subtitle pair is already declared in
    `docs/tacet-delivery-vocabulary.md` v1.367.
+
+## §507 — A CONVERSATION OPEN ON THE COMPUTER SHOWS ON THE PHONE, AND THE OTHER WAY ROUND
+
+Asked 2026-10-29. Ash: a conversation on the computer should be on the phone, and the other way round.
+
+The conversation is the feedback thread (`retail_feedback` and `retail_feedback_messages`): the customer's report and the shop's replies, on the computer's Feedback tab and the phone's Inbox, and the same thread on the website and in the mini app. It was already one record. What did not travel was a turn that arrived while the other screen was open.
+
+1. **The live watermark includes the conversation.** `_dashActivitySignature` samples the thread count, the newest thread, how many are marked handled, the newest turn from each side, and the message count and newest message. A reply, a new report, a direct message, or marking one handled or putting it back moves it, on the computer and on the phone, because both already listen to that stream. Read stamps are not in it.
+2. **The computer refetches while it is looking.** The Feedback tab and an open conversation follow the customer list: the stream's nudge, a 60-second backstop, and a refresh when the window comes back. Opening the Feedback tab again re-reads the list. The first-open guard stays, so the door does not fetch twice. The reply box is outside the part that is redrawn, and the quiet refresh does not write it.
+3. **The phone refetches while it is looking.** The same nudge, the same backstop, a pull-to-refresh, and every opening of the inbox. The open conversation is re-read only when its row in the list has changed, because that read stamps the thread. The words being typed are kept on the thread and put back when the screen redraws.
+4. **The customer's two screens re-read while the conversation is open.** The website and the mini app have no admin stream. Each re-reads every 8 seconds, and the website's list of that person's reports does too. The read stamp is written only when a store reply is still unread, so a re-read of a conversation they have already seen does not write.
+5. **Words:** none. The screens already name this a conversation.
+6. **Two logins stay two conversations.** A website account and a WeChat account that were never linked are still two customers, even when they share a phone number. This does not merge them. Merging would move wallet, points and orders, and that was not asked.

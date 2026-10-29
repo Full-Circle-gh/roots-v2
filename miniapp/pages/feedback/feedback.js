@@ -84,8 +84,16 @@ Page({
   },
 
   // Refresh the past-reports list each time the page shows (e.g. on return
-  // from a thread) so the "new reply" dots stay current.
-  onShow() { this.loadReports(); },
+  // from a thread) so the "new reply" dots stay current, and while it stays
+  // open, so a report filed on the website shows up here without leaving.
+  // 8000 matches the website's FB_POLL_MS.
+  onShow() {
+    this.loadReports();
+    clearInterval(this._poll);
+    this._poll = setInterval(() => this.loadReports(), 8000);
+  },
+  onHide() { clearInterval(this._poll); },
+  onUnload() { clearInterval(this._poll); },
 
   async loadReports() {
     const app = getApp();

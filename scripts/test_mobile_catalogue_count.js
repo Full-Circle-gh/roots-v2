@@ -272,6 +272,10 @@ function serveFrom(rows, opts) {
       loadLive: () => Promise.resolve(),
       loadOrdersPage: () => Promise.resolve(),
       loadCustomers: () => Promise.resolve(),
+      // refreshNow also re-reads an open conversation. This box is the
+      // catalogue, and the inbox is not the screen under test.
+      inboxOnScreen: () => false,
+      refreshConversation: () => Promise.resolve(),
       loadCatalogue: (f) => { box.forced.push(!!f); return Promise.resolve(); },
       Promise, console,
     };

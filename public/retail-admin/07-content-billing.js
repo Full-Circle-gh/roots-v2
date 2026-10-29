@@ -2463,19 +2463,45 @@ function rvwWireSearch() {
 // ═══════════════════════════════════════════════════════════════════
 let FEEDBACK_LOADED = false;
 
-async function loadFeedback() {
+// Last list the screen painted, and a fingerprint of it. A live refresh that
+// finds the same threads does not rebuild the table under the operator.
+let _fbRows = [];
+let _fbListKey = '';
+
+function fbListKey(data) {
+  return (data || []).map(f => [f.id, f.reply_count, f.last_at, f.last_body, f.needs_reply ? 1 : 0, f.handled ? 1 : 0, f.replied ? 1 : 0].join(':')).join('\n');
+}
+
+// What the open conversation's row looks like in the list. The thread itself
+// is re-read only when this changes: GET /feedback/:id stamps admin_read_at,
+// so re-reading it on every nudge would be a write each time an order moved.
+function fbRowStamp(id) {
+  const f = _fbRows.find(r => r.id === id);
+  if (!f) return '';
+  return [f.reply_count, f.last_at, f.last_body, f.needs_reply ? 1 : 0, f.handled ? 1 : 0].join('|');
+}
+
+async function loadFeedback(opts) {
+  const silent = !!(opts && opts.silent);
   const tbody = $('#feedback-table tbody');
-  tbody.innerHTML = '<tr><td colspan="4" class="muted">Loading…</td></tr>';
+  if (!tbody) return;
+  if (!silent) tbody.innerHTML = '<tr><td colspan="4" class="muted">Loading…</td></tr>';
   try {
     const { data, meta } = await api('/api/retail-admin/feedback?limit=200');
-    const n = meta?.total ?? data.length;
-    $('#fb-summary').textContent = `${n} report${n === 1 ? '' : 's'} · 共 ${n} 条`;
-    if (!data.length) {
+    _fbRows = data || [];
+    const n = meta?.total ?? _fbRows.length;
+    const sum = $('#fb-summary');
+    if (sum) sum.textContent = `${n} report${n === 1 ? '' : 's'} · 共 ${n} 条`;
+    const key = fbListKey(_fbRows);
+    if (silent && key === _fbListKey) return;
+    _fbListKey = key;
+    if (!_fbRows.length) {
       tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><div class="icon">' + ICONS.empty + '</div><h3>No feedback yet · 暂无反馈</h3><p class="muted">Customer bug reports from the mini app show up here. · 顾客在小程序提交的反馈会显示在这里。</p></div></td></tr>';
       return;
     }
-    tbody.innerHTML = data.map(renderFeedbackRow).join('');
+    tbody.innerHTML = _fbRows.map(renderFeedbackRow).join('');
   } catch (e) {
+    if (silent) return;   // a failed quiet refresh leaves the list as it was
     tbody.innerHTML = `<tr><td colspan="4" class="err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></td></tr>`;
   }
 }
@@ -2602,7 +2628,91 @@ function feedbackTabInit() {
   FEEDBACK_LOADED = true;
   loadFeedback();
 }
-document.querySelector('[data-tab="feedback"]').addEventListener('click', feedbackTabInit);
+// First open loads through feedbackTabInit, and its FEEDBACK_LOADED guard
+// stays: the rail door and the tab fallback both call it, and losing the
+// guard fetches twice. Coming BACK is a different question. The guard used
+// to mean the second visit kept whatever the first visit had read, so a
+// reply that arrived on the phone while this tab was closed was still
+// missing when it was opened again. A later visit re-reads, quietly.
+document.querySelector('[data-tab="feedback"]').addEventListener('click', () => {
+  if (FEEDBACK_LOADED) { loadFeedback({ silent: true }); return; }
+  feedbackTabInit();
+});
+
+// ── The conversation stays current on the computer and the phone ──────────
+// Same path the customer list took (08-customers.js): the admin-wide stream
+// nudges when the watermark moves, and this refetches. The watermark now
+// includes the thread tables (_dashActivitySignature), so a reply sent on
+// the phone arrives here, and a reply sent here moves the phone.
+//
+// The reply box is left alone. Rebuilding the thread must not throw away a
+// sentence the operator is in the middle of.
+const FEEDBACK_POLL_MS = 60000;
+let _FB_AUTO_TIMER = null;
+let _FB_LIVE_DEBOUNCE = null;
+
+function feedbackWatching() {
+  if (document.hidden) return false;
+  const tabOn = !!document.getElementById('tab-feedback')?.classList.contains('active');
+  const drawer = document.getElementById('fb-drawer');
+  const drawerOn = !!(drawer && drawer.classList.contains('open') && _fbThreadId != null);
+  return tabOn || drawerOn;
+}
+
+async function refreshOpenFeedbackThread() {
+  if (_fbThreadId == null) return;
+  const drawer = document.getElementById('fb-drawer');
+  if (!drawer || !drawer.classList.contains('open')) return;
+  const id = _fbThreadId;
+  try {
+    const { data } = await api('/api/retail-admin/feedback/' + id);
+    if (_fbThreadId !== id) return;
+    if (!drawer.classList.contains('open')) return;
+    const body = document.getElementById('fb-thread-body');
+    const photos = (data.photos || []).map(url => (
+      `<img src="${escapeAttr(url)}" onclick="openReviewLightbox(${JSON.stringify(url).replace(/"/g, '&quot;')})" style="width: 56px; height: 56px; object-fit: cover; border-radius: 4px; margin: 0 4px 4px 0; cursor: zoom-in;">`
+    )).join('');
+    const html = data.messages.map(fbBubble).join('') + (photos ? `<div class="fb-photos">${photos}</div>` : '');
+    const sig = (data.messages || []).map(m => m.id + '\0' + (m.body || '')).join('\n') + '|' + (data.handled ? 1 : 0);
+    // The reply box lives outside #fb-thread-body. This refresh never writes
+    // it: a sentence typed while the re-read is in flight has to stay.
+    if (body && body.dataset.sig !== sig) {
+      const near = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+      body.innerHTML = html;
+      body.dataset.sig = sig;
+      if (near) body.scrollTop = body.scrollHeight;
+    }
+    _fbHandled = !!data.handled;
+    fbPaintHandledBtn();
+  } catch (e) { /* a failed quiet refresh leaves the conversation as it was */ }
+}
+
+async function feedbackLiveRefresh() {
+  if (!feedbackWatching()) return;
+  const id = _fbThreadId;
+  const drawer = document.getElementById('fb-drawer');
+  const drawerOn = !!(drawer && drawer.classList.contains('open') && id != null);
+  const before = drawerOn ? fbRowStamp(id) : null;
+  await loadFeedback({ silent: true });
+  if (!drawerOn || _fbThreadId !== id) return;
+  if (fbRowStamp(id) === before && before !== '') return;
+  await refreshOpenFeedbackThread();
+}
+
+function _fbLiveNudge() {
+  clearTimeout(_FB_LIVE_DEBOUNCE);
+  _FB_LIVE_DEBOUNCE = setTimeout(feedbackLiveRefresh, 400);
+}
+
+(function _startFeedbackLive() {
+  if (window._feedbackLiveWired) return;
+  window._feedbackLiveWired = true;
+  if (typeof retailLiveSubscribe === 'function') retailLiveSubscribe(_fbLiveNudge);
+  if (_FB_AUTO_TIMER) clearInterval(_FB_AUTO_TIMER);
+  _FB_AUTO_TIMER = setInterval(feedbackLiveRefresh, FEEDBACK_POLL_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) feedbackLiveRefresh(); });
+  window.addEventListener('focus', feedbackLiveRefresh);
+})();
 
 // ── Feedback thread drawer — read the conversation and reply ───────────────
 let _fbThreadId = null;
@@ -2671,6 +2781,7 @@ async function openFeedbackThread(id) {
     body.innerHTML =
       data.messages.map(fbBubble).join('') +
       (photos ? `<div class="fb-photos">${photos}</div>` : '');
+    body.dataset.sig = (data.messages || []).map(m => m.id + '\0' + (m.body || '')).join('\n') + '|' + (data.handled ? 1 : 0);
     body.scrollTop = body.scrollHeight;
     _fbHandled = !!data.handled;
     fbPaintHandledBtn();

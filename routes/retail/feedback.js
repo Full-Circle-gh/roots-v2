@@ -151,7 +151,14 @@ router.get('/api/retail/feedback/:id', requireRetailAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const row = tdb().prepare('SELECT * FROM retail_feedback WHERE id = ? AND customer_id = ?').get(id, req.customer.id);
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
-  tdb().prepare('UPDATE retail_feedback SET customer_read_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  // Stamp only when a store reply is still unread. Opening an already-read
+  // thread used to write customer_read_at every time, and the page now
+  // re-reads while it stays open so a reply from the other device appears.
+  // A write on every re-read would be a write per poll for a dot that had
+  // already gone out. The unread test is the same one the list uses.
+  const unread = row.last_admin_msg_at && (!row.customer_read_at
+    || String(row.last_admin_msg_at) > String(row.customer_read_at));
+  if (unread) tdb().prepare('UPDATE retail_feedback SET customer_read_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
   res.json({ success: true, data: buildFeedbackThread(row) });
 });
 

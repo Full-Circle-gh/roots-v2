@@ -44,14 +44,28 @@ Page({
     const lang = app?.globalData?.lang || 'en';
     const id = parseInt(query.id, 10) || null;
     this.setData({ id, lang, copy: lang === 'cn' ? COPY_CN : COPY_EN });
-    this.load();
   },
 
-  async load() {
+  // Re-read while the page stays open, so a reply sent from the website or
+  // the back office shows up here. 8000 matches the website's FB_POLL_MS.
+  // onShow also covers the first open (it runs after onLoad).
+  onShow() {
+    this.load(!!this._seen);
+    this._seen = true;
+    clearInterval(this._poll);
+    this._poll = setInterval(() => this.load(true), 8000);
+  },
+  onHide() { clearInterval(this._poll); },
+  onUnload() { clearInterval(this._poll); },
+
+  async load(quiet) {
     const app = getApp();
     if (!app.globalData.token) { try { await app.silentLogin(); } catch {} }
     if (!this.data.id) { this.setData({ loading: false, notFound: true }); return; }
     const cn = this.data.lang === 'cn';
+    // A re-read must not swap the thread for the loading dots, and must not
+    // touch `reply` — that is the sentence the customer is typing.
+    if (!quiet && !(this.data.messages || []).length) this.setData({ loading: true });
     try {
       const res = await api.get('/api/retail/feedback/' + this.data.id);
       const data = (res && res.data) || res;
@@ -63,13 +77,17 @@ Page({
         body: m.body || '',
         time: fmtTime(m.created_at, cn),
       }));
+      const sig = messages.map(m => m.id + '\0' + m.body).join('\n');
+      if (quiet && sig === this._sig) return;
+      this._sig = sig;
       // A store-initiated direct message isn't "your report" — relabel the
       // header so the customer sees it as a message from the store.
       const copy = data.kind === 'message'
         ? { ...this.data.copy, kicker: cn ? '消息' : 'MESSAGE', title: cn ? '来自商家。' : 'From the store.' }
         : this.data.copy;
-      this.setData({ messages, copy, loading: false });
+      this.setData({ messages, copy, loading: false, notFound: false });
     } catch (e) {
+      if (quiet) return;
       this.setData({ loading: false, notFound: true });
     }
   },

@@ -4778,6 +4778,17 @@ async function renderFaq(){
   bindQ();
 }
 
+// A conversation open on this page re-reads itself so a reply sent from the
+// phone (the mini app, or the shop's own back office) shows up here, and a
+// report filed here is already on the phone's list the next time that page
+// looks. Eight seconds, the same interval the mini app uses. Stopped on
+// every navigation, above.
+let _fbPoll=null;
+const FB_POLL_MS=8000;
+function stopFeedbackPoll(){ if(_fbPoll){ clearInterval(_fbPoll); _fbPoll=null; } }
+function startFeedbackPoll(fn){ stopFeedbackPoll(); _fbPoll=setInterval(fn, FB_POLL_MS); }
+function feedbackOpenId(){ const m=/^#\/feedback\/(\d+)/.exec(location.hash||''); return m?m[1]:null; }
+
 async function renderFeedback(){
   const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
   document.title=(cn?'报告问题':'Feedback')+' · '+state.brand;
@@ -4810,8 +4821,16 @@ async function renderFeedback(){
     const btn=$('#fbSend'); btn.disabled=true; $('#fbErr').textContent='';
     try{ await postJson('/api/retail/feedback',{message:msg,photos,page_context:'web',app_version:'web'}); toast(cn?'已提交，谢谢！':'Sent — thank you!'); location.hash='#/me'; }
     catch(e){ $('#fbErr').textContent=cn?'提交失败，请重试':'Could not send — try again'; btn.disabled=false; } });
-  try{ const past=await api('/api/retail/feedback')||[]; if(past&&past.length){ $('#fbPast').innerHTML=`<div class="fb-sec"><div class="fb-label">${cn?'你的反馈':'Your reports'}</div><div class="sp-list" style="margin-top:8px">${past.map(p=>`<div class="sp-li" data-fb="${p.id}" style="cursor:pointer"><div class="sp-main"><div class="sp-t" style="font-size:14px">${esc(String(p.message||'').slice(0,60))}</div>${p.reply_count?`<div class="sp-d">${cn?'有新回复':'New reply'}</div>`:''}</div>${p.unread?'<span class="ntf-dot"></span>':''}</div>`).join('')}</div></div>`;
-    $('#fbPast').querySelectorAll('[data-fb]').forEach(r=>r.addEventListener('click',()=>{ location.hash='#/feedback/'+r.dataset.fb; })); } }catch(e){}
+  const paintPast=(past)=>{ const box=$('#fbPast'); if(!box) return;
+    const key=(past||[]).map(p=>p.id+'/'+(p.reply_count||0)+'/'+(p.unread?1:0)).join(',');
+    if(box.dataset.key===key) return; box.dataset.key=key;
+    if(!(past&&past.length)){ box.innerHTML=''; return; }
+    box.innerHTML=`<div class="fb-sec"><div class="fb-label">${cn?'你的反馈':'Your reports'}</div><div class="sp-list" style="margin-top:8px">${past.map(p=>`<div class="sp-li" data-fb="${p.id}" style="cursor:pointer"><div class="sp-main"><div class="sp-t" style="font-size:14px">${esc(String(p.message||'').slice(0,60))}</div>${p.reply_count?`<div class="sp-d">${cn?'有新回复':'New reply'}</div>`:''}</div>${p.unread?'<span class="ntf-dot"></span>':''}</div>`).join('')}</div></div>`;
+    box.querySelectorAll('[data-fb]').forEach(r=>r.addEventListener('click',()=>{ location.hash='#/feedback/'+r.dataset.fb; })); };
+  const onList=()=>{ const h=(location.hash||'').replace(/^#/,'').split('?')[0]; return h==='/feedback'||h==='/feedback/'; };
+  const loadPast=async()=>{ if(!onList()) return; try{ const past=await api('/api/retail/feedback')||[]; if(!onList()) return; paintPast(past); }catch(e){ /* a failed re-read leaves the reports already on screen */ } };
+  await loadPast();
+  if(onList()) startFeedbackPoll(loadPast);
 }
 
 // One conversation thread — a bug report the store replied to, or a direct
@@ -4830,10 +4849,29 @@ async function renderFeedbackThread(id){
   box.innerHTML=spBack()+spHead(cn?'对话':'CONVERSATION',cn?'消息记录。':'Your messages.','')
     +`<div class="fbt-thread">${bubbles}</div>`
     +`<div class="fbt-bar"><textarea class="sp-input" id="fbtReply" placeholder="${cn?'回复商家…':'Reply to the store…'}" maxlength="4000"></textarea><button class="sp-btn" id="fbtSend">${cn?'发送':'Send'}</button></div>`;
+  const threadEl=box.querySelector('.fbt-thread');
+  const sigOf=(msgs)=>(msgs||[]).map(m=>m.id+'\0'+(m.body||'')).join('\n');
+  if(threadEl) threadEl.dataset.sig=sigOf(data.messages);
   const send=$('#fbtSend');
   send.addEventListener('click',async()=>{ const msg=($('#fbtReply').value||'').trim(); if(!msg)return; send.disabled=true;
     try{ await postJson('/api/retail/feedback/'+id+'/reply',{message:msg}); renderFeedbackThread(id); }
     catch(e){ toast(cn?'发送失败':'Could not send'); send.disabled=false; } });
+  // Re-read while this page stays open. The reply box is outside .fbt-thread,
+  // so a new turn from the phone replaces the bubbles and leaves the sentence
+  // being typed where it was.
+  if(feedbackOpenId()===String(id)) startFeedbackPoll(async()=>{
+    if(feedbackOpenId()!==String(id)) return;
+    const thread=document.querySelector('.fbt-thread'); if(!thread) return;
+    let fresh; try{ fresh=await api('/api/retail/feedback/'+id); }catch(e){ return; }
+    if(!fresh||!document.body.contains(thread)) return;
+    const sig=sigOf(fresh.messages);
+    if(thread.dataset.sig===sig) return;
+    thread.dataset.sig=sig;
+    const next=(fresh.messages||[]).map(m=>{ const mine=m.author==='customer'; const who=mine?(cn?'你':'You'):(m.author_name||(cn?'商家':'Store'));
+      return `<div class="fbt-msg ${mine?'mine':'store'}"><div class="fbt-meta">${esc(who)}${m.created_at?' · '+fmt(m.created_at):''}</div><div class="fbt-body">${esc(m.body||'')}</div></div>`; }).join('');
+    thread.innerHTML=next;
+    const last=thread.querySelector('.fbt-msg:last-child'); if(last) last.scrollIntoView({block:'nearest'});
+  });
 }
 
 async function renderLegal(doc){
@@ -5002,6 +5040,7 @@ async function routeDispatch(){
   const {seg,params}=parseHash();
   if(window.ShopBlocks) ShopBlocks.stopTimers();   // clear any home countdowns before leaving
   clearInterval(co.pollTimer);                      // stop any payment-status polling
+  stopFeedbackPoll();                               // and any conversation re-read
   // highlight nav
   document.querySelectorAll('nav.links a').forEach(a=>{
     const n=a.dataset.nav;

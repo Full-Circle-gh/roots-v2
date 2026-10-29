@@ -142,10 +142,19 @@ back it, which client renders it, default scope.
 | `stock`    | `retail_stock_ledger`                      | products, dashboard                           | tenant  |
 | `settings` | tenant settings tables                     | settings pages, feature toggles               | tenant  |
 | `customers`| `retail_customers`                         | customers list, dashboard                     | tenant  |
+| `feedback` | `retail_feedback`, `retail_feedback_messages` | Feedback tab and open conversation (computer), Inbox and open conversation (phone) | tenant |
 
 Extend this table as entities are wired. Adding an entity = one row here + one
 `liveBump` call at its write seam + (usually) reusing an existing client
 subscription.
+
+`feedback` is the exception already used for `customers`: it rides the
+watermark (`_dashActivitySignature`) rather than a `liveBump` at each write.
+A conversation is written from five routes (the customer's report, the
+customer's reply, the operator's reply, handled / unhandle, and a direct
+message), and both the computer and the phone already refetch when that
+watermark's `activity` nudge arrives. An emit at each write on top of it
+would refresh twice.
 
 ---
 
