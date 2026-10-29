@@ -33659,3 +33659,32 @@ variants: *"Variants, build it"*.
    product pages show the old file for a remapped key. Republish in the same
    sitting as the deploy.
 6. **Words:** the labels are English-only data, as before. Nothing is composed.
+
+## §505 — ON THE QR MENU, A PRODUCT'S SIZES ARE RANKED BY HOW MUCH THEY SELL
+
+Asked 2026-10-29: platter / jar sizes on the QR menu should show from most
+popular to least popular by sales, not by the operator's drag order alone.
+
+§129 ordered the size picker by `variant_sort` (the back-office drag order).
+That is still the operator's control in the mini app, the till and the product
+editor. The QR menu is a customer standing at the counter: the size they are
+most likely to want should be first.
+
+1. **Sales first, operator order as the tie-break.** Within a collapsed size
+   card on the QR menu, members sort by units sold descending, then
+   `variant_sort`, then label, then id. Zero sales (a new shop, a new size)
+   falls through to today's `variant_sort` behaviour unchanged.
+2. **Window matches the till's best sellers (§499).** The last 30 whole days
+   ending yesterday on the shop's clock. Today is left out so a size does not
+   jump places mid-shift between two scans of the same code.
+3. **This location, both shop doors.** Count `channel='shop'` orders at
+   `store_id = shop.location_id` with `shop_entry_method IN ('qr','till')`,
+   under the paid predicate. Online-store and kitchen sales do not move the
+   picker; a QR-only count would ignore the till where much of the volume sits.
+4. **QR menu only.** The mini app, web storefront and till keep the operator's
+   `variant_sort`. The card's representative (photo, name) stays the group
+   owner; only the order inside the size picker changes.
+5. **No new setting.** Popularity ranking is the QR menu's rule for sizes, not
+   an opt-in. The operator's drag order remains the fallback and the control
+   everywhere else.
+6. **Words:** none composed — size labels are already on the product.

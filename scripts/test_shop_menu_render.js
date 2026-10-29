@@ -78,9 +78,10 @@ const P_ASK = 9991, A_EXT = 9992;
 /* §129's sizes. TWO SIBLINGS IN ONE GROUP, and the group id IS the first one's
    product id — that is what makes it the group OWNER, which is the member the
    collapse picks as the card. The second is listed with a HIGHER price and a
-   LOWER variant_sort, so the checks can tell "the operator's order" apart from
+   HIGHER variant_sort, so the checks can tell "the operator's order" apart from
    "cheapest first" and from "lowest id first"; three orderings that agree on a
-   tidy fixture prove nothing about which one the code actually used. */
+   tidy fixture prove nothing about which one the code actually used. §505 then
+   proves sales can override that order. */
 const P_V1 = 9995, P_V2 = 9996;
 const EN_VAR = 'Render fixture jar';
 const EN_ASK = 'Render fixture asker';
@@ -2748,8 +2749,9 @@ function boxOf(text) {
       // checked against the LABEL ORDER below rather than treated as proof.
       assert.ok(m.offersSizes, 'the + on a sized card does not offer the sizes');
       assert.ok(!m.plainAdd, 'the + on a sized card would add one size silently');
+      // No sales on the fixture yet, so §505 falls through to variant_sort.
       assert.deepStrictEqual(m.hidden.map(h => h.label), ['250g', '500g'],
-        `the sizes are not in the operator's variant_sort order: ${JSON.stringify(m.hidden)}`);
+        `with no sales the sizes should keep variant_sort order: ${JSON.stringify(m.hidden)}`);
       assert.deepStrictEqual(m.hidden.map(h => h.out), [false, true],
         'the switched-off size is not marked sold out');
       assert.ok(m.vaddsBox && m.vaddsBox.w === 0 && m.vaddsBox.h === 0,
@@ -2884,6 +2886,33 @@ function boxOf(text) {
       assert.ok(Math.abs(m.rowR - 23.9) < 0.6,
         `nutrition row value is ${m.rowR}px, want 23.9 (40rpx x 1.15 x .52)`);
       assert.strictEqual(m.band, 1, 'the image band did not render');
+    });
+
+    await check('§505 sizes rank by sales, most units first', async () => {
+      // Operator order is 250g then 500g. After the large size sells more at
+      // this shop, the picker must lead with 500g. paid_at is yesterday so the
+      // §499/§505 window (30 days ending last night) includes it.
+      const { shopDaysAgo } = require(path.join(ROOT, 'lib', 'shop-clock.js'));
+      const qrSales = require(path.join(ROOT, 'lib', 'qr-variant-sales.js'));
+      const oid = 991505;
+      db.prepare(`INSERT INTO retail_orders
+        (id, order_no, status, fulfillment_type, store_id, channel, shop_entry_method,
+         subtotal, total, paid_at, placed_at)
+        VALUES (?, '__R-505', 'paid', 'counter', ?, 'shop', 'till', 76, 76, ?, ?)`)
+        .run(oid, LOC, shopDaysAgo(1) + ' 12:00:00', shopDaysAgo(1) + ' 12:00:00');
+      db.prepare(`INSERT INTO retail_order_items
+        (order_id, product_id, name_en, name_cn, qty, unit_price, line_total)
+        VALUES (?, ?, ?, ?, 5, 76, 380)`).run(oid, P_V2, EN_VAR, '测试规格罐');
+      qrSales.clearMemoForTests();
+      await page.goto(`http://127.0.0.1:${PORT}/s/${CODE}?lang=en`, { waitUntil: 'domcontentloaded' });
+      const labels = await page.evaluate((n) => {
+        const card = Array.from(document.querySelectorAll('.it'))
+          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
+        if (!card) return null;
+        return Array.from(card.querySelectorAll('.vadds .add')).map(b => b.getAttribute('data-vl-en'));
+      }, EN_VAR);
+      assert.deepStrictEqual(labels, ['500g', '250g'],
+        `sales did not reorder the sizes: ${JSON.stringify(labels)}`);
     });
 
     await check('a nutrition value and its unit are drawn by ONE face', async () => {
