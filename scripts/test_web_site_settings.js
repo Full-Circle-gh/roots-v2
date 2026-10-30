@@ -195,6 +195,12 @@ yes(/\.shop-blocks \.sb-hero-split\{grid-template-columns:1fr/.test(SITE),
   'a split hero stacks, photo then words');
 yes(/height:72px/.test(SITE) && /PHONE_CAST=\['skater','onion','radishes','broccoli','flex','peas','mushroom'\]/.test(SITE),
   'a section with no character shows the next of the white-line cast, 72px');
+yes(/body \.shop-blocks \.sb-char-left,body \.shop-blocks \.sb-char-right\{right:12px;left:auto\}/.test(SITE),
+  'on a phone every character sits on the right, including one stored on the left');
+yes(/\.sb-steps-kicker,\.sb-cl-kicker,\.sb-menu-kicker,\.sb-st-kicker,\.sb-rcp-kicker,\.sb-grid-block \.sb-kicker/.test(SITE) && /min-height:80px;padding-right:112px/.test(SITE),
+  'the small label shares the character\'s row, so the title starts under it');
+yes(!/padding-right:84px/.test(SITE),
+  'the title is not kept narrow beside the drawing');
 yes(/if\(STAGE_MODE\) return layout;/.test(SITE),
   'the editor\'s stage does not invent a character');
 yes(!/font-size:17px/.test(read('public/shop/blocks.css').slice(0, 200)) && /--u: calc\(100vw \/ 750\)/.test(read('public/shop/blocks.css')),
