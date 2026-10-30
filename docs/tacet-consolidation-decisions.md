@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.601
+# Tacet shared-core consolidation — decisions record, v4.602
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-30 · v4.602 — **§503 AMENDED · ON A PHONE THE WEBSITE USES THE MOCK-UP'S TYPE, AND A SECTION WITHOUT A CHARACTER STILL SHOWS ONE — DECIDED BY ASH.** Ash: *"some text are too small"*, *"i want to use our ip character"*, *"i need the website to fit mobile and all should be mobile friendly and easy to read"*, pointing at the phone mock-up already drawn (`reference/roots-mobile-site-mockup.html`, PR #1299). Below 768px the brand site (`public/site.html` only; the web shop is unchanged) uses that mock-up's sizes: body 17px, section titles 32px, the promise lines 40px, buttons at least 44px tall, the header links stay, facts stack in one column, a split hero and a side-by-side story stack. A section block with no character chosen shows the next of the white-line cast, 72px, fully on the block. No new words. No change to `.gitignore` or CI.
 
 2026-10-29 · v4.601 — **§508 · A QR ORDER PAID ON THE PHONE PRINTS ONLY WHEN THE MONEY HAS ARRIVED — DECIDED BY ASH.** Ash: the QR menu's WeChat Pay sometimes prints a receipt that says paid by WeChat when the customer has not paid; the order in Tacet still shows that WeChat as unpaid (he described it as offline WeChat Pay); the slip came out by itself, without the till, and should come out only when someone actually pays with WeChat. The 2026-10-26 counter-screen print is what did it, and it is reversed. No new words. No change to `.gitignore` or CI.
 
@@ -33624,6 +33626,14 @@ Ash: *"need to see the live map with the location . if someone click on it on mo
 39. **Directions are one tap, in the visitor's own map app.** Under each placed shop: *Apple Maps*, *Google Maps* and *Amap* links, built from the position. On a phone the map does not take drags (the page scrolls past it) and a tap opens the phone's map app: Apple Maps on an iPhone or iPad, the default map app (`geo:`) on Android. On a computer the map can be dragged and zoomed. App names are not translated.
 
 40. **Yuexiu only, for Roots.** The Tianhe address is a kitchen in a tech park, not somewhere to visit, so only Yuexiu is placed on the website's map.
+
+### Amended 2026-10-30 — the phone uses the mock-up's type
+
+Ash, looking at the site on a phone: *"some text are too small"*, *"i want to use our ip character. you should have them"*, and *"i need the website to fit mobile and all should be mobile friendly and easy to read"*. The phone mock-up is `reference/roots-mobile-site-mockup.html` (PR #1299). The engine's phone unit is `100vw / 750`, so on a 390px-wide phone a 24-unit line is about 12px and an 18-unit kicker about 9px, and `site.html` was hiding the header links.
+
+41. **Below 768px the brand site uses the mock-up's sizes, and only there.** `public/site.html` sets them. `public/shop/blocks.css` is not changed, so the web shop and the mini app stay on the 750-unit scale. Body copy is 17px, section titles 32px, the promise band's big lines 40px, a step's title 24px, a dish or product name 18px and its price 20px. A button or direction link is at least 44px tall. The header links stay, at 13px, and wrap. Facts stack in one column. A split hero puts the photo on top and the words under it. A story set side by side does the same. An email or a WeChat id wraps instead of being cut off.
+
+42. **A section with no character chosen still shows one, on the website only.** The sections are the promise band, the steps, the menu showcase, the stores block, the contact block, a story and a product grid. Down the page they take the next of the white-line cast — skater, onion, radishes, broccoli, flex, peas, mushroom — and a character the block already stores replaces that. On a phone the picture is 72px tall and sits fully on the block, in the top corner, clear of the heading. On a wider screen it keeps rule 30's peek. The editor's stage does not add these, so a block still shows None until somebody picks one.
 
 ## §504 — EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS
 
