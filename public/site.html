@@ -68,7 +68,7 @@
   .foot-links a{text-decoration:none;}
   .foot-links a:hover{text-decoration:underline;}
 
-  /* Phone (§503 rules 41–42). The block engine's unit is 100vw/750, which on
+  /* Phone (§503 rules 41–43). The block engine's unit is 100vw/750, which on
      a phone makes body copy about 12px. These sizes are the phone mock-up's
      (reference/roots-mobile-site-mockup.html). They apply only on this page. */
   @media (max-width:767px){
@@ -153,17 +153,26 @@
     body .shop-blocks .sb-cl-qr{width:88px;height:88px;}
 
     body .shop-blocks .sb-blk-outer,body .shop-blocks .sb-blk-outer.framed{overflow:visible;}
+    /* Every character in the top right, in the label's row. The title follows
+       that row at full width, so a drawing never sits on the words (§503 rule 43). */
     body .shop-blocks .sb-char{
-      height:72px;width:auto;top:14px;
+      height:72px;width:auto;max-width:96px;top:16px;right:12px;left:auto;z-index:4;
+      object-fit:contain;object-position:right center;
       transform:none;
       animation:site-char-bob 4.6s ease-in-out infinite;
     }
-    body .shop-blocks .sb-char-right{right:12px;}
-    body .shop-blocks .sb-char-left{left:12px;}
+    body .shop-blocks .sb-char-left,body .shop-blocks .sb-char-right{right:12px;left:auto;}
+    body .shop-blocks .sb-blk-outer:has(.sb-char) :is(.sb-steps,.sb-cl,.sb-menu,.sb-store-blk,.sb-grid-block,.sb-rcp-body){padding-top:16px;}
     body .shop-blocks .sb-blk-outer:has(.sb-char) :is(
-      .sb-steps-head,.sb-cl-kicker,.sb-cl-title,.sb-menu-kicker,.sb-menu-title,.sb-menu-line,
-      .sb-st-kicker,.sb-st-title,.sb-rcp-kicker,.sb-rcp-headline,.sb-grid-head,.sb-fact-item:first-child
-    ){padding-right:84px;}
+      .sb-steps-kicker,.sb-cl-kicker,.sb-menu-kicker,.sb-st-kicker,.sb-rcp-kicker,.sb-grid-block .sb-kicker
+    ){
+      display:flex;align-items:center;box-sizing:border-box;
+      min-height:80px;padding-right:112px;
+    }
+    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"]{container-type:inline-size;}
+    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-char{top:calc(100cqw * 3 / 4 + 16px);}
+    body .shop-blocks .sb-blk-outer:has(.sb-char) .sb-grid-head{align-items:flex-end;}
+    body .shop-blocks .sb-blk-outer:has(.sb-char) .sb-fact-item:first-child{padding-right:112px;}
   }
   @keyframes site-char-bob{
     0%,100%{transform:rotate(-2deg);}
