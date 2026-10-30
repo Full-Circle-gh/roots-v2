@@ -156,6 +156,44 @@ function costFor(row, existingCpu) {
   return cpu === null ? (existingCpu || 0) : cpu;
 }
 
+// Search ranking for this list — and for the recipe-line picker, which is
+// the same endpoint with for_recipe=1. The picker paints eight rows. A
+// substring match ordered A–Z puts every Juice and Rice above Ice Cubes
+// when you type "ice", so the thing you meant is not on the list at all.
+// Closer matches first: exact name or SKU, then starts-with, then a later
+// word that starts with the query, then a match buried inside a word.
+function materialSearchOrder(search) {
+  if (!search) return { sql: 'ORDER BY name_en COLLATE NOCASE', params: [] };
+  const prefix = search + '%';
+  const afterSpace = '% ' + search + '%';
+  const afterHyphen = '%-' + search + '%';
+  const afterSlash = '%/' + search + '%';
+  const afterParen = '%(' + search + '%';
+  return {
+    sql: `ORDER BY CASE
+            WHEN name_en = ? COLLATE NOCASE
+              OR COALESCE(name_cn, '') = ? COLLATE NOCASE
+              OR COALESCE(sku, '') = ? COLLATE NOCASE THEN 0
+            WHEN name_en LIKE ?
+              OR COALESCE(name_cn, '') LIKE ?
+              OR COALESCE(sku, '') LIKE ? THEN 1
+            WHEN name_en LIKE ? OR COALESCE(name_cn, '') LIKE ?
+              OR name_en LIKE ? OR COALESCE(name_cn, '') LIKE ?
+              OR name_en LIKE ? OR COALESCE(name_cn, '') LIKE ?
+              OR name_en LIKE ? OR COALESCE(name_cn, '') LIKE ? THEN 2
+            ELSE 3
+          END, name_en COLLATE NOCASE`,
+    params: [
+      search, search, search,
+      prefix, prefix, prefix,
+      afterSpace, afterSpace,
+      afterHyphen, afterHyphen,
+      afterSlash, afterSlash,
+      afterParen, afterParen,
+    ],
+  };
+}
+
 // ═══ List ══════════════════════════════════════════════════════════════════
 router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
   const { search, kind, category, supplier, archived, for_recipe, source } = req.query;
@@ -206,13 +244,14 @@ router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
   // must show, and the only honest way to know whether the list was cut.
   const { limit, offset } = listWindow(req.query);
   const listArgs = [...base, ...(kind ? [kind] : [])];
+  const order = materialSearchOrder(search);
   const total = tdb().prepare(
     `SELECT COUNT(*) AS n FROM ingredients${where}${sourceClause}${kindClause}`
   ).get(...listArgs).n;
   const rows = tdb().prepare(
     `SELECT ${LIST_COLS} FROM ingredients${where}${sourceClause}${kindClause}
-      ORDER BY name_en COLLATE NOCASE LIMIT ? OFFSET ?`
-  ).all(...listArgs, limit, offset);
+      ${order.sql} LIMIT ? OFFSET ?`
+  ).all(...listArgs, ...order.params, limit, offset);
   for (const r of rows) {
     r.has_image = !!r.has_image;
     r.has_supplier_qr = !!r.has_supplier_qr;
