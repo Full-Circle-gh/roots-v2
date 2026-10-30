@@ -26,6 +26,7 @@ const ROOT = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const ROUTE = read('routes/integrations-admin.js');
 const SHOP = read('public/shop.html');
+const SITE = read('public/site.html');
 const CMS = read('public/cms.html');
 const PE = read('public/product-editor.html');
 const ADMIN = read('public/retail-admin/15-integrations.js');
@@ -180,6 +181,24 @@ yes(/const problems = wcSiteProblems\(\);\n    if \(problems\.length\) \{/.test(
 yes(/u = 'https:\/\/' \+ u;/.test(ADMIN), 'a bare domain gets its https:// instead of being dropped');
 yes(/failed\.push\(cuT\('sign-in', '登录'\)\)/.test(ADMIN) && /failed\.push\(cuT\('title, menu and footer', '标题、菜单与页脚'\)\)/.test(ADMIN),
   'the two writes are reported apart, so a failure names the part');
+
+// ─────────────────────────────────────────────────────────────────────────
+section('6 · on a phone the brand site uses the mock-up\'s type (§503 rules 41–42)');
+
+yes(!/@media \(max-width:640px\)\{ \.bar-nav a\{display:none;\} \}/.test(SITE),
+  'the header links are not hidden on a phone');
+yes(/@media \(max-width:767px\)\{[\s\S]*font-size:17px/.test(SITE),
+  'body copy is 17px below 768px');
+yes(/\.shop-blocks \.sb-fact-row\{grid-template-columns:1fr/.test(SITE),
+  'the promise band stacks in one column');
+yes(/\.shop-blocks \.sb-hero-split\{grid-template-columns:1fr/.test(SITE),
+  'a split hero stacks, photo then words');
+yes(/height:72px/.test(SITE) && /PHONE_CAST=\['skater','onion','radishes','broccoli','flex','peas','mushroom'\]/.test(SITE),
+  'a section with no character shows the next of the white-line cast, 72px');
+yes(/if\(STAGE_MODE\) return layout;/.test(SITE),
+  'the editor\'s stage does not invent a character');
+yes(!/font-size:17px/.test(read('public/shop/blocks.css').slice(0, 200)) && /--u: calc\(100vw \/ 750\)/.test(read('public/shop/blocks.css')),
+  'the web shop keeps the 750-unit scale');
 
 // ─────────────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);
