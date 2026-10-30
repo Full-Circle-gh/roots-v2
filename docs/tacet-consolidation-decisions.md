@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.603
+# Tacet shared-core consolidation — decisions record, v4.604
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-30 · v4.604 — **§503 AMENDED · ON A PHONE THE HERO PICTURE FILLS THE BANNER, THE SMALL LABELS ARE 16px, AND THE YUEXIU ADDRESS SITS ON THE MAP — DECIDED BY ASH.** Ash: the store picture and the Canton Fair logo should fill the banner, not sit in part of it; *"new to china / approved by taste buds, all those seems too small"*; the Yuexiu address should be on the map and a tap should open the map app. Then *"do it"*. Below 768px a split hero's picture keeps its own shape at full width. The small labels are 16px. A store card with no pin takes the position of the shop it names, the address is drawn on the map, and a tap opens the phone's map app. No new words. No change to `.gitignore` or CI.
 
 2026-10-30 · v4.603 — **§503 AMENDED · ON A PHONE EVERY CHARACTER SITS IN THE TOP RIGHT, AND THE TITLE STARTS UNDER IT — DECIDED BY ASH.** Ash, on the live site: *"not great, the some of the ip's character are not well located on the page. garlic for example, its behind the text"*, then *"go ahead"* to putting them all in the top right. Rule 42 parked a character in whichever top corner came next, and the only gap was on the right, so a left-hand drawing sat on the first words. Below 768px the brand site draws every character on the right, beside the small label, and the title starts on the next line at full width. No new words. No change to `.gitignore` or CI.
 
@@ -33638,6 +33640,12 @@ Ash, looking at the site on a phone: *"some text are too small"*, *"i want to us
 42. **A section with no character chosen still shows one, on the website only.** The sections are the promise band, the steps, the menu showcase, the stores block, the contact block, a story and a product grid. Down the page they take the next of the white-line cast — skater, onion, radishes, broccoli, flex, peas, mushroom — and a character the block already stores replaces that. On a phone the picture is 72px tall and sits fully on the block. On a wider screen it keeps rule 30's peek. The editor's stage does not add these, so a block still shows None until somebody picks one.
 
 43. **On a phone every character sits in the top right, beside the small label, and the title starts under it.** Ash, looking at the live site: *"some of the ip's character are not well located"*, and the garlic (the onion drawing) was behind "Two ways from hungry to happy." Rule 42's first pass alternated corners and only kept a gap on the right, so a left-hand drawing landed on the first words — the garlic on that title, the broccoli on "Roots · Yuexiu". Below 768px `public/site.html` draws every character on the right, 72px, in the label's row. The title and the lines under it start below that row, full width. The promise band has no label, so its first line keeps the gap on the right instead. A story's picture is on top, so its character sits at the top of the words, not on the picture. A wider screen still peeks over the corner the block chose. The web shop is unchanged.
+
+44. **On a phone a split hero's picture keeps its own shape and fills the width.** The café photo and the Canton Fair logo were locked into a box 196px tall, so each one sat in part of a gray bar. Below 768px the picture is as tall as its own proportions, full width, and nothing is cropped. The words stay underneath. The web shop is unchanged.
+
+45. **On a phone the small labels are 16px.** "New to China?", "Approved by taste buds", and the same line on the other sections. The titles stay 32px.
+
+46. **The Yuexiu address sits on the map, and a tap opens the phone's map app.** The block had the address typed and no pin, so rule 37 drew no map. The website copies the position from the shop the card names — Yuexiu's saved pin, from the shops the checkout already publishes. A card that already has a pin keeps it. Tianhe is not added, because nothing on the page names it. The address is drawn on the map. A tap opens Apple Maps on an iPhone and the default map app on Android, the same as a tap on the map (rule 39). The three named buttons are not shown on a phone.
 
 ## §504 — EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS
 

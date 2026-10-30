@@ -68,7 +68,7 @@
   .foot-links a{text-decoration:none;}
   .foot-links a:hover{text-decoration:underline;}
 
-  /* Phone (§503 rules 41–43). The block engine's unit is 100vw/750, which on
+  /* Phone (§503 rules 41–46). The block engine's unit is 100vw/750, which on
      a phone makes body copy about 12px. These sizes are the phone mock-up's
      (reference/roots-mobile-site-mockup.html). They apply only on this page. */
   @media (max-width:767px){
@@ -83,7 +83,11 @@
     .foot-links a{display:inline-flex;align-items:center;min-height:44px;}
 
     body .shop-blocks .sb-hero-split{grid-template-columns:1fr;min-height:0;}
-    body .shop-blocks .sb-split-img{height:196px;}
+    /* The picture keeps its own shape and fills the width (§503 rule 44).
+       A fixed short box was leaving the café photo and the Canton Fair
+       logo sitting in part of a gray bar. */
+    body .shop-blocks .sb-split-img{height:auto;}
+    body .shop-blocks .sb-split-img .sb-hero-img,body .shop-blocks .sb-split-img .sb-hero-video{width:100%;height:auto;object-fit:contain;display:block;}
     body .shop-blocks .sb-split-panel{padding:18px 22px 28px;}
     body .shop-blocks .sb-split-panel .sb-headline{font-size:38px;line-height:1.04;}
     body .shop-blocks .sb-split-panel .sb-subtitle{font-size:17px;line-height:1.5;}
@@ -100,7 +104,7 @@
     body .shop-blocks .sb-steps{padding:32px 22px 36px;}
     body .shop-blocks .sb-steps-kicker,body .shop-blocks .sb-cl-kicker,body .shop-blocks .sb-menu-kicker,
     body .shop-blocks .sb-st-kicker,body .shop-blocks .sb-rcp-kicker,body .shop-blocks .sb-grid-block .sb-kicker{
-      font-size:13px;letter-spacing:0.12em;
+      font-size:16px;letter-spacing:0.08em;
     }
     body .shop-blocks .sb-steps-title,body .shop-blocks .sb-cl-title,body .shop-blocks .sb-menu-title,
     body .shop-blocks .sb-st-title,body .shop-blocks .sb-rcp-headline,body .shop-blocks .sb-grid-block .sb-ttl{
@@ -137,7 +141,17 @@
     body .shop-blocks .sb-st-val{font-size:17px;}
     body .shop-blocks .sb-st-status,body .shop-blocks .sb-st-hours{font-size:16px;}
     body .shop-blocks .sb-st-cnaddr{font-size:18px;}
+    body .shop-blocks .sb-st-map-wrap{position:relative;min-height:220px;margin:0 0 16px;}
+    body .shop-blocks .sb-st-map-wrap .sb-st-map{display:block;height:220px;border-radius:12px;overflow:hidden;}
     body .shop-blocks .sb-st-map.is-live{height:220px;}
+    body .shop-blocks .sb-st-dir{display:none;}
+    body .shop-blocks .sb-st-map-addr{
+      position:absolute;left:10px;right:10px;bottom:10px;z-index:5;
+      display:flex;align-items:center;min-height:44px;padding:12px 14px;
+      background:#fff;color:#1a1a17;border-radius:10px;
+      font-size:16px;line-height:1.35;text-decoration:none;
+      box-shadow:0 2px 10px rgba(0,0,0,.16);
+    }
     body .shop-blocks .sb-st-dir-btn,body .shop-blocks .sb-st-cta{
       min-height:44px;font-size:13px;letter-spacing:0.08em;
       display:inline-flex;align-items:center;padding:10px 14px;
@@ -351,10 +365,69 @@ function withCast(layout){
   });
 }
 
+// §503 rule 46. A store card with an address and no pin still takes the
+// position of the shop it names, from the shops the checkout already
+// publishes. A card that already has a pin keeps it. Tianhe is not added:
+// nothing on the page names it.
+let shopPins=null;
+function hasPin(s){
+  const la=Number(s&&s.lat), ln=Number(s&&s.lng);
+  return isFinite(la)&&isFinite(ln)&&la!==0&&ln!==0;
+}
+function shopMatches(card, shop){
+  if(card.store_id&&Number(card.store_id)===Number(shop.id)) return true;
+  const name=String(card.name_en||'').toLowerCase();
+  const en=String(shop.name_en||'').toLowerCase();
+  return en.length>=4&&name.includes(en);
+}
+async function placeShopPins(layout){
+  const needs=layout.some(b=>b&&b.type==='store_info'&&(b.stores||[]).some(s=>!hasPin(s)&&(s.name_en||s.name_cn)));
+  if(!needs) return layout;
+  if(!shopPins){
+    try{ const rows=await api('/api/retail/pickup-stores'); shopPins=Array.isArray(rows)?rows:[]; }
+    catch(e){ return layout; }
+  }
+  return layout.map(b=>{
+    if(!b||b.type!=='store_info'||!Array.isArray(b.stores)) return b;
+    const stores=b.stores.map(s=>{
+      if(hasPin(s)) return s;
+      const hit=shopPins.find(st=>shopMatches(s,st)&&hasPin(st));
+      return hit?Object.assign({},s,{lat:hit.lat,lng:hit.lng}):s;
+    });
+    return Object.assign({},b,{stores});
+  });
+}
+
+// The address sits on the map. A tap opens the phone's map app, the same
+// way a tap on the map does. The row of named buttons is hidden on a phone.
+function mountMapAddress(root){
+  root.querySelectorAll('.sb-st-map').forEach(box=>{
+    if(box.parentElement&&box.parentElement.classList.contains('sb-st-map-wrap')) return;
+    let pins=[]; try{ pins=JSON.parse(box.getAttribute('data-pins')||'[]'); }catch(e){}
+    const p=pins.find(hasPin); if(!p) return;
+    const card=box.parentElement&&box.parentElement.querySelector('.sb-st-card');
+    const val=card&&card.querySelector('.sb-st-val');
+    const text=val?val.textContent.trim():'';
+    if(!text) return;
+    const wrap=document.createElement('div');
+    wrap.className='sb-st-map-wrap';
+    box.parentNode.insertBefore(wrap, box);
+    wrap.appendChild(box);
+    const a=document.createElement('a');
+    a.className='sb-st-map-addr';
+    a.href='https://uri.amap.com/marker?position='+p.lng+','+p.lat+'&name='+encodeURIComponent(p.name||'')+'&coordinate=gaode&callnative=1';
+    a.textContent=text;
+    a.addEventListener('click',ev=>{ ev.preventDefault(); openInMapApp(p); });
+    wrap.appendChild(a);
+    const row=val.closest('.sb-st-row'); if(row) row.remove();
+  });
+}
+
 async function render(){
   const view=$('#view');
   const published=state.config&&state.config.website&&state.config.website.layout;
-  const layout=(window.ShopBlocks&&Array.isArray(published))?withCast(ShopBlocks.forSurface(published)):[];
+  let layout=(window.ShopBlocks&&Array.isArray(published))?withCast(ShopBlocks.forSurface(published)):[];
+  if(layout.length) layout=await placeShopPins(layout);
   if(!layout.length){
     // On the stage, the editor's own live pair (public/cms.html) says what to
     // do; a visitor sees the brand's header and footer around an empty body.
@@ -368,6 +441,7 @@ async function render(){
   ShopBlocks.startTimers(view);
   stageHighlight(true);
   renderChatButton(layout);
+  mountMapAddress(view);
   drawStoreMaps(view);
 }
 

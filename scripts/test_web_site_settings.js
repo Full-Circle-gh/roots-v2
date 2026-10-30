@@ -207,5 +207,19 @@ yes(!/font-size:17px/.test(read('public/shop/blocks.css').slice(0, 200)) && /--u
   'the web shop keeps the 750-unit scale');
 
 // ─────────────────────────────────────────────────────────────────────────
+section('7 · the phone banner, the labels, and the Yuexiu address (§503 rules 44–46)');
+
+yes(/\.sb-split-img\{height:auto\}/.test(SITE) && /\.sb-split-img \.sb-hero-img,body \.shop-blocks \.sb-split-img \.sb-hero-video\{width:100%;height:auto\}/.test(SITE),
+  'a split hero picture keeps its own shape and fills the width');
+yes(!/height:196px/.test(SITE),
+  'the picture is not locked into a short strip');
+yes(/\.sb-steps-kicker,body \.shop-blocks \.sb-cl-kicker[\s\S]{0,220}font-size:16px/.test(SITE),
+  'the small labels are 16px');
+yes(/function placeShopPins\(layout\)/.test(SITE) && /en\.length>=4&&name\.includes\(en\)/.test(SITE),
+  'a store with no pin takes the position of the shop it names');
+yes(/sb-st-map-addr/.test(SITE) && /openInMapApp\(p\)/.test(SITE) && /\.sb-st-dir\{display:none\}/.test(SITE),
+  'the address sits on the map, a tap opens the map app, and the three buttons are not shown');
+
+// ─────────────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
