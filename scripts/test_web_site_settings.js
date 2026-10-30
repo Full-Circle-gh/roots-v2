@@ -215,7 +215,7 @@ yes(!/height:196px/.test(SITE),
   'the picture is not locked into a short strip');
 yes(/\.sb-steps-kicker,body \.shop-blocks \.sb-cl-kicker[\s\S]{0,220}font-size:16px/.test(SITE),
   'the small labels are 16px');
-yes(/function placeShopPins\(layout\)/.test(SITE) && /en\.length>=4&&name\.includes\(en\)/.test(SITE),
+yes(/function placeShopPins\(layout\)/.test(SITE) && /en\.length>=4&&name\.includes\(en\)/.test(SITE) && /rows\.stores/.test(SITE),
   'a store with no pin takes the position of the shop it names');
 yes(/sb-st-map-addr/.test(SITE) && /openInMapApp\(p\)/.test(SITE) && /\.sb-st-dir\{display:none\}/.test(SITE),
   'the address sits on the map, a tap opens the map app, and the three buttons are not shown');

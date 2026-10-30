@@ -384,7 +384,10 @@ async function placeShopPins(layout){
   const needs=layout.some(b=>b&&b.type==='store_info'&&(b.stores||[]).some(s=>!hasPin(s)&&(s.name_en||s.name_cn)));
   if(!needs) return layout;
   if(!shopPins){
-    try{ const rows=await api('/api/retail/pickup-stores'); shopPins=Array.isArray(rows)?rows:[]; }
+    try{
+      const rows=await api('/api/retail/pickup-stores');
+      shopPins=Array.isArray(rows)?rows:(rows&&Array.isArray(rows.stores)?rows.stores:[]);
+    }
     catch(e){ return layout; }
   }
   return layout.map(b=>{
