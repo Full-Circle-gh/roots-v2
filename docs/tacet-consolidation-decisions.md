@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.608
+# Tacet shared-core consolidation — decisions record, v4.609
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-31 · v4.609 — **§503 AMENDED · ON A COMPUTER A QR MENU LINK OPENS IN A PHONE MOCK-UP — DECIDED BY ASH.** Ash: *"once clicking ramada menu on pc it should show the menu inside a phone mock up because the menu is not built for pc"*. On the brand site only, from 768px up, a block button whose target is a shop QR menu (`https://…/s/<code>`) opens that menu in a phone frame overlay instead of a wide tab; a phone still opens it normally. The menu page names the tenant's own customer domains in `frame-ancestors` so the frame can load (`lib/shop-menu-redirect.js`, `applySiteMenuFrameHeaders`). One composed string (vocabulary v1.371). No change to `.gitignore` or CI.
 
 2026-10-31 · v4.608 — **§503 AMENDED · THE STORE VISIT IS ONE CARD — MAP AND DETAILS TOGETHER — DECIDED BY ASH.** Ash: the "Come say hi" block on a computer looked wrong — map, then a floating address link, then a separate white card — and asked for the mock-up built and deployed. On the brand site only, `public/site.html` wraps the map and the store card in one visit card: on a computer the map sits beside the words with one green **Get directions** button and the three map apps as small text links; on a phone the map is on top, the address is one tap bar, then the same button and links. Pin copy from the named shop and `openInMapApp` stay (rules 37, 39, 46). One composed string (vocabulary v1.370). The web shop is unchanged. No change to `.gitignore` or CI.
 

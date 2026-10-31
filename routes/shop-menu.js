@@ -65,6 +65,7 @@
 const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const { isShopCode } = require('../lib/shop-code');
+const { applySiteMenuFrameHeaders } = require('../lib/shop-menu-redirect');
 const { getCategoryTree } = require('../lib/category-tree');
 const qrCatOrder = require('../lib/qr-menu-category-order');
 const qrVariantSales = require('../lib/qr-variant-sales');
@@ -4600,6 +4601,9 @@ router.get('/s/:shopCode', (req, res) => {
   // A menu is priced and stocked; it must never be served from an
   // intermediary's cache. The shop code is also not something to index.
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  let tenantId = null;
+  try { tenantId = require('../lib/tenant-db').currentTenantId(); } catch (e) { tenantId = null; }
+  applySiteMenuFrameHeaders(res, tenantId);
   res.type('html').send(shell({
     lang, hasParam,
     title: [name.en || name.cn, brand].filter(Boolean).join(' · '),

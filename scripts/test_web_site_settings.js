@@ -248,5 +248,16 @@ yes(/No IP characters on a computer/.test(SITE) && /body \.shop-blocks \.sb-char
 yes(/Every character in the top right/.test(SITE) && /@media \(max-width:767px\)/.test(SITE) && /height:72px;width:auto;max-width:96px/.test(SITE),
   'a phone still draws the characters');
 
+// ─────────────────────────────────────────────────────────────────────────
+section('10 · QR menu in a phone frame on a computer (§503 rule 51)');
+
+yes(/function openSiteMenuPhone/.test(SITE) && /function trySiteMenuCtaClick/.test(SITE),
+  'a computer opens a shop-menu link in a phone mock-up, including on /site-preview');
+yes(/isShopMenuUrl\(t\)/.test(SITE) && /siteMenuDesktop\(\)/.test(SITE),
+  'a phone still opens the menu the normal way');
+yes(/applySiteMenuFrameHeaders/.test(read('routes/shop-menu.js'))
+  && /store\.rootskitchenchina\.com/.test(read('lib/shop-menu-redirect.js')),
+  'the menu page may be framed from the brand site and the store preview host');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
