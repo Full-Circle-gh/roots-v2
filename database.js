@@ -8542,6 +8542,8 @@ try {
     });
     const img = (id) => '/api/retail/products/' + id + '/image';
     const brand = (file) => '/assets/brand/menu/' + file;
+    // Café-only dishes have no shop product behind them; the Ramada menu serves their pictures.
+    const cafe = (id) => 'https://shop.rootskitchenchina.com/s/TJ6YHDGN/i/' + id + '?w=900';
     const blocks = [
       menu('bwplatters', 'Only at the Ramada Pearl lobby', 'Platters', 'Made for the table at the lobby. Not the jars you take home.', [
         dish('Dip Sampler Platter', '¥85', brand('dip-sampler-platter.jpg')),
@@ -8549,7 +8551,7 @@ try {
         dish('Labneh Platter', '¥68', brand('labneh-platter.jpg')),
       ]),
       menu('bwtoasts', '', 'Open toasts', '', [
-        dish('Garlic Dill Sour Cream Toast', '¥30', img(370)),
+        dish('Garlic Dill Sour Cream Toast', '¥30', cafe(370)),
         dish('Almond Banana Toast', '¥32', brand('almond-banana-toast.jpg')),
         dish('Hummus & Roasted Red Bell Pepper Toast', '¥30', brand('hummus-pepper-toast.jpg')),
         dish('Green Pesto Toast', '¥32', brand('green-pesto-toast.jpg')),
@@ -8568,10 +8570,10 @@ try {
         dish("Pesto 'Chicken' Wrap", '¥44', img(220)),
       ]),
       menu('bwdrinks', '', 'Beverages', '', [
-        dish('Espresso', '¥18', img(409)),
-        dish('Americano', '¥20', img(383)),
-        dish('Latte', '¥30', img(384)),
-        dish('House-Made Cashew Chocolate Milk', '¥32', img(387)),
+        dish('Espresso', '¥18', cafe(409)),
+        dish('Americano', '¥20', cafe(383)),
+        dish('Latte', '¥30', cafe(384)),
+        dish('House-Made Cashew Chocolate Milk', '¥32', cafe(387)),
         dish('Carrot-Ginger Juice', '¥23', img(235)),
         dish('Celerybration Juice', '¥27', img(164)),
         dish('Green Glow Juice', '¥27', img(69)),
