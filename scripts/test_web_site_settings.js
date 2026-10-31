@@ -222,8 +222,10 @@ yes(/function mountStoreVisit\(root\)/.test(SITE) && /\.sb-st-visit/.test(SITE) 
   'the store visit is one card, Get directions opens the map app, and the layout is wired in site.html');
 yes(/google\.com\/maps\/search/.test(SITE),
   'on a computer Get directions opens Google Maps in a new tab');
-yes(/sb-st-visit-addr\{margin:0 -22px 18px;padding:14px 16px;background:var\(--oat\)/.test(SITE),
-  'on a phone the address is a tap bar on --oat, not an underlined link');
+yes(/sb-st-visit--hero/.test(SITE) && /sb-st-map-cap-hint/.test(SITE) && /SITE_VISIT_MAP_HINT/.test(SITE),
+  'on a phone the map is a hero with a caption over the pin, not a cramped address band');
+yes(/height:260px/.test(SITE),
+  'on a phone the live map is taller for the hero layout');
 
 // ─────────────────────────────────────────────────────────────────────────
 
