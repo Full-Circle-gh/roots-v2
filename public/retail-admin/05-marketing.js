@@ -3178,6 +3178,7 @@ const PAGE_KEYS = [
   ['all',          'All pages · 全部页面'],
   ['home',         'Home · 首页'],
   ['shop',         'Shop · 商店'],
+  ['qr-menu',      'QR menu · 二维码菜单'],
   ['cart',         'Cart · 购物车'],
   ['me',           'Me · 我的'],
   ['product',      'Product detail · 商品详情'],
@@ -3253,12 +3254,20 @@ function puMiniPreview(p) {
   </div>`;
 }
 
+// "All pages" plus anything kept beside it (the QR menu). The extra labels
+// are already bilingual pairs, joined the way a multi-page line already is.
+function puWhereAll(pages, label, allText) {
+  const extra = pages.filter(k => k !== 'all');
+  if (!extra.length) return allText;
+  return allText + ' · ' + extra.map(label).join(' · ');
+}
+
 // One plain line under each card: where it shows · how often · what it opens.
 function puSentence(p) {
   const pageLabel = k => ((PAGE_KEYS.find(([kk]) => kk === k) || [])[1]) || k;
   let where;
   if (!p.pages || !p.pages.length)      where = puT('No page picked', '未选择页面');
-  else if (p.pages.includes('all'))     where = 'All pages · 全部页面';
+  else if (p.pages.includes('all'))     where = puWhereAll(p.pages, pageLabel, 'All pages · 全部页面');
   else                                  where = p.pages.map(pageLabel).join(' · ');
   const freq = ({
     once: 'shows once · 仅一次', daily: 'daily · 每天一次',
@@ -3383,7 +3392,11 @@ function refreshPopupStepSummaries() {
   const pages = (typeof selectedPopupPages === 'function') ? selectedPopupPages() : [];
   let where;
   if (!pages.length)               where = puT('No page picked', '未选择页面');
-  else if (pages.includes('all'))  where = puT('All pages', '全部页面');
+  else if (pages.includes('all'))  where = puWhereAll(pages, k => {
+    const pair = ((PAGE_KEYS.find(([kk]) => kk === k) || [])[1]) || k;
+    const bits = String(pair).split(' · ');
+    return bits.length === 2 ? puT(bits[0], bits[1]) : pair;
+  }, puT('All pages', '全部页面'));
   else                             where = pages.map(k => ((PAGE_KEYS.find(([kk]) => kk === k) || [])[1] || k)).join(' · ');
   set('#pu-sum-where', where);
   // When
@@ -3616,9 +3629,19 @@ function renderPopupPageChips(selected) {
   wrap.querySelectorAll('.pu-page-chip').forEach(el => {
     el.addEventListener('click', () => {
       const key = el.dataset.page;
+      // "All pages" is the mini app. It clears the other mini-app chips and
+      // leaves QR menu as it was, so a pop-up can be on every mini-app page
+      // and on the QR menu together. Picking QR menu does not clear "All pages".
       if (key === 'all') {
         const willEnable = !el.classList.contains('on');
-        wrap.querySelectorAll('.pu-page-chip').forEach(x => x.classList.toggle('on', x.dataset.page === 'all' && willEnable));
+        const qr = wrap.querySelector('.pu-page-chip[data-page="qr-menu"]');
+        const qrOn = !!(qr && qr.classList.contains('on'));
+        wrap.querySelectorAll('.pu-page-chip').forEach(x => {
+          const k = x.dataset.page;
+          x.classList.toggle('on', (k === 'all' && willEnable) || (k === 'qr-menu' && qrOn));
+        });
+      } else if (key === 'qr-menu') {
+        el.classList.toggle('on');
       } else {
         el.classList.toggle('on');
         wrap.querySelector('.pu-page-chip[data-page="all"]').classList.remove('on');
