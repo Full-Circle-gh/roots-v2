@@ -24253,6 +24253,18 @@ function screenKitchenReady(){
       </button>`;
     }).join('')}</div>`;
 }
+/* WHEN IT LEFT (§212's On-its-way tab). The Done tab leads with the day someone
+   counted it in; this tab leads with when the run went on the road — day and
+   clock together, same ladder as kqWhen, because "Yesterday" alone does not say
+   how long it has been waiting. dispatched_at is stamped at send; the fallbacks
+   are for rows that predate it. */
+function xfrListWhen(o){
+  const v=o&&(o.dispatched_at||o.sent_at||o.created_at||o.date);
+  const day=fmtDay(v);
+  if(!day) return '';
+  const time=fmtTime(v);
+  return escAttr(day===time||!time?day:day+' '+time)+' · ';
+}
 function screenReceiveTransfer(){
   loadXfr();
   const x=state.xfr;
@@ -24428,7 +24440,7 @@ function screenReceiveTransfer(){
   if(!x.list.length) return tabs+nothingYet(T('Nothing on its way','暂无在途'),
     T('Deliveries from another location show up here.','其他地点发来的货会显示在这里。'));
   return tabs+err+`<div>${x.list.map(o=>listRow(o,
-    (o.item_count||0)+' '+T('items','项')+where(o))).join('')}</div>`;
+    xfrListWhen(o)+(o.item_count||0)+' '+T('items','项')+where(o))).join('')}</div>`;
 }
 function screenPick(){
   const k=state.pik;
