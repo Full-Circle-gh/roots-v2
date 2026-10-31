@@ -68,12 +68,13 @@
 .cat-group:first-child .grid-section-head { border-top: 0; margin-top: 0; }
 .grid-section-kicker {
   font-size: calc(28rpx * var(--font-scale));
-  letter-spacing: 0.18em; color: var(--ink);
+  letter-spacing: 0.12em; color: var(--ink);
   font-weight: 700; text-transform: uppercase;
 }
 .grid-section-count {
   font-size: calc(28rpx * var(--font-scale));
-  color: var(--olive); letter-spacing: 0.04em;
+  font-weight: 700;
+  color: var(--olive); letter-spacing: 0.06em;
 }
 
 .top-anchor { height: 1rpx; }
@@ -577,8 +578,17 @@
   padding: 28rpx 32rpx 12rpx;
   display: flex; align-items: baseline; justify-content: space-between;
 }
-.list-section-kicker { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.2em; color: var(--olive); }
-.list-section-count { font-size: calc(36rpx * var(--font-scale)); color: var(--olive); letter-spacing: 0.04em; }
+.list-section-kicker {
+  font-size: calc(28rpx * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0.12em; color: var(--ink);
+  text-transform: uppercase;
+}
+.list-section-count {
+  font-size: calc(28rpx * var(--font-scale));
+  font-weight: 700;
+  color: var(--olive); letter-spacing: 0.06em;
+}
 
 .row {
   display: flex; align-items: center; gap: 24rpx;
