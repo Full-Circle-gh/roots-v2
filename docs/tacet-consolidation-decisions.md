@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.604
+# Tacet shared-core consolidation — decisions record, v4.605
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-31 · v4.605 — **§509 · THE QR MENU CAN SHOW ITS OWN POP-UP WHEN IT OPENS — DECIDED BY ASH.** Ash: *"menu qr code I want to have pop up option to add once menu is open"*, then *"the pop up in the qr menu might not be the same as the one for the mini app"*. A pop-up shows on the QR menu only when QR menu is one of the pages picked for it. "All pages" stays the mini app, so the pop-ups already running there do not start appearing on every table. A second pop-up can carry different words for the menu; ticking QR menu on an existing one uses the same words on both. On the menu the button adds the product it names, or scrolls to the category. One operator hint composed (vocabulary v1.369). No schema change. No change to `.gitignore` or CI.
 
 2026-10-30 · v4.604 — **§503 AMENDED · ON A PHONE THE HERO PICTURE FILLS THE BANNER, THE SMALL LABELS ARE 16px, AND THE YUEXIU ADDRESS SITS ON THE MAP — DECIDED BY ASH.** Ash: the store picture and the Canton Fair logo should fill the banner, not sit in part of it; *"new to china / approved by taste buds, all those seems too small"*; the Yuexiu address should be on the map and a tap should open the map app. Then *"do it"*. Below 768px a split hero's picture keeps its own shape at full width. The small labels are 16px. A store card with no pin takes the position of the shop it names, the address is drawn on the map, and a tap opens the phone's map app. No new words. No change to `.gitignore` or CI.
 
@@ -33772,3 +33774,23 @@ The conversation is the feedback thread (`retail_feedback` and `retail_feedback_
 5. **An unpaid phone-pay tender is not printed as paid.** If a WeChat or Alipay slip is ever rendered while the order is still `pending_payment`, `lib/feie.js` leaves off the `Paid by` line. The counter slip's own `Paid by offline` line stays: that slip is meant to exist before the money, and it does not grow an unpaid label.
 
 6. **Words:** nothing composed. `Paid by` is the receipt's existing English line.
+
+## §509 — THE QR MENU CAN SHOW ITS OWN POP-UP WHEN IT OPENS
+
+**2026-10-31 · DECIDED BY ASH.** Ash: a pop-up to add, once the QR menu is open. Then: the pop-up on the QR menu might not be the same as the one for the mini app.
+
+The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups). They choose a page. "All pages" means every mini-app page. The QR menu is a different page and had no pop-up.
+
+### Rules
+
+1. **The QR menu is its own page on a pop-up.** Computer and phone both offer `QR menu · 二维码菜单`, the live pair. A pop-up shows there only when that page is picked.
+
+2. **All pages does not include the QR menu.** A pop-up already set to all pages keeps showing in the mini app and stays off the menu. Picking QR menu does not clear All pages, and picking All pages does not clear QR menu, so one pop-up can be on both only when both are picked. A second pop-up, with only QR menu picked, is how the menu says something else.
+
+3. **It opens with the menu.** The same when and how-often rules as the mini app: the moment the page opens, or a few seconds after; once, daily, once a session, or every visit. Seen is remembered per version, under the same key the mini app uses, in the browser rather than WeChat storage. The basket is still memory only. This stamp is not the basket.
+
+4. **The button adds, or moves the menu.** A button aimed at a product taps that product's own add, so a drink with options still asks them. A button aimed at a category scrolls to it. A button aimed at a mini-app page just closes: those pages are not this menu. The picture and the words are the ones written on the pop-up. Both languages are in the page.
+
+5. **It does not cover a sheet that is already open.** If the basket, a product or the pay question is up, it waits, and gives up for this visit without marking itself seen.
+
+6. **Words.** The page chip is the live pair. One operator hint is composed (vocabulary v1.369). The pop-up's own words are the office's. Nothing new is said to the customer.

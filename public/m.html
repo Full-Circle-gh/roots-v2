@@ -10723,6 +10723,7 @@ function screenFaqEdit(){
    in this app that interrupts a customer, so those are not details.
    ========================================================================== */
 const PU_PAGE={all:['All pages','全部页面'],home:['Home','首页'],shop:['Shop','商店'],
+  'qr-menu':['QR menu','二维码菜单'],
   cart:['Cart','购物车'],me:['Me','我的'],product:['Product detail','商品详情'],
   checkout:['Checkout','结账'],'order-success':['Order success','下单成功'],
   orders:['My orders','我的订单'],membership:['Membership','会员'],addresses:['Addresses','地址']};
@@ -10753,7 +10754,11 @@ function puWindow(p,st){
 }
 function puWhere(p){
   if(!p.pages||!p.pages.length) return T('No page picked','未选择页面');
-  if(p.pages.indexOf('all')>=0) return T(...PU_PAGE.all);
+  if(p.pages.indexOf('all')>=0){
+    const rest=p.pages.filter(k=>k!=='all').map(k=>PU_PAGE[k]?T(...PU_PAGE[k]):k);
+    const base=T(...PU_PAGE.all);
+    return rest.length?base+' · '+rest.join(' · '):base;
+  }
   return p.pages.map(k=>PU_PAGE[k]?T(...PU_PAGE[k]):k).join(' · ');
 }
 function statusPopups(){
@@ -11137,10 +11142,18 @@ reg('puSet', (k,v)=>{ if(!PUE||!puCan()) return;
   if(k==='trigger'||k==='frequency'){ PUE.d[k]=String(v); puTouch(); render(); return; }
   if(k==='enabled'||k==='dismissible'){ PUE.d[k]=!PUE.d[k]; puTouch(); render(); } });
 // "All pages" overrides the rest; picking a page drops "All pages" (renderPopupPageChips).
+// "All pages" is the mini app. It clears the other mini-app pages and leaves
+// QR menu as it was, matching the desktop chips. Picking QR menu does not
+// clear "All pages", so one pop-up can open on both.
 reg('puPage', k=>{ if(!PUE||!puCan()||!PU_PAGE[k]) return;
   const on=PUE.d.pages.indexOf(k)>=0;
-  if(k==='all') PUE.d.pages=on?[]:['all'];
-  else { PUE.d.pages=PUE.d.pages.filter(x=>x!=='all'&&x!==k); if(!on) PUE.d.pages.push(k); }
+  if(k==='all'){
+    const qr=PUE.d.pages.indexOf('qr-menu')>=0;
+    PUE.d.pages=on?(qr?['qr-menu']:[]):(qr?['all','qr-menu']:['all']);
+  } else if(k==='qr-menu'){
+    PUE.d.pages=PUE.d.pages.filter(x=>x!=='qr-menu');
+    if(!on) PUE.d.pages.push('qr-menu');
+  } else { PUE.d.pages=PUE.d.pages.filter(x=>x!=='all'&&x!==k); if(!on) PUE.d.pages.push(k); }
   puTouch(); render(); });
 /* What the button opens: the desktop's simple destinations, a product (found
    by name or SKU) or a category (the desktop's own category list). */
@@ -11278,7 +11291,7 @@ function screenPopupEdit(){
             :`<div style="font-size:13px;color:var(--text-secondary)">${T('(no categories yet)','(暂无分类)')}</div>`}</div>`:''}
         ${hint(escAttr(puTargetLabel(d.cta_target)))}</div>`)}
     ${card(T('The rules','规则'),`
-      <div>${lab(T('Where','位置'))}${hint(T('Pick one or more pages. "All pages" overrides the rest.','选择一个或多个页面;"全部页面"将覆盖其余选项。'))}
+      <div>${lab(T('Where','位置'))}${hint(T('Pick one or more pages. "All pages" is the mini app and overrides the other mini-app pages. The QR menu is its own choice.','选择一个或多个页面。"全部页面"是小程序,并覆盖其他小程序页面。二维码菜单需单独选择。'))}
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${Object.keys(PU_PAGE).map(k=>`<button class="chip ${d.pages.indexOf(k)>=0?'on':''}" onclick="APP.cmd('puPage','${k}')"><span>${T(...PU_PAGE[k])}</span></button>`).join('')}</div></div>
       <div>${lab(T('Appears','触发时机'))}<select style="width:100%" onchange="APP.cmd('puSet','trigger',this.value)">
           <option value="on_load"${d.trigger==='on_load'?' selected':''}>${T('The moment the page opens','打开页面即弹出')}</option>

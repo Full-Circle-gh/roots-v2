@@ -122,6 +122,9 @@ const { allocateShopOrderCode } = require('../lib/shop-order-code');
 const { nutritionRows } = require('../lib/nutrition-rows');
 const blockRead = require('../lib/product-blocks-read');
 const qrBlockDefaults = require('../lib/qr-menu-block-defaults');
+// Marketing pop-ups aimed at this menu (page key qr-menu). "All pages" stays
+// the mini app; a pop-up reaches a table only when QR menu is picked.
+const qrMenuPopup = require('../lib/qr-menu-popup');
 // WHAT A PRODUCT PAGE SIGNS ITSELF WITH (§158). The same module the mini app's
 // storefront config and the product editor read, so this page cannot sign a
 // product differently from the phone: one cast, one auto-map, one house line.
@@ -2008,6 +2011,14 @@ a.place{display:flex;align-items:center;justify-content:center;gap:7px;
 @keyframes pqIn{from{transform:scale(.96);opacity:0}to{transform:none;opacity:1}}
 .pq:not([hidden]) .pq-p{animation:pqIn .16s ease-out}
 @media (prefers-reduced-motion:reduce){.pq:not([hidden]) .pq-p{animation:none}}
+/* A campaign pop-up on this menu, the same box as the payment one above.
+   The picture runs to the panel edges. The close sits on the picture. */
+.pq-img{display:block;width:calc(100% + 32px);max-height:42vh;object-fit:contain;
+  margin:-18px -16px 14px;background:var(--oat)}
+.pq-x{position:absolute;top:8px;right:8px;z-index:1;width:28px;height:28px;
+  border:0;border-radius:50%;background:rgba(0,0,0,.42);color:#fff;
+  font:inherit;font-size:18px;line-height:26px;text-align:center;padding:0;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
 
 /* ── THE PLACED ORDER, WHEREVER IT IS DRAWN ──
    Three surfaces render this block and they are one screen: the sheet that
@@ -4106,6 +4117,42 @@ function payReturnUrl(req, code, token) {
 
 // ─── routes ─────────────────────────────────────────────────────────────
 
+// A category id on the section the pop-up's button scrolls to. Empty when
+// the band has no tree node (OTHER), so the attribute is left off.
+function nodeAttr(id) {
+  const s = id == null ? '' : String(id);
+  return s ? ` data-node="${esc(s)}"` : '';
+}
+
+// The campaign pop-up, server-rendered like the rest of this page so both
+// languages are already in the DOM. Hidden until the script decides this
+// browser should see it. Nothing is emitted when no pop-up names this menu.
+function qrPopupBlock(list) {
+  if (!list.length) return '';
+  const panels = list.map((p) => {
+    const img = p.image_url
+      ? `<img class="pq-img" alt="" src="${esc(p.image_url)}" data-qr-go="1">`
+      : '';
+    const title = (p.title_en || p.title_cn) ? `<div class="pq-t">${bi(p.title_en, p.title_cn)}</div>` : '';
+    const body = (p.body_en || p.body_cn) ? `<div class="pq-s">${bi(p.body_en, p.body_cn)}</div>` : '';
+    const go = (p.cta_label_en || p.cta_label_cn)
+      ? `<button type="button" class="place" data-qr-go="1">${bi(p.cta_label_en, p.cta_label_cn)}</button>`
+      : '';
+    const x = p.dismissible
+      ? `<button type="button" class="pq-x" data-qr-x="1" aria-label="${esc('Close 关闭')}">×</button>`
+      : '';
+    return `<div class="pq" data-qr-pop="1" hidden` +
+      ` data-id="${esc(p.id)}" data-ver="${esc(String(p.updated_at || 0))}"` +
+      ` data-trig="${esc(p.trigger)}" data-delay="${esc(String(p.delay_seconds))}"` +
+      ` data-freq="${esc(p.frequency)}" data-x="${p.dismissible ? '1' : '0'}"` +
+      ` data-cta="${esc(p.cta_target)}">` +
+      `<div class="pq-bg" data-qr-bg="1"></div>` +
+      `<div class="pq-p" role="dialog" aria-modal="true">` +
+      `${x}${img}${title}${body}${go}</div></div>`;
+  }).join('');
+  return panels + `<script>${qrMenuPopup.CLIENT_SCRIPT}</script>`;
+}
+
 router.get('/s/:shopCode', (req, res) => {
   const code = String(req.params.shopCode || '');
   // Refused before it can become a query — lib/shop-code.js asks for exactly
@@ -4530,8 +4577,8 @@ router.get('/s/:shopCode', (req, res) => {
       : '')
   ) : '';
 
-  const paneHtml = groups.map(c => `<section class="cat" id="${c.id}">` +
-    c.sections.map(sec => `<div class="sec-h">` +
+  const paneHtml = groups.map(c => `<section class="cat" id="${c.id}"${nodeAttr(c.nodeId)}>` +
+    c.sections.map(sec => `<div class="sec-h"${nodeAttr(sec.nodeId)}>` +
         `<div class="kick">${bi(sec.en, sec.cn)}</div>` +
         `<div class="cnt">${pad2(sec.items.length)}</div>` +
       `</div><div class="grid">${sec.items.map(card).join('')}</div>`).join('') +
@@ -4541,13 +4588,14 @@ router.get('/s/:shopCode', (req, res) => {
   const dtTip = paneHtml.includes(' has-dt')
     ? `<div class="dt-tip">${bi('Tap any product to see its details.', '点击商品查看详情。')}</div>`
     : '';
-  const body = groups.length
+  const popupUi = qrPopupBlock(qrMenuPopup.forMenu(cfg('popups.list', [])));
+  const body = (groups.length
     ? `<div class="wrap">${rail}<div class="pane">` +
         // The search's empty answer, public/shop.html's live pair.
         `<div class="srch-none" id="mqNone" hidden>${bi('No products found.', '没有找到商品')}</div>` +
         `${dtTip}${paneHtml}</div></div>` + cartUi
     : `<div class="empty"><div class="t">${bi('No products yet.', '暂无商品')}</div>` +
-      `<div class="s">${bi('Check back soon.', '请稍后再来')}</div></div>`;
+      `<div class="s">${bi('Check back soon.', '请稍后再来')}</div></div>`) + popupUi;
 
   // A menu is priced and stocked; it must never be served from an
   // intermediary's cache. The shop code is also not something to index.
