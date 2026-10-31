@@ -208,7 +208,6 @@
     "@novnc/novnc": "^1.7.0",
     "bcrypt": "^5.1.1",
     "@libsql/client": "^0.8.0",
-    "connect-sqlite3": "^0.9.13",
     "exceljs": "^4.4.0",
     "express": "^4.18.2",
     "express-rate-limit": "^8.5.2",
