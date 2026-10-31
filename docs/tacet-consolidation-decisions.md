@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.607
+# Tacet shared-core consolidation — decisions record, v4.608
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-31 · v4.608 — **§503 AMENDED · THE STORE VISIT IS ONE CARD — MAP AND DETAILS TOGETHER — DECIDED BY ASH.** Ash: the "Come say hi" block on a computer looked wrong — map, then a floating address link, then a separate white card — and asked for the mock-up built and deployed. On the brand site only, `public/site.html` wraps the map and the store card in one visit card: on a computer the map sits beside the words with one green **Get directions** button and the three map apps as small text links; on a phone the map is on top, the address is one tap bar, then the same button and links. Pin copy from the named shop and `openInMapApp` stay (rules 37, 39, 46). One composed string (vocabulary v1.370). The web shop is unchanged. No change to `.gitignore` or CI.
 
 2026-10-31 · v4.607 — **§503 AMENDED · ON A COMPUTER THE WEBSITE SHOWS NO IP CHARACTERS — DECIDED BY ASH.** Ash, on the live site: *"for pc version i want to remove the ip icons"*. From 768px up `public/site.html` hides `.sb-char`. A phone still shows them (rules 42–43). The web shop is unchanged. No new words. No change to `.gitignore` or CI.
 
@@ -33651,7 +33653,7 @@ Ash, looking at the site on a phone: *"some text are too small"*, *"i want to us
 
 45. **On a phone the small labels are 16px.** "New to China?", "Approved by taste buds", and the same line on the other sections. The titles stay 32px.
 
-46. **The Yuexiu address sits on the map, and a tap opens the phone's map app.** The block had the address typed and no pin, so rule 37 drew no map. The website copies the position from the shop the card names — Yuexiu's saved pin, from the shops the checkout already publishes. A card that already has a pin keeps it. Tianhe is not added, because nothing on the page names it. The address is drawn on the map. A tap opens Apple Maps on an iPhone and the default map app on Android, the same as a tap on the map (rule 39). The three named buttons are not shown on a phone.
+46. **The Yuexiu address sits on the map, and a tap opens the phone's map app.** The block had the address typed and no pin, so rule 37 drew no map. The website copies the position from the shop the card names — Yuexiu's saved pin, from the shops the checkout already publishes. A card that already has a pin keeps it. Tianhe is not added, because nothing on the page names it. **On the brand site, rule 50 supersedes where the address is drawn and how the direction links are laid out;** pin copy and a tap still open the phone's map app (rule 39).
 
 ### Amended 2026-10-31 — Ramada lobby menus on the live site
 
@@ -33663,7 +33665,11 @@ Ash: *"i want also a menu like open toast for wraps and salads"*, then *"deploy 
 
 49. **On a computer the website shows no IP characters.** Ash: *"for pc version i want to remove the ip icons"*. From 768px up the brand site hides every `.sb-char`. Below 768px the characters stay (rules 42–43). The web shop is unchanged.
 
+### Amended 2026-10-31 — one visit card for the store block
 
+Ash: the store section on a computer did not look right; *"build it deploy it live"* after the mock-up.
+
+50. **The store visit is one card — map and details together.** Below 768px the map is on top inside a single white card; the English address is a tap bar under the title; a full-width green **Get directions** button and the Apple / Google / Amap links as small underlined text follow. From 768px up the same card is a grid: map on the left, the store name and address beside it, the same button and text links (not three large pills). `mountStoreVisit` in `public/site.html` wraps the engine output; the web shop renderer is unchanged.
 
 ## §504 — EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS
 
