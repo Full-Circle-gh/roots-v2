@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.605
+# Tacet shared-core consolidation — decisions record, v4.606
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-31 · v4.606 — **§503 AMENDED · THE RAMADA LOBBY MENUS GO ON THE LIVE WEBSITE, ONE PICTURE AT A TIME ON A PHONE — DECIDED BY ASH.** Ash: *"i want also a menu like open toast for wraps and salads . wraps one menu salad one menu"*, then *"deploy live"* after the preview. The published website gets one `menu_showcase` each for platters, open toasts, salads, wraps and beverages, plus a lobby-menu button to the Ramada QR menu. On a phone each group is one square picture that advances left; on a computer the pictures stay in a grid. The green slogan line is edge to edge and large on a computer. A menu showcase no longer gets an auto character. No new words. No change to `.gitignore` or CI.
 
 2026-10-31 · v4.605 — **§509 · THE QR MENU CAN SHOW ITS OWN POP-UP WHEN IT OPENS — DECIDED BY ASH.** Ash: *"menu qr code I want to have pop up option to add once menu is open"*, then *"the pop up in the qr menu might not be the same as the one for the mini app"*. A pop-up shows on the QR menu only when QR menu is one of the pages picked for it. "All pages" stays the mini app, so the pop-ups already running there do not start appearing on every table. A second pop-up can carry different words for the menu; ticking QR menu on an existing one uses the same words on both. On the menu the button adds the product it names, or scrolls to the category. One operator hint composed (vocabulary v1.369). No schema change. No change to `.gitignore` or CI.
 
@@ -33648,6 +33650,15 @@ Ash, looking at the site on a phone: *"some text are too small"*, *"i want to us
 45. **On a phone the small labels are 16px.** "New to China?", "Approved by taste buds", and the same line on the other sections. The titles stay 32px.
 
 46. **The Yuexiu address sits on the map, and a tap opens the phone's map app.** The block had the address typed and no pin, so rule 37 drew no map. The website copies the position from the shop the card names — Yuexiu's saved pin, from the shops the checkout already publishes. A card that already has a pin keeps it. Tianhe is not added, because nothing on the page names it. The address is drawn on the map. A tap opens Apple Maps on an iPhone and the default map app on Android, the same as a tap on the map (rule 39). The three named buttons are not shown on a phone.
+
+### Amended 2026-10-31 — Ramada lobby menus on the live site
+
+Ash: *"i want also a menu like open toast for wraps and salads"*, then *"deploy live"* after judging the preview.
+
+47. **The live website carries one menu showcase per lobby group.** Platters, open toasts, salads, wraps and beverages each get their own `menu_showcase` block (rule 33), inserted once ahead of the product grid by migration `website_ramada_menus_v1`. A button block points at the Ramada QR menu (`https://shop.rootskitchenchina.com/s/TJ6YHDGN`). Prices are typed as shown. The Thai buckwheat noodle salad is sold out and is not listed. A menu showcase is not given an auto character (rule 42's cast skips it), matching the preview Ash signed off.
+
+48. **On a phone each menu showcase is one square picture that advances left; on a computer it stays a grid.** Below 768px `public/site.html` makes each dish card nearly full width, keeps the picture square with the whole photo inside (`object-fit: contain`), and advances the rail every few seconds; a swipe still works. From 768px up the engine's grid stands. The green slogan line is edge to edge and large on a computer, on this page only.
+
 
 ## §504 — EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS
 
