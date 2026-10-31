@@ -26,7 +26,7 @@
 'use strict';
 
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const args = process.argv.slice(2);
 const APPLY = args.includes('--apply');

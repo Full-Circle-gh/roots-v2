@@ -73,7 +73,7 @@ for (const [rel, what] of [
 
 // ── The database half ────────────────────────────────────────────────────────
 let Database;
-try { Database = require('@libsql/client'); }
+try { Database = require('better-sqlite3'); }
 catch (e) {
   console.log('\n  ! better-sqlite3 is not built here — skipping the database half');
   console.log(`\n${pass} passed, ${fail} failed\n`);

@@ -27,7 +27,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 let failures = 0;
 function check(label, actual, expected) {

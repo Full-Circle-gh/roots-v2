@@ -12,7 +12,7 @@
 // Only block types listed in MAP are modified; anything else is left alone.
 
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const DRAFT_KEY = 'cms.draft.home_layout';
 const LIVE_KEY  = 'home.layout';

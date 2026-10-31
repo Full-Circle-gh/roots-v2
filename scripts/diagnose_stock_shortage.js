@@ -26,7 +26,7 @@
  *   node scripts/diagnose_stock_shortage.js --channel wechat
  */
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const argv = process.argv.slice(2);
 function flag(name, def) {

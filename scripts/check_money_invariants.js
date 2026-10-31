@@ -99,7 +99,7 @@ function openSqlite(file) {
   // better-sqlite3 is plain JavaScript and requires fine with no binding built,
   // throwing only when a database is opened.
   try {
-    const Better = require('@libsql/client');
+    const Better = require('better-sqlite3');
     const db = new Better(file, { readonly: true });
     db.prepare('SELECT 1').get();
     return { name: `better-sqlite3 (read-only) ${file}`, all: (s, p = []) => db.prepare(s).all(...p), close: () => db.close() };

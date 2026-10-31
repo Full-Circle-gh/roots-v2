@@ -59,7 +59,7 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const argv = process.argv.slice(2);
 const WRITE = argv.includes('--apply');

@@ -156,7 +156,7 @@ function openSqlite(file) {
     process.exit(2);
   }
   try {
-    const Better = require('@libsql/client');
+    const Better = require('better-sqlite3');
     const db = new Better(file, { readonly: true });
     return {
       name: `better-sqlite3 (read-only) ${file}`,

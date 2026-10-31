@@ -3,7 +3,7 @@
 // zone_type='city' row with the same match_city. Backs up the DB first.
 const path = require('path');
 const fs   = require('fs');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'roots.db');
 const backup  = DB_PATH.replace(/\.db$/, `-pre-zones-${Date.now()}.db`);

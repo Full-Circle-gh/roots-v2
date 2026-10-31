@@ -22,7 +22,7 @@
 //   node scripts/backfill_image_aspect.js --fix    # write image_aspect
 
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const sharp = require('sharp');
 
 const FIX = process.argv.includes('--fix');

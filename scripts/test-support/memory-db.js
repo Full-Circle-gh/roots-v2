@@ -9,10 +9,10 @@
 // ── The bug this file exists to stop happening twice ──────────────────────
 // scripts/test_needs_point.js used to carry its own copy of this, written as:
 //
-//     try { const B = require('@libsql/client'); return () => new B(':memory:'); }
+//     try { const B = require('better-sqlite3'); return () => new B(':memory:'); }
 //     catch { ...node:sqlite... }
 //
-// `require('@libsql/client')` SUCCEEDS when the native binding is missing — the
+// `require('better-sqlite3')` SUCCEEDS when the native binding is missing — the
 // wrapper is plain JavaScript, and "Could not locate the bindings file" is
 // thrown by the CONSTRUCTOR, which sat outside the try. So the fallback never
 // fired, and every DB-backed test failed on any machine without a built
@@ -31,7 +31,7 @@
 // is the only thing that proves the binding is loadable.
 const picked = (() => {
   try {
-    const BetterSqlite = require('@libsql/client');
+    const BetterSqlite = require('better-sqlite3');
     new BetterSqlite(':memory:').close();
     return { name: 'better-sqlite3', open: () => new BetterSqlite(':memory:') };
   } catch {

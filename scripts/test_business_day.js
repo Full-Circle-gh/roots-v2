@@ -89,7 +89,7 @@ it('an absurd offset is refused rather than shifting every date on screen', () =
 console.log('\nThe shop’s own zone, read the way the screen reads it');
 
 let Database = null;
-try { Database = require('@libsql/client'); } catch (e) { /* covered below */ }
+try { Database = require('better-sqlite3'); } catch (e) { /* covered below */ }
 
 if (!Database) {
   console.log('  — skipped: no better-sqlite3 in this checkout');

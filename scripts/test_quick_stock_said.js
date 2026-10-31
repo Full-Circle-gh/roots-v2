@@ -18,7 +18,7 @@
  */
 'use strict';
 
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const said = require('../lib/quick-stock-said');
 
 let pass = 0, fail = 0;

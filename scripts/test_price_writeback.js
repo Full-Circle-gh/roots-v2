@@ -25,7 +25,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const ROOT = path.join(__dirname, '..');
 const dbFile = path.join(os.tmpdir(), `price-writeback-test-${process.pid}.db`);

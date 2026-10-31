@@ -25,7 +25,7 @@ const path = require('path');
 // main checkout. Same two-place lookup the diagnose_* scripts already use, so
 // this runs from a worktree, from the main folder, and on the box unchanged.
 function loadSqlite() {
-  try { return require('@libsql/client'); }
+  try { return require('better-sqlite3'); }
   catch (e) { /* fall through */ }
   for (const base of [path.join(__dirname, '..', '..', '..', '..'), '/root/roots-v2']) {
     try { return require(path.join(base, 'node_modules', 'better-sqlite3')); }

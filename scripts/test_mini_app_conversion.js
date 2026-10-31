@@ -31,7 +31,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const ROOT = path.join(__dirname, '..');
 const RETAIL = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');

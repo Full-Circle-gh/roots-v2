@@ -17,7 +17,7 @@
 // columns the sweep reads (store_products is assembled dynamically in database.js
 // from the kitchen `products` table, so there is no literal DDL to copy).
 
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const sweep = require('../lib/channel-drift-sweep');
 
 const { sweepStockDrift, chronicDrift, ELEME, CHRONIC_HOURS, MAX_ROWS, DRIFT_RETRY_HOURS } = sweep;

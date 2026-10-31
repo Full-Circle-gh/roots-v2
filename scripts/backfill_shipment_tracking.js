@@ -26,7 +26,7 @@
  *   node scripts/backfill_shipment_tracking.js
  */
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const DRY = process.argv.includes('--dry-run');
 const DB_PATH = path.join(__dirname, '..', 'data', 'roots.db');

@@ -18,7 +18,7 @@
 //   5. Every surface gates its button on the permission and on a cause signing
 //      in can actually clear.
 
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');

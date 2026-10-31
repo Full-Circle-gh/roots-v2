@@ -22,7 +22,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const mainDb = require('../database');
 const { tenantAls } = require('../lib/tenant-db');

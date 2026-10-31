@@ -14,7 +14,7 @@
  *   node scripts/seed_variant_groups.js
  */
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const DRY = process.argv.includes('--dry-run');
 const db = new Database(path.join(__dirname, '..', 'data', 'roots.db'));
 db.pragma('journal_mode = WAL');

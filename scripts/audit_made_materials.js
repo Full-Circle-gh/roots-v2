@@ -65,7 +65,7 @@
 'use strict';
 
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 // --write acts on the repack twins ONLY. Class B is deliberately behind its own
 // flag: archiving one of those hides it from the build-list picker, which
