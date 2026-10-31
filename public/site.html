@@ -489,29 +489,6 @@ function trySiteMenuCtaClick(ev){
   return true;
 }
 
-// §503 rule 47. On a phone each menu showcase is one square picture that
-// advances left on its own; the visitor can also swipe.
-function mountMenuGalleries(){
-  if(!window.matchMedia('(max-width:767px)').matches) return;
-  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  document.querySelectorAll('.shop-blocks .sb-menu-grid').forEach(function(grid){
-    if(grid.dataset.gallery==='1') return;
-    const cards=grid.querySelectorAll('.sb-menu-card');
-    if(cards.length<2) return;
-    grid.dataset.gallery='1';
-    let i=0, timer=null, touching=false;
-    function step(){
-      if(touching) return;
-      i=(i+1)%cards.length;
-      const card=cards[i];
-      grid.scrollTo({left:card.offsetLeft-grid.offsetLeft,behavior:'smooth'});
-    }
-    function arm(){ clearInterval(timer); timer=setInterval(step,4800); }
-    grid.addEventListener('touchstart',function(){ touching=true; clearInterval(timer); },{passive:true});
-    grid.addEventListener('touchend',function(){ touching=false; arm(); },{passive:true});
-    arm();
-  });
-}
 async function placeShopPins(layout){
   const needs=layout.some(b=>b&&b.type==='store_info'&&(b.stores||[]).some(s=>!hasPin(s)&&(s.name_en||s.name_cn)));
   if(!needs) return layout;
@@ -650,7 +627,6 @@ async function render(){
   stageHighlight(true);
   renderChatButton(layout);
   mountStoreVisit(view);
-  mountMenuGalleries();
   drawStoreMaps(view);
 }
 

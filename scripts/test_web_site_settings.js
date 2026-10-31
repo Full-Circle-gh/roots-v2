@@ -234,8 +234,8 @@ section('8 · Ramada menus on the phone and the slogan line (§503 rules 47–48
 
 yes(!/menu_showcase:1/.test(SITE),
   'a menu showcase is not given an auto character');
-yes(/function mountMenuGalleries\(\)/.test(SITE) && /max-width:360px/.test(SITE) && /object-fit:contain/.test(SITE),
-  'on a phone each menu is one square picture that advances');
+yes(/data-auto-scroll-rail/.test(BLOCKS) && /initAutoScrollRails/.test(BLOCKS) && /max-width:360px/.test(SITE) && /object-fit:contain/.test(SITE),
+  'on a phone each menu is one square picture that advances (wired in blocks.js)');
 yes(/Slogan line edge to edge/.test(SITE) && /font-size:24px/.test(SITE),
   'the slogan line is edge to edge and large on a computer');
 yes(/website_ramada_menus_v1/.test(read('database.js')),

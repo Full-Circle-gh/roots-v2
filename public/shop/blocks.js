@@ -1816,7 +1816,7 @@
       (kicker ? '<div class="sb-menu-kicker">' + escapeHtml(kicker) + '</div>' : '') +
       (title ? '<div class="sb-menu-title">' + escapeHtml(title) + '</div>' : '') +
       (body ? '<div class="sb-menu-line">' + escapeHtml(body) + '</div>' : '') +
-      (cards ? '<div class="sb-menu-grid sb-menu-n' + items.length + '">' + cards + '</div>' : '') + '</div>';
+      (cards ? '<div class="sb-menu-grid sb-menu-n' + items.length + '" data-auto-scroll-rail>' + cards + '</div>' : '') + '</div>';
   };
 
   // favorites_block --------------------------------------------------------
@@ -2185,6 +2185,7 @@
     stopTimers();
     if (!rootEl) return;
     initCarousels(rootEl);
+    initAutoScrollRails(rootEl);
     var blocks = lastRendered || (ctx.config && ctx.config.home && ctx.config.home.layout);
     warmLazyData(blocks);
     tickHandle = setInterval(function () { tick(rootEl); }, 1000);
@@ -2254,6 +2255,76 @@
   function initCarousels(rootEl) {
     var els = rootEl.querySelectorAll('[data-rv-carousel]');
     for (var i = 0; i < els.length; i++) bindCarousel(els[i]);
+  }
+
+  // §503 rule 48 — on a phone each menu showcase advances on its own; swipe still works.
+  function initAutoScrollRails(rootEl) {
+    if (!rootEl || !global.matchMedia) return;
+    if (!global.matchMedia('(max-width:767px)').matches) return;
+    if (global.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var rails = rootEl.querySelectorAll('[data-auto-scroll-rail]');
+    for (var r = 0; r < rails.length; r++) bindAutoScrollRail(rails[r]);
+  }
+  function bindAutoScrollRail(track) {
+    if (track._sbAutoScrollBound) return;
+    track._sbAutoScrollBound = true;
+    var slides = track.querySelectorAll('.sb-menu-card');
+    var n = slides.length;
+    if (n < 2) return;
+    var cur = 0;
+    var pauseUntil = 0;
+    var progUntil = 0;
+    var now = function () { return Date.now(); };
+    function stride(idx) {
+      var el = slides[idx];
+      return el ? (el.offsetLeft - track.clientLeft) : 0;
+    }
+    function syncFromScroll() {
+      var sl = track.scrollLeft;
+      var best = 0;
+      var bestDist = Infinity;
+      for (var j = 0; j < n; j++) {
+        var d = Math.abs(stride(j) - sl);
+        if (d < bestDist) { bestDist = d; best = j; }
+      }
+      cur = best;
+    }
+    function go(i) {
+      cur = (i % n + n) % n;
+      progUntil = now() + 800;
+      var left = stride(cur);
+      if (typeof track.scrollTo === 'function') {
+        track.scrollTo({ left: left, behavior: 'smooth' });
+      } else {
+        track.scrollLeft = left;
+      }
+    }
+    function onScroll() {
+      syncFromScroll();
+      if (now() > progUntil) pauseUntil = now() + 9000;
+    }
+    track.addEventListener('scroll', function () {
+      window.clearTimeout(track._sbRailT);
+      track._sbRailT = window.setTimeout(onScroll, 90);
+    });
+    function pauseTouch() {
+      window.clearInterval(track._sbRailIv);
+      track._sbRailIv = null;
+    }
+    function arm() {
+      window.clearInterval(track._sbRailIv);
+      track._sbRailIv = window.setInterval(function () {
+        if (!track.isConnected || !track.offsetParent) return;
+        if (now() < pauseUntil) return;
+        go(cur + 1);
+      }, 4800);
+      carouselHandles.push(track._sbRailIv);
+    }
+    track.addEventListener('touchstart', pauseTouch, { passive: true });
+    track.addEventListener('touchend', arm, { passive: true });
+    track.addEventListener('touchcancel', arm, { passive: true });
+    syncFromScroll();
+    arm();
   }
   function bindCarousel(car) {
     var track = car.querySelector('.sb-rv-track');
