@@ -144,8 +144,29 @@
     body .shop-blocks .sb-st-val{font-size:17px;}
     body .shop-blocks .sb-st-status,body .shop-blocks .sb-st-hours{font-size:16px;}
     body .shop-blocks .sb-st-cnaddr{font-size:18px;}
-    body .shop-blocks .sb-st-visit .sb-st-map.is-live{height:220px;}
-    body .shop-blocks .sb-st-visit-addr{margin:0 -22px 18px;padding:14px 16px;background:var(--oat);border-bottom:none;border-radius:12px;text-decoration:none;}
+    body .shop-blocks .sb-st-visit .sb-st-map.is-live{height:260px;}
+    body .shop-blocks .sb-st-visit--hero .sb-st-map-hero{position:relative;}
+    body .shop-blocks .sb-st-visit--hero .sb-st-map-scrim{
+      position:absolute;inset:0;pointer-events:none;
+      background:linear-gradient(to top,rgba(26,26,23,.72) 0%,transparent 55%);
+    }
+    body .shop-blocks .sb-st-visit--hero .sb-st-map-cap{
+      position:absolute;left:16px;right:16px;bottom:14px;color:#fff;
+      font-size:14px;line-height:1.35;pointer-events:none;
+    }
+    body .shop-blocks .sb-st-visit--hero .sb-st-map-cap-title{
+      display:block;font-family:var(--f-bear);font-size:17px;margin-bottom:2px;
+    }
+    body .shop-blocks .sb-st-visit--hero .sb-st-map-cap-hint{display:block;opacity:.95;}
+    body .shop-blocks .sb-st-visit--hero .sb-st-map-cap-addr{
+      display:block;opacity:.9;margin-top:2px;font-size:13px;line-height:1.35;
+      overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    }
+    body .shop-blocks .sb-st-visit--hero .sb-st-title--in-cap{
+      position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+      clip:rect(0,0,0,0);white-space:nowrap;border:0;
+    }
+    body .shop-blocks .sb-st-visit--hero .sb-st-card{padding:12px 22px 18px;}
     body .shop-blocks .sb-st-get-dir{width:100%;}
     body .shop-blocks .sb-st-visit .sb-st-dir{justify-content:center;width:100%;}
     body .shop-blocks .sb-st-cta{min-height:44px;font-size:13px;letter-spacing:0.08em;display:inline-flex;align-items:center;padding:10px 14px;}
@@ -272,6 +293,8 @@
 <script>
 'use strict';
 const state={config:{},lang:'en',products:null,brand:''};
+// §503 rule 50 · mobile map hero caption (vocabulary v1.372). English on the live site.
+const SITE_VISIT_MAP_HINT='Tap map for directions';
 let STAGE_MODE=false, stageSel=null, stageKey=null, stageIdKey=null;
 const $=s=>document.querySelector(s);
 
@@ -515,6 +538,7 @@ async function placeShopPins(layout){
 
 // §503 rule 50. One card: map beside the words on a computer, stacked on a phone.
 function mountStoreVisit(root){
+  const mobile=matchMedia('(max-width:767px)').matches;
   root.querySelectorAll('.sb-store-blk').forEach(blk=>{
     const map=blk.querySelector('.sb-st-map');
     const cards=blk.querySelector('.sb-st-cards');
@@ -531,15 +555,47 @@ function mountStoreVisit(root){
     const row=[...card.querySelectorAll('.sb-st-row')].find(r=>r.querySelector('.sb-st-val')&&!r.getAttribute('href'));
     const val=row&&row.querySelector('.sb-st-val');
     const text=val?val.textContent.trim():'';
+    const title=card.querySelector('.sb-st-title');
     if(text&&p){
-      const addr=document.createElement('a');
-      addr.className='sb-st-visit-addr';
-      addr.href='#';
-      addr.textContent=text;
-      addr.addEventListener('click',ev=>{ ev.preventDefault(); openInMapApp(p); });
-      const title=card.querySelector('.sb-st-title');
-      if(title) title.after(addr); else card.prepend(addr);
-      row.remove();
+      if(mobile){
+        visit.classList.add('sb-st-visit--hero');
+        const hero=document.createElement('div');
+        hero.className='sb-st-map-hero';
+        visit.insertBefore(hero,map);
+        hero.appendChild(map);
+        const scrim=document.createElement('div');
+        scrim.className='sb-st-map-scrim';
+        scrim.setAttribute('aria-hidden','true');
+        hero.appendChild(scrim);
+        const cap=document.createElement('div');
+        cap.className='sb-st-map-cap';
+        if(title){
+          const capTitle=document.createElement('strong');
+          capTitle.className='sb-st-map-cap-title';
+          capTitle.textContent=title.textContent.trim();
+          cap.appendChild(capTitle);
+          title.classList.add('sb-st-title--in-cap');
+          title.setAttribute('aria-hidden','true');
+        }
+        const hint=document.createElement('span');
+        hint.className='sb-st-map-cap-hint';
+        hint.textContent=SITE_VISIT_MAP_HINT;
+        cap.appendChild(hint);
+        const capAddr=document.createElement('span');
+        capAddr.className='sb-st-map-cap-addr';
+        capAddr.textContent=text;
+        cap.appendChild(capAddr);
+        hero.appendChild(cap);
+        if(row) row.remove();
+      }else{
+        const addr=document.createElement('a');
+        addr.className='sb-st-visit-addr';
+        addr.href='#';
+        addr.textContent=text;
+        addr.addEventListener('click',ev=>{ ev.preventDefault(); openInMapApp(p); });
+        if(title) title.after(addr); else card.prepend(addr);
+        if(row) row.remove();
+      }
       if(!card.querySelector('.sb-st-get-dir')){
         const go=document.createElement('a');
         go.className='sb-st-get-dir';
