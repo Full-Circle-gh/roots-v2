@@ -1110,6 +1110,38 @@
   .pa-sec.pa-drop-before::before { top: -4px; }
   .pa-sec.pa-drop-after::after  { bottom: -4px; }
 
+  /* A claim inside "Why people choose it". The grip and the card's own
+     padding start the drag; the writing fields do not, so selecting a
+     sentence never picks the claim up. */
+  .pa-claim {
+    position: relative;
+    padding: 12px 14px;
+    background: var(--bg-pane);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-md);
+    margin-bottom: 10px;
+  }
+  .pa-claim-head {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 8px; cursor: grab; user-select: none;
+  }
+  .pa-claim-grip {
+    color: var(--text-3); font: 500 14px var(--f-sans);
+    letter-spacing: -1px; line-height: 1; flex: 0 0 auto;
+    padding: 2px 1px;
+  }
+  .pa-claim-head .pa-edit-section-title { margin: 0; }
+  .pa-claim-head .btn { margin-left: auto; cursor: pointer; }
+  .pa-claim .field, .pa-claim .field * { cursor: auto; }
+  .pa-claim.pa-row-dragging { opacity: .4; }
+  .pa-claim.pa-drop-before::before,
+  .pa-claim.pa-drop-after::after {
+    content: ''; position: absolute; left: 0; right: 0;
+    height: 2px; background: var(--accent); border-radius: 1px;
+  }
+  .pa-claim.pa-drop-before::before { top: -6px; }
+  .pa-claim.pa-drop-after::after  { bottom: -6px; }
+
   /* Inspector-style block editor head */
   .pa-inspector-head {
     padding: var(--s4) var(--s5) var(--s3);
@@ -4355,6 +4387,154 @@ function paBlocksReorder(dragId, targetId, after) {
   arr.splice(to, 0, moved);
   paRenderAll();
 }
+// Where one claim lands when it is dropped on another. `after` is the lower
+// half of the target. Returns the same array when the drop would not change
+// the order, so a drag that settles back where it started does not repaint
+// and does not mark the page dirty.
+function paMoveWithin(arr, from, to, after) {
+  if (!Array.isArray(arr)) return arr;
+  from = +from; to = +to;
+  if (!Number.isInteger(from) || !Number.isInteger(to)) return arr;
+  if (from < 0 || to < 0 || from >= arr.length || to >= arr.length || from === to) return arr;
+  const next = arr.slice();
+  const [moved] = next.splice(from, 1);
+  let dest = to;
+  if (from < dest) dest -= 1;
+  if (after) dest += 1;
+  if (dest === from) return arr;
+  next.splice(dest, 0, moved);
+  return next;
+}
+function paClaimReorder(blockId, fromIdx, targetIdx, after) {
+  paBlocksSyncFromDOM();
+  const b = (window._paBlocks || []).find(x => x.id === blockId);
+  if (!b || b.type !== 'why' || !Array.isArray(b.rows)) return;
+  const next = paMoveWithin(b.rows, fromIdx, targetIdx, after);
+  if (next === b.rows) return;
+  b.rows = next;
+  paRenderAll();
+}
+// The section around these claims is draggable="true". A drag that starts on
+// a claim has to take that off first, or the browser picks the whole section
+// up and the claim never moves. Writing fields are not a handle: selecting
+// text inside one must leave the claim where it is.
+let _paClaimDrag = null;
+let _paClaimArm = null;
+let _paClaimShieldSec = null;
+function paClaimPointerBlocked(el) {
+  return !!el.closest?.('input, textarea, select, button, a, label, .field, .txt-pair');
+}
+function paClaimUnshield() {
+  const sec = _paClaimShieldSec;
+  _paClaimShieldSec = null;
+  if (!sec || !sec.isConnected || sec._paDragRestore == null) return;
+  sec.setAttribute('draggable', sec._paDragRestore);
+  sec._paDragRestore = null;
+}
+function paInitClaimDnd() {
+  if (window._paClaimDndWired) return;
+  window._paClaimDndWired = true;
+  const clearMarks = () =>
+    document.querySelectorAll('.pa-claim.pa-drop-before, .pa-claim.pa-drop-after, .pa-claim.pa-row-dragging')
+      .forEach(r => r.classList.remove('pa-drop-before', 'pa-drop-after', 'pa-row-dragging'));
+
+  document.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    const row = e.target.closest?.('.pa-claim');
+    if (!row || paClaimPointerBlocked(e.target)) { _paClaimArm = null; return; }
+    _paClaimArm = row;
+    paClaimUnshield();
+    const sec = row.closest('.pa-sec');
+    if (!sec) return;
+    _paClaimShieldSec = sec;
+    sec._paDragRestore = sec.getAttribute('draggable');
+    sec.setAttribute('draggable', 'false');
+  }, true);
+  document.addEventListener('mouseup', () => {
+    if (_paClaimDrag) return;
+    _paClaimArm = null;
+    paClaimUnshield();
+  });
+  document.addEventListener('dragstart', e => {
+    const row = e.target.closest?.('.pa-claim');
+    if (!row) return;
+    // The grip is its own draggable, so the event target is the grip, not the
+    // card. A drag that starts on a writing field is not a reorder.
+    const fromGrip = !!e.target.closest?.('.pa-claim-grip');
+    const fromCard = e.target === row;
+    if (row !== _paClaimArm || (!fromGrip && !fromCard)) {
+      if (fromGrip || fromCard) e.preventDefault();
+      return;
+    }
+    _paClaimDrag = {
+      blockId: row.dataset.claimBlock,
+      idx: row.dataset.rowidx,
+      row,
+    };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', _paClaimDrag.blockId + ':' + _paClaimDrag.idx);
+    if (fromGrip) {
+      try { e.dataTransfer.setDragImage(row, 28, 24); } catch (err) {}
+    }
+    row.classList.add('pa-row-dragging');
+  });
+  document.addEventListener('dragend', () => {
+    // drop is specified to fire before dragend. A browser that does it the
+    // other way round would wipe the payload first and the claim would snap
+    // back, so the clear waits one turn. A newer drag in that turn is left
+    // alone.
+    const drag = _paClaimDrag;
+    _paClaimArm = null;
+    clearMarks();
+    paClaimUnshield();
+    setTimeout(() => { if (_paClaimDrag === drag) _paClaimDrag = null; }, 0);
+  });
+  // The line sits in the gap between cards, and that gap is not part of either
+  // card. Hit-testing the pointer against the cards' boxes keeps a drop on the
+  // line from falling through to the section underneath.
+  function paClaimDropAt(e) {
+    if (!_paClaimDrag) return null;
+    const rows = [...document.querySelectorAll(
+      `.pa-claim[data-claim-block="${CSS.escape(_paClaimDrag.blockId)}"]`)];
+    if (!rows.length) return null;
+    const box = rows[0].getBoundingClientRect();
+    if (e.clientX < box.left - 24 || e.clientX > box.right + 24) return null;
+    for (const row of rows) {
+      const r = row.getBoundingClientRect();
+      if (e.clientY < r.top - 14) return null;
+      if (e.clientY < r.top + r.height / 2) return { row, after: false };
+      if (e.clientY <= r.bottom + 12) return { row, after: true };
+    }
+    return null;
+  }
+  document.addEventListener('dragover', e => {
+    if (!_paClaimDrag) return;
+    const hit = paClaimDropAt(e);
+    if (!hit) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    clearMarks();
+    if (_paClaimDrag.row && _paClaimDrag.row.isConnected)
+      _paClaimDrag.row.classList.add('pa-row-dragging');
+    if (hit.row === _paClaimDrag.row) return;
+    hit.row.classList.add(hit.after ? 'pa-drop-after' : 'pa-drop-before');
+  });
+  document.addEventListener('drop', e => {
+    if (!_paClaimDrag) return;
+    const hit = paClaimDropAt(e);
+    if (!hit) return;
+    e.preventDefault();
+    const from = _paClaimDrag.idx;
+    const to = hit.row.dataset.rowidx;
+    const blockId = _paClaimDrag.blockId;
+    const after = hit.after;
+    _paClaimDrag = null;
+    _paClaimArm = null;
+    clearMarks();
+    paClaimUnshield();
+    paClaimReorder(blockId, from, to, after);
+  });
+}
 // "Select" used to mean "swap the far-away inspector". With the document every
 // section is already on screen, so it means: take me there, and mark which one.
 // This is what turns a click on the phone preview into a way IN.
@@ -5317,8 +5497,9 @@ function _paBlockEditorBody(b) {
     return `
       <div class="helper" style="margin:-4px 0 14px">3–5 single-sentence benefits. Numbered ledger on the mini-app. · 3-5 条单句卖点,小程序中编号呈现。</div>
       ${rows.map((r, i) => `
-        <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="pa-claim" draggable="true" data-claim-block="${escapeAttr(b.id)}" data-rowidx="${i}">
+          <div class="pa-claim-head">
+            <span class="pa-claim-grip" draggable="true" role="button" title="Drag to reorder · 拖动排序">⋮⋮</span>
             <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','rows',${i})" ${rows.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
@@ -6258,6 +6439,7 @@ window.addEventListener('resize', () => {
 })();
 
 // Go.
+paInitClaimDnd();
 peBoot();
   </script>
 </body>
