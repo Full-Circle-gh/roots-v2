@@ -64,7 +64,7 @@ check('off, not started, and already ended stay off the menu', () => {
     pu({ id: 'soon', start_at: '2026-11-01' }),
     pu({ id: 'done', end_at: '2026-10-30' }),
     pu({ id: 'today', start_at: '2026-10-31', end_at: '2026-10-31' }),
-    pu({ id: 'noid', id: '' }),
+    pu({ id: '' }),
   ], NOW);
   assert.deepStrictEqual(out.map(p => p.id), ['today']);
 });
