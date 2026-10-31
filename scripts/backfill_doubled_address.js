@@ -246,7 +246,7 @@ function regionRepeats(province, city, district, full) {
 if (SELFTEST) { selftest(); }
 
 // ── DB pass ───────────────────────────────────────────────────────────────
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const fs = require('fs');
 const DB_PATH = path.join(__dirname, '..', 'data', 'roots.db');
 const db = new Database(DB_PATH, { readonly: !WRITE });

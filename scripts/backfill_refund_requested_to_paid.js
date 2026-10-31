@@ -14,7 +14,7 @@
 //   node scripts/backfill_refund_requested_to_paid.js          # dry run
 //   node scripts/backfill_refund_requested_to_paid.js --apply  # write
 
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 

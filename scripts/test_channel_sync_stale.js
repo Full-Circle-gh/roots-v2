@@ -196,7 +196,7 @@ section('5 · §255 — "not syncing" is a push WAITING, never a push the channe
   // option), while every other push landed. A refused push is final — the
   // daemons re-pend transient failures themselves — and it is already the
   // product's own "Needs attention" row (§103).
-  const Database = require('@libsql/client');
+  const Database = require('better-sqlite3');
   const mk = () => {
     const db = new Database(':memory:');
     db.exec(`CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, code TEXT, is_active INTEGER DEFAULT 1);

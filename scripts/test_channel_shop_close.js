@@ -87,7 +87,7 @@ yes(!M.includes("T('Opening and closing a channel is on desktop'"),
 
 // ── §1 and §2 · the server ────────────────────────────────────────────────
 let Database;
-try { Database = require('@libsql/client'); }
+try { Database = require('better-sqlite3'); }
 catch (e) {
   console.log('\n  ! better-sqlite3 is not built here — skipping the API half');
   console.log(`\n${pass} passed, ${fail} failed\n`);

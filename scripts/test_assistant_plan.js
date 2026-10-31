@@ -33,7 +33,7 @@
  */
 'use strict';
 
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const A = require('../lib/assistant');
 
 let pass = 0, fail = 0;

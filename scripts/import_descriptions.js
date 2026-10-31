@@ -5,7 +5,7 @@
 // Usage:  node scripts/import_descriptions.js --dry   (preview)
 //         node scripts/import_descriptions.js --apply (write)
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const db = new Database(path.join(__dirname, '..', 'data', 'roots.db'));
 const rows = require(path.join(__dirname, '..', 'data', 'fc_descriptions.json'));
 

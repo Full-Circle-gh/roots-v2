@@ -16,7 +16,7 @@
  *   node scripts/restore_recipe_data.js --backup=data/roots-pre-wipe-XXXX.db
  */
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const DRY = process.argv.includes('--dry-run');
 const backupArg = process.argv.find(a => a.startsWith('--backup='));

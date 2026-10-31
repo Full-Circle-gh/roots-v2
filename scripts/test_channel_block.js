@@ -23,7 +23,7 @@
 //   5. The client defers an item's generic failure to the channel's cause, and
 //      never the other way round.
 
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const { channelBlock, channelBlockFor, CHANNELS } = require('../lib/channel-block');

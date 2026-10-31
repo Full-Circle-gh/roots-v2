@@ -35,7 +35,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 // Every shop in this suite is a Guangzhou shop, and says so (§82): the rules
 // take the shop's zone and day shift, and there is no default to lean on. The
 // real module, with Guangzhou passed wherever a call here leaves it out.

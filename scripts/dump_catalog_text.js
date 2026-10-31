@@ -11,7 +11,7 @@
  */
 const path = require('path');
 const fs   = require('fs');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'roots.db');
 const OUT = path.join(__dirname, 'catalog_text_dump.json');

@@ -6,7 +6,7 @@
 // Guangzhou. NO invented nutrition/health claims.
 //   node scripts/_sorbet_build.js            # dry-run
 //   APPLY=1 node scripts/_sorbet_build.js    # write blocks to #315 (backs up first)
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const APPLY = !!process.env.APPLY;

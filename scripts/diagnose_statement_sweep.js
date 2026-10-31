@@ -55,7 +55,7 @@ const AS_BUILT = firstExisting([
 ]);
 const Database = (() => {
   try { return require(path.join(HOME, 'node_modules', 'better-sqlite3')); }
-  catch (e) { return require('@libsql/client'); }
+  catch (e) { return require('better-sqlite3'); }
 })();
 
 const qi = (id) => '"' + String(id).replace(/"/g, '""') + '"';

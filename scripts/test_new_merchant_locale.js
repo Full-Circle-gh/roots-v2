@@ -156,7 +156,7 @@ it('a nonsense language falls back rather than reaching the shop', () => {
 console.log('\nThe business day follows the answer before there is a store');
 
 it('lib/business-date.js reads shop.timezone when no location has one', () => {
-  let Database; try { Database = require('@libsql/client'); } catch (e) { return; }
+  let Database; try { Database = require('better-sqlite3'); } catch (e) { return; }
   const B = require('../lib/business-date');
   const mk = (stores, tz) => {
     const db = new Database(':memory:');

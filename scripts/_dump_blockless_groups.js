@@ -3,7 +3,7 @@
 // Also prints one reference owner's full block JSON as an authoring template.
 //   node scripts/_dump_blockless_groups.js
 //   node scripts/_dump_blockless_groups.js --ref 285   # change the template example
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const path = require('path');
 const db = new Database(path.join(__dirname, '..', 'data', 'roots.db'));
 const argv = process.argv.slice(2);

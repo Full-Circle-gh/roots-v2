@@ -21,7 +21,7 @@
  */
 'use strict';
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const db = new Database(path.join(__dirname, '..', 'data', 'roots.db'), { readonly: true });
 const STORE = process.env.GUANYI_STORE_CODE || 'tianhe';

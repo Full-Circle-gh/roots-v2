@@ -17,7 +17,7 @@
  *   node scripts/diagnose_variant_descriptions.js --group 90
  */
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const argv = process.argv.slice(2);
 function flag(name, def) { const i = argv.indexOf(name); return i >= 0 && argv[i + 1] ? argv[i + 1] : def; }

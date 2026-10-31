@@ -75,7 +75,7 @@ yes(!/askConfirm/.test(OPS.slice(OPS.indexOf('async function _ocWrite('), OPS.in
 
 // ── §2 · what the screen is told ──────────────────────────────────────────
 let Database;
-try { Database = require('@libsql/client'); }
+try { Database = require('better-sqlite3'); }
 catch (e) {
   console.log('\n  ! better-sqlite3 is not built here — skipping the API half');
   console.log(`\n${pass} passed, ${fail} failed\n`);

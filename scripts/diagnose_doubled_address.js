@@ -26,7 +26,7 @@
  *   node scripts/diagnose_doubled_address.js --limit 40
  */
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const argv = process.argv.slice(2);
 const VERBOSE = argv.includes('--verbose');

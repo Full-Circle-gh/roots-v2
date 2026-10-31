@@ -15,7 +15,7 @@
  */
 const path = require('path');
 const fs   = require('fs');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const CONFIG_PATH = path.join(__dirname, 'gzgrocery_import.json');
 const OUT_PATH    = path.join(__dirname, 'gzgrocery_alias_suggestions.json');

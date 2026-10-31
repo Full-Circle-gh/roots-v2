@@ -22,7 +22,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const F = require('./test-support/tenant-fixture');
 
 const h = F.harness();

@@ -12,7 +12,7 @@
 //   node scripts/dedupe_province_covered_cities.js --apply    # delete
 const path = require('path');
 const fs   = require('fs');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 
 const APPLY = process.argv.includes('--apply');
 const DB_PATH = path.join(__dirname, '..', 'data', 'roots.db');

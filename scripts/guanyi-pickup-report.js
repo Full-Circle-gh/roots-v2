@@ -15,7 +15,7 @@
  */
 'use strict';
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const argv = process.argv.slice(2);
 const hi = argv.indexOf('--hours');
 const HOURS = hi >= 0 && argv[hi + 1] ? Number(argv[hi + 1]) : 24;

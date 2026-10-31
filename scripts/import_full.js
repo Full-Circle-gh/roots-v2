@@ -6,7 +6,7 @@
 // embedded as base64. Usage: node scripts/import_full.js --dry | --apply
 const path = require('path');
 const https = require('https');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 let sharp; try { sharp = require('sharp'); } catch (e) { console.error('sharp missing'); process.exit(1); }
 
 const db = new Database(path.join(__dirname, '..', 'data', 'roots.db'));

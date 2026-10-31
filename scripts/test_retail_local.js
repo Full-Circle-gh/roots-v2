@@ -20,7 +20,7 @@ const TMP_DB_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'roots-retail-test-'));
 // the real module — it'll write to /Users/ash/roots-v2/data/roots.db,
 // which IS the dev DB. We don't want that. So mock with a fresh DB:
 
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const db = new Database(path.join(TMP_DB_DIR, 'test.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');

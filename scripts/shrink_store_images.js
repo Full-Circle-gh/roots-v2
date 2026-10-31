@@ -22,7 +22,7 @@
 //   node scripts/shrink_store_images.js --fix            # fix both
 
 const path = require('path');
-const Database = require('@libsql/client');
+const Database = require('better-sqlite3');
 const sharp = require('sharp');
 
 const FIX = process.argv.includes('--fix');

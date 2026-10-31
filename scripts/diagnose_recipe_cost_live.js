@@ -226,7 +226,7 @@ async function main() {
   console.log('\n══ 5 · does the DEPLOYED module still match the old formulas on live data ══');
   const Database = (() => {
     try { return require(path.join(DEPLOY_ROOT, 'node_modules', 'better-sqlite3')); }
-    catch (e) { return require('@libsql/client'); }
+    catch (e) { return require('better-sqlite3'); }
   })();
   const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
   let proven = false;
