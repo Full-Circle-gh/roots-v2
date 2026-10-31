@@ -335,6 +335,18 @@ function fontFaces(fonts) {
     }
     out.push(`@font-face{font-family:'${fam}';src:url('${url}')${fmt};font-display:swap;}`);
   }
+  // Section headings wear Toni + League Gothic, same as public/shop.html .sl-gh.
+  // They are not the tenant display/body slots, so load the library faces even
+  // when the theme names Bear for everything else.
+  for (const fam of ['Toni Grotesk', 'League Gothic']) {
+    if (seen.has(fam)) continue;
+    const file = INSTALLED_FACES[fam];
+    if (!file) continue;
+    seen.add(fam);
+    const url = '/assets/fonts/' + file;
+    const ext = file.split('.').pop();
+    out.push(`@font-face{font-family:'${fam}';src:url('${url}') format('${FACE_FORMAT[ext]}');font-display:swap;}`);
+  }
   return out.join('');
 }
 
@@ -737,7 +749,8 @@ function cssSafe(s) { return String(s == null ? '' : s).replace(/[<>]/g, ''); }
 function styles(vars, faces) {
   // The shop's own visual language, not a second one invented for this page:
   // a 92px category rail on the oat ground with a lime active tab, a paler
-  // content pane, letterspaced olive section kickers with a zero-padded count,
+  // content pane, bold ink section kickers (Toni) with a zero-padded count
+  // (League Gothic), matching public/shop.html .sl-gh option B,
   // squared photo cards, and the sold-out bar laid across the bottom of the
   // photo. Values are the mini-app shop's (miniapp/pages/shop/shop.wxss,
   // converted from rpx at a 390px phone) and public/shop.html's, so a customer
@@ -758,7 +771,7 @@ function styles(vars, faces) {
   // here needs, and it costs "->" in a comment, which is how it was tripped: an
   // arrow in a note about rpx conversion went red as a security failure.
   return `${cssSafe(faces)}
-:root{${cssSafe(vars)};--barh:58px;--cbarh:0px;--u:calc(100vw / 390)}
+:root{${cssSafe(vars)};--f-toni:'Toni Grotesk','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,sans-serif;--f-gothic:'League Gothic','DF Yuan','PingFang SC','Hiragino Sans GB','Bebas Neue',sans-serif;--barh:58px;--cbarh:0px;--u:calc(100vw / 390)}
 /* THE OFFICE'S BLOCKS SCALE WITH THE PHONE, BECAUSE THE MINI APP'S DO.
    Every length under §132 below is written calc(N * var(--u)), where N is the
    number this file already held and --u is 1px on the 390px phone the whole
@@ -2258,11 +2271,11 @@ a.place{display:flex;align-items:center;justify-content:center;gap:7px;
 .pane{flex:1;min-width:0;background:rgba(255,255,255,.62);
   padding-bottom:calc(30px + var(--cbarh) + env(safe-area-inset-bottom))}
 .sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
-  padding:16px 14px 8px}
-.kick{font-family:var(--f-bear);font-size:10.5px;letter-spacing:.2em;
-  text-transform:uppercase;color:var(--olive);overflow-wrap:anywhere}
-.cnt{font-family:var(--f-bear);font-size:18px;letter-spacing:.04em;color:var(--olive);
-  font-variant-numeric:tabular-nums}
+  padding:16px 16px 8px}
+.kick{font-family:var(--f-toni);font-size:14px;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink);overflow-wrap:anywhere}
+.cnt{font-family:var(--f-gothic);font-size:14px;font-weight:700;letter-spacing:.06em;
+  color:var(--olive);font-variant-numeric:tabular-nums}
 /* TWO WAYS OF SAYING "THIS CARD OPENS". Customers did not know a card could be
    tapped to read about the product, and the + beside the price reads as the
    only thing on it that responds. The label sits under the name of the cards
