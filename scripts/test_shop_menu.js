@@ -587,9 +587,14 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.ok(body.includes('£28.00'), 'the tenant\'s symbol and decimals did not reach the price');
       assert.ok(!body.includes('¥'), 'a hardcoded yuan symbol reached a page under a GBP tenant');
     });
-    await checkAsync('a tenant on a stock system font ships no @font-face at all', async () => {
+    await checkAsync('a tenant on a stock system font ships section-header faces only', async () => {
       const { body } = await get(`/s/${LIVE}`);
-      assert.ok(!body.includes('@font-face'), 'font bytes were offered for a family this app does not host');
+      assert.ok(body.includes('/assets/fonts/ToniGroteskPro.otf'),
+        'Toni Grotesk was not offered for section headings');
+      assert.ok(body.includes('/assets/fonts/LeagueGothic.ttf'),
+        'League Gothic was not offered for section counts');
+      assert.ok(!body.includes('/assets/fonts/Inter'),
+        'font bytes were offered for a theme family this app does not host');
     });
     await checkAsync('...and a tenant on an installed family DOES get its @font-face', async () => {
       // The other half, so the assertion above is a real distinction rather
