@@ -16,7 +16,7 @@
 // Mutates nothing, and proves it before reporting.
 
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const ROOT = process.env.ROOTS_HOME || path.join(__dirname, '..');
 const DB_PATH = process.env.ROOTS_DB || path.join(__dirname, '..', 'data', 'roots.db');

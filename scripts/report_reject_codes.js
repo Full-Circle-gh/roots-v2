@@ -71,7 +71,7 @@ function databases() {
 }
 
 let Database;
-try { Database = require('better-sqlite3'); }
+try { Database = require('@libsql/client'); }
 catch (e) { refuse(`better-sqlite3 will not load: ${e.message}`); }
 
 // code -> { hits, first, last, msgs:Set, where:Set }. `null` is its own bucket:

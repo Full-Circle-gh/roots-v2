@@ -147,7 +147,7 @@ it('the genuinely different predicates are left alone', () => {
 // Everything above compares strings. This runs the predicate, because the whole
 // point of §98 stage three is what the numbers come out as.
 it('a replacement is excluded from revenue, count and average — a real query', () => {
-  const Database = require('better-sqlite3');
+  const Database = require('@libsql/client');
   const db = new Database(':memory:');
   db.exec(`CREATE TABLE retail_orders (
              id INTEGER PRIMARY KEY, status TEXT, total REAL,

@@ -184,7 +184,7 @@ const deps = (br, now) => ({ getBrowser: async () => br, now });
   // The route with its session, database and picture-taker stubbed through
   // the require cache, on a real Express server.
   const ROOTS = 1;
-  const Database = require('better-sqlite3');
+  const Database = require('@libsql/client');
   const db = new Database(':memory:');
   db.exec(`CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, code TEXT, is_active INTEGER);
            CREATE TABLE qingyun_status (store_code TEXT, logged_in INTEGER, updated_at TEXT);

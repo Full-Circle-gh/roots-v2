@@ -91,7 +91,7 @@ it('both callers pass the shop\'s zone', () => {
 console.log('\n4. purchasing');
 it('a supplier-account entry with no date is the shop\'s day; a back-order PO is its store\'s day', () => {
   const src = read('routes/retail-purchasing.js');
-  const Database = require('better-sqlite3');
+  const Database = require('@libsql/client');
   const businessDate = require(path.join(ROOT, 'lib', 'business-date'));
   const db = new Database(':memory:');
   db.exec(`CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, is_active INTEGER, sort_order INTEGER, timezone TEXT);

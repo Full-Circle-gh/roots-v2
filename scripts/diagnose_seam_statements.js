@@ -51,7 +51,7 @@ const PLAN_JSON = firstExisting([
 const DB_SEAM_JS = path.join(HOME, 'lib', 'db-seam.js');
 const Database = (() => {
   try { return require(path.join(HOME, 'node_modules', 'better-sqlite3')); }
-  catch (e) { return require('better-sqlite3'); }
+  catch (e) { return require('@libsql/client'); }
 })();
 const { seam } = require(DB_SEAM_JS);
 

@@ -31,7 +31,7 @@
  * Mutates nothing.
  */
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const DB_PATH = process.env.ROOTS_DB || path.join(__dirname, '..', 'data', 'roots.db');
 const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });

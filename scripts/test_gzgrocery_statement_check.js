@@ -26,7 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const ExcelJS = require('exceljs');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const ROOT = path.join(__dirname, '..');
 const { readStatement, compareStatement, rangeFromFilename } = require(path.join(ROOT, 'lib', 'gzgrocery-sheet.js'));

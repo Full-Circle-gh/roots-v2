@@ -106,7 +106,7 @@ function readSqlite() {
       + '--db at the renamed copy, or use the Postgres mode, but do not read this as fresh.');
   }
   let Database;
-  try { Database = require('better-sqlite3'); }
+  try { Database = require('@libsql/client'); }
   catch (e) { refuse(`better-sqlite3 will not load: ${e.message}`); }
   let db;
   try { db = new Database(DB_PATH, { readonly: true, fileMustExist: true }); }

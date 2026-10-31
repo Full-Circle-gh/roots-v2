@@ -13,7 +13,7 @@
 // Each case below runs the REAL script, as a child process, against a
 // scratch DB built from schema.sql's / database.js's own DDL (the same
 // helper scripts/test-support/memory-db.js gives every other suite), with
-// `require('better-sqlite3')` replaced by a node:sqlite-backed shim through a
+// `require('@libsql/client')` replaced by a node:sqlite-backed shim through a
 // --require preload — the same technique test_eleme_fee_backfill.js uses,
 // needed because this box has no built better-sqlite3 binding. Every line of
 // logic under test is the shipped file's own; only the SQLite driver is a

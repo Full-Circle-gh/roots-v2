@@ -31,7 +31,7 @@
 'use strict';
 
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const argv = process.argv.slice(2);
 const has = (f) => argv.includes(f);

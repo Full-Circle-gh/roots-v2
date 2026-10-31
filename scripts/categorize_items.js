@@ -15,7 +15,7 @@
  *   4. Fallback to "Other / Misc" category for the kind.
  */
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const APPLY = process.argv.includes('--apply');
 const DB_PATH = process.argv.find(a => a.startsWith('--db='))?.slice(5)

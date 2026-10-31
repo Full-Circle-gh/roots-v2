@@ -14,7 +14,7 @@
 // data), with per-name overrides for the historical "Others"/blank bucket.
 
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 // ── normalize so fullwidth ＆ / （） and casing don't cause misses ──────────
 const norm = s => (s || '')

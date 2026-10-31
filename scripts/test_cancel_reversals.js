@@ -54,7 +54,7 @@ const ok = (kind, name, cond, got) => {
 // test is unmodified either way.
 let openDb;
 try {
-  const Better = require('better-sqlite3');
+  const Better = require('@libsql/client');
   const probe = new Better(':memory:'); probe.close();   // construct, don't just require
   openDb = () => new Better(':memory:');
 } catch (e1) {
@@ -366,7 +366,7 @@ console.log('\n── BEHAVIOURAL: repair_sweep_cancel_reversals.js (fixture db)
   // failure this file's header warns about.
   let Better = null;
   try {
-    const B = require('better-sqlite3');
+    const B = require('@libsql/client');
     const probe = new B(':memory:'); probe.close();
     Better = B;
   } catch { /* reported below */ }

@@ -16,7 +16,7 @@
 //   node scripts/shrink_home_media.js --fix     # recompress in place
 
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 const sharp = require('sharp');
 
 const FIX = process.argv.includes('--fix');

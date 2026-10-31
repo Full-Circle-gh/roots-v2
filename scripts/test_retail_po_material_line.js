@@ -61,7 +61,7 @@ const ROOT = path.join(__dirname, '..');
 // a test that reached for the app's real database path would be one stray
 // `node` away from destroying it. database.js is copied into a scratch dir and
 // required from there: it opens `__dirname/data`, which is now the copy's own.
-// The scratch dir sits inside the repo so `require('better-sqlite3')` still
+// The scratch dir sits inside the repo so `require('@libsql/client')` still
 // resolves by walking up to node_modules.
 const SCRATCH = path.join(ROOT, `.test-scratch-${process.pid}`);
 fs.rmSync(SCRATCH, { recursive: true, force: true });

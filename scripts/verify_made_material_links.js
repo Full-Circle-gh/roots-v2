@@ -31,7 +31,7 @@ const path = require('path');
 const fs = require('fs');
 
 function loadSqlite() {
-  try { return require('better-sqlite3'); } catch (e) { /* fall through */ }
+  try { return require('@libsql/client'); } catch (e) { /* fall through */ }
   for (const base of [path.join(__dirname, '..', '..', '..', '..'), '/root/roots-v2']) {
     try { return require(path.join(base, 'node_modules', 'better-sqlite3')); } catch (e) { /* next */ }
   }

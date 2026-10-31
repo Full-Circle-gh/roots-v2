@@ -34,7 +34,7 @@ const yes = (c, m, extra) => (c ? ok(m) : bad(m, extra));
 const section = (t) => console.log('\n' + t);
 
 let Database;
-try { Database = require('better-sqlite3'); }
+try { Database = require('@libsql/client'); }
 catch (e) { console.log('  ! better-sqlite3 is not built here — skipping'); process.exit(0); }
 
 // ── A fixture with only the columns the checks read ───────────────────────

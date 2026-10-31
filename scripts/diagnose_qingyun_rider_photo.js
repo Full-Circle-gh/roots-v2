@@ -36,7 +36,7 @@ catch {
   }
 }
 
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 const { getQingyunBrowser, closeAllQingyun } = require('../lib/qingyun-browser');
 const riderPhotos = require('../lib/rider-photos');
 

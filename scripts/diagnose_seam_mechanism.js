@@ -80,7 +80,7 @@ const PLAN_JSON = firstExisting([
 
 function loadBetterSqlite3() {
   const local = path.join(HOME, 'node_modules', 'better-sqlite3');
-  try { return require(local); } catch (e) { return require('better-sqlite3'); }
+  try { return require(local); } catch (e) { return require('@libsql/client'); }
 }
 const Database = loadBetterSqlite3();
 

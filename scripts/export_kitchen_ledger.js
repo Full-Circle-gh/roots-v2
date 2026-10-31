@@ -109,7 +109,7 @@ if (OUT_ABS === REPO_ROOT || OUT_ABS.startsWith(REPO_ROOT + path.sep)) {
 // ── Open the database READ-ONLY ─────────────────────────────────────────────
 let Database;
 try {
-  Database = require('better-sqlite3');
+  Database = require('@libsql/client');
 } catch (e) {
   console.error('Cannot load better-sqlite3: ' + e.message);
   console.error('Run this from the repository root, where node_modules lives.');

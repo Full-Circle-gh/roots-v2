@@ -25,7 +25,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 let pass = 0, fail = 0;
 function it(name, fn) {

@@ -18,7 +18,7 @@
  *   node scripts/seed_meituan_bundles_tianhe.js --apply  # actually insert
  */
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const APPLY = process.argv.includes('--apply');
 const STORE_CODE = 'tianhe';

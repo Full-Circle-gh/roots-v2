@@ -32,7 +32,7 @@
 'use strict';
 
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 let pass = 0, fail = 0;
 const ok  = (m) => { pass++; console.log('  ✓ ' + m); };

@@ -26,7 +26,7 @@
 'use strict';
 
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const WRITE = process.argv.includes('--write');
 const DB_PATH = process.env.ROOTS_DB || path.join(__dirname, '..', 'data', 'roots.db');

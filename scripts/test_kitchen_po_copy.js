@@ -43,7 +43,7 @@ const ROOT = path.join(__dirname, '..');
 // copy_from_po_id assertions is that the migration ran. So database.js is copied
 // into a scratch directory and required from there: it opens `__dirname/data`,
 // which is now the scratch copy's own. The scratch dir sits inside the repo so
-// that `require('better-sqlite3')` still resolves by walking up to node_modules.
+// that `require('@libsql/client')` still resolves by walking up to node_modules.
 const SCRATCH = path.join(ROOT, `.test-scratch-${process.pid}`);
 fs.rmSync(SCRATCH, { recursive: true, force: true });
 fs.mkdirSync(SCRATCH, { recursive: true });

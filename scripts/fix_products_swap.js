@@ -15,7 +15,7 @@
  *   node scripts/fix_products_swap.js
  */
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const DRY = process.argv.includes('--dry-run');
 const db = new Database(path.join(__dirname, '..', 'data', 'roots.db'));

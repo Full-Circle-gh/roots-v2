@@ -34,7 +34,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const read = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
 const DESK   = read('public/retail-admin/04-orders.js');

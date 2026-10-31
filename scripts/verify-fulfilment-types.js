@@ -22,7 +22,7 @@ const os = require('os');
 const path = require('path');
 // The till's own settle gate is LIFTED AND RUN below (§93), not pattern-matched.
 const vm = require('vm');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const F = require('../lib/fulfilment');
 // renderOrder() is pure — no DB, no network — so the print assertions exercise

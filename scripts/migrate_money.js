@@ -130,7 +130,7 @@ if ([APPLY, VERIFY, ROLLBACK].filter(Boolean).length > 1) {
 function open(file, readonly) {
   if (!fs.existsSync(file)) { console.error(`[migrate_money] no database at ${file}`); process.exit(2); }
   try {
-    const Better = require('better-sqlite3');
+    const Better = require('@libsql/client');
     const db = new Better(file, { readonly });
     db.prepare('SELECT 1').get();
     return db;

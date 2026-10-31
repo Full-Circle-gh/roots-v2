@@ -53,7 +53,7 @@ try {
   ({ DatabaseSync } = require('node:sqlite'));
 } catch (e) {
   try {
-    const Better = require('better-sqlite3');
+    const Better = require('@libsql/client');
     // Construct, don't just require — better-sqlite3 requires fine with no
     // binding built and throws only when a database is opened.
     const probe = new Better(':memory:');

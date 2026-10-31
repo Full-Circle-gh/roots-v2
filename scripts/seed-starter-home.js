@@ -7,7 +7,7 @@
 // Usage (on the box):  node scripts/seed-starter-home.js [--dry]
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 const { buildStarterHomeLayout } = require('../lib/provision-tenant');
 
 const DRY = process.argv.includes('--dry');

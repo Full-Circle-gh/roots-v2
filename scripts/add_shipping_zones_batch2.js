@@ -2,7 +2,7 @@
 // Idempotent — skips any region already present as a city zone. Backs up first.
 const path = require('path');
 const fs   = require('fs');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'roots.db');
 const backup  = DB_PATH.replace(/\.db$/, `-pre-zones2-${Date.now()}.db`);

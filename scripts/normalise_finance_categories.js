@@ -118,7 +118,7 @@
 
 const fs   = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 const { normaliseCategory, spacingKey } = require('../lib/category-text');
 
 const APPLY   = process.argv.includes('--apply');

@@ -26,7 +26,7 @@
 //   5. Worst store wins per channel; worst channel wins per item.
 //   6. A store not trading on a channel is out of scope entirely.
 
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 const mod = require('../lib/channel-sync-items');
 const { channelSyncItems, channelSyncSummary } = mod;
 

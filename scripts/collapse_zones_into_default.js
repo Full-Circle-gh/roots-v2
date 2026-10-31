@@ -20,7 +20,7 @@
 //   node scripts/collapse_zones_into_default.js --apply    # delete
 const path = require('path');
 const fs   = require('fs');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const APPLY   = process.argv.includes('--apply');
 const DB_PATH = path.join(__dirname, '..', 'data', 'roots.db');

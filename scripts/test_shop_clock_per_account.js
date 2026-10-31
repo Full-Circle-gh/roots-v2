@@ -21,7 +21,7 @@
 
 const assert = require('assert');
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 const businessDate = require(path.join(__dirname, '..', 'lib', 'business-date'));
 const { retailSource } = require('./test-support/retail-source');
 

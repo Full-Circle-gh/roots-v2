@@ -29,7 +29,7 @@ const vm = require('vm');
 // the first row that carries a date. Stubbing them would let a format drift
 // past every suite in this directory at once.
 const { tdWhen, tdToday } = require('../public/td-datetime.js');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 let pass = 0, fail = 0;
 function it(name, fn) {

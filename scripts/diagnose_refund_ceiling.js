@@ -40,7 +40,7 @@
 const DB_PATH = process.env.ROOTS_DB || '/root/roots-v2/data/roots.db';
 let Database;
 try { Database = require('/root/roots-v2/node_modules/better-sqlite3'); }
-catch (e) { Database = require('better-sqlite3'); }
+catch (e) { Database = require('@libsql/client'); }
 
 const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
 

@@ -5,7 +5,7 @@
  * Writes only retail_product_options + retail_product_option_choices; no stock.
  */
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const DRY = process.argv.includes('--dry-run');
 const DB_PATH = process.env.ROOTS_DB || '/root/roots-v2/data/roots.db';

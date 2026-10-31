@@ -12,7 +12,7 @@
 //   node scripts/clear_stuck_refund_R260618156719.js          # dry run
 //   node scripts/clear_stuck_refund_R260618156719.js --apply  # write
 
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 const path = require('path');
 const fs = require('fs');
 

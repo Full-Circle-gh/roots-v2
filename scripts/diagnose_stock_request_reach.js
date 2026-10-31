@@ -38,7 +38,7 @@
 // write is attempted before anything else runs.
 
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 const HOME = process.env.ROOTS_HOME || path.join(__dirname, '..');
 const DB_PATH = process.env.ROOTS_DB || path.join(HOME, 'data', 'roots.db');

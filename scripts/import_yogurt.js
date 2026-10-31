@@ -1,7 +1,7 @@
 // Apply OUT1N yogurt variant price/stock/weight onto the 6 store draft rows.
 // Explicit mapping (small→130g, medium→230g, big→500g). Usage: --dry | --apply
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 const db = new Database(path.join(__dirname, '..', 'data', 'roots.db'));
 const APPLY = process.argv.includes('--apply');
 

@@ -28,7 +28,7 @@
 'use strict';
 
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 const { deriveCostPerUnit } = require('../lib/ingredient-cost');
 
 const args = process.argv.slice(2);

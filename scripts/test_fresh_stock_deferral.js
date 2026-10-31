@@ -44,7 +44,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 
 // lib/fulfilment.js is pure — no DB, no network — so the counter-sale exclusion
 // is tested through the real predicate rather than a re-spelling of it.

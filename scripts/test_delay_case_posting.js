@@ -29,7 +29,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('@libsql/client');
 const dc = require('../lib/delay-case');
 const { postDelayCase, postedRow, caseDate } = require('../lib/delay-case-posting');
 

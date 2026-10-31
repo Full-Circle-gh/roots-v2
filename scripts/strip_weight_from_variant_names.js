@@ -42,7 +42,7 @@ const dbPath = args.find(a => !a.startsWith('--')) || 'data/roots.db';
 // expose the same prepare().all()/.get()/.run() + exec() surface used below.
 let db;
 try {
-  const Database = require('better-sqlite3');
+  const Database = require('@libsql/client');
   db = new Database(dbPath);
 } catch (e1) {
   try {
