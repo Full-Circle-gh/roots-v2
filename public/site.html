@@ -144,21 +144,11 @@
     body .shop-blocks .sb-st-val{font-size:17px;}
     body .shop-blocks .sb-st-status,body .shop-blocks .sb-st-hours{font-size:16px;}
     body .shop-blocks .sb-st-cnaddr{font-size:18px;}
-    body .shop-blocks .sb-st-map-wrap{position:relative;min-height:220px;margin:0 0 16px;}
-    body .shop-blocks .sb-st-map-wrap .sb-st-map{display:block;height:220px;border-radius:12px;overflow:hidden;}
-    body .shop-blocks .sb-st-map.is-live{height:220px;}
-    body .shop-blocks .sb-st-dir{display:none;}
-    body .shop-blocks .sb-st-map-addr{
-      position:absolute;left:10px;right:10px;bottom:10px;z-index:5;
-      display:flex;align-items:center;min-height:44px;padding:12px 14px;
-      background:#fff;color:#1a1a17;border-radius:10px;
-      font-size:16px;line-height:1.35;text-decoration:none;
-      box-shadow:0 2px 10px rgba(0,0,0,.16);
-    }
-    body .shop-blocks .sb-st-dir-btn,body .shop-blocks .sb-st-cta{
-      min-height:44px;font-size:13px;letter-spacing:0.08em;
-      display:inline-flex;align-items:center;padding:10px 14px;
-    }
+    body .shop-blocks .sb-st-visit .sb-st-map.is-live{height:220px;}
+    body .shop-blocks .sb-st-visit-addr{margin:0 -22px 18px;padding:14px 16px;background:var(--surface);border-bottom:none;border-radius:12px;}
+    body .shop-blocks .sb-st-get-dir{width:100%;}
+    body .shop-blocks .sb-st-visit .sb-st-dir{justify-content:center;width:100%;}
+    body .shop-blocks .sb-st-cta{min-height:44px;font-size:13px;letter-spacing:0.08em;display:inline-flex;align-items:center;padding:10px 14px;}
 
     body .shop-blocks .sb-cl{padding:28px 22px 36px;}
     body .shop-blocks .sb-cl-item{padding:14px 16px;gap:14px;min-height:44px;}
@@ -200,6 +190,20 @@
   }
 
 
+
+  /* One visit card: map + details together (§503 rule 50). */
+  body .shop-blocks .sb-st-visit{background:#fff;border-radius:22px;overflow:hidden;}
+  body .shop-blocks .sb-st-visit .sb-st-map.is-live{margin-bottom:0;border-radius:0;}
+  body .shop-blocks .sb-st-visit .sb-st-card{background:transparent;}
+  body .shop-blocks .sb-st-visit-addr{display:block;font-size:17px;line-height:1.45;margin:8px 0 18px;text-decoration:none;border-bottom:1px solid rgba(26,26,23,.22);padding-bottom:2px;}
+  body .shop-blocks .sb-st-get-dir{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 22px;margin-bottom:14px;background:var(--forest);color:#fff;border-radius:999px;text-decoration:none;font-family:var(--f-toni);font-weight:700;font-size:14px;letter-spacing:.08em;text-transform:uppercase;}
+  body .shop-blocks .sb-st-visit .sb-st-dir{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:0;}
+  body .shop-blocks .sb-st-visit .sb-st-dir-btn{border:0;padding:0;min-height:auto;font-size:13px;letter-spacing:.06em;text-decoration:underline;text-transform:uppercase;}
+  @media (min-width:768px){
+    body .shop-blocks .sb-st-visit{display:grid;grid-template-columns:1.15fr .85fr;align-items:stretch;}
+    body .shop-blocks .sb-st-visit .sb-st-map.is-live{height:100%;min-height:420px;}
+    body .shop-blocks .sb-st-visit .sb-st-card{padding:36px 40px;display:flex;flex-direction:column;justify-content:center;}
+  }
   /* Slogan line edge to edge and large on a computer (§503 rule 48). */
   @media (min-width:768px){
     body .shop-blocks .sb-blk-outer[data-block-type="announcement_bar"]{
@@ -438,8 +442,48 @@ async function placeShopPins(layout){
   });
 }
 
-// The address sits on the map. A tap opens the phone's map app, the same
+// Legacy note: rule 46 address-on-map replaced by rule 50 visit card. A tap opens the phone's map app, the same
 // way a tap on the map does. The row of named buttons is hidden on a phone.
+
+// §503 rule 50. One card: map beside the words on a computer, stacked on a phone.
+function mountStoreVisit(root){
+  root.querySelectorAll('.sb-store-blk').forEach(blk=>{
+    const map=blk.querySelector('.sb-st-map');
+    const cards=blk.querySelector('.sb-st-cards');
+    if(!map||!cards||blk.querySelector('.sb-st-visit')) return;
+    const visit=document.createElement('div');
+    visit.className='sb-st-visit';
+    map.parentNode.insertBefore(visit,map);
+    visit.appendChild(map);
+    visit.appendChild(cards);
+    const card=cards.querySelector('.sb-st-card');
+    if(!card) return;
+    let pins=[]; try{ pins=JSON.parse(map.getAttribute('data-pins')||'[]'); }catch(e){}
+    const p=pins.find(hasPin);
+    const row=[...card.querySelectorAll('.sb-st-row')].find(r=>r.querySelector('.sb-st-val')&&!r.getAttribute('href'));
+    const val=row&&row.querySelector('.sb-st-val');
+    const text=val?val.textContent.trim():'';
+    if(text&&p){
+      const addr=document.createElement('a');
+      addr.className='sb-st-visit-addr';
+      addr.href='#';
+      addr.textContent=text;
+      addr.addEventListener('click',ev=>{ ev.preventDefault(); openInMapApp(p); });
+      const title=card.querySelector('.sb-st-title');
+      if(title) title.after(addr); else card.prepend(addr);
+      row.remove();
+      if(!card.querySelector('.sb-st-get-dir')){
+        const go=document.createElement('a');
+        go.className='sb-st-get-dir';
+        go.href='#';
+        go.textContent='Get directions';
+        go.addEventListener('click',ev=>{ ev.preventDefault(); openInMapApp(p); });
+        const dir=card.querySelector('.sb-st-dir');
+        if(dir) dir.before(go); else card.appendChild(go);
+      }
+    }
+  });
+}
 function mountMapAddress(root){
   root.querySelectorAll('.sb-st-map').forEach(box=>{
     if(box.parentElement&&box.parentElement.classList.contains('sb-st-map-wrap')) return;
@@ -481,7 +525,7 @@ async function render(){
   ShopBlocks.startTimers(view);
   stageHighlight(true);
   renderChatButton(layout);
-  mountMapAddress(view);
+  mountStoreVisit(view);
   drawStoreMaps(view);
 }
 
