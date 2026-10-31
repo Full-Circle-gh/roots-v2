@@ -40,11 +40,12 @@ const yes = (c, m, extra) => (c ? ok(m) : bad(m, extra));
 const section = (t) => console.log('\n' + t);
 
 function slice(src, open, close) {
-  const a = src.indexOf(open);
+  const norm = src.replace(/\r\n/g, '\n');
+  const a = norm.indexOf(open);
   if (a < 0) throw new Error(`not found: ${open}`);
-  const b = src.indexOf(close, a);
+  const b = norm.indexOf(close, a);
   if (b < 0) throw new Error(`no close after: ${open}`);
-  return src.slice(a, b + close.length);
+  return norm.slice(a, b + close.length);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -219,6 +220,10 @@ yes(/function placeShopPins\(layout\)/.test(SITE) && /en\.length>=4&&name\.inclu
   'a store with no pin takes the position of the shop it names');
 yes(/function mountStoreVisit\(root\)/.test(SITE) && /\.sb-st-visit/.test(SITE) && /Get directions/.test(SITE) && /openInMapApp\(p\)/.test(SITE),
   'the store visit is one card, Get directions opens the map app, and the layout is wired in site.html');
+yes(/google\.com\/maps\/search/.test(SITE),
+  'on a computer Get directions opens Google Maps in a new tab');
+yes(/sb-st-visit-addr\{margin:0 -22px 18px;padding:14px 16px;background:var\(--oat\)/.test(SITE),
+  'on a phone the address is a tap bar on --oat, not an underlined link');
 
 // ─────────────────────────────────────────────────────────────────────────
 

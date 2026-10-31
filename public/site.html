@@ -145,7 +145,7 @@
     body .shop-blocks .sb-st-status,body .shop-blocks .sb-st-hours{font-size:16px;}
     body .shop-blocks .sb-st-cnaddr{font-size:18px;}
     body .shop-blocks .sb-st-visit .sb-st-map.is-live{height:220px;}
-    body .shop-blocks .sb-st-visit-addr{margin:0 -22px 18px;padding:14px 16px;background:var(--surface);border-bottom:none;border-radius:12px;}
+    body .shop-blocks .sb-st-visit-addr{margin:0 -22px 18px;padding:14px 16px;background:var(--oat);border-bottom:none;border-radius:12px;text-decoration:none;}
     body .shop-blocks .sb-st-get-dir{width:100%;}
     body .shop-blocks .sb-st-visit .sb-st-dir{justify-content:center;width:100%;}
     body .shop-blocks .sb-st-cta{min-height:44px;font-size:13px;letter-spacing:0.08em;display:inline-flex;align-items:center;padding:10px 14px;}
@@ -195,7 +195,9 @@
   body .shop-blocks .sb-st-visit{background:#fff;border-radius:22px;overflow:hidden;}
   body .shop-blocks .sb-st-visit .sb-st-map.is-live{margin-bottom:0;border-radius:0;}
   body .shop-blocks .sb-st-visit .sb-st-card{background:transparent;}
-  body .shop-blocks .sb-st-visit-addr{display:block;font-size:17px;line-height:1.45;margin:8px 0 18px;text-decoration:none;border-bottom:1px solid rgba(26,26,23,.22);padding-bottom:2px;}
+  @media (min-width:768px){
+    body .shop-blocks .sb-st-visit-addr{display:block;font-size:17px;line-height:1.45;margin:8px 0 18px;text-decoration:none;border-bottom:1px solid rgba(26,26,23,.22);padding-bottom:2px;}
+  }
   body .shop-blocks .sb-st-get-dir{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 22px;margin-bottom:14px;background:var(--forest);color:#fff;border-radius:999px;text-decoration:none;font-family:var(--f-toni);font-weight:700;font-size:14px;letter-spacing:.08em;text-transform:uppercase;}
   body .shop-blocks .sb-st-visit .sb-st-dir{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:0;}
   body .shop-blocks .sb-st-visit .sb-st-dir-btn{border:0;padding:0;min-height:auto;font-size:13px;letter-spacing:.06em;text-decoration:underline;text-transform:uppercase;}
@@ -550,8 +552,10 @@ function loadAmap(cfg){
 }
 function openInMapApp(p){
   const ua=navigator.userAgent||'';
-  if(/iPhone|iPad|iPod/i.test(ua)) location.href='https://maps.apple.com/?ll='+p.lat+','+p.lng+'&q='+encodeURIComponent(p.name||'');
-  else if(/Android/i.test(ua)) location.href='geo:'+p.lat+','+p.lng+'?q='+p.lat+','+p.lng+'('+encodeURIComponent(p.name||'')+')';
+  const nm=encodeURIComponent(p.name||'');
+  if(/iPhone|iPad|iPod/i.test(ua)) location.href='https://maps.apple.com/?ll='+p.lat+','+p.lng+'&q='+nm;
+  else if(/Android/i.test(ua)) location.href='geo:'+p.lat+','+p.lng+'?q='+p.lat+','+p.lng+'('+nm+')';
+  else window.open('https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng,'_blank','noopener');
 }
 async function drawStoreMaps(root){
   const boxes=[...root.querySelectorAll('.sb-st-map:not([data-drawn])')];
