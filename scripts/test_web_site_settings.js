@@ -234,5 +234,14 @@ yes(/Slogan line edge to edge/.test(SITE) && /font-size:24px/.test(SITE),
 yes(/website_ramada_menus_v1/.test(read('database.js')),
   'a one-time migration puts the Ramada menus on the published website');
 
+
+// ─────────────────────────────────────────────────────────────────────────
+section('9 · no IP characters on a computer (§503 rule 49)');
+
+yes(/No IP characters on a computer/.test(SITE) && /body \.shop-blocks \.sb-char\{display:none\}/.test(SITE),
+  'on a computer the brand site hides the IP characters');
+yes(/Every character in the top right/.test(SITE) && /@media \(max-width:767px\)/.test(SITE) && /height:72px;width:auto;max-width:96px/.test(SITE),
+  'a phone still draws the characters');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
