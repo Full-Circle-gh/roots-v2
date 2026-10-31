@@ -8522,6 +8522,101 @@ try {
   }
 } catch (e) { console.error('[migration restock_line_product_id_backfill_v2]', e); }
 
+
+// ── One-off: Ramada lobby dishes on the brand website (§503 rule 47) ─────────
+//
+// Ash built the platters / open toasts / salads / wraps / beverages galleries
+// in the phone preview and said "deploy live". The block type already exists
+// (menu_showcase, rule 33); the published website.layout had none. This writes
+// those blocks once, ahead of the product grid, and leaves any later CMS edit
+// alone (the migration name is the guard).
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('website_ramada_menus_v1');
+  if (!ran) {
+    const dish = (name, price, image) => ({ name_en: name, name_cn: '', price, image_url: image, text_en: '', text_cn: '' });
+    const menu = (id, kicker, title, body, items) => ({
+      id, type: 'menu_showcase', show_on: 'both',
+      kicker_en: kicker, kicker_cn: '', title_en: title, title_cn: '',
+      body_en: body, body_cn: '', bg_color: 'oat-milk', fg_color: 'ink', accent_color: 'berry-punch',
+      items,
+    });
+    const img = (id) => '/api/retail/products/' + id + '/image';
+    const brand = (file) => '/assets/brand/menu/' + file;
+    // Café-only dishes have no shop product behind them; the Ramada menu serves their pictures.
+    const cafe = (id) => 'https://shop.rootskitchenchina.com/s/TJ6YHDGN/i/' + id + '?w=900';
+    const blocks = [
+      menu('bwplatters', 'Only at the Ramada Pearl lobby', 'Platters', 'Made for the table at the lobby. Not the jars you take home.', [
+        dish('Dip Sampler Platter', '¥85', brand('dip-sampler-platter.jpg')),
+        dish('Hummus Platter', '¥58', brand('hummus-platter.jpg')),
+        dish('Labneh Platter', '¥68', brand('labneh-platter.jpg')),
+      ]),
+      menu('bwtoasts', '', 'Open toasts', '', [
+        dish('Garlic Dill Sour Cream Toast', '¥30', cafe(370)),
+        dish('Almond Banana Toast', '¥32', brand('almond-banana-toast.jpg')),
+        dish('Hummus & Roasted Red Bell Pepper Toast', '¥30', brand('hummus-pepper-toast.jpg')),
+        dish('Green Pesto Toast', '¥32', brand('green-pesto-toast.jpg')),
+        dish('Sour Cream Tomato Toast', '¥33', brand('cashew-sour-cream-toast.jpg')),
+        dish("Za'atar Labneh Toast", '¥32', brand('zaatar-labneh-toast.jpg')),
+      ]),
+      menu('bwsalads', '', 'Salads', '', [
+        dish('Beet Salad', '¥48', img(71)),
+        dish('Tabbouleh Bowl', '¥44', img(121)),
+        dish('Quinoa Salad', '¥44', img(196)),
+      ]),
+      menu('bwwraps', '', 'Wraps', '', [
+        dish('Tofu Banh Mi Wrap', '¥44', img(42)),
+        dish('Shawarma Wrap', '¥49', img(72)),
+        dish('Falafel Wrap', '¥44', img(210)),
+        dish("Pesto 'Chicken' Wrap", '¥44', img(220)),
+      ]),
+      menu('bwdrinks', '', 'Beverages', '', [
+        dish('Espresso', '¥18', cafe(409)),
+        dish('Americano', '¥20', cafe(383)),
+        dish('Latte', '¥30', cafe(384)),
+        dish('House-Made Cashew Chocolate Milk', '¥32', cafe(387)),
+        dish('Carrot-Ginger Juice', '¥23', img(235)),
+        dish('Celerybration Juice', '¥27', img(164)),
+        dish('Green Glow Juice', '¥27', img(69)),
+        dish('Masala Chai Latte', '¥25', img(59)),
+        dish('Lemongrass Kombucha', '¥29', img(314)),
+        dish('Mango Kombucha', '¥29', img(286)),
+      ]),
+      {
+        id: 'bwmenucta', type: 'hero_banner', show_on: 'both', view: 'split',
+        image_url: '/api/retail/media/351', image_aspect: 1.3333, height_px: 420,
+        headline_en: 'Coffee, bowls, and the rest.', headline_cn: '',
+        subtitle_en: 'Platters, toasts, salads and wraps are above. The full Ramada menu is one tap away.', subtitle_cn: '',
+        panel_bg_color: 'forest-kale', panel_fg_color: 'white', scrim: 'none', entrance_anim: 'none',
+        ctas: [{ label_en: 'See the Ramada menu', label_cn: '', target: 'https://shop.rootskitchenchina.com/s/TJ6YHDGN', style: 'primary' }],
+      },
+      { id: 'bwmenuspc', type: 'spacer', show_on: 'both', height_px: 40, divider_style: 'none', divider_color: 'olive-moss' },
+    ];
+    db.transaction(() => {
+      for (const key of ['website.layout', 'cms.draft.website_layout']) {
+        const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+        if (!row) continue;
+        let layout = [];
+        try { layout = JSON.parse(row.value_json); } catch { continue; }
+        if (!Array.isArray(layout)) continue;
+        if (layout.some(b => b && b.type === 'menu_showcase')) {
+          console.log('[migration] website_ramada_menus_v1: ' + key + ' already has menu_showcase, left alone');
+          continue;
+        }
+        const at = layout.findIndex(b => b && b.type === 'product_grid');
+        if (at < 0) {
+          console.log('[migration] website_ramada_menus_v1: ' + key + ' has no product_grid, left alone');
+          continue;
+        }
+        layout.splice(at, 0, ...blocks);
+        db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?').run(JSON.stringify(layout), key);
+        console.log('[migration] website_ramada_menus_v1: ' + key + ' inserted ' + blocks.length + ' block(s)');
+      }
+      db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('website_ramada_menus_v1');
+    })();
+  }
+} catch (e) { console.error('[migration website_ramada_menus_v1]', e); }
+
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
