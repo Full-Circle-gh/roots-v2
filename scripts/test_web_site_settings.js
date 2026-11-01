@@ -212,8 +212,12 @@ section('7 · the phone banner, the labels, and the Yuexiu address (§503 rules 
 
 yes(/body \.shop-blocks \.sb-split-img\{height:auto/.test(SITE) && /body \.shop-blocks \.sb-split-img \.sb-hero-img,body \.shop-blocks \.sb-split-img \.sb-hero-video\{width:100%;height:auto/.test(SITE),
   'a split hero picture keeps its own shape and fills the width');
-yes(/sb-hero-fit-contain\{background:var\(--oat\)/.test(SITE),
-  'a poster hero letterboxes on oat on a phone, not the gray loading bar');
+yes(/body \.shop-blocks \.sb-recipe-blk\{margin-bottom:0;/.test(SITE),
+  'a story block does not leave a margin strip after its bottom rule on a phone');
+yes(/sb-hero-fit-contain[\s\S]{0,120}aspect-ratio:auto !important/.test(SITE),
+  'a poster hero height follows the art on a phone, not a fixed aspect box');
+yes(/sb-hero-fit-contain[\s\S]{0,220}height:auto !important/.test(SITE),
+  'poster hero images are not locked to a tall letterbox on a phone');
 yes(/\.sb-split-img\{height:auto;background:var\(--oat\)/.test(SITE),
   'a split hero picture sits on oat, not #ddd');
 yes(!/height:196px/.test(SITE),
