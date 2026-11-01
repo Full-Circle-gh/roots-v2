@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.609
+# Tacet shared-core consolidation — decisions record, v4.610
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-01 · v4.610 — **§503 AMENDED · A FINGER ON THE STORE MAP SCROLLS THE PAGE — DECIDED BY ASH.** Ash, on a phone: *"cant scroll on mobile over the map area"*, circling the Yuexiu map. Rule 39 already said the page scrolls past the map. Turning Amap's drag off does not do that: the map node gets `touch-action: none` and cancels the move, and a layer inside that node cannot undo it. On a touch screen `shieldStoreMap` in `public/site.html` puts a clear layer beside the map node. The page scrolls. A tap that did not move still opens the phone's map app. The editor's stage does not add the layer, and a computer with a mouse still drags the map. No new words. No change to `.gitignore` or CI.
 
 2026-10-31 · v4.609 — **§503 AMENDED · ON A COMPUTER A QR MENU LINK OPENS IN A PHONE MOCK-UP — DECIDED BY ASH.** Ash: *"once clicking ramada menu on pc it should show the menu inside a phone mock up because the menu is not built for pc"*. On the brand site only, from 768px up, a block button whose target is a shop QR menu (`https://…/s/<code>`) opens that menu in a phone frame overlay instead of a wide tab; a phone still opens it normally. The menu page names the tenant's own customer domains in `frame-ancestors` so the frame can load (`lib/shop-menu-redirect.js`, `applySiteMenuFrameHeaders`). One composed string (vocabulary v1.371). No change to `.gitignore` or CI.
 
@@ -33637,7 +33639,7 @@ Ash: *"need to see the live map with the location . if someone click on it on mo
 
 38. **The map is Amap, drawn by the website page.** Google Maps does not load in mainland China; Amap works there and abroad. The engine (`public/shop/blocks.js`) draws a map box with the pins' positions; `public/site.html` loads the Amap JS SDK with the public, referer-restricted key from `/api/retail/maps-config` (the web shop's address picker uses the same) and draws an English-labelled map with a pin per shop. With no key, or if the SDK fails, the box is removed and the block reads as before. The key's allowed domains in the Amap console must include the website's host.
 
-39. **Directions are one tap, in the visitor's own map app.** Under each placed shop: *Apple Maps*, *Google Maps* and *Amap* links, built from the position. On a phone the map does not take drags (the page scrolls past it) and a tap opens the phone's map app: Apple Maps on an iPhone or iPad, the default map app (`geo:`) on Android. On a computer the map can be dragged and zoomed. App names are not translated.
+39. **Directions are one tap, in the visitor's own map app.** Under each placed shop: *Apple Maps*, *Google Maps* and *Amap* links, built from the position. On a phone the map does not take drags (the page scrolls past it) and a tap opens the phone's map app: Apple Maps on an iPhone or iPad, the default map app (`geo:`) on Android. On a computer the map can be dragged and zoomed. App names are not translated. **Amended 2026-11-01:** Amap still cancels a finger moving on the map after drag is turned off, because it sets `touch-action: none` on the map node. On a touch screen the website lays a clear layer beside that node (`shieldStoreMap`). The page scrolls. A tap that did not move still opens the map app. The editor's stage does not add the layer.
 
 40. **Yuexiu only, for Roots.** The Tianhe address is a kitchen in a tech park, not somewhere to visit, so only Yuexiu is placed on the website's map.
 

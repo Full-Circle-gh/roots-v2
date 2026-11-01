@@ -226,6 +226,8 @@ yes(/sb-st-visit--hero/.test(SITE) && /sb-st-map-cap-hint/.test(SITE) && /SITE_V
   'on a phone the map is a hero with a caption over the pin, not a cramped address band');
 yes(/height:260px/.test(SITE),
   'on a phone the live map is taller for the hero layout');
+yes(/function shieldStoreMap\(/.test(SITE) && /sb-st-map-hit/.test(SITE) && /touch-action:pan-y/.test(SITE) && /sb-st-map-frame/.test(SITE),
+  'on a touch screen a layer beside the map lets the page scroll, and a tap still opens the map app');
 
 // ─────────────────────────────────────────────────────────────────────────
 
