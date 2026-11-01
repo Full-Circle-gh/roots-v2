@@ -116,6 +116,10 @@ ok('and the fold is visible before = is pressed', step(['2', '+', '3', '+']).cur
 ok('= states what it worked out', step(['2', '+', '3', '=']).expr === '2 + 3 =');
 ok('= with nothing pending changes nothing', cur(['4', '2', '=']) === '42');
 ok('50 % is 0.5', cur(['5', '0', '%']) === '0.5');
+ok('18 + 5 % = 18.9 — % after + means 5% of 18', cur(['1', '8', '+', '5', '%', '=']) === '18.9');
+ok('18 − 5 % = 17.1 — % after − means 5% of 18', cur(['1', '8', '−', '5', '%', '=']) === '17.1');
+ok('18 × 5 % = 0.9 — % after × is just 0.05', cur(['1', '8', '×', '5', '%', '=']) === '0.9');
+ok('18 ÷ 5 % = 360 — % after ÷ is just 0.05', cur(['1', '8', '÷', '5', '%', '=']) === '360');
 ok('± flips the sign', cur(['5', '±']) === '-5');
 ok('and flips it back', cur(['5', '±', '±']) === '5');
 ok('± on a bare 0 does nothing', cur(['0', '±']) === '0');

@@ -3978,7 +3978,18 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (s.cur !== '0') s.cur = s.cur.charAt(0) === '-' ? s.cur.slice(1) : '-' + s.cur;
       return s;
     }
-    if (k === '%') { s.cur = calcFmt(parseFloat(s.cur) / 100); s.fresh = true; return s; }
+    if (k === '%') {
+      var v = parseFloat(s.cur);
+      if ((s.op === '+' || s.op === '−') && s.acc !== null) {
+        // X% of the accumulator: 18 + 5% = 18 + (18 × 0.05) = 18.9
+        s.cur = calcFmt(s.acc * (v / 100));
+      } else {
+        // standalone or after × or ÷: just divide by 100
+        s.cur = calcFmt(v / 100);
+      }
+      s.fresh = true;
+      return s;
+    }
     if (k === '=') {
       if (s.op !== null && s.acc !== null) {
         s.expr = calcFmt(s.acc) + ' ' + s.op + ' ' + s.cur + ' =';
