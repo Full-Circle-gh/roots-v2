@@ -51,6 +51,9 @@ data/alert-latch/
 # exists.
 .claude/*
 !.claude/settings.json
+# Qwen Code — local chats/summaries; team project defaults live in .qwen/settings.json
+.qwen/*
+!.qwen/settings.json
 AGENTS.md
 .cursor/
 .aider*

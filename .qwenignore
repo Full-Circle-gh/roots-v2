@@ -1,0 +1,6 @@
+reference/
+design/
+eval/
+node_modules/
+data/
+*.db

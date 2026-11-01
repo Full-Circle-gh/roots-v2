@@ -1,0 +1,16 @@
+{
+  "context": {
+    "fileName": ["CLAUDE.md", "QWEN.md"],
+    "fileFiltering": {
+      "respectGitIgnore": true,
+      "enableFuzzySearch": true
+    }
+  },
+  "general": {
+    "gitCoAuthor": {
+      "commit": false,
+      "pr": false
+    }
+  },
+  "$version": 4
+}
