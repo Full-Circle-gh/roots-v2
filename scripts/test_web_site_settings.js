@@ -216,6 +216,9 @@ yes(!/height:196px/.test(SITE),
   'the picture is not locked into a short strip');
 yes(/\.sb-steps-kicker,body \.shop-blocks \.sb-cl-kicker[\s\S]{0,220}font-size:16px/.test(SITE),
   'the small labels are 16px');
+yes(/\.sb-grid-block \.sb-more,body \.shop-blocks \.sb-cattabs \.sb-more\{\s*font-size:18px/.test(SITE)
+  && /white-space:nowrap;flex-shrink:0/.test(SITE),
+  'SEE ALL is 18px and stays on one line');
 yes(/function placeShopPins\(layout\)/.test(SITE) && /en\.length>=4&&name\.includes\(en\)/.test(SITE) && /rows\.stores/.test(SITE),
   'a store with no pin takes the position of the shop it names');
 yes(/function mountStoreVisit\(root\)/.test(SITE) && /\.sb-st-visit/.test(SITE) && /Get directions/.test(SITE) && /openInMapApp\(p\)/.test(SITE),

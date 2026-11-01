@@ -110,6 +110,16 @@
     body .shop-blocks .sb-st-title,body .shop-blocks .sb-rcp-headline,body .shop-blocks .sb-grid-block .sb-ttl{
       font-size:32px;line-height:1.05;
     }
+    /* SEE ALL stayed on the block engine's phone unit (~9px) and wrapped to
+       two lines beside a long title. Same size as the dish names, one line. */
+    body .shop-blocks .sb-grid-head,body .shop-blocks .sb-cat-head{align-items:flex-end;}
+    body .shop-blocks .sb-grid-head > :first-child,body .shop-blocks .sb-cat-head > :first-child{
+      flex:1 1 auto;min-width:0;
+    }
+    body .shop-blocks .sb-grid-block .sb-more,body .shop-blocks .sb-cattabs .sb-more{
+      font-size:18px;letter-spacing:0.06em;line-height:1.2;
+      white-space:nowrap;flex-shrink:0;margin-left:12px;
+    }
     body .shop-blocks .sb-steps-body,body .shop-blocks .sb-rcp-para,body .shop-blocks .sb-st-val{font-size:17px;line-height:1.5;}
     body .shop-blocks .sb-step{padding:18px 18px 20px;}
     body .shop-blocks .sb-step-n{font-size:52px;}
