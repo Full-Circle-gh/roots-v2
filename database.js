@@ -8583,7 +8583,7 @@ try {
       ]),
       {
         id: 'bwmenucta', type: 'hero_banner', show_on: 'both', view: 'split',
-        image_url: '/api/retail/media/351', image_aspect: 1.3333, height_px: 420,
+        image_url: '/media/ramada-banner-food.jpeg', image_aspect: 1.3333, height_px: 420,
         headline_en: 'Coffee, bowls, and the rest.', headline_cn: '',
         subtitle_en: 'Platters, toasts, salads and wraps are above. The full Ramada menu is one tap away.', subtitle_cn: '',
         panel_bg_color: 'forest-kale', panel_fg_color: 'white', scrim: 'none', entrance_anim: 'none',
