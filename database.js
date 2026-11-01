@@ -8583,7 +8583,7 @@ try {
       ]),
       {
         id: 'bwmenucta', type: 'hero_banner', show_on: 'both', view: 'split',
-        image_url: '/media/ramada-banner-food.jpeg', image_aspect: 1.3333, height_px: 420,
+        image_url: '/assets/media/ramada-banner-food.jpeg', image_aspect: 0.7498, height_px: 420,
         headline_en: 'Coffee, bowls, and the rest.', headline_cn: '',
         subtitle_en: 'Platters, toasts, salads and wraps are above. The full Ramada menu is one tap away.', subtitle_cn: '',
         panel_bg_color: 'forest-kale', panel_fg_color: 'white', scrim: 'none', entrance_anim: 'none',
@@ -8684,6 +8684,40 @@ try {
     })();
   }
 } catch (e) { console.error('[migration ramada_banner_image_path_fix_v1]', e); }
+
+
+// ── One-off: update Ramada banner aspect ratio for new portrait image ───────
+//
+// The banner image was replaced with a portrait flat-lay (896×1195, aspect
+// 0.7498). The old landscape aspect (1.3333) must be updated so the split
+// hero renders at the correct ratio.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('ramada_banner_aspect_v1');
+  if (!ran) {
+    const NEW_ASPECT = 0.7498;
+    db.transaction(() => {
+      for (const key of ['website.layout', 'cms.draft.website_layout']) {
+        const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+        if (!row) continue;
+        let layout;
+        try { layout = JSON.parse(row.value_json); } catch { continue; }
+        if (!Array.isArray(layout)) continue;
+        let changed = false;
+        for (const b of layout) {
+          if (b && b.id === 'bwmenucta' && b.image_aspect !== NEW_ASPECT) {
+            b.image_aspect = NEW_ASPECT;
+            changed = true;
+          }
+        }
+        if (changed) {
+          db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?').run(JSON.stringify(layout), key);
+          console.log('[migration] ramada_banner_aspect_v1: ' + key + ' patched bwmenucta image_aspect');
+        }
+      }
+      db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('ramada_banner_aspect_v1');
+    })();
+  }
+} catch (e) { console.error('[migration ramada_banner_aspect_v1]', e); }
 
 
 module.exports = db;
