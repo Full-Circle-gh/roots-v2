@@ -256,19 +256,26 @@
     body .shop-blocks .sb-st-visit .sb-st-map-frame .sb-st-map.is-live{height:100%;min-height:420px;}
     body .shop-blocks .sb-st-visit .sb-st-card{padding:36px 40px;display:flex;flex-direction:column;justify-content:center;}
   }
-  /* Desktop site chrome (option B + split-hero separation). White header so nav
-     does not merge with oat split columns; ink frame + gap so a split hero below
-     recipe/editorial does not read as one cream slab with the block above. */
+  /* Desktop site chrome (option B + split-hero separation). White header; split
+     heroes get top/bottom rules only (full-bleed, square ends, no card frame). */
   @media (min-width:768px){
     header.site-bar{background:var(--paper);}
     body .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] .sb-hero-split{
-      border:2px solid var(--ink);
+      border:0;
+      border-top:2px solid var(--ink);
+      border-bottom:2px solid var(--ink);
+      border-radius:0;
     }
     body .shop-blocks .sb-blk-outer[data-block-type="hero_banner"]:not(:first-child){
       margin-top:32px;
     }
     body .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] .sb-split-img{
       background:var(--paper);
+    }
+    body .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] .sb-split-img .sb-hero-img,
+    body .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] .sb-split-img .sb-hero-video{
+      object-fit:cover;
+      object-position:center top;
     }
   }
   /* Slogan line edge to edge and large on a computer (§503 rule 48). */
