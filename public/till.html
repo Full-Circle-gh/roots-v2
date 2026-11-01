@@ -654,6 +654,50 @@ button{font:inherit;color:inherit;margin:0}
 .disc[hidden]{display:none}
 .disc:active{background:var(--td-raised)}
 .disc[disabled]{color:var(--td-text2)}
+/* §510 — the calculator. Hold's and Discount's own quiet shape, and unlike
+   both it is always up: working out a split or a change does not wait for a
+   basket. A tool, not a sale control — it writes nothing into the sale. */
+.calcb{
+  width:100%;height:44px;margin-top:8px;border:1px solid var(--td-border);
+  background:transparent;color:var(--td-text);border-radius:var(--r-control);
+  font-size:14px;font-weight:500;
+}
+.calcb:active{background:var(--td-raised)}
+/* The sheet DOCKS RIGHT, over the order rail, rather than centring like every
+   other picker: the basket stays readable behind the scrim while the cashier
+   works a sum, which is the whole reason §510 picked this shape. */
+.sscrim.right{align-items:stretch;justify-content:flex-end;padding:0}
+.calc-sheet{
+  width:380px;max-width:100%;display:flex;flex-direction:column;gap:10px;
+  padding:16px;background:var(--td-surface);border-left:1px solid var(--td-border);
+}
+.cdisp{
+  flex:none;text-align:right;padding:10px 14px;
+  background:var(--td-raised);border:1px solid var(--td-border);border-radius:var(--r-control);
+}
+.cexpr{
+  min-height:18px;font-size:13px;color:var(--td-text2);font-variant-numeric:tabular-nums;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* The number being read out loud or keyed into a terminal. tabular-nums, the
+   same as every money figure on this screen — there is no monospace in Tacet. */
+.cval{
+  font-size:36px;font-weight:500;letter-spacing:-.02em;line-height:1.2;
+  font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;
+}
+/* 20 keys, every one past the 44px floor with room between them: this is a
+   touch screen and a fat thumb is the normal case, not the accident. */
+.ckeys{flex:1;min-height:0;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.ck{
+  min-height:56px;border:1px solid var(--td-border);border-radius:var(--r-control);
+  background:var(--td-surface);color:var(--td-text);font-size:20px;font-weight:500;
+  font-variant-numeric:tabular-nums;display:flex;align-items:center;justify-content:center;
+}
+.ck:active{background:var(--td-raised)}
+.ck.op{color:var(--td-text2)}
+.ck.danger{color:var(--td-brick-ink)}
+.ck.eq{background:var(--td-text);border-color:var(--td-text);color:var(--td-paper)}
+.ck.eq:active{opacity:.85}
 /* The sheet: four quick percentages in one row, then the amount, then why. */
 .dpcts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .dpcts .srow{justify-content:center;padding:0;font-variant-numeric:tabular-nums}
@@ -1040,6 +1084,16 @@ button{font:inherit;color:inherit;margin:0}
   .settle{z-index:30}
   #storepick,#custpick,#leavepick{z-index:40}
 
+  /* §510 — a phone has no right edge to dock to that is not the whole screen,
+     so the calculator takes the shape the order rail already takes here: a
+     bottom sheet. Same height cap, same rounded top. */
+  .sscrim.right{align-items:flex-end;justify-content:center}
+  .calc-sheet{
+    width:100%;height:86%;border-left:0;border-top:1px solid var(--td-border);
+    border-radius:18px 18px 0 0;
+    box-shadow:0 -2px 6px rgba(17,26,43,.06), 0 -12px 32px rgba(17,26,43,.10);
+  }
+
   /* The settle takeover is amount-beside-wallets at 56px apart, which does not
      fit a phone either. Stack it, and let the two fixed 340px blocks be as wide
      as the screen allows. */
@@ -1124,6 +1178,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         <button class="pay" id="pay" type="button" disabled></button>
         <button class="hold" id="hold" type="button" data-hold="ask" hidden></button>
         <button class="disc" id="disc" type="button" data-disc="ask" hidden></button>
+        <button class="calcb" id="calc-open" type="button" data-calc="open"></button>
         <div class="cxq" id="cancel-ask" hidden></div>
         <button class="cxo" id="cancel-order" type="button" data-cancel-order="1" hidden></button>
       </div>
@@ -1146,6 +1201,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   <div class="sscrim" id="holdpick" hidden></div>
   <div class="sscrim" id="discpick" hidden></div>
   <div class="sscrim" id="optpick" hidden></div>
+  <!-- §510 — .right: this one docks over the order rail, not centred. -->
+  <div class="sscrim right" id="calcpick" hidden></div>
 </div>
 <div class="boot" id="boot"><p id="boot-msg"></p></div>
 
@@ -1258,6 +1315,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     complaint:    ['Complaint', '投诉'],               // composed, §474
     discMax:      ['Discount can be at most 20%', '折扣最多 20%'], // admin: 05-marketing.js, limit changed
     giveReason:   ['Give a reason first.', '请先填写原因。'], // admin: 01-core.js
+    /* §510 — the till's own calculator, a tool beside the sale controls.
+       COMPOSED and declared in docs/tacet-delivery-vocabulary.md (v1.373):
+       计算器 is the mainland word for the tool — what iOS and Android both
+       title their own calculator apps — where 计算机 reads as "computer".
+       The sheet's close row is the locked `cancel` below; every key is a
+       numeral or a symbol and needs no pair. */
+    calculator:   ['Calculator', '计算器'],            // composed, §510
     /* §475 — a manager approves with their PIN on a till signed in as staff.
        `manager` is the Manager role's own name (lib/roles.js); `pinLocked` is
        the admin's own lockout sentence, copied whole. Three COMPOSED, declared
@@ -1537,6 +1601,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        refuses the sale otherwise). `disc` is { percent | amount, reason, note }
        or null; `discOpen`/`discDraft` are the sheet. Cleared with the basket. */
     canDisc: false, disc: null, discOpen: false, discDraft: null,
+    /* §510 — the calculator sheet and its engine state. `calc` is the plain
+       { acc, op, cur, fresh, expr } the pure calcStep() reads and returns;
+       it lives here so the fifteen-second poll can repaint the screen
+       without throwing a half-worked sum away. Reset on every opening. */
+    calcOpen: false, calc: null,
     /* §475 — when this operator cannot give one, the managers who can approve
        one here with their PIN ({ id, name }), read once at boot. Empty means no
        Discount button at all, exactly as before. */
@@ -2423,10 +2492,15 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // it standing would put a second Add button under the screen whose whole
     // point is that nothing of the till stays readable behind it.
     if (S.view !== 'till') S.opts = null;
+    // §510 — nor the calculator: a QR order paid on the phone can move this
+    // till to the takeover from a poll while the sheet is up, and a scrim left
+    // standing over it is the same second screen under the first.
+    if (S.view !== 'till') S.calcOpen = false;
     document.getElementById('app').classList.toggle('sheet-open', S.sheetOpen);
     $('sheet-scrim').hidden = !S.sheetOpen;
     $('settle').hidden = (S.view === 'till');
     if (S.view !== 'till') renderSettle();
+    renderCalc();
   }
 
   function renderCats() {
@@ -3766,6 +3840,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       hb.textContent = T('hold');
       hb.disabled = !!S.busy;
     }
+    // §510 — the calculator, third in the quiet row and the one that is never
+    // hidden and never disabled: it is a tool beside the sale, not part of one,
+    // so no state of the sale has anything to say about it.
+    $('calc-open').textContent = T('calculator');
 
     /* CANCELLING A RECALLED ORDER — Ash, 2026-09-08: "if a customer eventually
        doesn't want the order there should be an option to cancel it from his
@@ -3846,6 +3924,116 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   // what a cashier counts against the goods on the counter.
   function itemCount() {
     return S.lines.reduce(function (n, l) { return n + (Number(l.qty) || 0); }, 0);
+  }
+
+  /* ── §510 · the till's calculator ────────────────────────────────────────
+     A tool beside the sale, never part of one: it reads nothing from the
+     basket and writes nothing back. IMMEDIATE EXECUTION like the counter
+     calculator it replaces — pressing an operator folds what is pending —
+     so there is no formula to parse and no eval anywhere near it.
+
+     The engine is a PURE function of { acc, op, cur, fresh, expr } and one
+     key, returning a new state and touching nothing else, which is what
+     lets scripts/test_till_calculator.js lift it out of this page and run
+     the arithmetic in plain node. Keep it that way. */
+  function calcNew() { return { acc: null, op: null, cur: '0', fresh: true, expr: '' }; }
+  // Division by zero answers ∞ rather than words: the symbol needs no locked
+  // pair, and "cannot divide by zero" would (§510 rule 3).
+  function calcFmt(n) {
+    if (!isFinite(n)) return '∞';
+    var r = Math.round(n * 1e8) / 1e8;
+    if (r === 0) r = 0;                       // never -0
+    if (Math.abs(r) >= 1e12) r = Number(r.toPrecision(10));
+    return String(r);
+  }
+  function calcFold(a, op, b) {
+    if (op === '÷' && b === 0) return '∞';
+    return calcFmt(op === '+' ? a + b : op === '−' ? a - b : op === '×' ? a * b : a / b);
+  }
+  // k is one key: '0'-'9', '.', '+', '−', '×', '÷', '=', 'C', 'B' (backspace),
+  // '±' or '%'. Returns the next state; never mutates the one passed in.
+  function calcStep(st, k) {
+    var s = { acc: st.acc, op: st.op, cur: st.cur, fresh: st.fresh, expr: st.expr };
+    if (s.cur === '∞') {
+      // After ∞ any key starts over; a digit starts over AS that digit, so
+      // the cashier's next number is not swallowed by the last one's error.
+      s = calcNew();
+      if (!((k >= '0' && k <= '9') || k === '.')) return s;
+    }
+    if ((k >= '0' && k <= '9') || k === '.') {
+      if (s.fresh) { s.cur = (k === '.' ? '0.' : k); s.fresh = false; return s; }
+      if (k === '.' && s.cur.indexOf('.') >= 0) return s;
+      if (s.cur.replace(/[-.]/g, '').length >= 12) return s;
+      s.cur += k;
+      return s;
+    }
+    if (k === 'C') return calcNew();
+    if (k === 'B') {
+      s.cur = s.cur.length > 1 ? s.cur.slice(0, -1) : '0';
+      if (s.cur === '-' || s.cur === '') s.cur = '0';
+      s.fresh = false;
+      return s;
+    }
+    if (k === '±') {
+      if (s.cur !== '0') s.cur = s.cur.charAt(0) === '-' ? s.cur.slice(1) : '-' + s.cur;
+      return s;
+    }
+    if (k === '%') { s.cur = calcFmt(parseFloat(s.cur) / 100); s.fresh = true; return s; }
+    if (k === '=') {
+      if (s.op !== null && s.acc !== null) {
+        s.expr = calcFmt(s.acc) + ' ' + s.op + ' ' + s.cur + ' =';
+        s.cur = calcFold(s.acc, s.op, parseFloat(s.cur));
+        s.acc = null; s.op = null; s.fresh = true;
+      }
+      return s;
+    }
+    // An operator. Whatever is pending folds first, so 2 + 3 + reads 5.
+    if (s.op !== null && s.acc !== null && !s.fresh) {
+      s.cur = calcFold(s.acc, s.op, parseFloat(s.cur));
+      if (s.cur === '∞') { s.acc = null; s.op = null; s.expr = ''; return s; }
+    }
+    s.acc = parseFloat(s.cur); s.op = k; s.fresh = true;
+    s.expr = calcFmt(s.acc) + ' ' + k;
+    return s;
+  }
+  function openCalc() { S.calcOpen = true; S.calc = calcNew(); render(); }
+  function closeCalc() { S.calcOpen = false; render(); }
+  function pressCalc(k) { S.calc = calcStep(S.calc, k); paintCalc(); }
+  function paintCalc() {
+    var v = $('c-val'), e = $('c-expr');
+    if (v) v.textContent = S.calc.cur;
+    if (e) e.innerHTML = S.calc.expr ? esc(S.calc.expr) : '&nbsp;';
+  }
+  /* BUILT ONCE PER OPENING, like the hold note and the discount sheet: the
+     poll repaints every fifteen seconds, and while the engine state lives in
+     S and survives any repaint, a rebuild would still flash the keys under a
+     thumb mid-press. The display is repainted from S, never rebuilt. */
+  function renderCalc() {
+    var el = $('calcpick');
+    el.hidden = !S.calcOpen;
+    if (!S.calcOpen) { el.innerHTML = ''; el.removeAttribute('data-built'); return; }
+    if (el.getAttribute('data-built') === _lang) { paintCalc(); return; }
+    // Every key is a numeral or a symbol — the only words on the sheet are its
+    // title and the locked Cancel row (§510 rule 4).
+    var K = function (k, cls, face) {
+      return '<button class="ck' + (cls ? ' ' + cls : '') + '" type="button" data-ck="' + esc(k) + '">'
+           + esc(face || k) + '</button>';
+    };
+    el.innerHTML =
+      '<div class="calc-sheet" role="dialog" aria-label="' + esc(T('calculator')) + '">'
+      + '<div class="hd">' + esc(T('calculator')) + '</div>'
+      + '<div class="cdisp"><div class="cexpr" id="c-expr">&nbsp;</div><div class="cval" id="c-val">0</div></div>'
+      + '<div class="ckeys">'
+      +   K('C', 'danger') + K('B', 'op', '⌫') + K('%', 'op') + K('÷', 'op')
+      +   K('7') + K('8') + K('9') + K('×', 'op')
+      +   K('4') + K('5') + K('6') + K('−', 'op')
+      +   K('1') + K('2') + K('3') + K('+', 'op')
+      +   K('±', 'op') + K('0') + K('.') + K('=', 'eq')
+      + '</div>'
+      + '<button class="srow" type="button" data-calc="close"><span>' + esc(T('cancel')) + '</span></button>'
+      + '</div>';
+    el.setAttribute('data-built', _lang);
+    paintCalc();
   }
 
   /* ---- settle ---------------------------------------------------------- */
@@ -5052,7 +5240,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (S.holdOpen && ev.target.id === 'holdpick') return closeHoldAsk();
       // §474 — tapping away from the discount sheet is not giving one.
       if (S.discOpen && ev.target.id === 'discpick') return closeDiscAsk();
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-cash],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-so-c],[data-hold],[data-held],[data-disc],[data-disc-pct],[data-disc-why],[data-disc-mgr]');
+      // §510 — tapping away from the calculator is only putting a tool down.
+      if (S.calcOpen && ev.target.id === 'calcpick') return closeCalc();
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-cash],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-so-c],[data-hold],[data-held],[data-disc],[data-disc-pct],[data-disc-why],[data-disc-mgr],[data-calc],[data-ck]');
       if (!t) return;
       // §183 — the question sheet. Answered before anything else on the screen:
       // while it is up it is the only thing the cashier is being asked.
@@ -5090,6 +5280,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         if (da === 'off') return removeDisc();
         if (da === 'close') return closeDiscAsk();
         return openDiscAsk();
+      }
+      // §510 — a key, or the control that opens/closes the sheet. A key press
+      // repaints the display in place rather than the screen: render() would
+      // cost a full repaint per tap on a tool that touches none of the sale.
+      if (t.hasAttribute('data-ck')) return pressCalc(t.getAttribute('data-ck'));
+      if (t.hasAttribute('data-calc')) {
+        return t.getAttribute('data-calc') === 'close' ? closeCalc() : openCalc();
       }
       if (t.hasAttribute('data-recall-cancel')) return cancelRecall();
       if (t.hasAttribute('data-rm-voucher')) return removeVoucher();

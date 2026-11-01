@@ -33820,3 +33820,19 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 5. **It does not cover a sheet that is already open.** If the basket, a product or the pay question is up, it waits, and gives up for this visit without marking itself seen.
 
 6. **Words.** The page chip is the live pair. One operator hint is composed (vocabulary v1.369). The pop-up's own words are the office's. Nothing new is said to the customer.
+
+## §510 — THE COUNTER TILL CARRIES A CALCULATOR
+
+**2026-11-01 · DECIDED BY ASH.** Ash: a calculator button in the counter till; tapping it opens a calculator as a pop-up and the cashier can calculate anything they like. Offered as mock-ups first (`reference/calculator-button-mockup.html`): placement — head-row icon, rail-foot button, or a quiet link under the Total; pop-up — centred modal or right-side sheet. Ash picked the **rail foot** and the **right side**.
+
+### Rules
+
+1. **It is a tool, not a sale control.** The button is the third quiet one under Mark paid, in Hold's and Discount's own shape, and unlike both it is ALWAYS up — splitting a bill or working out a change does not wait for a basket. It never touches the sale: no result is ever inserted into an amount, a discount or a tender. What the till is charged is typed into the till.
+
+2. **The sheet docks right, over the order rail.** The basket stays readable behind the scrim while the cashier works, which is the reason it is a right-side sheet and not one more centred picker. On a phone, where the rail is itself a bottom sheet, the calculator takes the same shape: a bottom sheet.
+
+3. **Immediate execution, no formulae.** Each operator press folds what is pending, like the counter calculator this replaces. There is no expression parser and no `eval` anywhere near it. Division by zero shows `∞` — a symbol needs no locked pair, and "cannot divide by zero" would.
+
+4. **Words.** One composed pair, `Calculator · 计算器` (vocabulary v1.373), used for both the button and the sheet title. The close row is the locked `Cancel · 取消`. Every key is a numeral or a mathematical symbol and needs no words at all.
+
+5. **The engine is a pure function.** `calcStep(state, key)` returns a new state and reads nothing else, so the fast-shard probe lifts it out of the page and runs the arithmetic in plain node. The till's browser suites all live in the slow shard, which is not run — a test that cannot run protects nothing, so this one is written where the gate is.

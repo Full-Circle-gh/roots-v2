@@ -1,0 +1,421 @@
+<!-- MOCKUP ONLY — not shipped code. Counter till: calculator button + popup options.
+     Design tokens copied from public/till.html light theme so the mockup reads like the real screen.
+     Chinese strings shown here are placeholders; real implementation must go through
+     docs/tacet-delivery-vocabulary.md. -->
+<style>
+.mock-wrap{
+  --td-surface:#FFFFFF; --td-raised:#F6F3EC; --td-border:#E4E0D5;
+  --td-header:#DAD5C6;
+  --td-text:#111A2B;    --td-text2:#58606E;
+  --td-dusk:#6E67AF;    --td-dusk-tint:#EEEDF6;
+  --td-sage-tint:#EDF1EC; --td-sage-ink:#4A6249;
+  --td-amber-tint:#F7EEDE; --td-amber-ink:#8A6425;
+  --td-brick-tint:#F6E7E3; --td-brick-ink:#B4533E;
+  --td-paper:#FBF9F4;
+  --r-control:8px; --r-card:14px; --r-pill:999px;
+  font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+  color:var(--td-text);
+  padding:16px;
+  background:#ece9e1;
+  min-height:100vh;
+  box-sizing:border-box;
+}
+.mock-wrap *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.mock-wrap button{font:inherit;color:inherit;margin:0;cursor:pointer}
+
+.mock-h1{font-size:18px;font-weight:600;margin:0 0 4px}
+.mock-sub{font-size:13px;color:var(--td-text2);margin:0 0 14px;max-width:900px;line-height:1.5}
+
+.optbar{display:flex;flex-wrap:wrap;gap:18px;margin-bottom:14px;align-items:center}
+.optgrp{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.optgrp .gl{font-size:12px;font-weight:600;color:var(--td-text2);text-transform:uppercase;letter-spacing:.04em}
+.opt{
+  height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--td-border);
+  background:#fff;color:var(--td-text2);font-size:13px;font-weight:500;
+}
+.opt.on{background:var(--td-text);border-color:var(--td-text);color:var(--td-paper)}
+
+/* ---- tablet frame ---- */
+.tablet{
+  max-width:1100px;height:min(78vh,720px);min-height:520px;margin:0 auto;
+  background:var(--td-paper);border:1px solid var(--td-border);border-radius:18px;
+  overflow:hidden;display:flex;flex-direction:column;position:relative;
+  box-shadow:0 12px 40px rgba(17,26,43,.14);
+  user-select:none;-webkit-user-select:none;
+}
+
+/* head */
+.t-head{height:56px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--td-surface);border-bottom:1px solid var(--td-border)}
+.t-back{width:44px;height:44px;flex:none;margin-left:-12px;padding:0;display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--td-text2)}
+.t-back svg{width:22px;height:22px}
+.t-brand{font-size:15px;font-weight:500;letter-spacing:-.01em}
+.t-dot{width:4px;height:4px;border-radius:50%;background:var(--td-border);flex:none}
+.t-store{min-height:44px;padding:0 10px;border:1px solid transparent;background:transparent;border-radius:var(--r-control);font-size:13px;color:var(--td-text2);display:inline-flex;align-items:center;gap:6px}
+.t-head .sp{flex:1}
+.t-lang{min-height:44px;padding:0 12px;border:1px solid var(--td-border);background:var(--td-surface);border-radius:var(--r-control);font-size:13px;font-weight:500;color:var(--td-text2);display:inline-flex;align-items:center}
+.iconbtn{
+  width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--td-border);background:var(--td-surface);border-radius:var(--r-control);
+  color:var(--td-text2);
+}
+.iconbtn:active{background:var(--td-raised);color:var(--td-text)}
+.iconbtn svg{width:22px;height:22px}
+.iconbtn.hot{border-color:var(--td-dusk);color:var(--td-dusk);background:var(--td-dusk-tint)}
+
+/* body */
+.t-body{flex:1;display:flex;min-height:0}
+.t-entry{flex:1;min-width:0;display:flex;flex-direction:column;padding:16px;gap:12px}
+.srch{height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--td-surface);border:1px solid var(--td-border);border-radius:var(--r-control);color:var(--td-text2)}
+.srch svg{width:18px;height:18px;flex:none}
+.srch .ph{font-size:15px;color:var(--td-text2)}
+.cats{display:flex;gap:8px;flex:none;overflow:hidden}
+.cat{height:44px;padding:0 16px;flex:none;display:inline-flex;align-items:center;border-radius:var(--r-pill);border:1px solid var(--td-border);background:var(--td-surface);color:var(--td-text2);font-size:14px;font-weight:500;white-space:nowrap}
+.cat.on{background:var(--td-text);border-color:var(--td-text);color:var(--td-paper)}
+.grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:100px;gap:12px;align-content:start;overflow:hidden}
+.tile{border-radius:var(--r-card);border:1px solid var(--td-border);background:var(--td-surface);padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between;text-align:left;overflow:hidden}
+.tile:active{background:var(--td-raised)}
+.tile .nm{font-size:14px;font-weight:500;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .vl{font-size:13px;color:var(--td-text2)}
+.tile .ft{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tile .sku{font-size:12px;color:var(--td-text2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile .pr{font-size:15px;font-variant-numeric:tabular-nums;flex:none}
+
+/* rail */
+.t-order{width:380px;flex:none;display:flex;flex-direction:column;background:var(--td-surface);border-left:1px solid var(--td-border);min-height:0}
+.cust{flex:none;padding:14px 16px 0;font-size:13px;color:var(--td-text2)}
+.lines{flex:1;min-height:0;overflow:hidden;padding:10px 16px}
+.ln{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--td-border);font-size:14px}
+.ln .q{color:var(--td-text2);font-variant-numeric:tabular-nums}
+.ln .p{font-variant-numeric:tabular-nums;flex:none}
+.foot{flex:none;border-top:1px solid var(--td-border);padding:16px;background:var(--td-surface)}
+.sums{font-size:13px;color:var(--td-text2)}
+.sums div{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.tot{display:flex;align-items:baseline;justify-content:space-between;margin:8px 0 14px}
+.tot .lb{font-size:15px}
+.tot .amt{font-size:34px;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1}
+.pay{
+  width:100%;height:60px;border-radius:var(--r-control);border:1px solid var(--td-text);
+  background:var(--td-text);color:var(--td-paper);font-size:17px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.pay:active{opacity:.85}
+.rowbtns{display:flex;gap:10px;margin-top:10px}
+.sec{
+  flex:1;min-height:52px;border-radius:var(--r-control);border:1px solid var(--td-border);
+  background:var(--td-surface);font-size:14px;font-weight:500;color:var(--td-text);
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 10px;
+}
+.sec:active{background:var(--td-raised)}
+.sec svg{width:18px;height:18px;color:var(--td-text2)}
+.sec.calc{border-color:var(--td-dusk);color:var(--td-dusk)}
+.sec.calc svg{color:var(--td-dusk)}
+/* placement C: text link under the total */
+.calcline{display:flex;justify-content:flex-end;margin:-6px 0 10px}
+.calctext{border:0;background:transparent;color:var(--td-dusk);font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px;padding:6px 4px}
+.calctext svg{width:15px;height:15px}
+
+/* ---- calculator popup ---- */
+.calc-scrim{position:absolute;inset:0;background:rgba(17,26,43,.38);z-index:40;display:flex;opacity:0;pointer-events:none;transition:opacity .18s ease}
+.calc-scrim.open{opacity:1;pointer-events:auto}
+.calc-scrim.center{align-items:center;justify-content:center}
+.calc-scrim.sheet{align-items:flex-end;justify-content:flex-end;padding:0}
+
+.calc{
+  width:340px;background:var(--td-surface);border:1px solid var(--td-border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.calc.modal{border-radius:var(--r-card);box-shadow:0 20px 60px rgba(17,26,43,.3);transform:translateY(10px) scale(.98);transition:transform .22s cubic-bezier(0.16,1,0.3,1)}
+.calc-scrim.open .calc.modal{transform:none}
+.calc.sheetmode{border-radius:var(--r-card) var(--r-card) 0 0;height:100%;max-height:560px;width:380px;border-left:1px solid var(--td-border);border-bottom:0;border-right:0;transform:translateY(30px);transition:transform .28s cubic-bezier(0.16,1,0.3,1);box-shadow:-8px 0 40px rgba(17,26,43,.18)}
+.calc-scrim.open .calc.sheetmode{transform:none}
+
+.calc-hd{flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px 10px;border-bottom:1px solid var(--td-border)}
+.calc-hd .ttl{font-size:14px;font-weight:600;flex:1}
+.calc-hd .ttl .cn{color:var(--td-text2);font-weight:500;margin-left:6px}
+.calc-x{width:36px;height:36px;border:0;background:transparent;color:var(--td-text2);border-radius:var(--r-control);font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center}
+.calc-x:active{background:var(--td-raised)}
+
+.calc-disp{flex:none;padding:14px 16px 12px;text-align:right;background:var(--td-raised)}
+.calc-expr{min-height:18px;font-size:12px;color:var(--td-text2);font-variant-numeric:tabular-nums;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.calc-val{font-size:38px;font-weight:500;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.15;overflow:hidden;white-space:nowrap}
+
+.calc-keys{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--td-border);border-top:1px solid var(--td-border)}
+.k{
+  border:0;background:var(--td-surface);font-size:20px;font-weight:500;
+  min-height:56px;display:flex;align-items:center;justify-content:center;
+  font-variant-numeric:tabular-nums;
+}
+.k:active{background:var(--td-raised)}
+.k.op{background:var(--td-unseen,#F4F5F0);color:var(--td-text2);font-size:22px}
+.k.eq{background:var(--td-text);color:var(--td-paper)}
+.k.eq:active{opacity:.85}
+.k.danger{color:var(--td-brick-ink)}
+.calc-ft{flex:none;display:flex;gap:10px;padding:10px 14px 14px;border-top:1px solid var(--td-border)}
+.calc-copy{flex:1;min-height:44px;border-radius:var(--r-control);border:1px solid var(--td-border);background:var(--td-surface);font-size:13px;font-weight:500;color:var(--td-text2)}
+.calc-copy:active{background:var(--td-raised)}
+
+.mock-notes{max-width:1100px;margin:16px auto 0;font-size:13px;color:#58606E;line-height:1.6}
+.mock-notes h3{font-size:14px;margin:14px 0 4px;color:#111A2B}
+.mock-notes ul{margin:4px 0;padding-left:20px}
+.hidden{display:none !important}
+</style>
+
+<div class="mock-wrap">
+  <p class="mock-h1">Counter till — calculator button mockup</p>
+  <p class="mock-sub">Live mockup: pick a <b>button placement</b> and a <b>popup style</b>, then tap the calculator button in the screen below. The calculator works. Placement options: <b>A</b> — icon button in the head row (always reachable, even with an empty basket); <b>B</b> — wide button in the rail foot beside Hold / Discount (near the money, but only on the rail); <b>C</b> — quiet text link under the Total (least visual weight).</p>
+
+  <div class="optbar">
+    <div class="optgrp">
+      <span class="gl">Placement</span>
+      <button class="opt on" data-place="A">A · head row</button>
+      <button class="opt" data-place="B">B · rail foot</button>
+      <button class="opt" data-place="C">C · under total</button>
+    </div>
+    <div class="optgrp">
+      <span class="gl">Popup</span>
+      <button class="opt on" data-pop="modal">Centered modal</button>
+      <button class="opt" data-pop="sheet">Right-side sheet</button>
+    </div>
+  </div>
+
+  <div class="tablet">
+    <div class="t-head">
+      <button class="t-back" type="button" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+      <span class="t-brand">Counter</span>
+      <span class="t-dot"></span>
+      <button class="t-store" type="button">Roots · Main St <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+      <span class="sp"></span>
+      <button class="iconbtn" id="calc-head" type="button" aria-label="Calculator" title="Calculator 计算器">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10.01"/><line x1="12" y1="10" x2="12" y2="10.01"/><line x1="16" y1="10" x2="16" y2="10.01"/><line x1="8" y1="14" x2="8" y2="14.01"/><line x1="12" y1="14" x2="12" y2="14.01"/><line x1="16" y1="14" x2="16" y2="18"/><line x1="8" y1="18" x2="12" y2="18"/></svg>
+      </button>
+      <button class="t-lang" type="button">EN / 中文</button>
+    </div>
+
+    <div class="t-body">
+      <div class="t-entry">
+        <div class="srch">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+          <span class="ph">Search products…</span>
+        </div>
+        <div class="cats">
+          <button class="cat on" type="button">All</button>
+          <button class="cat" type="button">Bread</button>
+          <button class="cat" type="button">Pastries</button>
+          <button class="cat" type="button">Coffee</button>
+          <button class="cat" type="button">Pantry</button>
+        </div>
+        <div class="grid">
+          <button class="tile" type="button"><span><span class="nm">Sourdough Loaf</span><span class="vl">Large</span></span><span class="ft"><span class="sku">BR-001</span><span class="pr">¥48.00</span></span></button>
+          <button class="tile" type="button"><span><span class="nm">Organic Matcha Latte</span><span class="vl">Large</span></span><span class="ft"><span class="sku">CF-014</span><span class="pr">¥38.00</span></span></button>
+          <button class="tile" type="button"><span><span class="nm">Butter Croissant</span><span class="vl">Single</span></span><span class="ft"><span class="sku">PA-002</span><span class="pr">¥22.00</span></span></button>
+          <button class="tile" type="button"><span><span class="nm">Sea Salt Chocolate Chip</span><span class="vl">6-pack</span></span><span class="ft"><span class="sku">PA-009</span><span class="pr">¥54.00</span></span></button>
+          <button class="tile" type="button"><span><span class="nm">Cold Brew Bottle</span><span class="vl">300 ml</span></span><span class="ft"><span class="sku">CF-021</span><span class="pr">¥32.00</span></span></button>
+          <button class="tile" type="button"><span><span class="nm">Rye Boule</span><span class="vl">Medium</span></span><span class="ft"><span class="sku">BR-006</span><span class="pr">¥42.00</span></span></button>
+          <button class="tile" type="button"><span><span class="nm">Honey Jar</span><span class="vl">250 g</span></span><span class="ft"><span class="sku">PN-003</span><span class="pr">¥68.00</span></span></button>
+          <button class="tile" type="button"><span><span class="nm">Flat White</span><span class="vl">Regular</span></span><span class="ft"><span class="sku">CF-003</span><span class="pr">¥30.00</span></span></button>
+        </div>
+      </div>
+
+      <div class="t-order">
+        <div class="cust">Counter sale · walk-in</div>
+        <div class="lines">
+          <div class="ln"><span>Sourdough Loaf <span class="q">× 2</span></span><span class="p">¥96.00</span></div>
+          <div class="ln"><span>Organic Matcha Latte <span class="q">× 1</span></span><span class="p">¥38.00</span></div>
+          <div class="ln"><span>Butter Croissant <span class="q">× 3</span></span><span class="p">¥66.00</span></div>
+        </div>
+        <div class="foot">
+          <div class="sums">
+            <div><span>Subtotal</span><span>¥200.00</span></div>
+          </div>
+          <div class="tot"><span class="lb">Total</span><span class="amt">¥200.00</span></div>
+          <div class="calcline hidden" id="calc-link-row">
+            <button class="calctext" id="calc-link" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="11" x2="8" y2="11.01"/><line x1="12" y1="11" x2="12" y2="11.01"/><line x1="16" y1="11" x2="16" y2="11.01"/><line x1="8" y1="15" x2="8" y2="15.01"/><line x1="12" y1="15" x2="16" y2="15"/></svg>
+              Calculator
+            </button>
+          </div>
+          <button class="pay" type="button">Charge ¥200.00</button>
+          <div class="rowbtns">
+            <button class="sec" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+              Hold
+            </button>
+            <button class="sec" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+              Discount
+            </button>
+            <button class="sec calc hidden" id="calc-foot" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="11" x2="8" y2="11.01"/><line x1="12" y1="11" x2="12" y2="11.01"/><line x1="16" y1="11" x2="16" y2="11.01"/><line x1="8" y1="15" x2="8" y2="15.01"/><line x1="12" y1="15" x2="16" y2="15"/></svg>
+              Calculator
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- calculator popup -->
+    <div class="calc-scrim center" id="calc-scrim">
+      <div class="calc modal" id="calc-box" role="dialog" aria-label="Calculator">
+        <div class="calc-hd">
+          <span class="ttl">Calculator<span class="cn">计算器</span></span>
+          <button class="calc-x" id="calc-close" type="button" aria-label="Close">&times;</button>
+        </div>
+        <div class="calc-disp">
+          <div class="calc-expr" id="c-expr">&nbsp;</div>
+          <div class="calc-val" id="c-val">0</div>
+        </div>
+        <div class="calc-keys" id="c-keys">
+          <button class="k danger" data-a="C" type="button">C</button>
+          <button class="k op" data-a="B" type="button">⌫</button>
+          <button class="k op" data-a="%" type="button">%</button>
+          <button class="k op" data-a="÷" type="button">÷</button>
+          <button class="k" data-n="7" type="button">7</button>
+          <button class="k" data-n="8" type="button">8</button>
+          <button class="k" data-n="9" type="button">9</button>
+          <button class="k op" data-a="×" type="button">×</button>
+          <button class="k" data-n="4" type="button">4</button>
+          <button class="k" data-n="5" type="button">5</button>
+          <button class="k" data-n="6" type="button">6</button>
+          <button class="k op" data-a="−" type="button">−</button>
+          <button class="k" data-n="1" type="button">1</button>
+          <button class="k" data-n="2" type="button">2</button>
+          <button class="k" data-n="3" type="button">3</button>
+          <button class="k op" data-a="+" type="button">+</button>
+          <button class="k" data-a="±" type="button">±</button>
+          <button class="k" data-n="0" type="button">0</button>
+          <button class="k" data-n="." type="button">.</button>
+          <button class="k eq" data-a="=" type="button">=</button>
+        </div>
+        <div class="calc-ft">
+          <button class="calc-copy" id="c-copy" type="button">Copy result</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mock-notes">
+    <h3>Option notes</h3>
+    <ul>
+      <li><b>A · head row</b> — a 44px icon button beside the language control. Follows the existing head-row pattern (icon-only, min 44px touch target). Available even with an empty basket and on the settle screen if wanted later. Recommended: it never competes with the money controls.</li>
+      <li><b>B · rail foot</b> — a labelled button beside Hold / Discount. Most discoverable, but the foot row gets crowded and it is only visible on the till view.</li>
+      <li><b>C · under total</b> — a quiet text link. Zero layout weight, but easy to miss in a rush.</li>
+      <li><b>Centered modal</b> vs <b>right-side sheet</b>: the sheet slides over the order rail (matches the hold/discount pickers' feel) and keeps the basket visible; the modal is the classic popup you asked for and reads as a separate tool.</li>
+      <li>“Copy result” is optional — the till has no text field to paste into during a sale, so it can be dropped in the real build.</li>
+      <li>Real implementation: strings go through <code>cuT(en,cn)</code>, the 计算器 pair must be declared in <code>docs/tacet-delivery-vocabulary.md</code>, popup is a plain <code>hidden</code>-toggled div inside <code>.till</code> (no new dependencies), keys ≥ 52px on the tablet.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+(function(){
+  var wrap = document.currentScript.closest('.mock-wrap') || document;
+  var scrim = wrap.querySelector('#calc-scrim');
+  var box = wrap.querySelector('#calc-box');
+  var head = wrap.querySelector('#calc-head');
+  var foot = wrap.querySelector('#calc-foot');
+  var link = wrap.querySelector('#calc-link');
+  var linkRow = wrap.querySelector('#calc-link-row');
+  var expr = wrap.querySelector('#c-expr');
+  var val = wrap.querySelector('#c-val');
+  var copyBtn = wrap.querySelector('#c-copy');
+
+  var placement = 'A', popstyle = 'modal';
+
+  function applyPlacement(){
+    head.classList.toggle('hidden', placement !== 'A');
+    foot.classList.toggle('hidden', placement !== 'B');
+    linkRow.classList.toggle('hidden', placement !== 'C');
+  }
+  function applyPop(){
+    scrim.classList.toggle('center', popstyle === 'modal');
+    scrim.classList.toggle('sheet', popstyle === 'sheet');
+    box.classList.toggle('modal', popstyle === 'modal');
+    box.classList.toggle('sheetmode', popstyle === 'sheet');
+  }
+  wrap.querySelectorAll('[data-place]').forEach(function(b){
+    b.addEventListener('click', function(){
+      wrap.querySelectorAll('[data-place]').forEach(function(x){x.classList.remove('on')});
+      b.classList.add('on'); placement = b.dataset.place; applyPlacement();
+    });
+  });
+  wrap.querySelectorAll('[data-pop]').forEach(function(b){
+    b.addEventListener('click', function(){
+      wrap.querySelectorAll('[data-pop]').forEach(function(x){x.classList.remove('on')});
+      b.classList.add('on'); popstyle = b.dataset.pop; applyPop();
+    });
+  });
+
+  function open(){ scrim.classList.add('open'); }
+  function close(){ scrim.classList.remove('open'); }
+  head.addEventListener('click', open);
+  foot.addEventListener('click', open);
+  link.addEventListener('click', open);
+  wrap.querySelector('#calc-close').addEventListener('click', close);
+  scrim.addEventListener('click', function(e){ if(e.target === scrim) close(); });
+
+  /* immediate-execution calculator, no eval() */
+  var acc = null, pendingOp = null, cur = '0', fresh = true, lastExpr = '';
+  function fmt(n){
+    if(!isFinite(n)) return 'Error';
+    var r = Math.round(n * 1e10) / 1e10;
+    var s = String(r);
+    if(s.length > 12) s = r.toPrecision(10).replace(/\.?0+$/,'');
+    return s;
+  }
+  function paint(){
+    val.textContent = cur === 'Error' ? 'Error' : cur;
+    expr.innerHTML = lastExpr ? lastExpr : '&nbsp;';
+  }
+  function compute(a, op, b){
+    if(op === '+') return a + b;
+    if(op === '−') return a - b;
+    if(op === '×') return a * b;
+    if(op === '÷') return b === 0 ? NaN : a / b;
+    return b;
+  }
+  wrap.querySelector('#c-keys').addEventListener('click', function(e){
+    var k = e.target.closest('.k'); if(!k) return;
+    if(cur === 'Error' && !k.dataset.a) { cur='0'; fresh=true; }
+    if(k.dataset.n !== undefined){
+      var d = k.dataset.n;
+      if(fresh){ cur = (d === '.' ? '0.' : d); fresh = false; }
+      else{
+        if(d === '.' && cur.indexOf('.') >= 0) return;
+        if(cur.replace(/[-.]/g,'').length >= 12 && d !== '.') return;
+        cur += d;
+      }
+      paint(); return;
+    }
+    var a = k.dataset.a;
+    if(a === 'C'){ acc = null; pendingOp = null; cur = '0'; fresh = true; lastExpr=''; paint(); return; }
+    if(a === 'B'){ cur = cur.length > 1 ? cur.slice(0,-1) : '0'; if(cur === '-') cur='0'; paint(); return; }
+    if(a === '±'){ cur = cur.charAt(0) === '-' ? cur.slice(1) : (cur === '0' ? cur : '-' + cur); paint(); return; }
+    if(a === '%'){ cur = fmt(parseFloat(cur) / 100); fresh = true; paint(); return; }
+    if(a === '='){
+      if(pendingOp !== null && acc !== null){
+        lastExpr = fmt(acc) + ' ' + pendingOp + ' ' + cur + ' =';
+        var r = compute(acc, pendingOp, parseFloat(cur));
+        cur = fmt(r); acc = null; pendingOp = null; fresh = true; paint();
+      }
+      return;
+    }
+    /* an operator */
+    if(pendingOp !== null && acc !== null && !fresh){
+      var r2 = compute(acc, pendingOp, parseFloat(cur));
+      cur = fmt(r2);
+    }
+    acc = parseFloat(cur); pendingOp = a; fresh = true;
+    lastExpr = fmt(acc) + ' ' + a;
+    paint();
+  });
+
+  copyBtn.addEventListener('click', function(){
+    var t = cur;
+    copyBtn.textContent = 'Copied ✓';
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(t).catch(function(){}); }
+    setTimeout(function(){ copyBtn.textContent = 'Copy result'; }, 1200);
+  });
+
+  applyPlacement(); applyPop(); paint();
+})();
+</script>
