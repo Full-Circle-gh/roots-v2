@@ -2317,7 +2317,7 @@
         if (!track.isConnected || !track.offsetParent) return;
         if (now() < pauseUntil) return;
         go(cur + 1);
-      }, 4800);
+      }, 3000);
       carouselHandles.push(track._sbRailIv);
     }
     track.addEventListener('touchstart', pauseTouch, { passive: true });
