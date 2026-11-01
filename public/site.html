@@ -214,6 +214,12 @@
 
   /* One visit card: map + details together (§503 rule 50). */
   body .shop-blocks .sb-st-visit{background:#fff;border-radius:22px;overflow:hidden;}
+  /* The scroll shield sits beside the map node, not inside it (§503 rule 39).
+     Amap sets touch-action:none on the map node; a child cannot undo that. */
+  body .shop-blocks .sb-st-map-frame{position:relative;}
+  body .shop-blocks .sb-st-map-hit{
+    position:absolute;inset:0;z-index:8;touch-action:pan-y;background:transparent;
+  }
   body .shop-blocks .sb-st-visit .sb-st-map.is-live{margin-bottom:0;border-radius:0;}
   body .shop-blocks .sb-st-visit .sb-st-card{background:transparent;}
   @media (min-width:768px){
@@ -225,6 +231,8 @@
   @media (min-width:768px){
     body .shop-blocks .sb-st-visit{display:grid;grid-template-columns:1.15fr .85fr;align-items:stretch;}
     body .shop-blocks .sb-st-visit .sb-st-map.is-live{height:100%;min-height:420px;}
+    body .shop-blocks .sb-st-visit .sb-st-map-frame{height:100%;}
+    body .shop-blocks .sb-st-visit .sb-st-map-frame .sb-st-map.is-live{height:100%;min-height:420px;}
     body .shop-blocks .sb-st-visit .sb-st-card{padding:36px 40px;display:flex;flex-direction:column;justify-content:center;}
   }
   /* Slogan line edge to edge and large on a computer (§503 rule 48). */
@@ -635,6 +643,9 @@ async function render(){
 // a failed SDK the box stays collapsed and the block reads as before. On a
 // phone the map takes no drags (the page scrolls past it) and a tap opens the
 // phone's map app; on a computer it can be dragged and zoomed.
+// Turning drag off is not enough. Amap still sets touch-action:none on the
+// map node and cancels touchmove, so a finger that starts on the map cannot
+// scroll the page. shieldStoreMap lays a clear layer next to that node.
 let mapsCfg; let amapP=null;
 function loadAmap(cfg){
   if(amapP) return amapP;
@@ -648,6 +659,31 @@ function loadAmap(cfg){
     setTimeout(()=>reject(new Error('amap_timeout')),15000);
   });
   return amapP;
+}
+// §503 rule 39. The layer is a sibling of the map node. A finger scrolls the
+// page; a tap that did not move opens the phone's map app.
+function shieldStoreMap(box,pin){
+  if(!box.parentNode||(box.parentElement&&box.parentElement.classList.contains('sb-st-map-frame'))) return;
+  const frame=document.createElement('div');
+  frame.className='sb-st-map-frame';
+  box.parentNode.insertBefore(frame,box);
+  frame.appendChild(box);
+  const hit=document.createElement('div');
+  hit.className='sb-st-map-hit';
+  hit.setAttribute('aria-hidden','true');
+  let sx=0,sy=0,moved=false;
+  hit.addEventListener('touchstart',ev=>{
+    const t=ev.changedTouches&&ev.changedTouches[0];
+    if(!t) return;
+    sx=t.clientX; sy=t.clientY; moved=false;
+  },{passive:true});
+  hit.addEventListener('touchmove',ev=>{
+    const t=ev.changedTouches&&ev.changedTouches[0];
+    if(!t) return;
+    if(Math.abs(t.clientX-sx)>10||Math.abs(t.clientY-sy)>10) moved=true;
+  },{passive:true});
+  hit.addEventListener('click',()=>{ if(moved){ moved=false; return; } openInMapApp(pin); });
+  frame.appendChild(hit);
 }
 function openInMapApp(p){
   const ua=navigator.userAgent||'';
@@ -670,12 +706,12 @@ async function drawStoreMaps(root){
     if(!pins.length||!box.isConnected) continue;
     box.classList.add('is-live');
     try{
+      if(touch&&!STAGE_MODE) shieldStoreMap(box,pins[0]);
       const map=new AMap.Map(box,{zoom:16,center:[pins[0].lng,pins[0].lat],lang:'en',resizeEnable:true,
         dragEnable:!touch,zoomEnable:!touch,scrollWheel:false,doubleClickZoom:!touch,touchZoom:!touch});
       const markers=pins.map(p=>new AMap.Marker({position:[p.lng,p.lat],title:p.name||''}));
       map.add(markers);
       if(pins.length>1) map.setFitView(markers);
-      if(touch&&!STAGE_MODE) box.addEventListener('click',()=>openInMapApp(pins[0]));
     }catch(e){ box.classList.remove('is-live'); }
   }
 }
