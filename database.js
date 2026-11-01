@@ -8651,6 +8651,41 @@ try {
 } catch (e) { console.error('[migration ramada_banner_food_image_v1]', e); }
 
 
+// ── One-off: fix Ramada banner image path (static files live under /assets) ─
+//
+// The previous migration set the path to /media/ramada-banner-food.jpeg but
+// express.static mounts /public at /assets, so the correct URL is
+// /assets/media/ramada-banner-food.jpeg.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('ramada_banner_image_path_fix_v1');
+  if (!ran) {
+    const OLD_IMG = '/media/ramada-banner-food.jpeg';
+    const NEW_IMG = '/assets/media/ramada-banner-food.jpeg';
+    db.transaction(() => {
+      for (const key of ['website.layout', 'cms.draft.website_layout']) {
+        const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+        if (!row) continue;
+        let layout;
+        try { layout = JSON.parse(row.value_json); } catch { continue; }
+        if (!Array.isArray(layout)) continue;
+        let changed = false;
+        for (const b of layout) {
+          if (b && b.id === 'bwmenucta' && b.image_url === OLD_IMG) {
+            b.image_url = NEW_IMG;
+            changed = true;
+          }
+        }
+        if (changed) {
+          db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?').run(JSON.stringify(layout), key);
+          console.log('[migration] ramada_banner_image_path_fix_v1: ' + key + ' fixed bwmenucta image_url');
+        }
+      }
+      db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('ramada_banner_image_path_fix_v1');
+    })();
+  }
+} catch (e) { console.error('[migration ramada_banner_image_path_fix_v1]', e); }
+
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
