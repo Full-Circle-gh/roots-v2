@@ -1107,6 +1107,62 @@ app.get('/api/version', (req, res) => {
   });
 });
 
+// /sitemap.xml — public pages for search engines. Static pages are hardcoded;
+// shop menu pages (/s/:shopCode) are read from the tenant's active shops so
+// new shops appear without a deploy. Served from the canonical www domain so
+// Search Console sees one authoritative copy.
+const SITE_BASE = 'https://www.rootskitchenchina.com';
+app.get('/sitemap.xml', (req, res) => {
+  const staticUrls = [
+    { loc: SITE_BASE + '/', changefreq: 'daily', priority: '1.0' },
+    { loc: SITE_BASE + '/storefront', changefreq: 'weekly', priority: '0.8' },
+    { loc: SITE_BASE + '/shop-preview', changefreq: 'weekly', priority: '0.8' },
+    { loc: SITE_BASE + '/site-preview', changefreq: 'weekly', priority: '0.8' },
+  ];
+  // Pull active shop codes so each QR menu page gets a sitemap entry.
+  let shopRows = [];
+  try {
+    shopRows = tenantDb.tdb().prepare(
+      "SELECT public_code FROM shops WHERE is_active = 1 AND public_code IS NOT NULL"
+    ).all();
+  } catch { /* table may not exist in older schemas — degrade to static-only */ }
+  const shopUrls = shopRows.map(r => ({
+    loc: SITE_BASE + '/s/' + r.public_code,
+    changefreq: 'weekly',
+    priority: '0.7',
+  }));
+  const urls = [...staticUrls, ...shopUrls];
+  const today = new Date().toISOString().slice(0, 10);
+  const xml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...urls.map(u =>
+      '  <url><loc>' + u.loc + '</loc><lastmod>' + today +
+      '</lastmod><changefreq>' + u.changefreq +
+      '</changefreq><priority>' + u.priority + '</priority></url>'
+    ),
+    '</urlset>',
+  ].join('\n');
+  res.type('application/xml').send(xml);
+});
+
+// /robots.txt — tells crawlers where the sitemap is and which paths to skip.
+app.get('/robots.txt', (req, res) => {
+  const lines = [
+    'User-agent: *',
+    'Allow: /',
+    'Disallow: /backend/',
+    'Disallow: /retail-admin/',
+    'Disallow: /store-admin/',
+    'Disallow: /saas-admin/',
+    'Disallow: /api/',
+    'Disallow: /impersonate',
+    'Sitemap: ' + SITE_BASE + '/sitemap.xml',
+    '',
+  ];
+  res.type('text/plain').send(lines.join('\n'));
+});
+
 // 404
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
