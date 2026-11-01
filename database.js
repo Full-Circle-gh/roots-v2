@@ -8719,6 +8719,39 @@ try {
 } catch (e) { console.error('[migration ramada_banner_aspect_v1]', e); }
 
 
+// ── One-off: restore Ramada banner aspect to 4:3 after crop ─────────────────
+//
+// The image was cropped from portrait to landscape 4:3. Update the stored
+// aspect ratio so the split hero renders at the correct size.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('ramada_banner_aspect_restore_v1');
+  if (!ran) {
+    const NEW_ASPECT = 1.3333;
+    db.transaction(() => {
+      for (const key of ['website.layout', 'cms.draft.website_layout']) {
+        const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+        if (!row) continue;
+        let layout;
+        try { layout = JSON.parse(row.value_json); } catch { continue; }
+        if (!Array.isArray(layout)) continue;
+        let changed = false;
+        for (const b of layout) {
+          if (b && b.id === 'bwmenucta' && b.image_aspect !== NEW_ASPECT) {
+            b.image_aspect = NEW_ASPECT;
+            changed = true;
+          }
+        }
+        if (changed) {
+          db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?').run(JSON.stringify(layout), key);
+          console.log('[migration] ramada_banner_aspect_restore_v1: ' + key + ' patched bwmenucta image_aspect to 1.3333');
+        }
+      }
+      db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('ramada_banner_aspect_restore_v1');
+    })();
+  }
+} catch (e) { console.error('[migration ramada_banner_aspect_restore_v1]', e); }
+
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
