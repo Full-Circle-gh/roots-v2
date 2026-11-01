@@ -83,10 +83,14 @@
     .foot-links a{display:inline-flex;align-items:center;min-height:44px;}
 
     body .shop-blocks .sb-hero-split{grid-template-columns:1fr;min-height:0;}
+    /* Poster heroes (full + contain) letterbox on oat, not blocks.css's gray
+       loading gradient ? otherwise a band shows between bordered copy above
+       and the artwork (brand signature, fair banner, etc.). */
+    body .shop-blocks .sb-hero.sb-hero-full.sb-hero-fit-contain{background:var(--oat);}
     /* The picture keeps its own shape and fills the width (§503 rule 44).
        A fixed short box was leaving the café photo and the Canton Fair
        logo sitting in part of a gray bar. */
-    body .shop-blocks .sb-split-img{height:auto;}
+    body .shop-blocks .sb-split-img{height:auto;background:var(--oat);}
     body .shop-blocks .sb-split-img .sb-hero-img,body .shop-blocks .sb-split-img .sb-hero-video{width:100%;height:auto;object-fit:contain;display:block;}
     body .shop-blocks .sb-split-panel{padding:18px 22px 28px;}
     body .shop-blocks .sb-split-panel .sb-headline{font-size:38px;line-height:1.04;}

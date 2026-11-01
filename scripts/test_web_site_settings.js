@@ -210,8 +210,12 @@ yes(!/font-size:17px/.test(read('public/shop/blocks.css').slice(0, 200)) && /--u
 // ─────────────────────────────────────────────────────────────────────────
 section('7 · the phone banner, the labels, and the Yuexiu address (§503 rules 44–46)');
 
-yes(/\.sb-split-img\{height:auto\}/.test(SITE) && /\.sb-split-img \.sb-hero-img,body \.shop-blocks \.sb-split-img \.sb-hero-video\{width:100%;height:auto\}/.test(SITE),
+yes(/body \.shop-blocks \.sb-split-img\{height:auto/.test(SITE) && /body \.shop-blocks \.sb-split-img \.sb-hero-img,body \.shop-blocks \.sb-split-img \.sb-hero-video\{width:100%;height:auto/.test(SITE),
   'a split hero picture keeps its own shape and fills the width');
+yes(/sb-hero-fit-contain\{background:var\(--oat\)/.test(SITE),
+  'a poster hero letterboxes on oat on a phone, not the gray loading bar');
+yes(/\.sb-split-img\{height:auto;background:var\(--oat\)/.test(SITE),
+  'a split hero picture sits on oat, not #ddd');
 yes(!/height:196px/.test(SITE),
   'the picture is not locked into a short strip');
 yes(/\.sb-steps-kicker,body \.shop-blocks \.sb-cl-kicker[\s\S]{0,220}font-size:16px/.test(SITE),
