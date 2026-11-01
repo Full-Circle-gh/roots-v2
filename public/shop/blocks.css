@@ -2830,7 +2830,10 @@
 .shop-blocks .sb-cl-stars { color: var(--cl-accent); letter-spacing: 0.06em; }
 .shop-blocks .sb-cl-off { opacity: 0.25; }
 /* An ID or an address is one word to copy: it never breaks inside itself. */
-.shop-blocks .sb-cl-sub.sb-cl-copy { overflow-wrap: normal; word-break: keep-all; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop-blocks .sb-cl-sub.sb-cl-copy { overflow-wrap: normal; word-break: keep-all; white-space: nowrap; }
+/* WeChat ID: no truncation, tap to copy. */
+.shop-blocks .sb-cl-wechat-id { cursor: pointer; }
+.shop-blocks .sb-cl-wechat-id:active { opacity: 0.6; }
 .shop-blocks .sb-cl-qr { flex: none; width: calc(140 * var(--u)); height: calc(140 * var(--u)); object-fit: contain; background: #fff; border-radius: calc(10 * var(--u)); }
 
 @media (min-width: 768px) {

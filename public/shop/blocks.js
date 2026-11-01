@@ -1760,7 +1760,7 @@
     var items = [];
     var ta = contactUrl(b.tripadvisor_url), hc = contactUrl(b.happycow_url);
     var ig = contactHandle(b.instagram), wa = contactWhatsapp(b), em = contactEmail(b.email);
-    var wc = String(b.wechat_id || '').trim().slice(0, 40), qr = absUrl(b.wechat_qr_url || '');
+    var wc = String(b.wechat_id || '').trim(), qr = absUrl(b.wechat_qr_url || '');
     function link(key, href, name, sub, rateHtml) {
       return '<a class="sb-cl-item" href="' + attr(href) + '" target="_blank" rel="noopener">' +
         '<span class="sb-cl-ico">' + CONTACT_ICONS[key] + '</span>' +
@@ -1783,7 +1783,7 @@
     if (wc || qr) items.push('<div class="sb-cl-item sb-cl-wechat">' +
       '<span class="sb-cl-ico">' + CONTACT_ICONS.wechat + '</span>' +
       '<span class="sb-cl-txt"><span class="sb-cl-name">' + (CN() ? '微信' : 'WeChat') + '</span>' +
-      (wc ? '<span class="sb-cl-sub sb-cl-copy">' + escapeHtml(wc) + '</span>' : '') + '</span>' +
+      (wc ? '<span class="sb-cl-sub sb-cl-copy sb-cl-wechat-id" data-wc-id="' + attr(wc) + '" title="' + (CN() ? '点击复制微信号' : 'Tap to copy WeChat ID') + '">' + escapeHtml(wc) + '</span>' : '') + '</span>' +
       (qr ? '<img class="sb-cl-qr" src="' + attr(qr) + '" alt="" loading="lazy">' : '') + '</div>');
     if (!items.length) return '';
     var kicker = pick(b.kicker_en, b.kicker_cn), title = pick(b.title_en, b.title_cn);
@@ -2186,6 +2186,32 @@
     if (!rootEl) return;
     initCarousels(rootEl);
     initAutoScrollRails(rootEl);
+    // WeChat ID: tap to copy. Delegated on the blocks root so it survives rerenders.
+    rootEl.onclick = rootEl.onclick || null; // keep any existing handler
+    var wcHandler = function (e) {
+      var target = e.target;
+      while (target && target !== rootEl) {
+        if (target.classList && target.classList.contains('sb-cl-wechat-id')) {
+          var id = target.getAttribute('data-wc-id');
+          if (id && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(id).then(function () {
+              var orig = target.textContent;
+              target.textContent = CN() ? '已复制 ✓' : 'Copied ✓';
+              setTimeout(function () { target.textContent = orig; }, 1200);
+            }).catch(function () {});
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        target = target.parentNode;
+      }
+    };
+    // Attach once; startTimers may be called multiple times on rerender.
+    if (!rootEl._wcClickBound) {
+      rootEl.addEventListener('click', wcHandler);
+      rootEl._wcClickBound = true;
+    }
     var blocks = lastRendered || (ctx.config && ctx.config.home && ctx.config.home.layout);
     warmLazyData(blocks);
     tickHandle = setInterval(function () { tick(rootEl); }, 1000);
