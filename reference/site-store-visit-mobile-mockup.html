@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Store visit block — mobile layout options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --olive:#6A6E2D; --muted:#7c7c72;
+    --f-bear:'Bear Serif',Georgia,serif;
+    --f-toni:'Toni Grotesk',system-ui,sans-serif;
+    --f-aleo:'Aleo',Georgia,serif;
+    --phone:390px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--f-aleo);background:#e8e0d8;color:var(--ink);padding:32px 20px 48px;line-height:1.45}
+  .wrap{max-width:920px;margin:0 auto}
+  h1{font-family:var(--f-bear);font-size:28px;font-weight:500;margin-bottom:8px}
+  .lede{font-size:15px;color:var(--muted);max-width:52em;margin-bottom:12px}
+  .diag{font-size:14px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:16px 18px;margin-bottom:28px}
+  .diag b{color:var(--forest)}
+  .opt{margin:40px 0 0}
+  .opt-h{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}
+  .opt-h h2{font-family:var(--f-toni);font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--olive)}
+  .opt-h .name{font-family:var(--f-bear);font-size:22px;font-weight:500}
+  .rec{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 10px;border-radius:999px;background:#e8f0e4;color:var(--forest)}
+  .note{font-size:14px;color:var(--muted);margin-top:12px;max-width:52em}
+  .note b{color:var(--ink);font-weight:600}
+
+  /* phone chrome */
+  .phone-wrap{display:flex;justify-content:center;padding:8px 0 4px}
+  .phone{width:var(--phone);background:var(--oat);border-radius:28px;box-shadow:0 12px 40px rgba(0,0,0,.12);overflow:hidden;border:1px solid rgba(0,0,0,.06)}
+  .phone-status{height:28px;background:var(--oat);font-size:11px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+  .phone-body{padding:0 0 20px}
+  .kicker{font-family:var(--f-toni);font-weight:700;font-size:11px;letter-spacing:.16em;text-transform:uppercase;opacity:.85;padding:20px 22px 0;color:var(--olive)}
+
+  /* shared map placeholder */
+  .map{height:220px;background:linear-gradient(145deg,#d4e8c8 0%,#a8c99a 40%,#8fb8e8 100%);position:relative;overflow:hidden}
+  .map::after{content:'';position:absolute;left:50%;top:42%;width:14px;height:14px;background:#2b6cb0;border-radius:50% 50% 50% 0;transform:translate(-50%,-100%) rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,.25)}
+  .map-tall{height:260px}
+  .map-scrim{position:absolute;inset:0;background:linear-gradient(to top,rgba(26,26,23,.72) 0%,transparent 55%);pointer-events:none}
+  .map-cap{position:absolute;left:16px;right:16px;bottom:14px;color:#fff;font-size:14px;line-height:1.35;pointer-events:none}
+  .map-cap strong{display:block;font-family:var(--f-bear);font-size:17px;margin-bottom:2px}
+
+  .visit{background:#fff;border-radius:22px;margin:16px 22px 0;overflow:hidden}
+  .card{padding:18px 22px 22px}
+  .card-tight{padding:12px 22px 18px}
+  .title{font-family:var(--f-bear);font-size:26px;line-height:1.15;margin-bottom:0}
+  .title-sm{font-size:22px;margin-bottom:6px}
+
+  /* broken — mimics live bug: no card padding + negative-margin band */
+  .broken .card{padding:0 22px 18px}
+  .broken .addr-bad{
+    margin:0 -22px 14px;padding:14px 16px;background:var(--oat);
+    font-size:17px;line-height:1.05;
+    /* tight line-height + band sitting under tall Bear title = overlap read */
+  }
+  .broken .title{margin-top:14px;margin-bottom:-6px;position:relative;z-index:1}
+
+  /* good address styles */
+  .addr{font-size:16px;line-height:1.45;margin:10px 0 16px;overflow-wrap:anywhere}
+  .addr-band{margin:12px 0 16px;padding:12px 14px;background:var(--oat);border-radius:12px;font-size:15px;line-height:1.45}
+  .addr-muted{font-size:14px;color:var(--muted);margin:-8px 0 14px}
+
+  .btn-dir{
+    display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;
+    background:var(--forest);color:#fff;border-radius:999px;text-decoration:none;
+    font-family:var(--f-toni);font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;
+    margin-bottom:12px;
+  }
+  .links{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 14px;font-family:var(--f-toni);font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+  .links a{color:inherit;text-decoration:underline}
+  .links-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px}
+  .links-row a{
+    text-align:center;padding:10px 6px;border:2px solid var(--ink);border-radius:999px;
+    font-family:var(--f-toni);font-weight:700;font-size:10px;letter-spacing:.04em;text-transform:uppercase;text-decoration:none;
+  }
+  .more-maps{
+    display:block;width:100%;text-align:center;margin-top:10px;padding:8px;
+    font-family:var(--f-toni);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    background:none;border:0;text-decoration:underline;color:var(--muted);cursor:pointer;
+  }
+  .hours{font-size:14px;color:var(--muted);margin:6px 0 0}
+  .pill-open{display:inline-flex;align-items:center;gap:6px;font-size:14px;margin:8px 0 4px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#7cb342}
+
+  .compare{display:grid;gap:32px}
+  @media(min-width:860px){
+    .compare-2{grid-template-columns:1fr 1fr;align-items:start}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Store visit block — mobile</h1>
+  <p class="lede">The live card stacks map, title, address band, primary button, and three map links in one white shell. On a phone the address lines are colliding (your screenshot). These are layout options on the same content: Roots · Yuexiu, English address, Get directions, Apple / Google / Amap.</p>
+
+  <div class="diag">
+    <b>What is going wrong today</b> — <code>mountStoreVisit</code> in <code>public/site.html</code> moves the address into <code>.sb-st-visit-addr</code> with <code>margin: 0 -22px</code>, but the visit card body on mobile never gets the inner padding the desktop side has (<code>padding: 36px 40px</code>). The Bear title, oat address band, and any Chinese address line compete in the same vertical slice. Fix can be CSS-only; these mockups show how much to restructure.
+  </div>
+
+  <div class="opt">
+    <div class="opt-h"><h2>Baseline</h2><span class="name">Today (broken read)</span></div>
+    <div class="phone-wrap"><div class="phone"><div class="phone-status">390 × 844 · live pattern</div><div class="phone-body">
+      <div class="kicker">Come say hi · plant-based café in Yuexiu, Guangzhou</div>
+      <div class="visit broken">
+        <div class="map"></div>
+        <div class="card">
+          <div class="title">Roots · Yuexiu</div>
+          <div class="addr-bad">No. 12 Tianhe Rd, Zhujiang New Town, Tianhe District, Guangzhou</div>
+          <a class="btn-dir" href="#">Get directions</a>
+          <div class="links"><a href="#">Apple Maps</a><a href="#">Google Maps</a><a href="#">Amap</a></div>
+        </div>
+      </div>
+    </div></div></div>
+    <p class="note"><b>Symptom:</b> title and address feel printed on top of each other; the band bleeds sideways while the card has no top padding under the map.</p>
+  </div>
+
+  <div class="opt">
+    <div class="opt-h"><h2>Option A</h2><span class="name">Padded card, plain address</span><span class="rec">smallest change</span></div>
+    <div class="phone-wrap"><div class="phone"><div class="phone-body">
+      <div class="kicker">Come say hi · …</div>
+      <div class="visit">
+        <div class="map"></div>
+        <div class="card">
+          <div class="title title-sm">Roots · Yuexiu</div>
+          <p class="addr">No. 12 Tianhe Rd, Zhujiang New Town, Tianhe District, Guangzhou</p>
+          <a class="btn-dir" href="#">Get directions</a>
+          <div class="links"><a href="#">Apple Maps</a><a href="#">Google Maps</a><a href="#">Amap</a></div>
+        </div>
+      </div>
+    </div></div></div>
+    <p class="note"><b>Change:</b> drop negative margins; add <code>padding: 18px 22px</code> on <code>.sb-st-visit .sb-st-card</code>; address is normal text with <code>line-height: 1.45</code> and <code>overflow-wrap: anywhere</code>. Keep map links on mobile or hide per rule 50 note. Same information hierarchy as now, readable.</p>
+  </div>
+
+  <div class="opt">
+    <div class="opt-h"><h2>Option B</h2><span class="name">Map hero + caption</span><span class="rec">best scan</span></div>
+    <div class="phone-wrap"><div class="phone"><div class="phone-body">
+      <div class="kicker">Come say hi · …</div>
+      <div class="visit">
+        <div class="map map-tall">
+          <div class="map-scrim"></div>
+          <div class="map-cap"><strong>Roots · Yuexiu</strong>Tap map for directions<br>No. 12 Tianhe Rd, Zhujiang New Town…</div>
+        </div>
+        <div class="card card-tight">
+          <a class="btn-dir" href="#">Get directions</a>
+          <div class="links"><a href="#">Apple Maps</a><a href="#">Google Maps</a><a href="#">Amap</a></div>
+        </div>
+      </div>
+    </div></div></div>
+    <p class="note"><b>Change:</b> taller map (~260px); name + one-line address sit on a bottom scrim (tap target = whole map). Body is only the green button and links. Visitors see <em>where</em> first; text cannot collide with the Bear title under the map fold.</p>
+  </div>
+
+  <div class="opt">
+    <div class="opt-h"><h2>Option C</h2><span class="name">One button, links tucked away</span></div>
+    <div class="phone-wrap"><div class="phone"><div class="phone-body">
+      <div class="kicker">Come say hi · …</div>
+      <div class="visit">
+        <div class="map"></div>
+        <div class="card">
+          <div class="title title-sm">Roots · Yuexiu</div>
+          <div class="addr-band">No. 12 Tianhe Rd<br>Zhujiang New Town, Tianhe District<br>Guangzhou</div>
+          <a class="btn-dir" href="#">Get directions</a>
+          <button type="button" class="more-maps">Other map apps</button>
+        </div>
+      </div>
+    </div></div></div>
+    <p class="note"><b>Change:</b> address broken into three deliberate lines inside the oat band (no underline link styling on mobile). Apple / Google / Amap collapse behind “Other map apps” (disclosure or bottom sheet). Cuts vertical height ~40px and matches rule 50’s intent to hide the link row on phones unless asked.</p>
+  </div>
+
+  <div class="opt">
+    <div class="opt-h"><h2>Option D</h2><span class="name">Directions-first (minimal copy)</span></div>
+    <div class="phone-wrap"><div class="phone"><div class="phone-body">
+      <div class="kicker">Come say hi · …</div>
+      <div class="visit">
+        <div class="map map-tall"></div>
+        <div class="card card-tight">
+          <div class="title title-sm">Roots · Yuexiu</div>
+          <div class="pill-open"><span class="dot"></span> Open now · 8:00 – 20:00</div>
+          <p class="addr-muted">Address opens in your map app</p>
+          <a class="btn-dir" href="#">Get directions</a>
+          <div class="links-row">
+            <a href="#">Apple</a><a href="#">Google</a><a href="#">Amap</a>
+          </div>
+        </div>
+      </div>
+    </div></div></div>
+    <p class="note"><b>Change:</b> drop the long English address from the card on mobile (keep it on desktop and in the map deep link). Status + one CTA + three compact chips. Best when most visitors are in Guangzhou and only need a tap-to-navigate flow; taxi drivers still get Chinese address via desktop or “show CN address” toggle elsewhere.</p>
+  </div>
+
+  <p class="note" style="margin-top:48px;padding-top:24px;border-top:1px solid rgba(0,0,0,.1)"><b>Recommendation:</b> ship <b>Option A</b> immediately if you want a one-commit fix on <code>public/site.html</code> mobile rules. If you are willing to touch markup/JS, <b>Option B</b> matches the “map hero” feel of the rest of the site and removes the overlap class of bug entirely. Say which letter you want built on the branch.</p>
+</div>
+</body>
+</html>
