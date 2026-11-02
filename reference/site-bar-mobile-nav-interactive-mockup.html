@@ -45,13 +45,12 @@
   }
   .site-mobile-nav.is-open{opacity:1;visibility:visible;pointer-events:auto;}
   body.demo-nav-open .site-bar{z-index:6;background:#fff;}
-  .site-mobile-nav-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+  .site-mobile-nav-top{display:flex;justify-content:flex-end;align-items:center;margin-bottom:6px;}
   .site-mobile-nav-close{
     width:48px;height:48px;border:2px solid var(--ink);border-radius:8px;background:#fff;
     display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;color:var(--ink);
   }
   .site-mobile-nav-close svg{width:24px;height:24px;}
-  .site-mobile-nav-kicker{font-family:var(--f-toni);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--forest);}
   .site-mobile-nav-links{list-style:none;flex:1;overflow:auto;}
   .site-mobile-nav-links a{
     display:flex;align-items:center;min-height:48px;font-family:var(--f-bear);font-size:21px;
@@ -68,7 +67,7 @@
 </style>
 </head>
 <body>
-<p class="hint"><b>Tap the button on the phone</b> Closed: three lines on the bar. Open: menu fades in; use the × beside Jump to (or a link) to close — not a second × on the bar.</p>
+<p class="hint"><b>Tap the button on the phone</b> Closed: three lines on the bar. Open: menu fades in; use the × (or a link) to close — not a second × on the bar.</p>
 <div class="phone-wrap">
   <div class="phone" id="demoPhone">
     <header class="site-bar">
@@ -83,7 +82,6 @@
     <p class="hero-copy">Landed in Guangzhou? <em>Fresh food, sorted.</em></p>
     <div class="site-mobile-nav" id="demoNav" aria-hidden="true">
       <div class="site-mobile-nav-top">
-        <span class="site-mobile-nav-kicker">Jump to</span>
         <button type="button" class="site-mobile-nav-close" id="demoNavClose" aria-label="Close menu">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
