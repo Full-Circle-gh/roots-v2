@@ -302,6 +302,15 @@ yes(/function openSiteBarMenu\(url,ev\)/.test(SITE) && /siteMenuDesktop\(\)\) op
   'a computer opens the bar Menu in the phone frame; a phone follows the link');
 yes(/overflow-x:clip/.test(SITE) && /id="barLinks"/.test(SITE) && /SITE_BAR_LINKS/.test(SITE) && /function mountBarLinks\(/.test(SITE) && !/id="barMenuPanel"/.test(SITE),
   'on a computer the bar stays put and carries six section links beside Menu');
+
+// ─────────────────────────────────────────────────────────────────────────
+section('12 · phone hamburger nav (§503 rule 55 · option C)');
+
+yes(/id="barNavOpenBtn"/.test(SITE) && /id="siteMobileNav"/.test(SITE) && /Jump to/.test(SITE)
+  && /function mountMobileNav\(/.test(SITE) && /function openMobileNav\(/.test(SITE),
+  'a phone opens a full-screen panel with the same bar links and Menu');
+yes(/header\.site-bar \.bar-menu-btn\{display:none/.test(SITE),
+  'the forest Menu pill is not on the phone bar');
 const BAR_MOCK = read('reference/site-bar-section-links-mockup.html');
 yes(/href="#new-to-china">New to China/.test(BAR_MOCK)
   && /href="#products">Our products/.test(BAR_MOCK)
