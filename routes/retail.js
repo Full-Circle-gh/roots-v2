@@ -32581,7 +32581,7 @@ const ALLOWED_BLOCK_TYPES = new Set([
   'promo_cards',
   // §503 — website-only blocks for the brand website (public/site.html): a
   // colour band of short facts, and numbered steps. No mini-app branch.
-  'fact_band', 'steps', 'contact_links', 'menu_showcase',
+  'fact_band', 'steps', 'contact_links', 'menu_showcase', 'about_stats',
   // ── Deprecated types kept on the whitelist so existing drafts/layouts
   // still validate. The CMS palette hides them; clients ignore them.
   'wechat_oa',                        // replaced 2026-05-19 by wecom_contact

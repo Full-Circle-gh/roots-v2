@@ -1055,28 +1055,17 @@ function scheduleRecipeStoryCharacterDock(root){
   });
 }
 
-// The Our story card on this website. The mini app and the web shop do
-// not use it. A card the bar already calls Our story, or one aimed at the
-// essay, is the one that opens the full piece.
+// The story card that opens the essay. The button's target is what decides
+// it. A card still labelled Our story, from before that target was saved,
+// counts too, so the popup can find it.
 function isOurStory(b){
   if(!b||b.type!=='recipe_story') return false;
   if(b.cta_target==='story'||b.cta_target==='about') return true;
-  return /our story/i.test(String(pick(b.kicker_en,b.kicker_cn)||''));
+  return /our story|founder's story/i.test(String(pick(b.kicker_en,b.kicker_cn)||''));
 }
 const FOUNDER_STORY_KICKER_EN="Founder's Story";
 const FOUNDER_STORY_KICKER_CN='\u521b\u59cb\u4eba\u6545\u4e8b';
 let siteLayout=[];
-function layoutForSite(layout){
-  const about=state.config&&state.config.about&&state.config.about.content;
-  const base=(window.ShopBlocks&&ShopBlocks.withFrontFacts)
-    ?ShopBlocks.withFrontFacts(layout,about)
-    :(Array.isArray(layout)?layout:[]);
-  return base.map(b=>isOurStory(b)?Object.assign({},b,{
-    cta_target:'story',
-    kicker_en:FOUNDER_STORY_KICKER_EN,
-    kicker_cn:FOUNDER_STORY_KICKER_CN,
-  }):b);
-}
 let siteStoryCloseTimer=0;
 function finishCloseSiteStoryPopup(){
   const scrim=$('#siteStoryScrim');
@@ -1115,21 +1104,28 @@ function wireSiteStoryPopup(){
     if(ev.key==='Escape'&&scrim&&!scrim.hidden&&scrim.classList.contains('is-open')) closeSiteStoryPopup();
   });
 }
-function showFounderStory(){
+function showFounderStory(blockId){
   const scroll=$('#siteStoryScroll'), scrim=$('#siteStoryScrim');
   if(!scroll||!scrim) return;
   const cn=state.lang==='cn';
   const stored=state.config&&state.config.about&&state.config.about.content;
   const c=(stored&&typeof stored==='object')?stored:{};
-  const card=(Array.isArray(siteLayout)?siteLayout:[]).find(isOurStory)||null;
-  const quote=String(pick(c.founder_quote_en,c.founder_quote_cn)||'').trim();
-  const cardBody=card?String(pick(card.body_en,card.body_cn)||'').trim():'';
-  const essay=quote||cardBody;
+  const cards=Array.isArray(siteLayout)?siteLayout:[];
+  const card=(blockId&&cards.find(b=>b&&b.id===blockId))||cards.find(isOurStory)||null;
+  // The essay and the sign-off are fields on the card, edited on the Website
+  // page. A card saved before those fields existed still reads About.
+  const owns=function(key){ return !!(card&&Object.prototype.hasOwnProperty.call(card,key)); };
+  const essay=(owns('essay_en')||owns('essay_cn'))
+    ?String(pick(card.essay_en,card.essay_cn)||'').trim()
+    :(String(pick(c.founder_quote_en,c.founder_quote_cn)||'').trim()
+      ||(card?String(pick(card.body_en,card.body_cn)||'').trim():''));
   const name=String(pick(c.founder_name_en,c.founder_name_cn)||'').trim();
   const headline=(card&&String(pick(card.headline_en,card.headline_cn)||'').trim())||name||(cn?'我们的故事':'Our story');
-  const kicker=cn?FOUNDER_STORY_KICKER_CN:FOUNDER_STORY_KICKER_EN;
+  const kicker=(card&&String(pick(card.kicker_en,card.kicker_cn)||'').trim())||(cn?FOUNDER_STORY_KICKER_CN:FOUNDER_STORY_KICKER_EN);
   const image=String((card&&card.image_url)||c.founder_photo_url||c.hero_image_url||'').trim();
-  const outro=String(pick(c.outro_en,c.outro_cn)||'').trim();
+  const outro=(owns('signoff_en')||owns('signoff_cn'))
+    ?String(pick(card.signoff_en,card.signoff_cn)||'').trim()
+    :String(pick(c.outro_en,c.outro_cn)||'').trim();
   scroll.innerHTML='';
   const art=document.createElement('article');
   art.className='site-story';
@@ -1170,7 +1166,7 @@ async function render(){
   if(!state.products) state.products=await loadProducts(layout);
   ShopBlocks.stopTimers();
   ShopBlocks.setContext({ lang:state.lang, products:state.products, categories:[], flashSales:[], config:state.config });
-  view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layoutForSite(layout))+'</div>';
+  view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layout)+'</div>';
   ShopBlocks.startTimers(view);
   scrollToBarHashDone=false;
   mountBarLinks(layout);
@@ -1305,7 +1301,11 @@ function renderChatButton(layout){
     const el=ev.target.closest('[data-cta-target]'); if(!el) return;
     ev.preventDefault();
     const t=String(el.getAttribute('data-cta-target')||'');
-    if(t==='story'){ showFounderStory(); return; }
+    if(t==='story'){
+      const outer=el.closest('.sb-blk-outer');
+      showFounderStory(outer&&outer.getAttribute('data-block-id'));
+      return;
+    }
     if(/^https:\/\//i.test(t)) window.open(t,'_blank','noopener');
   });
 

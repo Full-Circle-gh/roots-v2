@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.620
+# Tacet shared-core consolidation — decisions record, v4.621
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-02 · v4.621 — **§511 · THE FACTS STRIP AND THE FOUNDER ESSAY ARE BLOCKS ON THE WEBSITE PAGE — ASH.** Ash: *"in tacet editor I want to be able to edit every block of the location website"*. The black facts strip was filled from About at draw time, and the essay popup read About's founder quote, so the Website page could not change either. The strip is now an `about_stats` block. The story card keeps its short body and gains the essay and the sign-off. Boot copies today's words onto the published layout and the draft once. Two composed strings (vocabulary v1.379). No change to `.gitignore` or CI.
 
 2026-11-02 · v4.619 — **§503 AMENDED · OUR PRODUCTS STARTS AT THE PLATTERS — ASH.** Ash cancelled a separate Ramada link and said *"our products" will start from the platters section*, then *"deploy live"*. The **Our products** bar link, on the computer bar and in the phone list, scrolls to the menu showcase whose title or id names platters. Toasts, salads, wraps, drinks and the take-home grid follow on the page. If that showcase is missing, the link still lands on the product grid. The 22px size from v4.618 stands. No new words. No change to `.gitignore` or CI.
 
@@ -33880,3 +33882,15 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 4. **Words.** One composed pair, `Calculator · 计算器` (vocabulary v1.373), used for both the button and the sheet title. The close row is the locked `Cancel · 取消`. Every key is a numeral or a mathematical symbol and needs no words at all.
 
 5. **The engine is a pure function.** `calcStep(state, key)` returns a new state and reads nothing else, so the fast-shard probe lifts it out of the page and runs the arithmetic in plain node. The till's browser suites all live in the slow shard, which is not run — a test that cannot run protects nothing, so this one is written where the gate is.
+
+## §511 — THE FACTS STRIP AND THE FOUNDER ESSAY ARE BLOCKS ON THE WEBSITE PAGE
+
+**2026-11-02 · DECIDED BY ASH.** Ash, on the location website: *"in tacet editor I want to be able to edit every block of the location website . make sure each block is available for edit in tacet editor"*. Every other block on that page was already a block on the Website page. Two pieces were not. The black facts strip was invented at draw time from About, so clicking it in the editor selected nothing. The founder essay in the popup was About's founder quote, so the story card's own text was a short version and the long piece could not be changed there.
+
+1. **The facts strip is an `about_stats` block**, website only, same as the promise band. Up to four facts, each a big line and a small line. It is offered on the Website page and the server accepts it on save. The page no longer invents one from About: deleting it in the editor removes it. On boot, if the published layout and the draft do not already have one, today's About facts are copied in after the first hero, which is where the strip sat. The web shop and the mini app do not draw it.
+
+2. **The story card keeps the short text, and holds the essay.** Body stays the card. Two fields on that card, shown in the editor only on the Website page, are the piece the button opens and the sign-off under it. The button's link list on that page offers Founder's Story, the pair the card already uses. A card whose small heading was `OUR STORY` is stored as `Founder's Story`, which is the heading visitors already saw, so an edit after that is the heading the page shows. The card's short text is not replaced by the essay. On boot the essay and the sign-off are copied from About onto the first such card, on the published layout and the draft. A card that is not that story is left alone.
+
+3. **Until that boot has run, a card with no essay fields still opens About's quote**, so a layout that has not been copied does not go blank. Once the fields exist, empty means empty.
+
+4. **Words.** The block's name `Stat strip · 数据条` is copied from the About editor. `Title · 标题`, `Text · 正文`, `Card N · 卡片 N`, `+ Add card · + 添加卡片`, `Content · 内容` and `Sign-off · 结尾` are copied. `Founder's Story · 创始人故事` is the pair already on the card (vocabulary v1.376), reused for the field and the button target. Two strings are composed (vocabulary v1.379): the block's description, and the note under the essay field. The six bar links stay the fixed names from §503 rule 54. They are not blocks.
