@@ -377,7 +377,7 @@
 .shop-blocks .sb-rcp-para { margin-top: calc(18 * var(--u)); font-family: var(--f-aleo); font-size: calc(28 * var(--u) * var(--font-scale)); line-height: 1.55; white-space: pre-line; }
 .shop-blocks .sb-rcp-short { display: none; }
 .shop-blocks .sb-recipe-blk[role="link"] { cursor: pointer; }
-.shop-blocks .sb-facts { max-width: 55%; margin: calc(24 * var(--u)) auto; background: var(--ink); color: #fff; display: flex; padding: calc(28 * var(--u)) calc(16 * var(--u)); }
+.shop-blocks .sb-facts { max-width: 70%; margin: calc(24 * var(--u)) auto; background: var(--ink); color: #fff; display: flex; padding: calc(28 * var(--u)) calc(16 * var(--u)); }
 .shop-blocks .sb-fact { flex: 1; padding: 0 calc(12 * var(--u)); min-width: 0; text-align: center; }
 .shop-blocks .sb-fact + .sb-fact { border-left: 1px solid rgba(255,255,255,.18); }
 .shop-blocks .sb-fact-v { font-family: var(--f-bear); font-size: calc(40 * var(--u) * var(--font-scale)); line-height: 1; color: var(--lime); }
