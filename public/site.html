@@ -371,9 +371,18 @@
   .site-menu-open-tab{align-self:center;margin-top:10px;font-size:13px;color:#fff;text-decoration:underline;text-underline-offset:3px;}
   .site-menu-open-tab:focus-visible{outline:2px solid #fff;outline-offset:3px;}
   .site-menu-frame{flex:1;border:0;width:100%;background:#F2E7DF;margin-top:0;}
-  /* The founder essay, opened from the Our story card. English for visitors. */
-  .site-story{background:var(--oat);min-height:60vh;padding-bottom:48px;}
-  .site-story-back{display:inline-flex;margin:16px 22px 0;padding:8px 0;background:none;border:0;font-family:var(--f-toni);font-size:13px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;color:var(--ink);}
+  /* The founder essay popup, opened from Read the full story. English for visitors. */
+  .site-story-scrim{position:fixed;inset:0;z-index:45;background:rgba(26,26,23,.62);display:flex;align-items:flex-end;justify-content:center;padding:0;}
+  .site-story-scrim[hidden]{display:none!important;}
+  .site-story-dialog{position:relative;background:var(--oat);width:100%;max-height:min(92vh,900px);display:flex;flex-direction:column;border-radius:22px 22px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.22);overflow:hidden;}
+  .site-story-close{position:absolute;top:12px;right:12px;z-index:2;width:44px;height:44px;border:0;border-radius:50%;background:#fff;color:var(--ink);font-size:26px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.15);}
+  .site-story-close:focus-visible{outline:3px solid var(--forest);outline-offset:2px;}
+  .site-story-scroll{overflow-y:auto;overscroll-behavior:contain;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));flex:1;}
+  @media (min-width:768px){
+    .site-story-scrim{align-items:center;padding:24px;}
+    .site-story-dialog{max-width:720px;border-radius:22px;max-height:min(88vh,900px);}
+  }
+  .site-story{background:var(--oat);padding-bottom:32px;}
   .site-story-hero{display:block;width:100%;max-height:420px;object-fit:cover;object-position:42% 46%;background:var(--oat);}
   .site-story-body{padding:28px 26px 0;max-width:720px;}
   .site-story-kicker{font-family:var(--f-toni);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--olive);}
@@ -447,6 +456,12 @@
       <iframe class="site-menu-frame" id="siteMenuFrame" title="Menu"></iframe>
     </div>
     <a class="site-menu-open-tab" id="siteMenuOpenTab" href="#" target="_blank" rel="noopener">Open full screen</a>
+  </div>
+</div>
+<div class="site-story-scrim" id="siteStoryScrim" hidden>
+  <div class="site-story-dialog" role="dialog" aria-modal="true" aria-labelledby="siteStoryTitle">
+    <button type="button" class="site-story-close" id="siteStoryClose" aria-label="Close">&times;</button>
+    <div class="site-story-scroll" id="siteStoryScroll"></div>
   </div>
 </div>
 <footer>
@@ -1012,8 +1027,25 @@ function layoutForSite(layout){
     :(Array.isArray(layout)?layout:[]);
   return base.map(b=>isOurStory(b)?Object.assign({},b,{cta_target:'story'}):b);
 }
+function closeSiteStoryPopup(){
+  const scrim=$('#siteStoryScrim');
+  if(!scrim||scrim.hidden) return;
+  scrim.hidden=true;
+  document.body.style.overflow='';
+}
+function wireSiteStoryPopup(){
+  const scrim=$('#siteStoryScrim');
+  if(!scrim||scrim.dataset.wired==='1') return;
+  scrim.dataset.wired='1';
+  $('#siteStoryClose').addEventListener('click',closeSiteStoryPopup);
+  scrim.addEventListener('click',ev=>{ if(ev.target===scrim) closeSiteStoryPopup(); });
+  document.addEventListener('keydown',ev=>{
+    if(ev.key==='Escape'&&!scrim.hidden) closeSiteStoryPopup();
+  });
+}
 function showFounderStory(){
-  const view=$('#view'); if(!view) return;
+  const scroll=$('#siteStoryScroll'), scrim=$('#siteStoryScrim');
+  if(!scroll||!scrim) return;
   const cn=state.lang==='cn';
   const stored=state.config&&state.config.about&&state.config.about.content;
   const c=(stored&&typeof stored==='object')?stored:{};
@@ -1035,17 +1067,13 @@ function showFounderStory(){
   const outro=String(pick(c.outro_en,c.outro_cn)||'').trim();
   const cta=String(pick(c.cta_en,c.cta_cn)||'').trim();
   const menu=siteBarMenuUrl();
-  view.innerHTML='';
+  scroll.innerHTML='';
   const art=document.createElement('article');
   art.className='site-story';
-  const back=document.createElement('button');
-  back.type='button'; back.className='site-story-back'; back.id='storyBack';
-  back.textContent=cn?'返回':'Back';
-  art.appendChild(back);
   if(image){ const fig=document.createElement('img'); fig.className='site-story-hero'; fig.alt=''; fig.src=image; art.appendChild(fig); }
   const body=document.createElement('div'); body.className='site-story-body';
   if(kicker){ const k=document.createElement('div'); k.className='site-story-kicker'; k.textContent=kicker; body.appendChild(k); }
-  const h=document.createElement('h1'); h.className='site-story-title'; h.textContent=headline; body.appendChild(h);
+  const h=document.createElement('h1'); h.className='site-story-title'; h.id='siteStoryTitle'; h.textContent=headline; body.appendChild(h);
   if(byline){ const m=document.createElement('div'); m.className='site-story-meta'; m.textContent=byline; body.appendChild(m); }
   String(essay||'').split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean).forEach(p=>{
     const para=document.createElement('p'); para.className='site-story-para'; para.textContent=p; body.appendChild(para);
@@ -1053,9 +1081,12 @@ function showFounderStory(){
   if(outro){ const s=document.createElement('div'); s.className='site-story-sign'; s.textContent=outro; body.appendChild(s); }
   if(cta&&menu){ const a=document.createElement('a'); a.className='site-story-cta'; a.href=menu; a.textContent=cta; body.appendChild(a); }
   art.appendChild(body);
-  view.appendChild(art);
-  back.addEventListener('click',()=>render());
-  window.scrollTo(0,0);
+  scroll.appendChild(art);
+  scrim.hidden=false;
+  document.body.style.overflow='hidden';
+  scroll.scrollTop=0;
+  const closeBtn=$('#siteStoryClose');
+  if(closeBtn) closeBtn.focus();
 }
 async function render(){
   const view=$('#view');
@@ -1200,7 +1231,11 @@ function renderChatButton(layout){
   // A block's button: a full https:// link opens; anything that leads into
   // the shop (product, category, basket, account) has nowhere to go here.
   wireSiteMenuPhone();
+<<<<<<< HEAD
   wireMobileNav();
+=======
+  wireSiteStoryPopup();
+>>>>>>> b320434f (Our Story: first paragraph teaser, read link, and popup on brand site)
   document.addEventListener('click',ev=>{
     if(trySiteMenuCtaClick(ev)) return;
     if(STAGE_MODE) return;

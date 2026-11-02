@@ -808,10 +808,11 @@
       (byline && readTime ? '<span> · </span>' : '') +
       (readTime ? '<span>' + escapeHtml(readTime) + '</span>' : '') + '</div>' : '';
     var fullParas = paragraphs.map(function (p) { return '<div class="sb-rcp-para">' + escapeHtml(p) + '</div>'; }).join('');
-    // Phone shows two lines. A wide screen keeps every paragraph of the
-    // short piece. Only the card that opens the essay is shortened.
+    var firstPara = paragraphs[0] || '';
+    // Phone shows the first paragraph only. A wide screen keeps every
+    // paragraph. Only the card that opens the essay is shortened.
     var paras = opensStory
-      ? '<div class="sb-rcp-paras tease"><div class="sb-rcp-full">' + fullParas + '</div><div class="sb-rcp-short sb-rcp-para">' + escapeHtml(paragraphs.join(' ')) + '</div></div>'
+      ? '<div class="sb-rcp-paras tease"><div class="sb-rcp-full">' + fullParas + '</div><div class="sb-rcp-short sb-rcp-para">' + escapeHtml(firstPara) + '</div></div>'
       : '<div class="sb-rcp-paras">' + fullParas + '</div>';
     var card = linkedCard
       ? ctaWrap('product:' + linkedCard.id, '<div class="sb-rcp-card">' +
@@ -820,19 +821,18 @@
         (linkedCard.tagline ? '<div class="sb-rcp-card-tag">' + escapeHtml(linkedCard.tagline) + '</div>' : '') +
         (linkedCard.price ? '<div class="sb-rcp-card-price">' + escapeHtml(linkedCard.price) + ' →</div>' : '') + '</div></div>')
       : '';
-    // The story card itself is the link, so the button is paint only.
-    // A second target on the button would be the one closest() finds.
-    var cta = ctaLabel
-      ? (opensStory
-        ? '<div class="sb-rcp-cta" style="background:' + attr(btnBg) + ';color:' + attr(btnFg) + '">' + escapeHtml(ctaLabel) + ' →</div>'
-        : ctaWrap(ctaTarget, '<div class="sb-rcp-cta" style="background:' + attr(btnBg) + ';color:' + attr(btnFg) + '">' + escapeHtml(ctaLabel) + ' →</div>'))
-      : '';
+    var readLabel = ctaLabel || (CN() ? '阅读完整故事' : 'READ THE FULL STORY');
+    var cta = opensStory
+      ? ctaWrap(ctaTarget, '<div class="sb-rcp-read">' + escapeHtml(readLabel) + ' →</div>')
+      : (ctaLabel
+        ? ctaWrap(ctaTarget, '<div class="sb-rcp-cta" style="background:' + attr(btnBg) + ';color:' + attr(btnFg) + '">' + escapeHtml(ctaLabel) + ' →</div>')
+        : '');
     var bodyHtml = '<div class="sb-rcp-body">' +
       (kicker ? '<div class="sb-rcp-kicker">' + escapeHtml(kicker) + '</div>' : '') +
       (headline ? '<div class="sb-rcp-headline">' + escapeHtml(headline) + '</div>' : '') +
       meta + paras + card + cta + '</div>';
     var html = '<div class="sb-recipe-blk sb-recipe-' + imageView + ' sb-corner-' + corner + '" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' + img + bodyHtml + '</div>';
-    return opensStory ? ctaWrap(ctaTarget, html) : html;
+    return html;
   };
 
   // about_stats -------------------------------------------------------------
