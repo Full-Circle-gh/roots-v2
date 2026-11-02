@@ -304,6 +304,8 @@ yes(/site-mobile-nav\.is-open/.test(SITE) && /transition:opacity/.test(SITE),
 yes(/body\.site-mobile-nav-open \.bar-nav-open-btn\{visibility:hidden/.test(SITE)
   && /id="siteMobileNavClose"/.test(SITE) && !/bar-nav-icon-close/.test(SITE),
   'only the × inside the menu closes it; the bar keeps three lines and hides while open');
+yes(/\.sb-st-map\.is-live \{[^}]*isolation: isolate/.test(read('public/shop/blocks.css')),
+  'the AutoNavi credit stays inside the map box, under the jump menu');
 yes(/header\.site-bar \.bar-menu-btn\{display:none/.test(SITE),
   'the forest Menu pill is not on the phone bar');
 const BAR_MOCK = read('reference/site-bar-section-links-mockup.html');
