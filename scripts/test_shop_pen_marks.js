@@ -44,5 +44,6 @@ assert.match(html, /100% plant-based café and fresh-food kitchen in Guangzhou, 
 assert.match(html, /No additives, no preservatives, no refined sugar\./);
 assert.doesNotMatch(html, /<<PEN>>/);
 assert.match(html, /Grab-and-go yogurts/);
+assert.equal((html.match(/sb-pen-mark/g) || []).length, 2, 'both #1 and #3 pen spans');
 
 console.log('test_shop_pen_marks: ok');
