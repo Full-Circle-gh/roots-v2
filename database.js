@@ -8804,6 +8804,54 @@ try {
 } catch (e) { console.error('[migration web_site_bar_menu_v1]', e); }
 
 
+// ── One-off: lime pen marks on the website intro hero (Option B, #1 + #3) ───
+//
+// Wraps the identity line and the clean-label line in <<PEN>>…<</PEN>> so
+// public/shop/blocks.js draws the highlighter treatment. Skips blocks that
+// already carry pen markers or no longer match the live copy.
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('website_intro_pen_marks_v1');
+  if (!ran) {
+    const PH1 = '100% plant-based café and fresh-food kitchen in Guangzhou, since 2017';
+    const PH3 = 'No additives, no preservatives, no refined sugar.';
+    const PEN_OPEN = '<<PEN>>', PEN_CLOSE = '<</PEN>>';
+    const wrapPen = (text, phrase) => {
+      if (!text || text.includes(PEN_OPEN) || !text.includes(phrase)) return text;
+      return text.split(phrase).join(PEN_OPEN + phrase + PEN_CLOSE);
+    };
+    const patchSubtitle = (sub) => {
+      if (!sub || typeof sub !== 'string') return sub;
+      let next = wrapPen(sub, PH1);
+      next = wrapPen(next, PH3);
+      return next;
+    };
+    db.transaction(() => {
+      for (const key of ['website.layout', 'cms.draft.website_layout']) {
+        const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+        if (!row) continue;
+        let layout;
+        try { layout = JSON.parse(row.value_json); } catch { continue; }
+        if (!Array.isArray(layout)) continue;
+        let changed = false;
+        for (const b of layout) {
+          if (!b || b.type !== 'hero_banner') continue;
+          const sub = b.subtitle_en;
+          if (!sub || typeof sub !== 'string') continue;
+          if (!sub.includes('100% plant-based') && !(b.headline_en || '').includes('Landed in Guangzhou')) continue;
+          const next = patchSubtitle(sub);
+          if (next !== sub) { b.subtitle_en = next; changed = true; }
+        }
+        if (changed) {
+          db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?').run(JSON.stringify(layout), key);
+          console.log('[migration] website_intro_pen_marks_v1: ' + key + ' patched intro subtitle');
+        }
+      }
+      db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('website_intro_pen_marks_v1');
+    })();
+  }
+} catch (e) { console.error('[migration website_intro_pen_marks_v1]', e); }
+
+
 // ── One-off: brand website hero — all-day food, not lunch only ───────────────
 //
 // The Yuexiu / brand site hero read "Lunch is sorted." Roots serves breakfast

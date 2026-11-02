@@ -86,6 +86,11 @@
 .shop-blocks .sb-split-panel { padding: calc(36 * var(--u)) calc(32 * var(--u)); display: flex; flex-direction: column; justify-content: center; gap: calc(12 * var(--u)); }
 .shop-blocks .sb-split-panel .sb-headline { font-family: var(--f-bear); font-weight: 500; font-size: calc(42 * var(--u) * var(--font-scale)); line-height: 1.1; }
 .shop-blocks .sb-split-panel .sb-subtitle { font-family: var(--f-aleo); font-size: calc(22 * var(--u) * var(--font-scale)); opacity: 0.8; line-height: 1.4; }
+.shop-blocks .sb-pen-mark {
+  background: linear-gradient(180deg, transparent 58%, rgba(204, 217, 0, 0.52) 58%, rgba(204, 217, 0, 0.52) 95%, transparent 95%);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
 .shop-blocks .sb-split-panel .sb-cta-stack { position: static; padding: 0; left: auto; right: auto; bottom: auto; margin-top: calc(16 * var(--u)); }
 .shop-blocks .sb-split-panel .sb-cta-btn { padding: calc(20 * var(--u)) calc(28 * var(--u)); font-weight: 700; font-size: calc(20 * var(--u) * var(--font-scale)); letter-spacing: 0.14em; }
 
