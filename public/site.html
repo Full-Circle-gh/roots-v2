@@ -346,6 +346,17 @@
   .site-menu-open-tab{align-self:center;margin-top:10px;font-size:13px;color:#fff;text-decoration:underline;text-underline-offset:3px;}
   .site-menu-open-tab:focus-visible{outline:2px solid #fff;outline-offset:3px;}
   .site-menu-frame{flex:1;border:0;width:100%;background:#F2E7DF;margin-top:0;}
+  /* The founder essay, opened from the Our story card. English for visitors. */
+  .site-story{background:var(--oat);min-height:60vh;padding-bottom:48px;}
+  .site-story-back{display:inline-flex;margin:16px 22px 0;padding:8px 0;background:none;border:0;font-family:var(--f-toni);font-size:13px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;color:var(--ink);}
+  .site-story-hero{display:block;width:100%;max-height:420px;object-fit:cover;object-position:42% 46%;background:var(--oat);}
+  .site-story-body{padding:28px 26px 0;max-width:720px;}
+  .site-story-kicker{font-family:var(--f-toni);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--olive);}
+  .site-story-title{font-family:var(--f-bear);font-size:40px;line-height:.95;margin:8px 0 0;color:var(--ink);}
+  .site-story-meta{font-family:var(--f-toni);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--olive);margin-top:10px;}
+  .site-story-para{font-family:var(--f-aleo);font-size:17px;line-height:1.6;color:var(--forest);white-space:pre-line;margin:16px 0 0;}
+  .site-story-sign{font-family:var(--f-bear);font-size:28px;line-height:1.1;color:var(--forest);margin-top:28px;}
+  .site-story-cta{display:inline-block;margin-top:22px;background:var(--ink);color:var(--lime);padding:16px 22px;font-family:var(--f-toni);letter-spacing:.14em;text-transform:uppercase;text-decoration:none;}
 </style>
 <link rel="stylesheet" href="/assets/shop/blocks.css">
 <style>
@@ -865,11 +876,73 @@ function scheduleRecipeStoryCharacterDock(root){
   });
 }
 
+// The Our story card on this website. The mini app and the web shop do
+// not use it. A card the bar already calls Our story, or one aimed at the
+// essay, is the one that opens the full piece.
+function isOurStory(b){
+  if(!b||b.type!=='recipe_story') return false;
+  if(b.cta_target==='story'||b.cta_target==='about') return true;
+  return /our story/i.test(String(pick(b.kicker_en,b.kicker_cn)||''));
+}
+let siteLayout=[];
+function layoutForSite(layout){
+  const about=state.config&&state.config.about&&state.config.about.content;
+  const base=(window.ShopBlocks&&ShopBlocks.withFrontFacts)
+    ?ShopBlocks.withFrontFacts(layout,about)
+    :(Array.isArray(layout)?layout:[]);
+  return base.map(b=>isOurStory(b)?Object.assign({},b,{cta_target:'story'}):b);
+}
+function showFounderStory(){
+  const view=$('#view'); if(!view) return;
+  const cn=state.lang==='cn';
+  const stored=state.config&&state.config.about&&state.config.about.content;
+  const c=(stored&&typeof stored==='object')?stored:{};
+  const card=(Array.isArray(siteLayout)?siteLayout:[]).find(isOurStory)||null;
+  const quote=String(pick(c.founder_quote_en,c.founder_quote_cn)||'').trim();
+  const cardBody=card?String(pick(card.body_en,card.body_cn)||'').trim():'';
+  const essay=quote||cardBody;
+  const name=String(pick(c.founder_name_en,c.founder_name_cn)||'').trim();
+  const role=String(pick(c.founder_title_en,c.founder_title_cn)||'').trim();
+  const headline=(card&&String(pick(card.headline_en,card.headline_cn)||'').trim())||name||(cn?'我们的故事':'Our story');
+  const kicker=(card&&String(pick(card.kicker_en,card.kicker_cn)||'').trim())||String(pick(c.founder_kicker_en,c.founder_kicker_cn)||'').trim();
+  const minutes=card&&Number(card.read_time_minutes);
+  const bits=[];
+  if(name) bits.push(name);
+  if(role) bits.push(role);
+  if(minutes) bits.push(minutes+(cn?' 分钟':' min'));
+  const byline=bits.length?bits.join(' · '):(card?String(pick(card.byline_en,card.byline_cn)||'').trim():'');
+  const image=String((card&&card.image_url)||c.founder_photo_url||c.hero_image_url||'').trim();
+  const outro=String(pick(c.outro_en,c.outro_cn)||'').trim();
+  const cta=String(pick(c.cta_en,c.cta_cn)||'').trim();
+  const menu=siteBarMenuUrl();
+  view.innerHTML='';
+  const art=document.createElement('article');
+  art.className='site-story';
+  const back=document.createElement('button');
+  back.type='button'; back.className='site-story-back'; back.id='storyBack';
+  back.textContent=cn?'返回':'Back';
+  art.appendChild(back);
+  if(image){ const fig=document.createElement('img'); fig.className='site-story-hero'; fig.alt=''; fig.src=image; art.appendChild(fig); }
+  const body=document.createElement('div'); body.className='site-story-body';
+  if(kicker){ const k=document.createElement('div'); k.className='site-story-kicker'; k.textContent=kicker; body.appendChild(k); }
+  const h=document.createElement('h1'); h.className='site-story-title'; h.textContent=headline; body.appendChild(h);
+  if(byline){ const m=document.createElement('div'); m.className='site-story-meta'; m.textContent=byline; body.appendChild(m); }
+  String(essay||'').split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean).forEach(p=>{
+    const para=document.createElement('p'); para.className='site-story-para'; para.textContent=p; body.appendChild(para);
+  });
+  if(outro){ const s=document.createElement('div'); s.className='site-story-sign'; s.textContent=outro; body.appendChild(s); }
+  if(cta&&menu){ const a=document.createElement('a'); a.className='site-story-cta'; a.href=menu; a.textContent=cta; body.appendChild(a); }
+  art.appendChild(body);
+  view.appendChild(art);
+  back.addEventListener('click',()=>render());
+  window.scrollTo(0,0);
+}
 async function render(){
   const view=$('#view');
   const published=state.config&&state.config.website&&state.config.website.layout;
   let layout=(window.ShopBlocks&&Array.isArray(published))?withCast(ShopBlocks.forSurface(published)):[];
   if(layout.length) layout=await placeShopPins(layout);
+  siteLayout=layout;
   if(!layout.length){
     // On the stage, the editor's own live pair (public/cms.html) says what to
     // do; a visitor sees the brand's header and footer around an empty body.
@@ -880,7 +953,7 @@ async function render(){
   if(!state.products) state.products=await loadProducts(layout);
   ShopBlocks.stopTimers();
   ShopBlocks.setContext({ lang:state.lang, products:state.products, categories:[], flashSales:[], config:state.config });
-  view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layout)+'</div>';
+  view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layoutForSite(layout))+'</div>';
   ShopBlocks.startTimers(view);
   scrollToBarHashDone=false;
   mountBarLinks(layout);
@@ -1013,6 +1086,7 @@ function renderChatButton(layout){
     const el=ev.target.closest('[data-cta-target]'); if(!el) return;
     ev.preventDefault();
     const t=String(el.getAttribute('data-cta-target')||'');
+    if(t==='story'){ showFounderStory(); return; }
     if(/^https:\/\//i.test(t)) window.open(t,'_blank','noopener');
   });
 

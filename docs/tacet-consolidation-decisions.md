@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.613
+# Tacet shared-core consolidation — decisions record, v4.614
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-02 · v4.614 — **§503 AMENDED · THE FOUNDER ESSAY AND THE FOUR FACTS LIVE ON THE YUEXIU WEBSITE ONLY — ASH.** Ash, after the essay had been added to the web shop and the mini app: *"I only want it on the yuexiu location website . not on mini app"*. `public/site.html` draws the About facts under the first hero and opens the full founder piece from the Our story card. The mini app and the web shop are back to what they were. No new words. No change to `.gitignore` or CI.
 
 2026-11-02 · v4.613 — **§503 AMENDED · THE SIX BAR LINKS GO LIVE ON A COMPUTER — ASH.** Ash confirmed the mockup and said *"confirmed,deploy live"*. From 768px up `public/site.html` draws six links on the sticky bar — New to China, Our products, Our location, Social, Our story, Canton Fair — each scrolling to the matching block on the published website. Menu stays the forest pill that opens the Ramada QR menu (phone frame on a computer). A phone keeps wordmark and Menu only. The sticky fix (rule 52) stands. Six composed strings (vocabulary v1.374). No change to `.gitignore` or CI.
 
