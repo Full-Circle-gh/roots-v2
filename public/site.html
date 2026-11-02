@@ -684,9 +684,10 @@ function openSiteBarMenu(url,ev){
   else location.href=url;
 }
 // §503 rule 54 · computer bar links (vocabulary v1.374). Menu stays Ramada.
+// Our products starts at the platters showcase. The take-home grid is the fallback.
 const SITE_BAR_LINKS=[
   {label:'New to China', match:b=>b.type==='steps'||/new to china/i.test(String(pick(b.kicker_en,b.kicker_cn)||''))},
-  {label:'Our products', match:b=>b.type==='product_grid'},
+  {label:'Our products', match:b=>b.type==='menu_showcase'&&/platter/i.test(String(pick(b.title_en,b.title_cn)||b.id||'')), fallback:b=>b.type==='product_grid'},
   {label:'Our location', match:b=>b.type==='store_info'},
   {label:'Social', match:b=>b.type==='contact_links'},
   {label:'Our story', match:b=>b.type==='recipe_story'||/our story/i.test(String(pick(b.kicker_en,b.kicker_cn)||''))},
@@ -697,8 +698,10 @@ function validBlockId(id){
 }
 function resolveBarLinks(layout){
   const used=new Set(), out=[];
+  const blocks=(Array.isArray(layout)?layout:[]).filter(b=>b&&typeof b==='object'&&validBlockId(b.id));
   for(const spec of SITE_BAR_LINKS){
-    const hit=(Array.isArray(layout)?layout:[]).find(b=>b&&typeof b==='object'&&validBlockId(b.id)&&!used.has(b.id)&&spec.match(b));
+    let hit=blocks.find(b=>!used.has(b.id)&&spec.match(b));
+    if(!hit&&typeof spec.fallback==='function') hit=blocks.find(b=>!used.has(b.id)&&spec.fallback(b));
     if(!hit) continue;
     used.add(hit.id);
     out.push({label:spec.label, id:hit.id});
