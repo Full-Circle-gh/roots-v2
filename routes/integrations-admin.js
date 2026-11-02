@@ -763,6 +763,9 @@ function normalizeWebSite(raw) {
     footer_en: webSiteStr(r.footer_en, WEB_SITE_MAX.text),
     footer_cn: webSiteStr(r.footer_cn, WEB_SITE_MAX.text),
     links,
+    // QR menu link for the brand site's sticky bar (public/site.html). Must be
+    // https://…/s/<code>; the page hides the button when it is blank or invalid.
+    menu: webSiteUrl(r.menu),
   };
 }
 

@@ -54,12 +54,12 @@ section('1 · the website\'s own words are cleaned on the way in');
 const srv = { console };
 vm.createContext(srv);
 vm.runInContext(
-  slice(ROUTE, 'const WEB_SITE_MAX = ', '    links,\n  };\n}') + '\nthis.normalizeWebSite = normalizeWebSite;',
+  slice(ROUTE, 'const WEB_SITE_MAX = ', '    menu: webSiteUrl(r.menu),\n  };\n}') + '\nthis.normalizeWebSite = normalizeWebSite;',
   srv,
 );
 const N = srv.normalizeWebSite;
 
-is(N(null), { title_en: '', title_cn: '', description_en: '', description_cn: '', nav: [], footer_en: '', footer_cn: '', links: [] },
+is(N(null), { title_en: '', title_cn: '', description_en: '', description_cn: '', nav: [], footer_en: '', footer_cn: '', links: [], menu: '' },
   'nothing saved yet is a complete, empty shape (the shop never sees undefined)');
 is(N({ title_en: '  Roots   Kitchen ', title_cn: '根源厨房' }).title_en, 'Roots Kitchen', 'a title is trimmed and its spaces folded');
 is(N({ title_en: 'x'.repeat(200) }).title_en.length, 80, 'a title is capped at 80');
@@ -275,6 +275,20 @@ yes(/isShopMenuUrl\(t\)/.test(SITE) && /siteMenuDesktop\(\)/.test(SITE),
 yes(/applySiteMenuFrameHeaders/.test(read('routes/shop-menu.js'))
   && /store\.rootskitchenchina\.com/.test(read('lib/shop-menu-redirect.js')),
   'the menu page may be framed from the brand site and the store preview host');
+
+// ─────────────────────────────────────────────────────────────────────────
+section('11 · sticky bar Menu button (Option A · forest pill)');
+
+yes(/class="bar-menu-btn" id="barMenuBtn"/.test(SITE) && /background:var\(--forest\)/.test(SITE),
+  'the brand site bar carries a forest pill Menu link');
+yes(/function siteBarMenuUrl\(\)/.test(SITE) && /function bindSiteBarMenu\(\)/.test(SITE),
+  'the Menu href is resolved from web.site.menu, nav, footer or layout');
+yes(/function openSiteBarMenu\(url,ev\)/.test(SITE) && /siteMenuDesktop\(\)\) openSiteMenuPhone\(url\)/.test(SITE),
+  'a computer opens the bar Menu in the phone frame; a phone follows the link');
+yes(/menu: webSiteUrl\(r\.menu\)/.test(ROUTE),
+  'web.site.menu is cleaned on the way in');
+yes(/web_site_bar_menu_v1/.test(read('database.js')),
+  'a one-time migration seeds web.site.menu when it is not set yet');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
