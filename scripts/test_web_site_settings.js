@@ -234,6 +234,10 @@ yes(/body \.shop-blocks \.sb-grid-block\{padding:32px calc\(44 \* var\(--u\)\) 3
 yes(/body \.shop-blocks \.sb-blk-outer\[data-block-type="hero_banner"\]:not\(:first-child\)\{\s*margin-top:32px;/.test(SITE)
   && !/@media \(min-width:768px\)\{[\s\S]*hero_banner"\]:not\(:first-child\)/.test(SITE),
   'a hero after a menu or grid gets the same 32px oat band on phone and desktop');
+yes(/body \.shop-blocks \.sb-blk-outer\[data-block-type="hero_banner"\]:not\(:last-child\)\{\s*margin-bottom:32px;/.test(SITE),
+  'a full-bleed hero leaves the same 32px oat band before the block below');
+yes(/@media \(min-width:768px\)\{[\s\S]*body \.shop-blocks \.sb-grid-block\{padding:32px calc\(44 \* var\(--u\)\) 36px;/.test(SITE),
+  'a product grid breathes on desktop like the phone mock-up');
 yes(/function placeShopPins\(layout\)/.test(SITE) && /en\.length>=4&&name\.includes\(en\)/.test(SITE) && /rows\.stores/.test(SITE),
   'a store with no pin takes the position of the shop it names');
 yes(/function mountStoreVisit\(root\)/.test(SITE) && /\.sb-st-visit/.test(SITE) && /Get directions/.test(SITE) && /openInMapApp\(p\)/.test(SITE),
@@ -321,7 +325,7 @@ yes(/href="#new-to-china">New to China/.test(BAR_MOCK)
   && /href="#products">Our products/.test(BAR_MOCK)
   && /href="#location">Our location/.test(BAR_MOCK)
   && /href="#social">Social/.test(BAR_MOCK)
-  && /href="#story">Our story/.test(BAR_MOCK)
+  && /href="#story">Founder's Story/.test(BAR_MOCK)
   && /href="#fair">Canton Fair/.test(BAR_MOCK)
   && /class="menu-btn"/.test(BAR_MOCK)
   && /position:sticky/.test(BAR_MOCK),
