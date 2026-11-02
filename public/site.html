@@ -109,6 +109,37 @@
   .foot-links a{text-decoration:none;}
   .foot-links a:hover{text-decoration:underline;}
 
+  /* �503 � Accent labels on the Yuexiu website match the announcement bar:
+     Toni Grotesk 600, 0.04em tracking ? 20px on a phone, 24px on a computer. */
+  body .shop-blocks{--site-accent-size:20px;}
+  body .shop-blocks .sb-steps-kicker,
+  body .shop-blocks .sb-cl-kicker,
+  body .shop-blocks .sb-menu-kicker,
+  body .shop-blocks .sb-st-kicker,
+  body .shop-blocks .sb-rcp-kicker,
+  body .shop-blocks .sb-rcp-meta,
+  body .shop-blocks .sb-grid-block .sb-kicker,
+  body .shop-blocks .sb-cattabs .sb-kicker,
+  body .shop-blocks .sb-gr-kicker,
+  body .shop-blocks .sb-grd-kicker{
+    font-family:var(--f-toni);
+    font-weight:600;
+    font-size:var(--site-accent-size);
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+  }
+  body .shop-blocks .sb-st-kicker{opacity:1;}
+  body .shop-blocks .sb-grid-block .sb-more,
+  body .shop-blocks .sb-cattabs .sb-more{
+    font-family:var(--f-toni);
+    font-weight:600;
+    font-size:var(--site-accent-size);
+    letter-spacing:0.04em;
+    line-height:1.2;
+    text-decoration:underline;
+  }
+  body .shop-blocks .sb-announce{font-weight:600;letter-spacing:0.04em;}
+
   /* Phone (§503 rules 41–46). The block engine's unit is 100vw/750, which on
      a phone makes body copy about 12px. These sizes are the phone mock-up's
      (reference/roots-mobile-site-mockup.html). They apply only on this page. */
@@ -167,10 +198,6 @@
     body .shop-blocks .sb-fact-b{font-size:16px;line-height:1.4;margin-top:8px;}
 
     body .shop-blocks .sb-steps{padding:32px 22px 36px;}
-    body .shop-blocks .sb-steps-kicker,body .shop-blocks .sb-cl-kicker,body .shop-blocks .sb-menu-kicker,
-    body .shop-blocks .sb-st-kicker,body .shop-blocks .sb-rcp-kicker,body .shop-blocks .sb-grid-block .sb-kicker{
-      font-size:16px;letter-spacing:0.08em;
-    }
     body .shop-blocks .sb-steps-title,body .shop-blocks .sb-cl-title,body .shop-blocks .sb-menu-title,
     body .shop-blocks .sb-st-title,body .shop-blocks .sb-rcp-headline,body .shop-blocks .sb-grid-block .sb-ttl{
       font-size:32px;line-height:1.05;
@@ -182,7 +209,6 @@
       flex:1 1 auto;min-width:0;
     }
     body .shop-blocks .sb-grid-block .sb-more,body .shop-blocks .sb-cattabs .sb-more{
-      font-size:18px;letter-spacing:0.06em;line-height:1.2;
       white-space:nowrap;flex-shrink:0;margin-left:12px;
     }
     body .shop-blocks .sb-steps-body,body .shop-blocks .sb-rcp-para,body .shop-blocks .sb-st-val{font-size:17px;line-height:1.5;}
@@ -194,7 +220,6 @@
     body .shop-blocks .sb-recipe-side{flex-direction:column;}
     body .shop-blocks .sb-recipe-side .sb-rcp-img{width:100%;min-height:0;aspect-ratio:4/3;}
     body .shop-blocks .sb-recipe-side .sb-rcp-body,body .shop-blocks .sb-rcp-body{padding:28px 22px 32px;}
-    body .shop-blocks .sb-rcp-meta{font-size:13px;letter-spacing:0.08em;}
     body .shop-blocks .sb-rcp-cta{min-height:48px;font-size:14px;padding:12px 20px;}
 
     body .shop-blocks .sb-grid-block{padding:32px calc(44 * var(--u)) 36px;}
@@ -315,10 +340,11 @@
   }
   /* Slogan line edge to edge and large on a computer (§503 rule 48). */
   @media (min-width:768px){
+    body .shop-blocks{--site-accent-size:24px;}
     body .shop-blocks .sb-blk-outer[data-block-type="announcement_bar"]{
       width:100vw;max-width:none;position:relative;left:50%;transform:translateX(-50%);
     }
-    body .shop-blocks .sb-announce{font-size:24px;padding:18px 40px;letter-spacing:0.04em;}
+    body .shop-blocks .sb-announce{font-size:24px;padding:18px 40px;}
   }
   /* The floating WhatsApp button (§503 rule 20): bottom corner, clear of the
      phone's safe area, an icon with an accessible name and no words. */
@@ -361,6 +387,7 @@
   .site-story-close:focus-visible{outline:3px solid var(--forest);outline-offset:2px;}
   .site-story-scroll{overflow-y:auto;overscroll-behavior:contain;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));flex:1;min-height:0;}
   @media (min-width:768px){
+    .site-story-kicker,.site-story-meta{font-size:24px;}
     .site-story-scrim{align-items:center;padding:24px;}
     .site-story-dialog{max-width:720px;border-radius:22px;max-height:min(88vh,900px);}
     .site-story-dialog .site-story{border-radius:0 0 22px 22px;overflow:hidden;}
@@ -375,9 +402,9 @@
   .site-story{background:var(--oat);padding-bottom:32px;}
   .site-story-hero{display:block;width:100%;max-height:420px;object-fit:cover;object-position:42% 46%;background:var(--oat);border-radius:22px 22px 0 0;}
   .site-story-body{padding:28px 26px 0;max-width:720px;}
-  .site-story-kicker{font-family:var(--f-toni);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--olive);}
+  .site-story-kicker{font-family:var(--f-toni);font-weight:600;font-size:20px;letter-spacing:.04em;text-transform:uppercase;color:var(--olive);}
   .site-story-title{font-family:var(--f-bear);font-size:40px;line-height:.95;margin:8px 0 0;color:var(--ink);}
-  .site-story-meta{font-family:var(--f-toni);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--olive);margin-top:10px;}
+  .site-story-meta{font-family:var(--f-toni);font-weight:600;font-size:20px;letter-spacing:.04em;text-transform:uppercase;color:var(--olive);margin-top:10px;}
   .site-story-para{font-family:var(--f-aleo);font-size:17px;line-height:1.6;color:var(--forest);white-space:pre-line;margin:16px 0 0;}
   .site-story-sign{font-family:var(--f-bear);font-size:28px;line-height:1.1;color:var(--forest);margin-top:28px;}
 </style>
