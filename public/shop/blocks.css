@@ -384,7 +384,19 @@
 .shop-blocks .sb-fact-l { font-family: var(--f-toni); font-size: calc(18 * var(--u) * var(--font-scale)); letter-spacing: .1em; text-transform: uppercase; opacity: .6; margin-top: calc(8 * var(--u)); white-space: nowrap; }
 @media (max-width: 767px) {
   .shop-blocks .sb-rcp-paras.tease .sb-rcp-full { display: none; }
-  .shop-blocks .sb-rcp-paras.tease .sb-rcp-short { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .shop-blocks .sb-rcp-paras.tease .sb-rcp-short { display: block; overflow: visible; }
+}
+.shop-blocks .sb-rcp-read {
+  margin-top: calc(18 * var(--u));
+  display: inline-block;
+  font-family: var(--f-toni);
+  font-size: calc(22 * var(--u) * var(--font-scale));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  border-bottom: calc(2 * var(--u)) solid var(--ink);
+  padding-bottom: calc(4 * var(--u));
+  cursor: pointer;
 }
 .shop-blocks .sb-rcp-card { margin-top: calc(24 * var(--u)); display: flex; align-items: center; gap: calc(20 * var(--u)); padding: calc(16 * var(--u)); border: calc(2 * var(--u)) solid var(--ink); background: rgba(255,255,255,0.5); }
 .shop-blocks .sb-rcp-card-img { width: calc(140 * var(--u)); height: calc(140 * var(--u)); background: rgba(0,0,0,0.08); flex-shrink: 0; overflow: hidden; }
@@ -960,6 +972,7 @@
   .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-card-price { font-size: 17px; }
   .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-card-img { width: 96px; height: 96px; }
   .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-cta { font-size: 14px; }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-read { font-size: 13px; margin-top: 14px; }
 }
 @media (min-width: 1024px) {
   .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-body { padding: 56px 60px; }

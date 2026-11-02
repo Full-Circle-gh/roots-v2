@@ -84,9 +84,14 @@ const storyHtml = ShopBlocks.render([{
   headline_en: 'The Roots of It All',
   body_en: 'A tiny kitchen.\n\nThat kitchen became Roots.',
 }]);
-is((storyHtml.match(/data-cta-target="story"/g) || []).length, 1, 'one story target, on the card');
+is((storyHtml.match(/data-cta-target="story"/g) || []).length, 1, 'one story target, on the read link');
+yes(!/class="sb-recipe-blk[^"]*"[^>]*data-cta-target/.test(storyHtml), 'the card itself is not a link');
 yes(storyHtml.includes('sb-rcp-paras tease'), 'the phone tease is marked');
-yes(storyHtml.includes('A tiny kitchen. That kitchen became Roots.'), 'the short line joins the paragraphs');
+yes(storyHtml.includes('sb-rcp-short sb-rcp-para">A tiny kitchen.'), 'the short line is the first paragraph only');
+yes(storyHtml.includes('sb-rcp-full') && storyHtml.includes('That kitchen became Roots.'), 'later paragraphs stay in the full block');
+yes(storyHtml.includes('sb-rcp-read') && storyHtml.includes('READ MORE'), 'the read link is labelled');
+const defaultRead = ShopBlocks.render([{ id: 'd', type: 'recipe_story', cta_target: 'story', body_en: 'One para.' }]);
+yes(defaultRead.includes('READ THE FULL STORY'), 'default read label when cta_label is empty');
 
 const aboutCard = ShopBlocks.render([{
   id: 'shop', type: 'recipe_story', cta_target: 'about', cta_label_en: 'READ MORE', body_en: 'Full shop copy.',
@@ -104,8 +109,9 @@ const aboutWxml = read('miniapp/pages/about/about.wxml');
 const home = read('miniapp/pages/home/home.js');
 
 yes(site.includes('function showFounderStory()'), 'the Yuexiu website has the essay');
+yes(site.includes('siteStoryScrim') && site.includes('closeSiteStoryPopup'), 'the essay opens in a popup');
 yes(site.includes('layoutForSite') && site.includes('ShopBlocks.withFrontFacts'), 'the website draws the facts strip');
-yes(site.includes("t==='story'"), 'the story card opens the essay');
+yes(site.includes("t==='story'"), 'the story link opens the essay');
 yes(!shop.includes('function renderStory') && !shop.includes('withFrontFacts'), 'the web shop does not');
 yes(!appJson.includes('pages/story/story'), 'the mini app has no essay screen');
 yes(!aboutWxml.includes('goStory'), 'About on the mini app does not open one');
