@@ -41,12 +41,18 @@
   .hero-copy{padding:16px 18px 20px;font-family:var(--f-bear);font-size:18px;line-height:1.15;}
   .hero-copy em{font-style:normal;background:var(--lime);padding:0 2px;}
   .site-mobile-nav{
-    position:absolute;inset:0;z-index:5;background:#fff;display:flex;flex-direction:column;
-    padding:14px 16px 18px;opacity:0;visibility:hidden;pointer-events:none;
+    position:absolute;left:0;right:0;bottom:0;top:58px;z-index:5;background:#fff;display:flex;flex-direction:column;
+    padding:8px 16px 18px;opacity:0;visibility:hidden;pointer-events:none;
     transition:opacity var(--nav-fade) ease,visibility var(--nav-fade) ease;
   }
   .site-mobile-nav.is-open{opacity:1;visibility:visible;pointer-events:auto;}
+  body.demo-nav-open .site-bar{z-index:6;background:#fff;}
   .site-mobile-nav-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+  .site-mobile-nav-close{
+    width:48px;height:48px;border:2px solid var(--ink);border-radius:8px;background:#fff;
+    display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;color:var(--ink);
+  }
+  .site-mobile-nav-close svg{width:24px;height:24px;}
   .site-mobile-nav-kicker{font-family:var(--f-toni);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--forest);}
   .site-mobile-nav-links{list-style:none;flex:1;overflow:auto;}
   .site-mobile-nav-links a{
@@ -79,7 +85,12 @@
     <div class="hero-img" aria-hidden="true"></div>
     <p class="hero-copy">Landed in Guangzhou? <em>Fresh food, sorted.</em></p>
     <div class="site-mobile-nav" id="demoNav" aria-hidden="true">
-      <div class="site-mobile-nav-top"><span class="site-mobile-nav-kicker">Jump to</span></div>
+      <div class="site-mobile-nav-top">
+        <span class="site-mobile-nav-kicker">Jump to</span>
+        <button type="button" class="site-mobile-nav-close" id="demoNavClose" aria-label="Close menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
       <ul class="site-mobile-nav-links">
         <li><a href="#" data-close>New to China</a></li>
         <li><a href="#" data-close>Our products</a></li>
@@ -96,14 +107,17 @@
 (function(){
   const btn=document.getElementById('demoBtn');
   const nav=document.getElementById('demoNav');
+  const navClose=document.getElementById('demoNavClose');
   function setOpen(open){
     btn.classList.toggle('is-open',open);
     nav.classList.toggle('is-open',open);
+    document.body.classList.toggle('demo-nav-open',open);
     btn.setAttribute('aria-expanded',open?'true':'false');
     btn.setAttribute('aria-label',open?'Close menu':'Open menu');
     nav.setAttribute('aria-hidden',open?'false':'true');
   }
   btn.addEventListener('click',()=>setOpen(!btn.classList.contains('is-open')));
+  if(navClose) navClose.addEventListener('click',()=>setOpen(false));
   nav.querySelectorAll('[data-close]').forEach(el=>{
     el.addEventListener('click',ev=>{ ev.preventDefault(); setOpen(false); });
   });

@@ -77,20 +77,23 @@
   .bar-nav-open-btn:focus-visible{outline:3px solid var(--lime);outline-offset:2px;}
   .bar-nav-open-btn[hidden]{display:none!important;}
   .site-mobile-nav{
-    position:fixed;inset:0;z-index:35;background:#fff;display:flex;flex-direction:column;
-    padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
+    position:fixed;left:0;right:0;bottom:0;top:var(--site-bar-h,72px);z-index:35;background:#fff;display:flex;flex-direction:column;
+    padding:8px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
     opacity:0;visibility:hidden;pointer-events:none;
     transition:opacity .28s ease,visibility .28s ease;
   }
   .site-mobile-nav.is-open{opacity:1;visibility:visible;pointer-events:auto;}
-  .site-mobile-nav-close{display:none;}
   @media (prefers-reduced-motion:reduce){
     .site-mobile-nav,.bar-nav-open-btn svg{transition:none;}
   }
   .site-mobile-nav-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
   .site-mobile-nav-kicker{font-family:var(--f-toni);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--forest);}
-  .site-mobile-nav-close{width:44px;height:44px;border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;color:var(--ink);}
-  .site-mobile-nav-close:focus-visible{outline:3px solid var(--forest);outline-offset:2px;}
+  .site-mobile-nav-close{
+    width:48px;height:48px;border:2px solid var(--ink);border-radius:8px;background:#fff;
+    display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;color:var(--ink);flex:none;
+  }
+  .site-mobile-nav-close svg{width:24px;height:24px;}
+  .site-mobile-nav-close:focus-visible{outline:3px solid var(--lime);outline-offset:2px;}
   .site-mobile-nav-links{list-style:none;flex:1;overflow:auto;-webkit-overflow-scrolling:touch;}
   .site-mobile-nav-links a{
     display:flex;align-items:center;min-height:48px;width:100%;text-align:left;
@@ -387,6 +390,7 @@
     .bar-links{display:none!important;}
     header.site-bar .bar-menu-btn{display:none!important;}
     .bar-nav-open-btn{display:inline-flex;}
+    body.site-mobile-nav-open header.site-bar{z-index:36;background:#fff;}
     body .shop-blocks .sb-blk-outer{scroll-margin-top:calc(var(--site-bar-h, 72px) + 12px);}
   }
   @media (min-width:768px){
@@ -415,7 +419,9 @@
 <div class="site-mobile-nav" id="siteMobileNav" hidden aria-hidden="true">
   <div class="site-mobile-nav-top">
     <span class="site-mobile-nav-kicker">Jump to</span>
-    <button type="button" class="site-mobile-nav-close" id="siteMobileNavClose" aria-label="Close">&times;</button>
+    <button type="button" class="site-mobile-nav-close" id="siteMobileNavClose" aria-label="Close menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
   </div>
   <ul class="site-mobile-nav-links" id="siteMobileNavLinks"></ul>
   <a class="bar-menu-btn site-mobile-nav-menu" id="siteMobileNavMenu" href="#" hidden>Menu</a>
@@ -707,14 +713,17 @@ function finishCloseMobileNav(){
   const panel=$('#siteMobileNav'); if(!panel) return;
   panel.hidden=true;
   panel.setAttribute('aria-hidden','true');
+  document.body.classList.remove('site-mobile-nav-open');
   if($('#siteMenuScrim')&&$('#siteMenuScrim').hidden) document.body.style.overflow='';
   syncBarNavOpenIcon(false);
   const btn=$('#barNavOpenBtn'); if(btn) btn.focus();
 }
 function openMobileNav(){
   const panel=$('#siteMobileNav'); if(!panel||panel.classList.contains('is-open')) return;
+  syncSiteBarHeight();
   panel.hidden=false;
   panel.setAttribute('aria-hidden','false');
+  document.body.classList.add('site-mobile-nav-open');
   document.body.style.overflow='hidden';
   syncBarNavOpenIcon(true);
   requestAnimationFrame(()=>requestAnimationFrame(()=>panel.classList.add('is-open')));
@@ -764,7 +773,7 @@ function wireMobileNav(){
   openBtn.dataset.wired='1';
   openBtn.addEventListener('click',()=>{
     const panel=$('#siteMobileNav');
-    if(panel&&!panel.hidden) closeMobileNav();
+    if(panel&&panel.classList.contains('is-open')) closeMobileNav();
     else openMobileNav();
   });
   if(closeBtn) closeBtn.addEventListener('click',closeMobileNav);

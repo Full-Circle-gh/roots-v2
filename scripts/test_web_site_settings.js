@@ -302,6 +302,9 @@ yes(/id="barNavOpenBtn"/.test(SITE) && /id="siteMobileNav"/.test(SITE) && /Jump 
 yes(/bar-nav-open-btn\.is-open/.test(SITE) && /site-mobile-nav\.is-open/.test(SITE)
   && /transition:opacity/.test(SITE),
   'the hamburger swaps to an × and the panel fades in and out');
+yes(/site-mobile-nav-open header\.site-bar\{z-index:36/.test(SITE)
+  && /id="siteMobileNavClose"/.test(SITE) && !/site-mobile-nav-close\{display:none/.test(SITE),
+  'when the menu is open the bar stays on top and the panel shows a close control');
 yes(/header\.site-bar \.bar-menu-btn\{display:none/.test(SITE),
   'the forest Menu pill is not on the phone bar');
 const BAR_MOCK = read('reference/site-bar-section-links-mockup.html');
