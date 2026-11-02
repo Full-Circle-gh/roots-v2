@@ -329,19 +329,6 @@
      clip hides the sideways overflow and does not make a scroll box. */
   @media (min-width:768px){
     html, body{overflow-x:clip;}
-    body .shop-blocks .sb-blk-outer{scroll-margin-top:calc(var(--site-bar-h, 80px) + 12px);}
-    .bar-menu{position:relative;}
-    .bar-menu-panel:not([hidden]){
-      display:flex;flex-direction:column;position:absolute;top:calc(100% + 10px);right:0;z-index:30;
-      width:min(380px, calc(100vw - 32px));max-height:min(70vh, 560px);overflow:auto;
-      background:#fff;border:2px solid var(--ink);padding:6px;
-      box-shadow:0 16px 40px rgba(26,26,23,.16);
-    }
-    .bar-menu-panel a{
-      display:block;padding:11px 14px;text-decoration:none;
-      font-family:var(--f-toni);font-weight:700;font-size:16px;line-height:1.3;
-    }
-    .bar-menu-panel a:hover,.bar-menu-panel a:focus-visible{background:var(--oat);outline:none;}
   }
 </style>
 <script src="/assets/shop/blocks.js"></script>
@@ -351,10 +338,7 @@
   <div class="bar-in">
     <a class="wordmark" id="wordmark" href="/"></a>
     <div class="bar-actions">
-      <div class="bar-menu" id="barMenu">
-        <a class="bar-menu-btn" id="barMenuBtn" href="#" hidden aria-haspopup="true" aria-expanded="false" aria-controls="barMenuPanel">Menu</a>
-        <div class="bar-menu-panel" id="barMenuPanel" hidden></div>
-      </div>
+      <a class="bar-menu-btn" id="barMenuBtn" href="#" hidden>Menu</a>
       <nav class="bar-nav" id="barNav" aria-label="Main">
         <span id="navLinks" style="display:contents"></span>
       </nav>
@@ -601,116 +585,15 @@ function openSiteBarMenu(url,ev){
   if(siteMenuDesktop()) openSiteMenuPhone(url);
   else location.href=url;
 }
-// On a computer, Menu lists this page's sections. A click scrolls to that
-// block, just under the bar. A phone still follows the QR menu link.
-const SECTION_SKIP={spacer:1,announcement_bar:1,fact_band:1};
-function sectionLabel(b){
-  const tidy=s=>String(s||'').replace(/\s+/g,' ').trim();
-  const title=tidy(pick(b.title_en,b.title_cn));
-  const headline=tidy(pick(b.headline_en,b.headline_cn));
-  const kicker=tidy(String(pick(b.kicker_en,b.kicker_cn)||'').split('·')[0]);
-  return title||headline||kicker;
-}
-function pageSections(layout){
-  const out=[]; let skippedHero=false;
-  for(const b of (Array.isArray(layout)?layout:[])){
-    if(!b||typeof b!=='object') continue;
-    if(b.type==='hero_banner'&&!skippedHero){ skippedHero=true; continue; }
-    if(SECTION_SKIP[b.type]) continue;
-    const id=String(b.id||'');
-    if(!/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(id)) continue;
-    const label=sectionLabel(b);
-    if(!label) continue;
-    out.push({id,label});
-  }
-  return out;
-}
-function pageMenuHasItems(){
-  const panel=$('#barMenuPanel');
-  return !!(panel&&Number(panel.dataset.count)>0);
-}
-function closePageMenu(){
-  const panel=$('#barMenuPanel'), btn=$('#barMenuBtn');
-  if(panel) panel.hidden=true;
-  if(btn) btn.setAttribute('aria-expanded','false');
-}
-function openPageMenu(){
-  const panel=$('#barMenuPanel'), btn=$('#barMenuBtn');
-  if(!panel||!pageMenuHasItems()) return;
-  panel.hidden=false;
-  if(btn) btn.setAttribute('aria-expanded','true');
-}
-function togglePageMenu(ev){
-  if(!siteMenuDesktop()||!pageMenuHasItems()) return false;
-  if(ev){ ev.preventDefault(); ev.stopPropagation(); }
-  const panel=$('#barMenuPanel');
-  if(panel.hidden) openPageMenu(); else closePageMenu();
-  return true;
-}
-function goToSection(id,ev){
-  if(ev){ ev.preventDefault(); ev.stopPropagation(); }
-  closePageMenu();
-  const el=document.getElementById(id); if(!el) return;
-  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  el.scrollIntoView({block:'start',behavior:reduce?'auto':'smooth'});
-  if(!STAGE_MODE){ try{ history.replaceState(null,'','#'+id); }catch(e){} }
-}
-function mountPageMenu(layout){
-  const panel=$('#barMenuPanel'); if(!panel) return;
-  panel.innerHTML='';
-  const items=pageSections(layout);
-  for(const it of items){
-    const a=document.createElement('a');
-    a.href='#'+it.id;
-    a.textContent=it.label;
-    a.addEventListener('click',ev=>goToSection(it.id,ev));
-    panel.appendChild(a);
-  }
-  panel.dataset.count=String(items.length);
-  document.querySelectorAll('.sb-blk-outer[data-block-id]').forEach(el=>{
-    const id=el.getAttribute('data-block-id')||'';
-    if(/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(id)) el.id=id;
-  });
-  if(!siteMenuDesktop()) closePageMenu();
-  syncBarMenuBtn();
-  syncBarStick();
-  scrollToHash();
-}
-function scrollToHash(){
-  if(STAGE_MODE||scrollToHash.done) return;
-  const id=(location.hash||'').slice(1);
-  if(!/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(id)) return;
-  const el=document.getElementById(id); if(!el) return;
-  scrollToHash.done=true;
-  el.scrollIntoView({block:'start'});
-}
-function syncBarStick(){
-  const bar=document.querySelector('header.site-bar');
-  if(bar) document.documentElement.style.setProperty('--site-bar-h', bar.offsetHeight+'px');
-}
-function syncBarMenuBtn(){
-  const btn=$('#barMenuBtn'); if(!btn) return;
-  const url=siteBarMenuUrl();
-  const sections=siteMenuDesktop()&&pageMenuHasItems();
-  btn.hidden=!(url||sections);
-  if(url) btn.href=url;
-}
-function onBarMenuClick(ev){
-  if(togglePageMenu(ev)) return;
-  const url=siteBarMenuUrl();
-  if(url) openSiteBarMenu(url,ev);
-  else if(ev){ ev.preventDefault(); }
-}
 function bindSiteBarMenu(){
   const btn=$('#barMenuBtn'); if(!btn) return;
-  syncBarMenuBtn();
-  syncBarStick();
+  const url=siteBarMenuUrl();
+  if(!url){ btn.hidden=true; return; }
+  btn.hidden=false;
+  btn.href=url;
   if(btn.dataset.wired==='1') return;
   btn.dataset.wired='1';
-  btn.addEventListener('click',onBarMenuClick);
-  document.addEventListener('click',ev=>{ if(!ev.target.closest('#barMenu')) closePageMenu(); });
-  document.addEventListener('keydown',ev=>{ if(ev.key==='Escape') closePageMenu(); });
-  window.addEventListener('resize',()=>{ syncBarStick(); if(!siteMenuDesktop()) closePageMenu(); syncBarMenuBtn(); });
+  btn.addEventListener('click',ev=>openSiteBarMenu(url,ev));
 }
 
 async function placeShopPins(layout){
@@ -841,7 +724,6 @@ async function render(){
     // On the stage, the editor's own live pair (public/cms.html) says what to
     // do; a visitor sees the brand's header and footer around an empty body.
     view.innerHTML=STAGE_MODE?'<p class="empty">'+(state.lang==='cn'?'添加模块':'Add a block')+'</p>':'';
-    mountPageMenu([]);
     return;
   }
   if(!state.products) state.products=await loadProducts(layout);
@@ -849,7 +731,6 @@ async function render(){
   ShopBlocks.setContext({ lang:state.lang, products:state.products, categories:[], flashSales:[], config:state.config });
   view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layout)+'</div>';
   ShopBlocks.startTimers(view);
-  mountPageMenu(layout);
   stageHighlight(true);
   renderChatButton(layout);
   mountStoreVisit(view);
@@ -1008,10 +889,7 @@ function renderChatButton(layout){
     // Clicks: a block selects itself in the editor; everything else is inert.
     document.addEventListener('click',ev=>{
       if(trySiteMenuCtaClick(ev)) return;
-      if(ev.target.closest('#barMenu')){
-        if(ev.target.closest('#barMenuBtn')) onBarMenuClick(ev);
-        return;
-      }
+      if(ev.target.closest('#barMenuBtn')){ const u=siteBarMenuUrl(); if(u) openSiteBarMenu(u,ev); return; }
       const blk=ev.target.closest('.sb-blk-outer');
       if(blk){
         ev.preventDefault(); ev.stopPropagation();

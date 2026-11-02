@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.611
+# Tacet shared-core consolidation — decisions record, v4.612
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,7 +22,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-11-02 · v4.611 — **§503 AMENDED · ON A COMPUTER THE BAR STAYS PUT, AND MENU JUMPS TO THE SECTION — DECIDED BY ASH.** Ash: *"pc - top bar should be sticky and also menu where a user can click on a link and it will direct him exacly where it is on the page"*. The bar was already `position: sticky`. From 768px up the shop block sheet sets `overflow-x: hidden` on `html` and `body`, and a hidden axis forces the other axis to `auto`, so the page scrolled in one box and the bar lived in the other. The bar scrolled away. On the brand site that sideways clip is `overflow-x: clip`, which does not make a scroll box. On a computer, Menu opens the sections of this page (each block's own title, headline, or kicker). A click scrolls that block to sit just under the bar. A phone still opens the QR menu. A block button to the QR menu still opens the phone frame (rule 51). No new words. No change to `.gitignore` or CI.
+2026-11-02 · v4.612 — **§503 AMENDED · THE LONG LIST UNDER MENU IS NOT THE BAR — ASH.** Ash, on the list that opened under Menu: *"i dont want all this menu list is too long . also on pc thats not what i mean . i wan there will be on the sticky bar few link that once clicking it will go directly to the page. i dont want it to be under menu . the menu is one of the button user can click to see ramada menu , the rest of the links can be : new to china, our products, our location , social , our story , canton fair"* and asked for a mockup he can test. Rule 53 is withdrawn. Menu stays the Ramada button. The six names are drawn on the bar in `reference/site-bar-section-links-mockup.html`, in page order, and are not on the live site. The sticky fix from v4.611 stays. No new words on the live site. No change to `.gitignore` or CI.
+
+2026-11-02 · v4.611 — **§503 AMENDED · ON A COMPUTER THE BAR STAYS PUT, AND MENU JUMPS TO THE SECTION — DECIDED BY ASH.** Ash: *"pc - top bar should be sticky and also menu where a user can click on a link and it will direct him exacly where it is on the page"*. The bar was already `position: sticky`. From 768px up the shop block sheet sets `overflow-x: hidden` on `html` and `body`, and a hidden axis forces the other axis to `auto`, so the page scrolled in one box and the bar lived in the other. The bar scrolled away. On the brand site that sideways clip is `overflow-x: clip`, which does not make a scroll box. The same pass put the page's sections in a list under Menu. **Withdrawn the same day by v4.612:** that list is not what Ash meant. The sticky fix stands. No new words. No change to `.gitignore` or CI.
 
 2026-11-01 · v4.610 — **§503 AMENDED · A FINGER ON THE STORE MAP SCROLLS THE PAGE — DECIDED BY ASH.** Ash, on a phone: *"cant scroll on mobile over the map area"*, circling the Yuexiu map. Rule 39 already said the page scrolls past the map. Turning Amap's drag off does not do that: the map node gets `touch-action: none` and cancels the move, and a layer inside that node cannot undo it. On a touch screen `shieldStoreMap` in `public/site.html` puts a clear layer beside the map node. The page scrolls. A tap that did not move still opens the phone's map app. The editor's stage does not add the layer, and a computer with a mouse still drags the map. No new words. No change to `.gitignore` or CI.
 
@@ -33683,13 +33685,13 @@ Ash: *"once clicking ramada menu on pc it should show the menu inside a phone mo
 
 51. **On a computer a block button to the QR menu opens in a phone frame.** From 768px up, a button whose target is a shop QR menu (`https://…/s/<code>`) opens that menu in a phone-shaped overlay. A phone still opens it as a page. The menu page allows the brand site to frame it. The link under the frame is "Open full screen".
 
-### Amended 2026-11-02 — the computer bar stays, and Menu jumps down the page
+### Amended 2026-11-02 — the computer bar stays on screen
 
-Ash: *"pc - top bar should be sticky and also menu where a user can click on a link and it will direct him exacly where it is on the page"*.
+Ash: *"pc - top bar should be sticky and also menu where a user can click on a link and it will direct him exacly where it is on the page"*. The list under Menu that followed is withdrawn (rule 53).
 
 52. **On a computer the top bar stays on screen.** From 768px up `public/shop/blocks.css` sets `overflow-x: hidden` on `html` and `body` so a full-bleed block cannot grow a sideways scrollbar. A hidden axis forces the other axis to `auto`. The page then scrolled in one box and the sticky bar belonged to the other, so the bar left with the scroll. On the brand site only, that rule is overridden with `overflow-x: clip`. Clip still hides the sideways overflow and does not make a scroll box, so `header.site-bar` stays at the top. The web shop is unchanged.
 
-53. **On a computer, Menu is a list of this page.** The button opens the sections already on the website. The label is the block's own title, or its headline, or the part of its kicker before a middle dot. The opening hero is not listed — the wordmark goes there. Spacers, the green slogan line, and the promise band (it has no words of its own) are not listed. A click scrolls that block so its top sits just under the bar. The address bar keeps the section. A phone still follows the QR menu link. A block button whose target is the QR menu still opens the phone frame (rule 51). No new words.
+53. **Withdrawn the same day.** A list of every section under Menu is not the bar. Ash: the list is too long, and Menu is the button that opens the Ramada menu. The other links sit on the bar itself. They are not on the live site. The mockup is `reference/site-bar-section-links-mockup.html`.
 
 ## §504 — EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS
 
