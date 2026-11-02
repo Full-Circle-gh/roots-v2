@@ -253,6 +253,8 @@ yes(/Slogan line edge to edge/.test(SITE) && /font-size:24px/.test(SITE),
   'the slogan line is edge to edge and large on a computer');
 yes(/website_ramada_menus_v1/.test(read('database.js')),
   'a one-time migration puts the Ramada menus on the published website');
+yes(/website_hero_fresh_food_sorted_v1/.test(read('database.js')),
+  'a one-off migration rewrites the website hero from lunch to fresh food');
 
 
 // ─────────────────────────────────────────────────────────────────────────
