@@ -794,12 +794,12 @@
     var byline = pick(b.byline_en, b.byline_cn);
     var readTime = b.read_time_minutes ? (b.read_time_minutes + ' ' + (CN() ? '分钟' : 'min')) : '';
     var ctaLabel = pick(b.cta_label_en, b.cta_label_cn);
-    // A story card that points at About opens the essay screen. The live
-    // home card is saved with cta_target "about"; remapping here means the
-    // published layout does not have to change. Any other target stays.
+    // The Yuexiu website sets cta_target "story" on its Our story card
+    // before drawing. A card saved as "about" stays a normal card here, so
+    // the web shop and the mini app are not pulled into that essay.
     var rawTarget = b.cta_target || (linkedCard ? 'product:' + linkedCard.id : '');
-    var opensStory = rawTarget === 'about' || rawTarget === 'story';
-    var ctaTarget = opensStory ? 'story' : rawTarget;
+    var opensStory = rawTarget === 'story';
+    var ctaTarget = rawTarget;
     var btnBg = color(b.btn_color || ''), btnFg = b.btn_color ? btnText(b.btn_color) : '';
 
     var img = '<div class="sb-rcp-img">' + (imageUrl ? '<img class="sb-img-full" src="' + attr(imageUrl) + '" alt="">' : '<div class="sb-rcp-img-placeholder">No image</div>') + '</div>';
@@ -837,8 +837,8 @@
 
   // about_stats -------------------------------------------------------------
   // The four facts from About, drawn on the front page. Render-only: the
-  // layout the shop saved does not contain this block. An empty value is
-  // skipped, same rule as the mini app.
+  // the layout the shop saved does not contain this block. An empty value
+  // is skipped.
   renderers.about_stats = function (b) {
     var stats = (Array.isArray(b.stats) ? b.stats : []).slice(0, 4).map(function (s) {
       if (!s) return null;
@@ -2130,10 +2130,9 @@
   // 'web' and drops 'miniapp'. Hosts that walk the layout before rendering
   // (shop.html's renderHome pre-fetches the products a layout names) call
   // forSurface() first so a hidden block costs no request either.
-  // Twin of miniapp/utils/front-facts.js. Inserts the About facts strip
-  // under the first hero at draw time. Never writes the layout back, so a
-  // shop that has not filled in the numbers does not publish a strip, and
-  // the CMS list stays the blocks the shop actually placed.
+  // The Yuexiu website draws the About facts under its first hero. The
+  // web shop and the mini app do not call this. Never writes the layout
+  // back, so a site with no numbers does not grow a strip.
   function withFrontFacts(layout, about) {
     var blocks = Array.isArray(layout) ? layout : [];
     if (!blocks.length) return blocks;

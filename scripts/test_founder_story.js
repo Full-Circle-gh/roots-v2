@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 /**
- * The founder essay is its own screen. The home story card that points at
- * About, and About's "Read the full story" link, both open it. The four
- * facts from About sit under the hero on the front page, and only when
- * this shop wrote them.
+ * The founder essay and the four About facts belong on the Yuexiu brand
+ * website only. The mini app and the web shop do not open that essay and
+ * do not draw the strip.
  *
- * The web shop and the mini app each have a copy of the insert rule,
- * because the browser block engine cannot require the mini-app file.
- * This suite is what keeps the two copies the same.
+ * The website marks its Our story card with cta_target "story" at draw
+ * time. The block engine shortens that card on a phone and makes the card
+ * the link. A card aimed at About stays a normal card.
  */
 'use strict';
 
@@ -24,8 +23,6 @@ const bad = (m, extra) => { fail++; console.log('  ✗ ' + m + (extra ? '\n     
 const is = (a, e, m) => (a === e ? ok(m) : bad(m, `expected ${JSON.stringify(e)}, got ${JSON.stringify(a)}`));
 const yes = (c, m, extra) => (c ? ok(m) : bad(m, extra));
 const section = (t) => console.log('\n' + t);
-
-const { withFrontFacts } = require('../miniapp/utils/front-facts');
 
 const sandbox = { console };
 vm.createContext(sandbox);
@@ -50,134 +47,70 @@ const STATS = {
     { value_en: '100%', label_en: 'PLANTS' },
     { value_en: 'EXTRA', label_en: 'FIFTH' },
     { value_en: '   ', label_en: 'BLANK' },
-    { value_cn: '保留', label_cn: '中文' },
   ],
 };
 
-section('1 · the two insert rules agree');
-
-function agree(layout, about, label) {
-  const web = ShopBlocks.withFrontFacts(layout, about);
-  const mini = withFrontFacts(layout, about);
-  is(sig(web), sig(mini), label);
-  return { web, mini };
-}
-
-agree([], STATS, 'an empty front page stays empty');
-agree(null, STATS, 'a missing layout stays empty');
-agree([{ id: 'h', type: 'hero_banner' }], { stats: [] }, 'no numbers, no strip');
-agree([{ id: 'h', type: 'hero_banner' }], null, 'no About page, no strip');
+section('1 · facts are inserted only when the site asks');
 
 {
   const layout = [{ id: 'h', type: 'hero_banner' }, { id: 'r', type: 'recipe_story' }];
   const snap = JSON.stringify(layout);
-  const { web, mini } = agree(layout, STATS, 'facts land after the hero');
+  const web = ShopBlocks.withFrontFacts(layout, STATS);
   is(JSON.stringify(layout), snap, 'the published layout is not rewritten');
   is(web[0].type, 'hero_banner', 'the hero stays first');
   is(web[1].type, 'about_stats', 'the strip is the next block');
-  is(web[1].id, 'about-stats', 'the strip has a stable id');
   is(web[1].stats.length, 4, 'four facts, the fifth and the blank dropped');
-  is(web[1].stats[3].value_en, '100%', 'the fourth written fact is kept');
-  yes(web[1].stats.every(s => String(s.value_en || s.value_cn).trim() !== 'EXTRA'), 'the fifth fact is not on the strip');
-  is(mini[1].stats.length, 4, 'the mini app keeps the same four');
   is(web !== layout, true, 'the drawn list is a new array');
 }
-
+is(sig(ShopBlocks.withFrontFacts([], STATS)), '', 'an empty page stays empty');
+is(sig(ShopBlocks.withFrontFacts([{ id: 'h', type: 'hero_banner' }], { stats: [] })), 'hero_banner:h', 'no numbers, no strip');
 {
   const layout = [{ id: 'g', type: 'product_grid' }];
-  const { web } = agree(layout, STATS, 'no hero, the strip is first');
-  is(web[0].type, 'about_stats', 'it sits at the top');
-  is(web[1].id, 'g', 'the shop block follows it');
+  is(ShopBlocks.withFrontFacts(layout, STATS)[0].type, 'about_stats', 'no hero, the strip is first');
 }
-
 {
-  const layout = [
-    { id: 'h', type: 'hero_banner' },
-    { id: 'own', type: 'about_stats', stats: [{ value_en: '9' }] },
-  ];
-  const { web } = agree(layout, STATS, 'a strip the shop already placed is left alone');
-  is(web, layout, 'same array, nothing inserted');
-  is(web[1].id, 'own', 'the shop\'s own strip is the one that shows');
+  const layout = [{ id: 'h', type: 'hero_banner' }, { id: 'own', type: 'about_stats', stats: [{ value_en: '9' }] }];
+  is(ShopBlocks.withFrontFacts(layout, STATS), layout, 'a strip already on the page is left alone');
 }
 
-section('2 · the home story card opens the essay');
+section('2 · only a story target opens the essay');
 
 ShopBlocks.setContext({ lang: 'en', products: [], categories: [], flashSales: [], config: null });
 const storyHtml = ShopBlocks.render([{
   id: 'roots',
   type: 'recipe_story',
-  cta_target: 'about',
+  cta_target: 'story',
   cta_label_en: 'READ MORE',
   headline_en: 'The Roots of It All',
   body_en: 'A tiny kitchen.\n\nThat kitchen became Roots.',
 }]);
 is((storyHtml.match(/data-cta-target="story"/g) || []).length, 1, 'one story target, on the card');
-yes(/class="sb-recipe-blk[^"]*"/.test(storyHtml) && storyHtml.indexOf('data-cta-target="story"') < storyHtml.indexOf('sb-recipe-blk'), 'the target is on the card itself');
 yes(storyHtml.includes('sb-rcp-paras tease'), 'the phone tease is marked');
-yes(storyHtml.includes('sb-rcp-short') && storyHtml.includes('A tiny kitchen. That kitchen became Roots.'), 'the two paragraphs become the short line');
-yes(storyHtml.includes('sb-rcp-full') && storyHtml.includes('A tiny kitchen.'), 'the wide screen still has the paragraphs');
-yes(!/class="sb-rcp-cta"[^>]*data-cta-target/.test(storyHtml) && !/data-cta-target="story"[^>]*>READ MORE/.test(storyHtml), 'the button is paint, not a second link');
+yes(storyHtml.includes('A tiny kitchen. That kitchen became Roots.'), 'the short line joins the paragraphs');
 
-const pointed = ShopBlocks.render([{
-  id: 'roots2', type: 'recipe_story', cta_target: 'story', cta_label_en: 'READ MORE', body_en: 'Hello.',
+const aboutCard = ShopBlocks.render([{
+  id: 'shop', type: 'recipe_story', cta_target: 'about', cta_label_en: 'READ MORE', body_en: 'Full shop copy.',
 }]);
-yes(pointed.includes('data-cta-target="story"') && pointed.includes('tease'), 'a card already aimed at the essay does the same');
+yes(!aboutCard.includes('tease'), 'a card aimed at About is not shortened');
+yes(aboutCard.includes('data-cta-target="about"'), 'its About target is kept');
+yes(!aboutCard.includes('data-cta-target="story"'), 'it does not open the essay');
 
-ShopBlocks.setContext({
-  lang: 'en',
-  products: [{ id: 7, name_en: 'Oat milk', sell_price: 12 }],
-  categories: [], flashSales: [], config: null,
-});
-const withProduct = ShopBlocks.render([{
-  id: 'roots3', type: 'recipe_story', cta_target: 'about', product_id: 7, body_en: 'Hello.',
-}]);
-yes(withProduct.includes('data-cta-target="product:7"'), 'the product inside the card still opens the product');
-is((withProduct.match(/data-cta-target="story"/g) || []).length, 1, 'the card target stays the essay');
+section('3 · the website has it, the shop and the mini app do not');
 
-const wild = ShopBlocks.render([{
-  id: 'wild', type: 'recipe_story', cta_target: 'shop', cta_label_en: 'SHOP', body_en: 'Out in the field.\n\nStill the full piece.',
-}]);
-yes(!wild.includes('tease'), 'a story card that does not open the essay is not shortened');
-yes(wild.includes('data-cta-target="shop"'), 'its own target is kept');
-yes(!wild.includes('data-cta-target="story"'), 'it does not open the essay');
-
-const facts = ShopBlocks.render([{
-  id: 'about-stats', type: 'about_stats',
-  stats: [
-    { value_en: '2017', label_en: 'EST' },
-    { value_en: '   ', label_en: 'BLANK' },
-    { value_cn: '广州', label_cn: '产地' },
-  ],
-}]);
-yes(facts.includes('sb-facts') && facts.includes('2017') && facts.includes('广州'), 'the strip draws the written facts');
-yes(!facts.includes('BLANK'), 'a blank fact is left out');
-
-section('3 · the pages that open the essay');
-
-const shop = read('public/shop.html');
-const aboutWxml = read('miniapp/pages/about/about.wxml');
-const aboutJs = read('miniapp/pages/about/about.js');
-const appJson = read('miniapp/app.json');
-const renderer = read('miniapp/components/block-renderer/block-renderer.js');
-const wxml = read('miniapp/components/block-renderer/block-renderer.wxml');
-const home = read('miniapp/pages/home/home.js');
 const site = read('public/site.html');
+const shop = read('public/shop.html');
+const appJson = read('miniapp/app.json');
+const aboutWxml = read('miniapp/pages/about/about.wxml');
+const home = read('miniapp/pages/home/home.js');
 
-yes(shop.includes('async function renderStory()'), 'the web shop has the essay page');
-yes(shop.includes("seg[0]==='story'") && shop.includes("location.hash='#/story'"), 'the hash and the card target both reach it');
-yes(shop.includes('data-go="#/story"'), 'About\'s link opens the essay');
-yes(!shop.includes('aboutExpanded') && !shop.includes('SHOW LESS'), 'About no longer unfolds the quote in place');
-yes(shop.includes('-webkit-line-clamp:3'), 'the quote on About is three lines');
-yes(shop.includes('ShopBlocks.withFrontFacts'), 'the front page draws the strip');
-yes(!site.includes('withFrontFacts'), 'the brand website is not the shop front page');
-
-yes(aboutWxml.includes('goStory') && aboutWxml.includes('阅读完整故事 →'), 'the mini app About link is the live pair');
-yes(!aboutJs.includes('toggleStory') && !aboutJs.includes('storyExpanded'), 'the quote does not expand in place');
-yes(aboutJs.includes("/pages/story/story"), 'the link opens the essay screen');
-yes(appJson.includes('"pages/story/story"'), 'the essay screen is a page');
-yes(home.includes('withFrontFacts'), 'the mini app home draws the strip');
-yes(renderer.includes("rawTarget === 'about' || rawTarget === 'story'") && renderer.includes('case \'about_stats\''), 'the mini app block renderer knows both');
-yes(wxml.includes('rcp-tease') && wxml.includes("type === 'about_stats'") && wxml.includes('catchtap="onProductTap"'), 'the card tease, the strip, and the product tap are in the template');
+yes(site.includes('function showFounderStory()'), 'the Yuexiu website has the essay');
+yes(site.includes('layoutForSite') && site.includes('ShopBlocks.withFrontFacts'), 'the website draws the facts strip');
+yes(site.includes("t==='story'"), 'the story card opens the essay');
+yes(!shop.includes('function renderStory') && !shop.includes('withFrontFacts'), 'the web shop does not');
+yes(!appJson.includes('pages/story/story'), 'the mini app has no essay screen');
+yes(!aboutWxml.includes('goStory'), 'About on the mini app does not open one');
+yes(!home.includes('withFrontFacts'), 'the mini app home does not draw the strip');
+yes(!fs.existsSync(path.join(ROOT, 'miniapp/utils/front-facts.js')), 'the mini app copy of the strip rule is gone');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
