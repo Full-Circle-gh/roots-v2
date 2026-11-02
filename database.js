@@ -8893,6 +8893,54 @@ try {
 } catch (e) { console.error('[migration website_hero_fresh_food_sorted_v1]', e); }
 
 
+// ── One-off: split-hero headline line break (Guangzhou? / Fresh food, sorted.) ─
+//
+// A single-line headline wrapped with "sorted." alone on the last line. The
+// mock-up breaks after the question mark (reference/site-bar-menu-button-mockup).
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('website_hero_headline_linebreak_v1');
+  if (!ran) {
+    const LINE2 = 'Fresh food, sorted.';
+    const patchHeadlineEn = (s) => {
+      if (typeof s !== 'string' || s.includes('\n')) return s;
+      if (/^Landed in Guangzhou\?\s*Fresh food,\s*sorted\.?$/i.test(s.trim())) {
+        return 'Landed in Guangzhou?\n' + LINE2;
+      }
+      if (/^Landed in Guangzhou\?\s*Lunch is sorted\.?$/i.test(s.trim())) {
+        return 'Landed in Guangzhou?\n' + LINE2;
+      }
+      return s;
+    };
+    db.transaction(() => {
+      let total = 0;
+      for (const key of ['website.layout', 'cms.draft.website_layout']) {
+        const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+        if (!row) continue;
+        let layout;
+        try { layout = JSON.parse(row.value_json); } catch { continue; }
+        if (!Array.isArray(layout)) continue;
+        let changed = 0;
+        for (const b of layout) {
+          if (!b || typeof b.headline_en !== 'string') continue;
+          const next = patchHeadlineEn(b.headline_en);
+          if (next === b.headline_en) continue;
+          b.headline_en = next;
+          changed++;
+        }
+        if (!changed) continue;
+        db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?').run(JSON.stringify(layout), key);
+        console.log('[migration] website_hero_headline_linebreak_v1: ' + key + ' patched ' + changed + ' headline(s)');
+        total += changed;
+      }
+      if (!total) {
+        console.log('[migration] website_hero_headline_linebreak_v1: no intro headline to re-break');
+      }
+      db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('website_hero_headline_linebreak_v1');
+    })();
+  }
+} catch (e) { console.error('[migration website_hero_headline_linebreak_v1]', e); }
+
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
