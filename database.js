@@ -8941,6 +8941,48 @@ try {
 } catch (e) { console.error('[migration website_hero_headline_linebreak_v1]', e); }
 
 
+// ── One-off: finish intro pen marks (#3) — v1 stopped after #1 ─────────────
+//
+// v1's wrapPen bailed once <<PEN>> appeared anywhere in the string, so the
+// clean-label line never got wrapped. This pass wraps PH3 only when that exact
+// phrase is not already inside a pen pair.
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('website_intro_pen_marks_v2');
+  if (!ran) {
+    const PH3 = 'No additives, no preservatives, no refined sugar.';
+    const PEN_OPEN = '<<PEN>>', PEN_CLOSE = '<</PEN>>';
+    const marked = (text, phrase) => text.includes(PEN_OPEN + phrase + PEN_CLOSE);
+    const wrapOne = (text, phrase) => {
+      if (!text || !text.includes(phrase) || marked(text, phrase)) return text;
+      return text.split(phrase).join(PEN_OPEN + phrase + PEN_CLOSE);
+    };
+    db.transaction(() => {
+      for (const key of ['website.layout', 'cms.draft.website_layout']) {
+        const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+        if (!row) continue;
+        let layout;
+        try { layout = JSON.parse(row.value_json); } catch { continue; }
+        if (!Array.isArray(layout)) continue;
+        let changed = false;
+        for (const b of layout) {
+          if (!b || b.type !== 'hero_banner') continue;
+          const sub = b.subtitle_en;
+          if (!sub || typeof sub !== 'string') continue;
+          if (!sub.includes('100% plant-based') && !(b.headline_en || '').includes('Landed in Guangzhou')) continue;
+          const next = wrapOne(sub, PH3);
+          if (next !== sub) { b.subtitle_en = next; changed = true; }
+        }
+        if (changed) {
+          db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?').run(JSON.stringify(layout), key);
+          console.log('[migration] website_intro_pen_marks_v2: ' + key + ' wrapped clean-label line');
+        }
+      }
+      db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('website_intro_pen_marks_v2');
+    })();
+  }
+} catch (e) { console.error('[migration website_intro_pen_marks_v2]', e); }
+
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
