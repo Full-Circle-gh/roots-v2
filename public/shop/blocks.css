@@ -2842,6 +2842,10 @@
 /* WeChat ID: no truncation, tap to copy. */
 .shop-blocks .sb-cl-wechat-id { cursor: pointer; }
 .shop-blocks .sb-cl-wechat-id:active { opacity: 0.6; }
+/* WeChat ID beside QR: nowrap IDs must not paint over the code in narrow cards. */
+.shop-blocks .sb-cl-wechat--qr .sb-cl-txt { overflow: hidden; padding-inline-end: calc(8 * var(--u)); }
+.shop-blocks .sb-cl-wechat--qr .sb-cl-wechat-id { display: block; overflow: hidden; text-overflow: ellipsis; }
+.shop-blocks .sb-cl-wechat--qr .sb-cl-qr { margin-inline-start: calc(12 * var(--u)); }
 .shop-blocks .sb-cl-qr { flex: none; width: calc(140 * var(--u)); height: calc(140 * var(--u)); object-fit: contain; background: #fff; border-radius: calc(10 * var(--u)); }
 
 @media (min-width: 768px) {
@@ -2857,6 +2861,8 @@
   .shop-blocks .sb-cl-name { font-size: 20px; }
   .shop-blocks .sb-cl-sub { font-size: 14px; }
   .shop-blocks .sb-cl-qr { width: 88px; height: 88px; border-radius: 8px; }
+  .shop-blocks .sb-cl-wechat--qr .sb-cl-txt { padding-inline-end: 8px; }
+  .shop-blocks .sb-cl-wechat--qr .sb-cl-qr { margin-inline-start: 12px; }
   .shop-blocks .sb-cl-rate { font-size: 14px; gap: 8px; margin-top: 2px; }
   .shop-blocks .sb-cl-ta { height: 16px; }
 }
