@@ -1056,7 +1056,7 @@ function isOurStory(b){
   return /our story/i.test(String(pick(b.kicker_en,b.kicker_cn)||''));
 }
 const FOUNDER_STORY_KICKER_EN="Founder's Story";
-const FOUNDER_STORY_KICKER_CN='?????';
+const FOUNDER_STORY_KICKER_CN='\u521b\u59cb\u4eba\u6545\u4e8b';
 let siteLayout=[];
 function layoutForSite(layout){
   const about=state.config&&state.config.about&&state.config.about.content;
@@ -1118,15 +1118,8 @@ function showFounderStory(){
   const cardBody=card?String(pick(card.body_en,card.body_cn)||'').trim():'';
   const essay=quote||cardBody;
   const name=String(pick(c.founder_name_en,c.founder_name_cn)||'').trim();
-  const role=String(pick(c.founder_title_en,c.founder_title_cn)||'').trim();
   const headline=(card&&String(pick(card.headline_en,card.headline_cn)||'').trim())||name||(cn?'我们的故事':'Our story');
-  const kicker=(card&&String(pick(card.kicker_en,card.kicker_cn)||'').trim())||String(pick(c.founder_kicker_en,c.founder_kicker_cn)||'').trim();
-  const minutes=card&&Number(card.read_time_minutes);
-  const bits=[];
-  if(name) bits.push(name);
-  if(role) bits.push(role);
-  if(minutes) bits.push(minutes+(cn?' 分钟':' min'));
-  const byline=bits.length?bits.join(' · '):(card?String(pick(card.byline_en,card.byline_cn)||'').trim():'');
+  const kicker=cn?FOUNDER_STORY_KICKER_CN:FOUNDER_STORY_KICKER_EN;
   const image=String((card&&card.image_url)||c.founder_photo_url||c.hero_image_url||'').trim();
   const outro=String(pick(c.outro_en,c.outro_cn)||'').trim();
   scroll.innerHTML='';
