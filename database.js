@@ -8752,6 +8752,58 @@ try {
 } catch (e) { console.error('[migration ramada_banner_aspect_restore_v1]', e); }
 
 
+// ── One-off: the brand website sticky bar Menu button (Option A) ───────────
+//
+// public/site.html reads web.site.menu first, then a shop-menu link in nav,
+// footer or website.layout. This seeds menu when nothing is set yet.
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('web_site_bar_menu_v1');
+  if (!ran) {
+    const MENU_PATH = /^\/s\/[A-HJ-NP-Z2-9]{8}(?:\/|$)/i;
+    const isMenuUrl = (u) => {
+      try {
+        const x = new URL(String(u || ''));
+        return x.protocol === 'https:' && MENU_PATH.test(x.pathname);
+      } catch { return false; }
+    };
+    const findInLayout = (layout) => {
+      if (!Array.isArray(layout)) return '';
+      for (const b of layout) {
+        if (!b || typeof b !== 'object') continue;
+        const targets = [];
+        if (b.cta_target) targets.push(b.cta_target);
+        for (const c of (Array.isArray(b.ctas) ? b.ctas : [])) if (c && c.target) targets.push(c.target);
+        for (const t of targets) if (isMenuUrl(t)) return t;
+      }
+      return '';
+    };
+    const DEFAULT_MENU = 'https://shop.rootskitchenchina.com/s/TJ6YHDGN';
+    db.transaction(() => {
+      let menu = '';
+      const layoutRow = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'website.layout'").get();
+      if (layoutRow) {
+        try { menu = findInLayout(JSON.parse(layoutRow.value_json)); } catch { /* unreadable layout */ }
+      }
+      if (!menu) menu = DEFAULT_MENU;
+      const siteRow = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'web.site'").get();
+      let site = {};
+      if (siteRow) {
+        try { site = JSON.parse(siteRow.value_json); } catch { site = {}; }
+      }
+      if (!isMenuUrl(site.menu)) {
+        site.menu = menu;
+        db.prepare("INSERT INTO storefront_config (key, value_json) VALUES ('web.site', ?) " +
+          "ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json").run(JSON.stringify(site));
+        console.log('[migration] web_site_bar_menu_v1: web.site.menu →', menu);
+      } else {
+        console.log('[migration] web_site_bar_menu_v1: web.site.menu already set, left alone');
+      }
+      db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('web_site_bar_menu_v1');
+    })();
+  }
+} catch (e) { console.error('[migration web_site_bar_menu_v1]', e); }
+
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;

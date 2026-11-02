@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roots — site bar Menu button options</title>
+<style>
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/LilitaOne.ttf') format('truetype'); unicode-range:U+0024,U+0025,U+0030-0039,U+00A5; font-display:swap; }
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --olive:#6A6E2D; --lime:#CCD900;
+    --line:rgba(0,0,0,.08);
+    --f-bear:'Bear Serif','PingFang SC',serif;
+    --f-toni:'Toni Grotesk','PingFang SC',sans-serif;
+    --f-aleo:'Aleo','PingFang SC',serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:var(--f-aleo);background:#e8e0d8;color:var(--ink);-webkit-font-smoothing:antialiased;}
+  .page{max-width:1100px;margin:0 auto;padding:28px 20px 80px;}
+  h1{font-family:var(--f-bear);font-size:28px;margin-bottom:8px;}
+  .lead{font-size:15px;color:#4a4a44;max-width:62ch;line-height:1.5;margin-bottom:28px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:28px;}
+  .opt{display:flex;flex-direction:column;gap:10px;}
+  .opt-h{font-family:var(--f-toni);font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--olive);}
+  .opt-t{font-size:17px;font-family:var(--f-bear);line-height:1.15;}
+  .opt-n{font-size:13px;color:#5c5c54;line-height:1.45;}
+  .phone{width:100%;max-width:390px;border-radius:28px;overflow:hidden;border:1px solid rgba(0,0,0,.12);background:var(--oat);box-shadow:0 12px 40px rgba(0,0,0,.12);}
+  .site-bar{background:var(--oat);border-bottom:1px solid var(--line);padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,0px));}
+  .bar-in{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .wordmark img{height:40px;width:auto;display:block;}
+  .hero-img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:#ccc;}
+  .split{padding:18px 22px 28px;}
+  .headline{font-family:var(--f-bear);font-size:38px;line-height:1.04;margin-bottom:12px;}
+  .subtitle{font-size:17px;line-height:1.5;color:#333;}
+  .since{background:var(--forest);color:var(--lime);font-family:var(--f-toni);font-size:14px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;text-align:center;padding:14px 16px;}
+
+  /* shared button base */
+  .menu-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;white-space:nowrap;
+    font-family:var(--f-toni);font-weight:700;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;
+    min-height:44px;-webkit-tap-highlight-color:transparent;}
+
+  /* A — forest pill (shop primary) */
+  .btn-a{padding:10px 20px;font-size:13px;background:var(--forest);color:#fff;border:0;border-radius:999px;}
+
+  /* B — lime chip (QR menu / lang toggle family) */
+  .btn-b{padding:8px 16px;font-size:13px;background:var(--lime);color:var(--ink);border:2px solid var(--ink);border-radius:0;}
+
+  /* C — ink outline ghost */
+  .btn-c{padding:8px 16px;font-size:13px;background:rgba(255,255,255,.72);color:var(--ink);border:2px solid var(--ink);border-radius:999px;}
+
+  /* D — square editorial (mini-app chips) */
+  .btn-d{padding:10px 14px;font-size:12px;background:var(--ink);color:var(--lime);border:0;border-radius:0;letter-spacing:.14em;}
+
+  /* E — text + small icon, no fill */
+  .btn-e{padding:6px 4px;font-size:13px;background:transparent;color:var(--ink);border:0;border-bottom:2px solid var(--forest);border-radius:0;letter-spacing:.1em;}
+  .btn-e svg{width:18px;height:18px;flex:none;}
+
+  .rec{margin-top:32px;padding:18px 20px;background:#fff;border:2px solid var(--ink);max-width:62ch;font-size:15px;line-height:1.5;}
+  .rec b{font-family:var(--f-bear);font-size:18px;display:block;margin-bottom:6px;}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Site bar — Menu link as button</h1>
+  <p class="lead">Mobile sticky bar (<code>public/site.html</code> · <code>header.site-bar</code>). Wordmark left; Menu right. Tap opens the QR menu overlay (phone frame) already on the site. Below: five styles on the same hero block.</p>
+
+  <div class="grid">
+    <section class="opt">
+      <div class="opt-h">Option A</div>
+      <div class="opt-t">Forest pill</div>
+      <p class="opt-n">Same family as shop “Add to cart” and block CTAs. Reads clearly on oat; strongest call to action in the bar.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <a class="menu-btn btn-a" href="#">Menu</a>
+        </div></header>
+        <img class="hero-img" src="/assets/brand/welcome-roots.jpg" alt="">
+        <div class="split">
+          <h2 class="headline">Landed in Guangzhou?<br>Lunch is sorted.</h2>
+          <p class="subtitle">Plant-based, grab-and-go — yogurts, salads, and bowls you can trust.</p>
+        </div>
+        <div class="since">Since 2017</div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option B</div>
+      <div class="opt-t">Lime + ink frame</div>
+      <p class="opt-n">Matches QR menu language toggle and chip borders. Loud but on-brand; pairs with the green “Since 2017” band.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <a class="menu-btn btn-b" href="#">Menu</a>
+        </div></header>
+        <img class="hero-img" src="/assets/brand/welcome-roots.jpg" alt="">
+        <div class="split">
+          <h2 class="headline">Landed in Guangzhou?<br>Lunch is sorted.</h2>
+          <p class="subtitle">Plant-based, grab-and-go — yogurts, salads, and bowls you can trust.</p>
+        </div>
+        <div class="since">Since 2017</div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option C</div>
+      <div class="opt-t">Outlined pill</div>
+      <p class="opt-n">Lightest weight in the bar; logo stays hero. Still ≥44px tap target; outline reads as button without competing with headlines.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <a class="menu-btn btn-c" href="#">Menu</a>
+        </div></header>
+        <img class="hero-img" src="/assets/brand/welcome-roots.jpg" alt="">
+        <div class="split">
+          <h2 class="headline">Landed in Guangzhou?<br>Lunch is sorted.</h2>
+          <p class="subtitle">Plant-based, grab-and-go — yogurts, salads, and bowls you can trust.</p>
+        </div>
+        <div class="since">Since 2017</div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option D</div>
+      <div class="opt-t">Ink block + lime type</div>
+      <p class="opt-n">Editorial / mini-app chip look. Square corners echo block buttons; high contrast next to the wordmark.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <a class="menu-btn btn-d" href="#">Menu</a>
+        </div></header>
+        <img class="hero-img" src="/assets/brand/welcome-roots.jpg" alt="">
+        <div class="split">
+          <h2 class="headline">Landed in Guangzhou?<br>Lunch is sorted.</h2>
+          <p class="subtitle">Plant-based, grab-and-go — yogurts, salads, and bowls you can trust.</p>
+        </div>
+        <div class="since">Since 2017</div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option E</div>
+      <div class="opt-t">Text link + list icon</div>
+      <p class="opt-n">Same tone as footer/header text links (§503 mobile nav). Underline signals tap; add icon so it still reads as “open menu” not “another page”.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <a class="menu-btn btn-e" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+            Menu
+          </a>
+        </div></header>
+        <img class="hero-img" src="/assets/brand/welcome-roots.jpg" alt="">
+        <div class="split">
+          <h2 class="headline">Landed in Guangzhou?<br>Lunch is sorted.</h2>
+          <p class="subtitle">Plant-based, grab-and-go — yogurts, salads, and bowls you can trust.</p>
+        </div>
+        <div class="since">Since 2017</div>
+      </div>
+    </section>
+  </div>
+
+  <div class="rec">
+    <b>Recommendation</b>
+    Option <strong>A</strong> (forest pill) for tourists who need one obvious action, or <strong>C</strong> if you want the wordmark and hero headline to stay visually first. B is best if the bar should feel like the QR menu; D if you want the square Roots editorial look end-to-end.
+  </div>
+</div>
+</body>
+</html>
