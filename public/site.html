@@ -61,6 +61,31 @@
     background:var(--forest);color:#fff;border:0;border-radius:999px;-webkit-tap-highlight-color:transparent;}
   .bar-menu-btn:focus-visible{outline:3px solid var(--lime);outline-offset:2px;}
   .bar-menu-btn[hidden]{display:none!important;}
+  /* §503 rule 55 · phone hamburger (reference/site-bar-mobile-nav-option-c-only.html). */
+  .bar-nav-open-btn{
+    width:48px;height:48px;border:2px solid var(--ink);border-radius:8px;background:rgba(255,255,255,.9);
+    display:none;align-items:center;justify-content:center;padding:0;flex:none;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;color:var(--ink);
+  }
+  .bar-nav-open-btn svg{width:24px;height:24px;}
+  .bar-nav-open-btn:focus-visible{outline:3px solid var(--lime);outline-offset:2px;}
+  .bar-nav-open-btn[hidden]{display:none!important;}
+  .site-mobile-nav{
+    position:fixed;inset:0;z-index:35;background:#fff;display:flex;flex-direction:column;
+    padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
+  }
+  .site-mobile-nav[hidden]{display:none!important;}
+  .site-mobile-nav-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+  .site-mobile-nav-kicker{font-family:var(--f-toni);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--forest);}
+  .site-mobile-nav-close{width:44px;height:44px;border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;color:var(--ink);}
+  .site-mobile-nav-close:focus-visible{outline:3px solid var(--forest);outline-offset:2px;}
+  .site-mobile-nav-links{list-style:none;flex:1;overflow:auto;-webkit-overflow-scrolling:touch;}
+  .site-mobile-nav-links a{
+    display:flex;align-items:center;min-height:48px;width:100%;text-align:left;
+    font-family:var(--f-bear);font-size:22px;font-weight:500;letter-spacing:0;
+    text-decoration:none;color:var(--ink);padding:14px 0;border-bottom:2px solid var(--line);
+  }
+  .site-mobile-nav-menu{align-self:stretch;width:100%;margin-top:12px;flex:none;}
   .bar-nav{display:flex;align-items:center;gap:22px;font-size:15px;}
   .bar-nav a{text-decoration:none;}
   .bar-nav a:hover{text-decoration:underline;text-underline-offset:4px;}
@@ -339,6 +364,12 @@
   }
   @media (max-width:767px){
     .bar-links{display:none!important;}
+    header.site-bar .bar-menu-btn{display:none!important;}
+    .bar-nav-open-btn{display:inline-flex;}
+    body .shop-blocks .sb-blk-outer{scroll-margin-top:calc(var(--site-bar-h, 72px) + 12px);}
+  }
+  @media (min-width:768px){
+    .site-mobile-nav{display:none!important;}
   }
 </style>
 <script src="/assets/shop/blocks.js"></script>
@@ -350,12 +381,24 @@
     <div class="bar-actions">
       <nav class="bar-links" id="barLinks" aria-label="On this page" hidden></nav>
       <a class="bar-menu-btn" id="barMenuBtn" href="#" hidden>Menu</a>
+      <button type="button" class="bar-nav-open-btn" id="barNavOpenBtn" hidden aria-label="Open menu" aria-expanded="false" aria-controls="siteMobileNav">
+        <svg class="bar-nav-icon-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <svg class="bar-nav-icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true" hidden><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
       <nav class="bar-nav" id="barNav" aria-label="Main">
         <span id="navLinks" style="display:contents"></span>
       </nav>
     </div>
   </div>
 </header>
+<div class="site-mobile-nav" id="siteMobileNav" hidden aria-hidden="true">
+  <div class="site-mobile-nav-top">
+    <span class="site-mobile-nav-kicker">Jump to</span>
+    <button type="button" class="site-mobile-nav-close" id="siteMobileNavClose" aria-label="Close">&times;</button>
+  </div>
+  <ul class="site-mobile-nav-links" id="siteMobileNavLinks"></ul>
+  <a class="bar-menu-btn site-mobile-nav-menu" id="siteMobileNavMenu" href="#" hidden>Menu</a>
+</div>
 <main id="view"></main>
 <div class="site-menu-scrim" id="siteMenuScrim" hidden>
   <div class="site-menu-wrap">
@@ -553,7 +596,10 @@ function wireSiteMenuPhone(){
   $('#siteMenuClose').addEventListener('click',closeSiteMenuPhone);
   scrim.addEventListener('click',ev=>{ if(ev.target===scrim) closeSiteMenuPhone(); });
   document.addEventListener('keydown',ev=>{
-    if(ev.key==='Escape'&&!scrim.hidden) closeSiteMenuPhone();
+    if(ev.key!=='Escape') return;
+    const mob=$('#siteMobileNav');
+    if(mob&&!mob.hidden){ closeMobileNav(); return; }
+    if(!scrim.hidden) closeSiteMenuPhone();
   });
 }
 function trySiteMenuCtaClick(ev){
@@ -622,6 +668,70 @@ function goToBarSection(id,ev){
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   el.scrollIntoView({block:'start',behavior:reduce?'auto':'smooth'});
   if(!STAGE_MODE){ try{ history.replaceState(null,'','#'+id); }catch(e){} }
+  if(!siteMenuDesktop()) closeMobileNav();
+}
+function syncBarNavOpenIcon(open){
+  const btn=$('#barNavOpenBtn'); if(!btn) return;
+  const ham=btn.querySelector('.bar-nav-icon-open'), x=btn.querySelector('.bar-nav-icon-close');
+  if(ham) ham.hidden=!!open;
+  if(x) x.hidden=!open;
+  btn.setAttribute('aria-expanded',open?'true':'false');
+  btn.setAttribute('aria-label',open?'Close menu':'Open menu');
+}
+function openMobileNav(){
+  const panel=$('#siteMobileNav'); if(!panel||panel.hidden===false) return;
+  panel.hidden=false;
+  panel.setAttribute('aria-hidden','false');
+  document.body.style.overflow='hidden';
+  syncBarNavOpenIcon(true);
+  const close=$('#siteMobileNavClose'); if(close) close.focus();
+}
+function closeMobileNav(){
+  const panel=$('#siteMobileNav'); if(!panel||panel.hidden) return;
+  panel.hidden=true;
+  panel.setAttribute('aria-hidden','true');
+  if($('#siteMenuScrim')&&$('#siteMenuScrim').hidden) document.body.style.overflow='';
+  syncBarNavOpenIcon(false);
+  const btn=$('#barNavOpenBtn'); if(btn) btn.focus();
+}
+function mountMobileNav(links){
+  const openBtn=$('#barNavOpenBtn'), list=$('#siteMobileNavLinks'), menu=$('#siteMobileNavMenu');
+  if(!openBtn||!list) return;
+  list.innerHTML='';
+  const menuUrl=siteBarMenuUrl();
+  (Array.isArray(links)?links:[]).forEach(l=>{
+    const li=document.createElement('li');
+    const a=document.createElement('a');
+    a.href='#'+l.id;
+    a.textContent=l.label;
+    a.addEventListener('click',ev=>goToBarSection(l.id,ev));
+    li.appendChild(a);
+    list.appendChild(li);
+  });
+  if(menu){
+    if(menuUrl){
+      menu.hidden=false;
+      menu.href=menuUrl;
+      if(menu.dataset.wired!=='1'){
+        menu.dataset.wired='1';
+        menu.addEventListener('click',ev=>{ closeMobileNav(); openSiteBarMenu(menuUrl,ev); });
+      }
+    }else menu.hidden=true;
+  }
+  const show=!!(links&&links.length)||!!menuUrl;
+  openBtn.hidden=!show;
+  if(!show) closeMobileNav();
+}
+function wireMobileNav(){
+  const openBtn=$('#barNavOpenBtn'), closeBtn=$('#siteMobileNavClose');
+  if(!openBtn||openBtn.dataset.wired==='1') return;
+  openBtn.dataset.wired='1';
+  openBtn.addEventListener('click',()=>{
+    const panel=$('#siteMobileNav');
+    if(panel&&!panel.hidden) closeMobileNav();
+    else openMobileNav();
+  });
+  if(closeBtn) closeBtn.addEventListener('click',closeMobileNav);
 }
 let barLinkObs=null;
 function wireBarLinkScroll(links){
@@ -647,21 +757,26 @@ function mountBarLinks(layout){
   const nav=$('#barLinks'); if(!nav) return;
   nav.innerHTML='';
   const links=resolveBarLinks(layout);
-  if(!siteMenuDesktop()||!links.length){ nav.hidden=true; wireBarLinkScroll([]); syncSiteBarHeight(); return; }
-  for(const l of links){
-    const a=document.createElement('a');
-    a.href='#'+l.id;
-    a.textContent=l.label;
-    a.addEventListener('click',ev=>goToBarSection(l.id,ev));
-    nav.appendChild(a);
+  if(siteMenuDesktop()&&links.length){
+    for(const l of links){
+      const a=document.createElement('a');
+      a.href='#'+l.id;
+      a.textContent=l.label;
+      a.addEventListener('click',ev=>goToBarSection(l.id,ev));
+      nav.appendChild(a);
+    }
+    nav.hidden=false;
+    wireBarLinkScroll(links);
+  }else{
+    nav.hidden=true;
+    wireBarLinkScroll([]);
   }
-  nav.hidden=false;
   document.querySelectorAll('.sb-blk-outer[data-block-id]').forEach(el=>{
     const id=el.getAttribute('data-block-id')||'';
     if(validBlockId(id)) el.id=id;
   });
+  mountMobileNav(links);
   syncSiteBarHeight();
-  wireBarLinkScroll(links);
   scrollToBarHash();
 }
 let scrollToBarHashDone=false;
@@ -673,18 +788,23 @@ function scrollToBarHash(){
   scrollToBarHashDone=true;
   el.scrollIntoView({block:'start'});
 }
-function bindSiteBarMenu(){
+function syncBarMenuVisibility(){
   const btn=$('#barMenuBtn'); if(!btn) return;
   const url=siteBarMenuUrl();
   if(!url){ btn.hidden=true; return; }
-  btn.hidden=false;
   btn.href=url;
+  btn.hidden=!siteMenuDesktop();
+}
+function bindSiteBarMenu(){
+  const btn=$('#barMenuBtn'); if(!btn) return;
+  syncBarMenuVisibility();
   syncSiteBarHeight();
   if(btn.dataset.wired==='1') return;
   btn.dataset.wired='1';
   btn.addEventListener('click',ev=>openSiteBarMenu(siteBarMenuUrl(),ev));
   window.addEventListener('resize',()=>{
     syncSiteBarHeight();
+    syncBarMenuVisibility();
     const pub=state.config&&state.config.website&&state.config.website.layout;
     mountBarLinks(Array.isArray(pub)?pub:[]);
   });
@@ -1034,6 +1154,7 @@ function renderChatButton(layout){
   // A block's button: a full https:// link opens; anything that leads into
   // the shop (product, category, basket, account) has nowhere to go here.
   wireSiteMenuPhone();
+  wireMobileNav();
   document.addEventListener('click',ev=>{
     if(trySiteMenuCtaClick(ev)) return;
     if(STAGE_MODE) return;
@@ -1074,7 +1195,8 @@ function renderChatButton(layout){
     // Clicks: a block selects itself in the editor; everything else is inert.
     document.addEventListener('click',ev=>{
       if(trySiteMenuCtaClick(ev)) return;
-      if(ev.target.closest('#barMenuBtn')){ const u=siteBarMenuUrl(); if(u) openSiteBarMenu(u,ev); return; }
+      if(ev.target.closest('#barMenuBtn,#siteMobileNavMenu')){ const u=siteBarMenuUrl(); if(u) openSiteBarMenu(u,ev); return; }
+      if(ev.target.closest('#barNavOpenBtn,#siteMobileNavClose,#siteMobileNavLinks a')) return;
       const barA=ev.target.closest('#barLinks a');
       if(barA){
         const id=(barA.getAttribute('href')||'').slice(1);
