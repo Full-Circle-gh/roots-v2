@@ -93,7 +93,13 @@
     font-family:var(--f-bear);font-size:22px;font-weight:500;letter-spacing:0;
     text-decoration:none;color:var(--ink);padding:14px 0;border-bottom:2px solid var(--line);
   }
-  .site-mobile-nav-menu{align-self:stretch;width:100%;margin-top:12px;flex:none;}
+  /* Phone nav · Option B (reference/site-mobile-nav-menu-button-option-b.html). */
+  .bar-menu-btn.site-mobile-nav-menu{
+    align-self:stretch;width:100%;margin-top:12px;flex:none;gap:10px;
+    min-height:56px;padding:14px 20px;font-size:17px;letter-spacing:.06em;
+    background:var(--lime);color:var(--ink);border:2px solid var(--ink);border-radius:0;
+  }
+  .bar-menu-btn.site-mobile-nav-menu svg{width:22px;height:22px;flex:none;}
   .bar-nav{display:flex;align-items:center;gap:22px;font-size:17px;}
   .bar-nav a{text-decoration:none;}
   .bar-nav a:hover{text-decoration:underline;text-underline-offset:4px;}
@@ -470,7 +476,7 @@
     </button>
   </div>
   <ul class="site-mobile-nav-links" id="siteMobileNavLinks"></ul>
-  <a class="bar-menu-btn site-mobile-nav-menu" id="siteMobileNavMenu" href="#" hidden>Menu</a>
+  <a class="bar-menu-btn site-mobile-nav-menu" id="siteMobileNavMenu" href="#" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Food menu</a>
 </div>
 <main id="view"></main>
 <div class="site-menu-scrim" id="siteMenuScrim" hidden>

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roots — phone nav · Menu button options</title>
+<style>
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --olive:#6A6E2D; --lime:#CCD900;
+    --paper:#fff; --line:rgba(0,0,0,.08); --muted:#5c5c54;
+    --f-bear:'Bear Serif',Georgia,serif;
+    --f-toni:'Toni Grotesk',sans-serif;
+    --f-aleo:'Aleo',Georgia,serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:var(--f-aleo);background:#e8e0d8;color:var(--ink);-webkit-font-smoothing:antialiased;}
+  .page{max-width:1200px;margin:0 auto;padding:28px 20px 80px;}
+  h1{font-family:var(--f-bear);font-size:28px;margin-bottom:8px;}
+  .lead{font-size:15px;color:var(--muted);max-width:68ch;line-height:1.55;margin-bottom:10px;}
+  .lead code{font-size:14px;}
+  .today-note{font-size:14px;color:var(--olive);max-width:68ch;line-height:1.5;margin-bottom:28px;padding:12px 14px;background:rgba(255,255,255,.55);border-left:4px solid var(--forest);}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:32px;}
+  .opt{display:flex;flex-direction:column;gap:10px;}
+  .opt-h{font-family:var(--f-toni);font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--olive);}
+  .opt-t{font-size:20px;font-family:var(--f-bear);line-height:1.15;}
+  .opt-n{font-size:13px;color:var(--muted);line-height:1.45;min-height:4.5em;}
+  .phone{
+    width:100%;max-width:360px;border-radius:28px;overflow:hidden;border:2px solid var(--ink);
+    background:var(--paper);box-shadow:0 14px 36px rgba(0,0,0,.14);position:relative;min-height:580px;
+    display:flex;flex-direction:column;
+  }
+  .site-bar{background:var(--paper);border-bottom:1px solid var(--line);padding:12px 16px;flex:none;}
+  .bar-in{display:flex;align-items:center;justify-content:space-between;}
+  .wordmark img{height:36px;width:auto;display:block;}
+  .nav-close{
+    width:48px;height:48px;border:2px solid var(--ink);border-radius:8px;background:#fff;
+    display:inline-flex;align-items:center;justify-content:center;color:var(--ink);
+  }
+  .nav-close svg{width:24px;height:24px;}
+  .nav-panel{flex:1;display:flex;flex-direction:column;padding:4px 16px 16px;min-height:0;}
+  .nav-links{list-style:none;flex:1;overflow:hidden;}
+  .nav-links a{
+    display:flex;align-items:center;min-height:48px;font-family:var(--f-bear);font-size:22px;font-weight:500;
+    text-decoration:none;color:var(--ink);padding:12px 0;border-bottom:2px solid var(--line);
+  }
+  .menu-slot{flex:none;margin-top:8px;padding-top:4px;}
+
+  /* Today — matches live site (13px pill) */
+  .btn-today{
+    display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;padding:10px 20px;
+    font-family:var(--f-toni);font-weight:700;font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+    background:var(--forest);color:#fff;border:0;border-radius:999px;text-decoration:none;
+  }
+
+  /* A — tall forest pill, readable type */
+  .btn-a{
+    display:flex;align-items:center;justify-content:center;width:100%;min-height:56px;padding:14px 24px;
+    font-family:var(--f-toni);font-weight:700;font-size:16px;letter-spacing:.08em;text-transform:uppercase;
+    background:var(--forest);color:#fff;border:0;border-radius:999px;text-decoration:none;
+  }
+
+  /* B — lime band (QR-menu family) */
+  .btn-b{
+    display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:56px;padding:14px 20px;
+    font-family:var(--f-toni);font-weight:700;font-size:17px;letter-spacing:.06em;text-transform:uppercase;
+    background:var(--lime);color:var(--ink);border:2px solid var(--ink);border-radius:0;text-decoration:none;
+  }
+  .btn-b svg{width:22px;height:22px;flex:none;}
+
+  /* C — seventh nav row (same voice as section links) */
+  .btn-c{
+    display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:14px 0;
+    font-family:var(--f-bear);font-size:22px;font-weight:500;text-decoration:none;color:var(--ink);
+    border-top:2px solid var(--line);border-bottom:2px solid var(--line);
+  }
+  .btn-c svg{width:26px;height:26px;flex:none;color:var(--forest);}
+
+  /* D — Bear headline on forest block */
+  .btn-d{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:100%;
+    min-height:72px;padding:16px 20px;text-align:center;text-decoration:none;
+    background:var(--forest);color:#fff;border:0;border-radius:12px;
+  }
+  .btn-d .main{font-family:var(--f-bear);font-size:26px;font-weight:500;letter-spacing:0;text-transform:none;line-height:1.1;}
+  .btn-d .sub{font-family:var(--f-toni);font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;opacity:.88;}
+
+  /* E — ink slab + lime (editorial) */
+  .btn-e{
+    display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:56px;padding:14px 20px;
+    font-family:var(--f-toni);font-weight:700;font-size:16px;letter-spacing:.1em;text-transform:uppercase;
+    background:var(--ink);color:var(--lime);border:0;border-radius:0;text-decoration:none;
+  }
+
+  /* F — outlined tall pill */
+  .btn-f{
+    display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:56px;padding:14px 22px;
+    font-family:var(--f-bear);font-size:24px;font-weight:500;
+    background:#fff;color:var(--ink);border:3px solid var(--forest);border-radius:999px;text-decoration:none;
+  }
+  .btn-f svg{width:24px;height:24px;flex:none;}
+
+  .rec{margin-top:36px;padding:20px 22px;background:#fff;border:2px solid var(--ink);max-width:72ch;font-size:15px;line-height:1.55;}
+  .rec b{font-family:var(--f-bear);font-size:20px;display:block;margin-bottom:8px;}
+  .rec ul{margin:10px 0 0 1.1em;}
+  .rec li{margin:6px 0;}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Phone nav — Menu button at the bottom</h1>
+  <p class="lead">Open hamburger panel on <code>public/site.html</code> (§503 rule 55). Section links stay as they are; only the bottom control that opens the QR / Ramada menu is compared here.</p>
+  <p class="today-note"><strong>Today:</strong> full-width forest pill, Toni 13px uppercase — same as the computer bar Menu pill, but easy to miss on a white panel and next to 22px Bear links.</p>
+
+  <div class="grid">
+    <section class="opt">
+      <div class="opt-h">Today</div>
+      <div class="opt-t">Forest pill · 13px</div>
+      <p class="opt-n">What is live now. Small caps label on green; low contrast against long link list above.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <span class="nav-close" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+        </div></header>
+        <div class="nav-panel">
+          <ul class="nav-links">
+            <li><a href="#">New to China</a></li>
+            <li><a href="#">Our products</a></li>
+            <li><a href="#">Our location</a></li>
+            <li><a href="#">Social</a></li>
+            <li><a href="#">Founder's Story</a></li>
+            <li><a href="#">Canton Fair</a></li>
+          </ul>
+          <div class="menu-slot"><a class="btn-today" href="#">Menu</a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option A</div>
+      <div class="opt-t">Taller forest pill · 16px</div>
+      <p class="opt-n">Same green as today but ≥56px tall and larger type. Smallest change; still reads as “primary button” not another page link.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <span class="nav-close" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+        </div></header>
+        <div class="nav-panel">
+          <ul class="nav-links">
+            <li><a href="#">New to China</a></li>
+            <li><a href="#">Our products</a></li>
+            <li><a href="#">Our location</a></li>
+            <li><a href="#">Social</a></li>
+            <li><a href="#">Founder's Story</a></li>
+            <li><a href="#">Canton Fair</a></li>
+          </ul>
+          <div class="menu-slot"><a class="btn-a" href="#">Menu</a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option B</div>
+      <div class="opt-t">Lime bar + list icon</div>
+      <p class="opt-n">High contrast on white; matches QR menu chips. Icon helps tourists who do not know “Menu” means food list.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <span class="nav-close" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+        </div></header>
+        <div class="nav-panel">
+          <ul class="nav-links">
+            <li><a href="#">New to China</a></li>
+            <li><a href="#">Our products</a></li>
+            <li><a href="#">Our location</a></li>
+            <li><a href="#">Social</a></li>
+            <li><a href="#">Founder's Story</a></li>
+            <li><a href="#">Canton Fair</a></li>
+          </ul>
+          <div class="menu-slot"><a class="btn-b" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+            Food menu
+          </a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option C</div>
+      <div class="opt-t">Seventh link row</div>
+      <p class="opt-n">Same Bear 22px as jump links; fork icon marks it as dishes, not another section. No separate “button” — clearest hierarchy if you want one list.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <span class="nav-close" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+        </div></header>
+        <div class="nav-panel">
+          <ul class="nav-links">
+            <li><a href="#">New to China</a></li>
+            <li><a href="#">Our products</a></li>
+            <li><a href="#">Our location</a></li>
+            <li><a href="#">Social</a></li>
+            <li><a href="#">Founder's Story</a></li>
+            <li><a href="#">Canton Fair</a></li>
+          </ul>
+          <div class="menu-slot"><a class="btn-c" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 4v4M18 4v4M4 10h16M6 18h2v2H6zM16 18h2v2h-2z"/></svg>
+            Food menu
+          </a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option D</div>
+      <div class="opt-t">Bear title + QR hint</div>
+      <p class="opt-n">Largest type; says what you get. Good if “Menu” alone is too vague for first-time visitors.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <span class="nav-close" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+        </div></header>
+        <div class="nav-panel">
+          <ul class="nav-links">
+            <li><a href="#">New to China</a></li>
+            <li><a href="#">Our products</a></li>
+            <li><a href="#">Our location</a></li>
+            <li><a href="#">Social</a></li>
+            <li><a href="#">Founder's Story</a></li>
+            <li><a href="#">Canton Fair</a></li>
+          </ul>
+          <div class="menu-slot"><a class="btn-d" href="#">
+            <span class="main">Food menu</span>
+            <span class="sub">Scan · order · Ramada</span>
+          </a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option E</div>
+      <div class="opt-t">Ink slab · lime type</div>
+      <p class="opt-n">Square editorial block (bar mockup D). Stands off the white panel; 16px caps still readable.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <span class="nav-close" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+        </div></header>
+        <div class="nav-panel">
+          <ul class="nav-links">
+            <li><a href="#">New to China</a></li>
+            <li><a href="#">Our products</a></li>
+            <li><a href="#">Our location</a></li>
+            <li><a href="#">Social</a></li>
+            <li><a href="#">Founder's Story</a></li>
+            <li><a href="#">Canton Fair</a></li>
+          </ul>
+          <div class="menu-slot"><a class="btn-e" href="#">Food menu</a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option F</div>
+      <div class="opt-t">Outlined Bear · 24px</div>
+      <p class="opt-n">Matches link size; green ring ties to brand. Feels tappable without a filled green slab at the bottom.</p>
+      <div class="phone">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <span class="nav-close" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+        </div></header>
+        <div class="nav-panel">
+          <ul class="nav-links">
+            <li><a href="#">New to China</a></li>
+            <li><a href="#">Our products</a></li>
+            <li><a href="#">Our location</a></li>
+            <li><a href="#">Social</a></li>
+            <li><a href="#">Founder's Story</a></li>
+            <li><a href="#">Canton Fair</a></li>
+          </ul>
+          <div class="menu-slot"><a class="btn-f" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+            Menu
+          </a></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="rec">
+    <b>Recommendation</b>
+    For legibility with minimal rethink, pick <strong>A</strong> (taller pill, 16px) or <strong>B</strong> (lime bar + “Food menu”) — both fix the size problem you saw on the live site.
+    If you want the bottom action to feel part of the same list as the section links, pick <strong>C</strong>.
+    If tourists need clearer wording, pick <strong>D</strong> (Bear headline + short subline).
+    <ul>
+      <li>View this page locally: <code>/reference/site-mobile-nav-menu-button-mockup.html</code> (dev server on port 4000).</li>
+      <li>Say which letter to ship; vocabulary only changes if we rename “Menu” to “Food menu” on the customer site.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

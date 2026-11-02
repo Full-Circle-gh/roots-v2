@@ -320,6 +320,8 @@ yes(/\.sb-st-map\.is-live \{[^}]*isolation: isolate/.test(read('public/shop/bloc
   'the AutoNavi credit stays inside the map box, under the jump menu');
 yes(/header\.site-bar \.bar-menu-btn\{display:none/.test(SITE),
   'the forest Menu pill is not on the phone bar');
+yes(/site-mobile-nav-menu[^}]*background:var\(--lime\)/.test(SITE) && /Food menu/.test(SITE),
+  'the phone nav food control is option B (lime bar, Food menu label)');
 const BAR_MOCK = read('reference/site-bar-section-links-mockup.html');
 yes(/href="#new-to-china">New to China/.test(BAR_MOCK)
   && /href="#products">Our products/.test(BAR_MOCK)

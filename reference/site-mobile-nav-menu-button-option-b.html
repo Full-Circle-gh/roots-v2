@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roots — phone nav · Menu button · Option B only</title>
+<style>
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+  :root{
+    --ink:#1a1a17; --forest:#365329; --lime:#CCD900;
+    --paper:#fff; --line:rgba(0,0,0,.08); --muted:#5c5c54;
+    --f-bear:'Bear Serif',Georgia,serif;
+    --f-toni:'Toni Grotesk',sans-serif;
+    --f-aleo:'Aleo',Georgia,serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:var(--f-aleo);background:#e8e0d8;color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px 16px 48px;}
+  .label{text-align:center;margin-bottom:16px;max-width:360px;}
+  .label h1{font-family:var(--f-bear);font-size:22px;margin-bottom:6px;}
+  .label p{font-size:14px;color:var(--muted);line-height:1.45;}
+  .label .tag{display:inline-block;margin-top:10px;font-family:var(--f-toni);font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--forest);}
+  .phone{
+    width:100%;max-width:390px;border-radius:28px;overflow:hidden;border:2px solid var(--ink);
+    background:var(--paper);box-shadow:0 16px 40px rgba(0,0,0,.15);position:relative;min-height:640px;
+    display:flex;flex-direction:column;
+  }
+  .site-bar{background:var(--paper);border-bottom:1px solid var(--line);padding:12px 16px;flex:none;}
+  .bar-in{display:flex;align-items:center;justify-content:space-between;}
+  .wordmark img{height:38px;width:auto;display:block;}
+  .nav-close{
+    width:48px;height:48px;border:2px solid var(--ink);border-radius:8px;background:#fff;
+    display:inline-flex;align-items:center;justify-content:center;color:var(--ink);
+  }
+  .nav-close svg{width:24px;height:24px;}
+  .nav-panel{flex:1;display:flex;flex-direction:column;padding:4px 16px calc(16px + env(safe-area-inset-bottom,0px));min-height:0;}
+  .nav-links{list-style:none;flex:1;}
+  .nav-links a{
+    display:flex;align-items:center;min-height:48px;font-family:var(--f-bear);font-size:22px;font-weight:500;
+    text-decoration:none;color:var(--ink);padding:14px 0;border-bottom:2px solid var(--line);
+  }
+  .menu-slot{flex:none;margin-top:12px;}
+  .btn-b{
+    display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:56px;padding:14px 20px;
+    font-family:var(--f-toni);font-weight:700;font-size:17px;letter-spacing:.06em;text-transform:uppercase;
+    background:var(--lime);color:var(--ink);border:2px solid var(--ink);border-radius:0;text-decoration:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .btn-b svg{width:22px;height:22px;flex:none;}
+  .btn-b:focus-visible{outline:3px solid var(--forest);outline-offset:2px;}
+</style>
+</head>
+<body>
+<div class="label">
+  <p class="tag">Option B</p>
+  <h1>Lime bar + list icon</h1>
+  <p>Phone hamburger panel — bottom control only. High contrast; “Food menu” + icon (not live yet).</p>
+</div>
+<div class="phone" role="img" aria-label="Mock-up of open phone nav with Option B food menu button">
+  <header class="site-bar"><div class="bar-in">
+    <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+    <span class="nav-close" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+  </div></header>
+  <div class="nav-panel">
+    <ul class="nav-links">
+      <li><a href="#">New to China</a></li>
+      <li><a href="#">Our products</a></li>
+      <li><a href="#">Our location</a></li>
+      <li><a href="#">Social</a></li>
+      <li><a href="#">Founder's Story</a></li>
+      <li><a href="#">Canton Fair</a></li>
+    </ul>
+    <div class="menu-slot"><a class="btn-b" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      Food menu
+    </a></div>
+  </div>
+</div>
+</body>
+</html>
