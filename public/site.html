@@ -235,7 +235,14 @@
       display:flex;align-items:center;box-sizing:border-box;
       min-height:80px;padding-right:112px;
     }
-    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-char{top:16px;}
+    /* Story: the drawing lives inside the kicker row (flex), not over the title. */
+    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-kicker:has(> .sb-char){
+      justify-content:space-between;gap:8px;padding-right:0;
+    }
+    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-kicker > .sb-char{
+      position:static;top:auto;right:auto;left:auto;height:72px;width:auto;max-width:96px;
+      flex-shrink:0;transform:none;animation:site-char-bob-inline 4.6s ease-in-out infinite;
+    }
     body .shop-blocks .sb-blk-outer:has(.sb-char)[data-block-type="recipe_story"] .sb-rcp-headline{margin-top:0;}
     body .shop-blocks .sb-blk-outer:has(.sb-char) .sb-grid-head{align-items:flex-end;}
     body .shop-blocks .sb-blk-outer:has(.sb-char) .sb-fact-item:first-child{padding-right:112px;}
@@ -245,7 +252,11 @@
     50%{transform:translateY(-6px) rotate(2deg);}
   }
   @media (prefers-reduced-motion:reduce){
-    body .shop-blocks .sb-char{animation:none;}
+    body .shop-blocks .sb-char,body .shop-blocks .sb-rcp-kicker > .sb-char{animation:none;}
+  }
+  @keyframes site-char-bob-inline{
+    0%,100%{transform:rotate(-2deg);}
+    50%{transform:translateY(-4px) rotate(2deg);}
   }
 
 
@@ -832,24 +843,23 @@ function mountMapAddress(root){
 }
 
 // §503 rule 43. A story's picture is on top; the character sits in the kicker
-// row at the top of the words. The photo height is not fixed, so after layout
-// we pin the drawing to the text block — not a viewport guess.
-function alignRecipeStoryCharacters(root){
+// row. Move it into the kicker on a phone so it cannot drift over the headline.
+function dockRecipeStoryCharacters(root){
   if(!root||!window.matchMedia('(max-width:767px)').matches) return;
   root.querySelectorAll('.sb-blk-outer[data-block-type="recipe_story"]').forEach(outer=>{
     const ch=outer.querySelector(':scope > .sb-char');
-    const body=outer.querySelector('.sb-rcp-body');
-    if(!ch||!body) return;
-    const padTop=parseFloat(getComputedStyle(body).paddingTop)||0;
-    ch.style.top=(body.offsetTop+padTop)+'px';
+    const kicker=outer.querySelector('.sb-rcp-kicker');
+    if(!ch||!kicker||kicker.contains(ch)) return;
+    ch.removeAttribute('style');
+    kicker.appendChild(ch);
   });
 }
-let recipeCharAlignRaf=0;
-function scheduleRecipeStoryCharacterAlign(root){
-  if(recipeCharAlignRaf) cancelAnimationFrame(recipeCharAlignRaf);
-  recipeCharAlignRaf=requestAnimationFrame(()=>{
-    recipeCharAlignRaf=0;
-    alignRecipeStoryCharacters(root);
+let recipeCharDockRaf=0;
+function scheduleRecipeStoryCharacterDock(root){
+  if(recipeCharDockRaf) cancelAnimationFrame(recipeCharDockRaf);
+  recipeCharDockRaf=requestAnimationFrame(()=>{
+    recipeCharDockRaf=0;
+    dockRecipeStoryCharacters(root);
   });
 }
 
@@ -876,9 +886,9 @@ async function render(){
   renderChatButton(layout);
   mountStoreVisit(view);
   drawStoreMaps(view);
-  scheduleRecipeStoryCharacterAlign(view);
+  scheduleRecipeStoryCharacterDock(view);
   view.querySelectorAll('.sb-blk-outer[data-block-type="recipe_story"] img.sb-img-full').forEach(img=>{
-    if(!img.complete) img.addEventListener('load',()=>scheduleRecipeStoryCharacterAlign(view),{once:true});
+    if(!img.complete) img.addEventListener('load',()=>scheduleRecipeStoryCharacterDock(view),{once:true});
   });
 }
 
@@ -1053,11 +1063,11 @@ function renderChatButton(layout){
   }
   window.addEventListener('resize',()=>{
     const view=$('#view');
-    if(view) scheduleRecipeStoryCharacterAlign(view);
+    if(view) scheduleRecipeStoryCharacterDock(view);
   });
   window.addEventListener('load',()=>{
     const view=$('#view');
-    if(view) scheduleRecipeStoryCharacterAlign(view);
+    if(view) scheduleRecipeStoryCharacterDock(view);
   });
   await render();
   if(STAGE_MODE){ try{ parent.postMessage({type:'cms:stage-ready'},location.origin); }catch(e){} }
