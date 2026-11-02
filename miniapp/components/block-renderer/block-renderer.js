@@ -17,6 +17,7 @@ const FULL_BG_TYPES = [
   'top_up', 'review_card', 'favorites_block', 'voting_block', 'affiliate_block',
   'store_info', 'greeting', 'kitchen_status', 'recipe_story', 'bundle',
   'wecom_contact', 'countdown_timer', 'leaderboard', 'notification_bar',
+  'about_stats',
 ];
 
 function absUrl(u) {
@@ -1589,6 +1590,15 @@ Component({
           };
           break;
         }
+        case 'about_stats': {
+          const stats = Array.isArray(b.stats) ? b.stats : [];
+          out.facts = stats.slice(0, 4).map((s, i) => ({
+            key: i,
+            value: String(lang.pick(s && s.value_en, s && s.value_cn, L) || '').trim(),
+            label: String(lang.pick(s && s.label_en, s && s.label_cn, L) || '').trim(),
+          })).filter(s => s.value);
+          break;
+        }
         case 'recipe_story': {
           // Editorial long-form: image + serif headline + paragraphs + linked product.
           out.bg = color(b.bg_color || 'oat-milk');
@@ -1609,6 +1619,10 @@ Component({
           const bodyText = lang.pick(b.body_en, b.body_cn, L) || '';
           // Split body on double-newlines so the template can render real paragraphs.
           const paragraphs = bodyText.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+          const rawTarget = b.cta_target || (linkedCard ? 'product:' + linkedCard.id : '');
+          // Phone is the only width this app draws. A card that opens the
+          // essay shows two lines; the rest of the story cards stay whole.
+          const tease = rawTarget === 'about' || rawTarget === 'story';
           out.recipe = {
             imageUrl: absUrl(b.image_url),
             imageView: b.image_view || 'top',  // 'top' | 'side'
@@ -1617,9 +1631,11 @@ Component({
             byline:   lang.pick(b.byline_en, b.byline_cn, L),
             readTime: b.read_time_minutes ? `${b.read_time_minutes} ${L === 'cn' ? '分钟' : 'min'}` : '',
             paragraphs,
+            tease,
+            teaseText: paragraphs.join(' '),
             linkedProduct: linkedCard,
             ctaLabel:  lang.pick(b.cta_label_en, b.cta_label_cn, L),
-            ctaTarget: b.cta_target || (linkedCard ? 'product:' + linkedCard.id : ''),
+            ctaTarget: tease ? 'story' : rawTarget,
             btnBg: color(b.btn_color || ''),
             btnFg: b.btn_color ? btnText(b.btn_color) : '',
           };
@@ -2324,6 +2340,15 @@ Component({
       // READ MORE tapped — count an article 'read' before routing onward.
       this._trackArticle('read');
       const target = this.data.recipe?.ctaTarget;
+      if (target) this.triggerEvent('cta', { target });
+    },
+    // The founder card is one tap, including the picture and the two-line
+    // tease. Other story cards keep their own button and product link.
+    onRecipeCardTap() {
+      const recipe = this.data.recipe;
+      if (!recipe || !recipe.tease) return;
+      const target = recipe.ctaTarget;
+      if (target === 'story') this._trackArticle('read');
       if (target) this.triggerEvent('cta', { target });
     },
     onBundleAddTap() {

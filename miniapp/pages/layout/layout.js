@@ -253,6 +253,7 @@ Page({
     if (t === 'home')        return wx.switchTab({ url: '/pages/home/home' });
     if (t === 'membership')  return wx.navigateTo({ url: '/pages/membership/membership' });
     if (t === 'about')       return wx.navigateTo({ url: '/pages/about/about' });
+    if (t === 'story')       return wx.navigateTo({ url: '/pages/story/story' });
     if (t === 'coupons')     return wx.navigateTo({ url: '/pages/coupons/coupons' });
     if (t === 'wallet')      return wx.navigateTo({ url: '/pages/wallet/wallet' });
     if (t === 'voting')      return wx.navigateTo({ url: '/pages/voting/voting' });

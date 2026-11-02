@@ -54,10 +54,11 @@ Page({
     founderPhoto: '',             // resolved absolute URL or ''
     heroImage: '',                // the SHOP's own hero, or '' for no hero
     hasFounder: false,            // did the shop write a founder at all?
-    storyExpanded: false,         // founder quote clamp/expand toggle
   },
 
-  toggleStory() { this.setData({ storyExpanded: !this.data.storyExpanded }); },
+  // The complete essay is its own screen. The card on this page stays a
+  // three-line quote so What's in / What's out stays where it is.
+  goStory() { wx.navigateTo({ url: '/pages/story/story' }); },
 
   onShow() {
     const app = getApp();

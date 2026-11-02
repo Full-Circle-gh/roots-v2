@@ -11,7 +11,7 @@
  *   ShopBlocks.stopTimers()
  *
  * Clickable elements carry data-cta-target="<target>" (e.g. product:123,
- * category:Dry & Pantry, shop, cart, voting, wallet, about, coupons, …).
+ * category:Dry & Pantry, shop, cart, voting, wallet, about, story, coupons, …).
  * The host page delegates clicks; this module attaches NO listeners.
  */
 (function (global) {
@@ -161,7 +161,7 @@
     voting_block: 1, greeting: 1, recipe_story: 1, bundle: 1, wecom_contact: 1,
     order_tracker: 1, announcement_bar: 1, points_widget: 1, top_up: 1,
     favorites_block: 1, affiliate_block: 1, store_info: 1, countdown_timer: 1,
-    leaderboard: 1,
+    leaderboard: 1, about_stats: 1,
   };
 
   // ── Per-type renderers ──────────────────────────────────────────────────
@@ -794,7 +794,12 @@
     var byline = pick(b.byline_en, b.byline_cn);
     var readTime = b.read_time_minutes ? (b.read_time_minutes + ' ' + (CN() ? '分钟' : 'min')) : '';
     var ctaLabel = pick(b.cta_label_en, b.cta_label_cn);
-    var ctaTarget = b.cta_target || (linkedCard ? 'product:' + linkedCard.id : '');
+    // A story card that points at About opens the essay screen. The live
+    // home card is saved with cta_target "about"; remapping here means the
+    // published layout does not have to change. Any other target stays.
+    var rawTarget = b.cta_target || (linkedCard ? 'product:' + linkedCard.id : '');
+    var opensStory = rawTarget === 'about' || rawTarget === 'story';
+    var ctaTarget = opensStory ? 'story' : rawTarget;
     var btnBg = color(b.btn_color || ''), btnFg = b.btn_color ? btnText(b.btn_color) : '';
 
     var img = '<div class="sb-rcp-img">' + (imageUrl ? '<img class="sb-img-full" src="' + attr(imageUrl) + '" alt="">' : '<div class="sb-rcp-img-placeholder">No image</div>') + '</div>';
@@ -802,7 +807,12 @@
       (byline ? '<span>' + escapeHtml(byline) + '</span>' : '') +
       (byline && readTime ? '<span> · </span>' : '') +
       (readTime ? '<span>' + escapeHtml(readTime) + '</span>' : '') + '</div>' : '';
-    var paras = paragraphs.map(function (p) { return '<div class="sb-rcp-para">' + escapeHtml(p) + '</div>'; }).join('');
+    var fullParas = paragraphs.map(function (p) { return '<div class="sb-rcp-para">' + escapeHtml(p) + '</div>'; }).join('');
+    // Phone shows two lines. A wide screen keeps every paragraph of the
+    // short piece. Only the card that opens the essay is shortened.
+    var paras = opensStory
+      ? '<div class="sb-rcp-paras tease"><div class="sb-rcp-full">' + fullParas + '</div><div class="sb-rcp-short sb-rcp-para">' + escapeHtml(paragraphs.join(' ')) + '</div></div>'
+      : '<div class="sb-rcp-paras">' + fullParas + '</div>';
     var card = linkedCard
       ? ctaWrap('product:' + linkedCard.id, '<div class="sb-rcp-card">' +
         '<div class="sb-rcp-card-img">' + (linkedCard.image ? '<img class="sb-img-full" src="' + attr(linkedCard.image) + '" alt="">' : '') + '</div>' +
@@ -810,14 +820,37 @@
         (linkedCard.tagline ? '<div class="sb-rcp-card-tag">' + escapeHtml(linkedCard.tagline) + '</div>' : '') +
         (linkedCard.price ? '<div class="sb-rcp-card-price">' + escapeHtml(linkedCard.price) + ' →</div>' : '') + '</div></div>')
       : '';
+    // The story card itself is the link, so the button is paint only.
+    // A second target on the button would be the one closest() finds.
     var cta = ctaLabel
-      ? ctaWrap(ctaTarget, '<div class="sb-rcp-cta" style="background:' + attr(btnBg) + ';color:' + attr(btnFg) + '">' + escapeHtml(ctaLabel) + ' →</div>')
+      ? (opensStory
+        ? '<div class="sb-rcp-cta" style="background:' + attr(btnBg) + ';color:' + attr(btnFg) + '">' + escapeHtml(ctaLabel) + ' →</div>'
+        : ctaWrap(ctaTarget, '<div class="sb-rcp-cta" style="background:' + attr(btnBg) + ';color:' + attr(btnFg) + '">' + escapeHtml(ctaLabel) + ' →</div>'))
       : '';
     var bodyHtml = '<div class="sb-rcp-body">' +
       (kicker ? '<div class="sb-rcp-kicker">' + escapeHtml(kicker) + '</div>' : '') +
       (headline ? '<div class="sb-rcp-headline">' + escapeHtml(headline) + '</div>' : '') +
       meta + paras + card + cta + '</div>';
-    return '<div class="sb-recipe-blk sb-recipe-' + imageView + ' sb-corner-' + corner + '" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' + img + bodyHtml + '</div>';
+    var html = '<div class="sb-recipe-blk sb-recipe-' + imageView + ' sb-corner-' + corner + '" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' + img + bodyHtml + '</div>';
+    return opensStory ? ctaWrap(ctaTarget, html) : html;
+  };
+
+  // about_stats -------------------------------------------------------------
+  // The four facts from About, drawn on the front page. Render-only: the
+  // layout the shop saved does not contain this block. An empty value is
+  // skipped, same rule as the mini app.
+  renderers.about_stats = function (b) {
+    var stats = (Array.isArray(b.stats) ? b.stats : []).slice(0, 4).map(function (s) {
+      if (!s) return null;
+      var value = pick(s.value_en, s.value_cn);
+      if (!value) return null;
+      return { value: value, label: pick(s.label_en, s.label_cn) };
+    }).filter(Boolean);
+    if (!stats.length) return '';
+    return '<div class="sb-facts">' + stats.map(function (s) {
+      return '<div class="sb-fact"><div class="sb-fact-v">' + escapeHtml(s.value) + '</div>' +
+        (s.label ? '<div class="sb-fact-l">' + escapeHtml(s.label) + '</div>' : '') + '</div>';
+    }).join('') + '</div>';
   };
 
   // bundle ------------------------------------------------------------------
@@ -2097,6 +2130,31 @@
   // 'web' and drops 'miniapp'. Hosts that walk the layout before rendering
   // (shop.html's renderHome pre-fetches the products a layout names) call
   // forSurface() first so a hidden block costs no request either.
+  // Twin of miniapp/utils/front-facts.js. Inserts the About facts strip
+  // under the first hero at draw time. Never writes the layout back, so a
+  // shop that has not filled in the numbers does not publish a strip, and
+  // the CMS list stays the blocks the shop actually placed.
+  function withFrontFacts(layout, about) {
+    var blocks = Array.isArray(layout) ? layout : [];
+    if (!blocks.length) return blocks;
+    var raw = about && Array.isArray(about.stats) ? about.stats : [];
+    var stats = raw.filter(function (s) {
+      return !!(s && String(s.value_en || s.value_cn || '').trim());
+    }).slice(0, 4);
+    if (!stats.length) return blocks;
+    for (var i = 0; i < blocks.length; i++) {
+      if (blocks[i] && blocks[i].type === 'about_stats') return blocks;
+    }
+    var block = { id: 'about-stats', type: 'about_stats', stats: stats, full_bleed: true };
+    var hero = -1;
+    for (var j = 0; j < blocks.length; j++) {
+      if (blocks[j] && blocks[j].type === 'hero_banner') { hero = j; break; }
+    }
+    var next = blocks.slice();
+    next.splice(hero >= 0 ? hero + 1 : 0, 0, block);
+    return next;
+  }
+
   function showsOnWeb(b) { return !!b && b.show_on !== 'miniapp'; }
   function forSurface(blocks) {
     return Array.isArray(blocks) ? blocks.filter(showsOnWeb) : [];
@@ -2418,6 +2476,7 @@
     setContext: setContext,
     render: render,
     forSurface: forSurface,
+    withFrontFacts: withFrontFacts,
     onRerender: onRerender,
     onCta: onCta,
     startTimers: startTimers,

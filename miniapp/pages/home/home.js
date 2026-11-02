@@ -7,6 +7,7 @@ const api    = require('../../utils/api');
 const cart   = require('../../utils/cart');
 const pickQueue = require('../../utils/pick-queue');
 const config = require('../../utils/config');
+const { withFrontFacts } = require('../../utils/front-facts');
 const lang   = require('../../utils/lang');
 const theme  = require('../../utils/theme');
 const { createPoller } = require('../../utils/livepoll');
@@ -303,7 +304,10 @@ Page({
         // Anonymous users have nothing to count.
         hasToken ? api.get('/api/retail/notifications/unread-count').catch(() => null) : Promise.resolve(null),
       ]);
-      const layout = config.forMiniApp(cfg?.home?.layout);
+      const layout = withFrontFacts(
+        config.forMiniApp(cfg?.home?.layout),
+        cfg?.about?.content,
+      );
       // Tell the two empty states apart. No config at all means we could not
       // reach the server — a network error the customer can retry, not an
       // operator who forgot to publish. Leave a diagnostics breadcrumb either
@@ -698,6 +702,7 @@ Page({
     // Standalone pages
     if (t === 'membership') return wx.navigateTo({ url: '/pages/membership/membership' });
     if (t === 'about')      return wx.navigateTo({ url: '/pages/about/about' });
+    if (t === 'story')      return wx.navigateTo({ url: '/pages/story/story' });
     if (t === 'coupons')    return wx.navigateTo({ url: '/pages/coupons/coupons' });
     if (t === 'wallet')     return wx.navigateTo({ url: '/pages/wallet/wallet' });
     if (t === 'voting')     return wx.navigateTo({ url: '/pages/voting/voting' });

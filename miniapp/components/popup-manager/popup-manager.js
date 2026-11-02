@@ -255,6 +255,7 @@ Component({
       if (t === 'home')       return wx.switchTab({ url: '/pages/home/home' });
       if (t === 'me')         return wx.switchTab({ url: '/pages/me/me' });
       if (t === 'membership') return wx.navigateTo({ url: '/pages/membership/membership' });
+      if (t === 'story')      return wx.navigateTo({ url: '/pages/story/story' });
       if (t === 'promotions' || t === 'about' || t === 'categories') {
         return wx.navigateTo({ url: '/pages/layout/layout?page=' + t });
       }
