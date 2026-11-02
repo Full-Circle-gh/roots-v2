@@ -299,12 +299,11 @@ section('12 · phone hamburger nav (§503 rule 55 · option C)');
 yes(/id="barNavOpenBtn"/.test(SITE) && /id="siteMobileNav"/.test(SITE) && /Jump to/.test(SITE)
   && /function mountMobileNav\(/.test(SITE) && /function openMobileNav\(/.test(SITE),
   'a phone opens a full-screen panel with the same bar links and Menu');
-yes(/bar-nav-open-btn\.is-open/.test(SITE) && /site-mobile-nav\.is-open/.test(SITE)
-  && /transition:opacity/.test(SITE),
-  'the hamburger swaps to an × and the panel fades in and out');
-yes(/site-mobile-nav-open header\.site-bar\{z-index:36/.test(SITE)
-  && /id="siteMobileNavClose"/.test(SITE) && !/site-mobile-nav-close\{display:none/.test(SITE),
-  'when the menu is open the bar stays on top and the panel shows a close control');
+yes(/site-mobile-nav\.is-open/.test(SITE) && /transition:opacity/.test(SITE),
+  'the panel fades in and out');
+yes(/body\.site-mobile-nav-open \.bar-nav-open-btn\{visibility:hidden/.test(SITE)
+  && /id="siteMobileNavClose"/.test(SITE) && !/bar-nav-icon-close/.test(SITE),
+  'only the × inside the menu closes it; the bar keeps three lines and hides while open');
 yes(/header\.site-bar \.bar-menu-btn\{display:none/.test(SITE),
   'the forest Menu pill is not on the phone bar');
 const BAR_MOCK = read('reference/site-bar-section-links-mockup.html');

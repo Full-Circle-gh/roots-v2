@@ -67,13 +67,7 @@
     display:none;align-items:center;justify-content:center;padding:0;flex:none;cursor:pointer;
     -webkit-tap-highlight-color:transparent;color:var(--ink);position:relative;
   }
-  .bar-nav-open-btn svg{
-    position:absolute;width:24px;height:24px;
-    transition:opacity .28s ease,transform .28s ease;
-  }
-  .bar-nav-open-btn .bar-nav-icon-close{opacity:0;transform:scale(.85);}
-  .bar-nav-open-btn.is-open .bar-nav-icon-open{opacity:0;transform:scale(.85);}
-  .bar-nav-open-btn.is-open .bar-nav-icon-close{opacity:1;transform:scale(1);}
+  .bar-nav-open-btn svg{width:24px;height:24px;}
   .bar-nav-open-btn:focus-visible{outline:3px solid var(--lime);outline-offset:2px;}
   .bar-nav-open-btn[hidden]{display:none!important;}
   .site-mobile-nav{
@@ -391,6 +385,7 @@
     header.site-bar .bar-menu-btn{display:none!important;}
     .bar-nav-open-btn{display:inline-flex;}
     body.site-mobile-nav-open header.site-bar{z-index:36;background:#fff;}
+    body.site-mobile-nav-open .bar-nav-open-btn{visibility:hidden;pointer-events:none;}
     body .shop-blocks .sb-blk-outer{scroll-margin-top:calc(var(--site-bar-h, 72px) + 12px);}
   }
   @media (min-width:768px){
@@ -407,8 +402,7 @@
       <nav class="bar-links" id="barLinks" aria-label="On this page" hidden></nav>
       <a class="bar-menu-btn" id="barMenuBtn" href="#" hidden>Menu</a>
       <button type="button" class="bar-nav-open-btn" id="barNavOpenBtn" hidden aria-label="Open menu" aria-expanded="false" aria-controls="siteMobileNav">
-        <svg class="bar-nav-icon-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-        <svg class="bar-nav-icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
       <nav class="bar-nav" id="barNav" aria-label="Main">
         <span id="navLinks" style="display:contents"></span>
@@ -703,11 +697,9 @@ function goToBarSection(id,ev){
   if(!STAGE_MODE){ try{ history.replaceState(null,'','#'+id); }catch(e){} }
   if(!siteMenuDesktop()) closeMobileNav();
 }
-function syncBarNavOpenIcon(open){
+function syncBarNavOpenState(open){
   const btn=$('#barNavOpenBtn'); if(!btn) return;
-  btn.classList.toggle('is-open',!!open);
   btn.setAttribute('aria-expanded',open?'true':'false');
-  btn.setAttribute('aria-label',open?'Close menu':'Open menu');
 }
 function finishCloseMobileNav(){
   const panel=$('#siteMobileNav'); if(!panel) return;
@@ -715,7 +707,7 @@ function finishCloseMobileNav(){
   panel.setAttribute('aria-hidden','true');
   document.body.classList.remove('site-mobile-nav-open');
   if($('#siteMenuScrim')&&$('#siteMenuScrim').hidden) document.body.style.overflow='';
-  syncBarNavOpenIcon(false);
+  syncBarNavOpenState(false);
   const btn=$('#barNavOpenBtn'); if(btn) btn.focus();
 }
 function openMobileNav(){
@@ -725,8 +717,11 @@ function openMobileNav(){
   panel.setAttribute('aria-hidden','false');
   document.body.classList.add('site-mobile-nav-open');
   document.body.style.overflow='hidden';
-  syncBarNavOpenIcon(true);
-  requestAnimationFrame(()=>requestAnimationFrame(()=>panel.classList.add('is-open')));
+  syncBarNavOpenState(true);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    panel.classList.add('is-open');
+    const close=$('#siteMobileNavClose'); if(close) close.focus();
+  }));
 }
 function closeMobileNav(){
   const panel=$('#siteMobileNav'); if(!panel||!panel.classList.contains('is-open')) return;
@@ -773,8 +768,8 @@ function wireMobileNav(){
   openBtn.dataset.wired='1';
   openBtn.addEventListener('click',()=>{
     const panel=$('#siteMobileNav');
-    if(panel&&panel.classList.contains('is-open')) closeMobileNav();
-    else openMobileNav();
+    if(panel&&panel.classList.contains('is-open')) return;
+    openMobileNav();
   });
   if(closeBtn) closeBtn.addEventListener('click',closeMobileNav);
 }
