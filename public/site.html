@@ -94,7 +94,14 @@
     body .shop-blocks .sb-hero-split{grid-template-columns:1fr;min-height:0;}
     /* Story ? poster: no margin strip after the bottom rule; poster height
        follows the art (inline aspect-ratio on the block left a white/oat band). */
-    body .shop-blocks .sb-recipe-blk{margin-bottom:0;}
+    body .shop-blocks .sb-recipe-blk{margin-top:0;margin-bottom:0;}
+    /* Story photo keeps its own shape (same idea as rule 44 split heroes). */
+    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-img{
+      aspect-ratio:auto;height:auto;background:var(--oat);
+    }
+    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-img .sb-img-full{
+      width:100%;height:auto !important;object-fit:contain;
+    }
     body .shop-blocks .sb-hero.sb-hero-full.sb-hero-fit-contain{
       aspect-ratio:auto !important;height:auto !important;min-height:0 !important;
       line-height:0;background:var(--oat);
@@ -228,8 +235,8 @@
       display:flex;align-items:center;box-sizing:border-box;
       min-height:80px;padding-right:112px;
     }
-    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"]{container-type:inline-size;}
-    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-char{top:calc(100cqw * 3 / 4 + 16px);}
+    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-char{top:16px;}
+    body .shop-blocks .sb-blk-outer:has(.sb-char)[data-block-type="recipe_story"] .sb-rcp-headline{margin-top:0;}
     body .shop-blocks .sb-blk-outer:has(.sb-char) .sb-grid-head{align-items:flex-end;}
     body .shop-blocks .sb-blk-outer:has(.sb-char) .sb-fact-item:first-child{padding-right:112px;}
   }
@@ -824,6 +831,28 @@ function mountMapAddress(root){
   });
 }
 
+// §503 rule 43. A story's picture is on top; the character sits in the kicker
+// row at the top of the words. The photo height is not fixed, so after layout
+// we pin the drawing to the text block — not a viewport guess.
+function alignRecipeStoryCharacters(root){
+  if(!root||!window.matchMedia('(max-width:767px)').matches) return;
+  root.querySelectorAll('.sb-blk-outer[data-block-type="recipe_story"]').forEach(outer=>{
+    const ch=outer.querySelector(':scope > .sb-char');
+    const body=outer.querySelector('.sb-rcp-body');
+    if(!ch||!body) return;
+    const padTop=parseFloat(getComputedStyle(body).paddingTop)||0;
+    ch.style.top=(body.offsetTop+padTop)+'px';
+  });
+}
+let recipeCharAlignRaf=0;
+function scheduleRecipeStoryCharacterAlign(root){
+  if(recipeCharAlignRaf) cancelAnimationFrame(recipeCharAlignRaf);
+  recipeCharAlignRaf=requestAnimationFrame(()=>{
+    recipeCharAlignRaf=0;
+    alignRecipeStoryCharacters(root);
+  });
+}
+
 async function render(){
   const view=$('#view');
   const published=state.config&&state.config.website&&state.config.website.layout;
@@ -847,6 +876,10 @@ async function render(){
   renderChatButton(layout);
   mountStoreVisit(view);
   drawStoreMaps(view);
+  scheduleRecipeStoryCharacterAlign(view);
+  view.querySelectorAll('.sb-blk-outer[data-block-type="recipe_story"] img.sb-img-full').forEach(img=>{
+    if(!img.complete) img.addEventListener('load',()=>scheduleRecipeStoryCharacterAlign(view),{once:true});
+  });
 }
 
 // The Stores block's live map (§503 r.37–39): Amap, with the public,
@@ -1018,6 +1051,14 @@ function renderChatButton(layout){
       if(ev.target.closest('a,button,form')){ ev.preventDefault(); ev.stopPropagation(); }
     },true);
   }
+  window.addEventListener('resize',()=>{
+    const view=$('#view');
+    if(view) scheduleRecipeStoryCharacterAlign(view);
+  });
+  window.addEventListener('load',()=>{
+    const view=$('#view');
+    if(view) scheduleRecipeStoryCharacterAlign(view);
+  });
   await render();
   if(STAGE_MODE){ try{ parent.postMessage({type:'cms:stage-ready'},location.origin); }catch(e){} }
 })();
