@@ -294,6 +294,9 @@ yes(/overflow-x:clip/.test(SITE) && /id="barLinks"/.test(SITE) && /SITE_BAR_LINK
   'on a computer the bar stays put and carries six section links beside Menu');
 yes(/\.bar-links\{[^}]*font-size:22px/.test(SITE),
   'the computer bar section links are 22px (not the unused .bar-nav)');
+yes(/label:'Our products', match:b=>b\.type==='menu_showcase'&&\/platter\/i/.test(SITE)
+  && /fallback:b=>b\.type==='product_grid'/.test(SITE),
+  'Our products starts at the platters showcase, and the product grid is the fallback');
 
 // ─────────────────────────────────────────────────────────────────────────
 section('12 · phone hamburger nav (§503 rule 55 · option C)');
