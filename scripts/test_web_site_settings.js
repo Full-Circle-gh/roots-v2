@@ -196,7 +196,7 @@ yes(/\.shop-blocks \.sb-hero-split\{grid-template-columns:1fr/.test(SITE),
   'a split hero stacks, photo then words');
 yes(/height:72px/.test(SITE) && /PHONE_CAST=\['skater','onion','radishes','broccoli','flex','peas','mushroom'\]/.test(SITE),
   'a section with no character shows the next of the white-line cast, 72px');
-yes(/body \.shop-blocks \.sb-char-left,body \.shop-blocks \.sb-char-right\{right:12px;left:auto\}/.test(SITE),
+yes(/body \.shop-blocks \.sb-char-left,body \.shop-blocks \.sb-char-right\{right:12px;left:auto;?\}/.test(SITE),
   'on a phone every character sits on the right, including one stored on the left');
 yes(/\.sb-steps-kicker,\.sb-cl-kicker,\.sb-menu-kicker,\.sb-st-kicker,\.sb-rcp-kicker,\.sb-grid-block \.sb-kicker/.test(SITE) && /min-height:80px;padding-right:112px/.test(SITE),
   'the small label shares the character\'s row, so the title starts under it');
@@ -204,6 +204,10 @@ yes(!/padding-right:84px/.test(SITE),
   'the title is not kept narrow beside the drawing');
 yes(/if\(STAGE_MODE\) return layout;/.test(SITE),
   'the editor\'s stage does not invent a character');
+yes(/function alignRecipeStoryCharacters\(/.test(SITE) && /getComputedStyle\(body\)\.paddingTop/.test(SITE),
+  'a story character is pinned to the kicker row after layout, not a viewport guess');
+yes(/recipe_story.*\.sb-rcp-img[\s\S]{0,120}aspect-ratio:auto/.test(SITE),
+  'a story photo keeps its own shape on a phone');
 yes(!/font-size:17px/.test(read('public/shop/blocks.css').slice(0, 200)) && /--u: calc\(100vw \/ 750\)/.test(read('public/shop/blocks.css')),
   'the web shop keeps the 750-unit scale');
 
@@ -212,7 +216,7 @@ section('7 · the phone banner, the labels, and the Yuexiu address (§503 rules 
 
 yes(/body \.shop-blocks \.sb-split-img\{height:auto/.test(SITE) && /body \.shop-blocks \.sb-split-img \.sb-hero-img,body \.shop-blocks \.sb-split-img \.sb-hero-video\{width:100%;height:auto/.test(SITE),
   'a split hero picture keeps its own shape and fills the width');
-yes(/body \.shop-blocks \.sb-recipe-blk\{margin-bottom:0;/.test(SITE),
+yes(/body \.shop-blocks \.sb-recipe-blk\{[^}]*margin-bottom:0;/.test(SITE),
   'a story block does not leave a margin strip after its bottom rule on a phone');
 yes(/sb-hero-fit-contain[\s\S]{0,120}aspect-ratio:auto !important/.test(SITE),
   'a poster hero height follows the art on a phone, not a fixed aspect box');
@@ -265,7 +269,7 @@ yes(/website_hero_fresh_food_sorted_v1/.test(read('database.js')),
 // ─────────────────────────────────────────────────────────────────────────
 section('9 · no IP characters on a computer (§503 rule 49)');
 
-yes(/No IP characters on a computer/.test(SITE) && /body \.shop-blocks \.sb-char\{display:none\}/.test(SITE),
+yes(/No IP characters on a computer/.test(SITE) && /body \.shop-blocks \.sb-char\{display:none;?\}/.test(SITE),
   'on a computer the brand site hides the IP characters');
 yes(/Every character in the top right/.test(SITE) && /@media \(max-width:767px\)/.test(SITE) && /height:72px;width:auto;max-width:96px/.test(SITE),
   'a phone still draws the characters');
