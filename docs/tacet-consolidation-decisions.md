@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.615
+# Tacet shared-core consolidation — decisions record, v4.616
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -29,6 +29,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-11-02 · v4.613 — **§503 AMENDED · THE SIX BAR LINKS GO LIVE ON A COMPUTER — ASH.** Ash confirmed the mockup and said *"confirmed,deploy live"*. From 768px up `public/site.html` draws six links on the sticky bar — New to China, Our products, Our location, Social, Our story, Canton Fair — each scrolling to the matching block on the published website. Menu stays the forest pill that opens the Ramada QR menu (phone frame on a computer). A phone keeps wordmark and Menu only. The sticky fix (rule 52) stands. Six composed strings (vocabulary v1.374). No change to `.gitignore` or CI.
 
 2026-11-02 · v4.612 — **§503 AMENDED · THE LONG LIST UNDER MENU IS NOT THE BAR — ASH.** Ash, on the list that opened under Menu: *"i dont want all this menu list is too long . also on pc thats not what i mean . i wan there will be on the sticky bar few link that once clicking it will go directly to the page. i dont want it to be under menu . the menu is one of the button user can click to see ramada menu , the rest of the links can be : new to china, our products, our location , social , our story , canton fair"* and asked for a mockup he can test. Rule 53 is withdrawn. Menu stays the Ramada button. The six names are drawn on the bar in `reference/site-bar-section-links-mockup.html`, in page order, and are not on the live site. The sticky fix from v4.611 stays. No new words on the live site. No change to `.gitignore` or CI.
+
+2026-11-02 · v4.616 — **§503 AMENDED · THE BRAND SITE SHOWS NO IP CHARACTERS ON A PHONE EITHER — DECIDED BY ASH.** Ash, on the live site on a phone, asked to delete the IP character on the promise/steps band. Rule 49 already hid them from 768px up; below 768px rule 42 still auto-cast the white-line drawings. `public/site.html` now strips `character` from the published layout before draw and hides any stray `.sb-char` outside the editor stage. The web shop is unchanged. No new words. No change to `.gitignore` or CI.
 
 2026-11-02 · v4.611 — **§503 AMENDED · ON A COMPUTER THE BAR STAYS PUT, AND MENU JUMPS TO THE SECTION — DECIDED BY ASH.** Ash: *"pc - top bar should be sticky and also menu where a user can click on a link and it will direct him exacly where it is on the page"*. The bar was already `position: sticky`. From 768px up the shop block sheet sets `overflow-x: hidden` on `html` and `body`, and a hidden axis forces the other axis to `auto`, so the page scrolled in one box and the bar lived in the other. The bar scrolled away. On the brand site that sideways clip is `overflow-x: clip`, which does not make a scroll box. The same pass put the page's sections in a list under Menu. **Withdrawn the same day by v4.612:** that list is not what Ash meant. The sticky fix stands. No new words. No change to `.gitignore` or CI.
 
@@ -33677,7 +33679,7 @@ Ash: *"i want also a menu like open toast for wraps and salads"*, then *"deploy 
 
 48. **On a phone each menu showcase is one square picture that advances left; on a computer it stays a grid.** Below 768px `public/site.html` makes each dish card nearly full width, keeps the picture square with the whole photo inside (`object-fit: contain`), and advances the rail every few seconds; a swipe still works. From 768px up the engine's grid stands. The green slogan line is edge to edge and large on a computer, on this page only.
 
-49. **On a computer the website shows no IP characters.** Ash: *"for pc version i want to remove the ip icons"*. From 768px up the brand site hides every `.sb-char`. Below 768px the characters stay (rules 42–43). The web shop is unchanged.
+49. **The brand site shows no IP characters.** Ash first asked to remove them on a computer (*"for pc version i want to remove the ip icons"*), then on a phone while looking at the promise/steps band. The published layout is stripped of `character` before draw; the editor stage still shows a block's pick. Rule 42's auto cast no longer runs on the live site. The web shop is unchanged.
 
 ### Amended 2026-10-31 — one visit card for the store block
 

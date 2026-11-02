@@ -244,49 +244,11 @@
     body .shop-blocks .sb-cl-qr{width:88px;height:88px;}
 
     body .shop-blocks .sb-blk-outer,body .shop-blocks .sb-blk-outer.framed{overflow:visible;}
-    /* Every character in the top right, in the label's row. The title follows
-       that row at full width, so a drawing never sits on the words (§503 rule 43). */
-    body .shop-blocks .sb-char{
-      height:72px;width:auto;max-width:96px;top:16px;right:12px;left:auto;z-index:4;
-      object-fit:contain;object-position:right center;
-      transform:none;
-      animation:site-char-bob 4.6s ease-in-out infinite;
-    }
-    body .shop-blocks .sb-char-left,body .shop-blocks .sb-char-right{right:12px;left:auto;}
-    body .shop-blocks .sb-blk-outer:has(.sb-char) :is(.sb-steps,.sb-cl,.sb-menu,.sb-store-blk,.sb-grid-block,.sb-rcp-body){padding-top:16px;}
-    body .shop-blocks .sb-blk-outer:has(.sb-char) :is(
-      .sb-steps-kicker,.sb-cl-kicker,.sb-menu-kicker,.sb-st-kicker,.sb-rcp-kicker,.sb-grid-block .sb-kicker
-    ){
-      display:flex;align-items:center;box-sizing:border-box;
-      min-height:80px;padding-right:112px;
-    }
-    /* Story: the drawing lives inside the kicker row (flex), not over the title. */
-    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-kicker:has(> .sb-char){
-      justify-content:space-between;gap:8px;padding-right:0;
-    }
-    body .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-kicker > .sb-char{
-      position:static;top:auto;right:auto;left:auto;height:72px;width:auto;max-width:96px;
-      flex-shrink:0;transform:none;animation:site-char-bob-inline 4.6s ease-in-out infinite;
-    }
-    body .shop-blocks .sb-blk-outer:has(.sb-char)[data-block-type="recipe_story"] .sb-rcp-headline{margin-top:0;}
-    body .shop-blocks .sb-blk-outer:has(.sb-char) .sb-grid-head{align-items:flex-end;}
-    /* Promise band: the drawing sits in a top band; facts stay centered (§503 r.43). */
-    body .shop-blocks .sb-blk-outer[data-block-type="fact_band"]:has(> .sb-char) .sb-fact{padding-top:96px;}
-    body .shop-blocks .sb-blk-outer[data-block-type="fact_band"] .sb-fact-item{text-align:center;}
-  }
-  @keyframes site-char-bob{
-    0%,100%{transform:rotate(-2deg);}
-    50%{transform:translateY(-6px) rotate(2deg);}
-  }
-  @media (prefers-reduced-motion:reduce){
-    body .shop-blocks .sb-char,body .shop-blocks .sb-rcp-kicker > .sb-char{animation:none;}
-  }
-  @keyframes site-char-bob-inline{
-    0%,100%{transform:rotate(-2deg);}
-    50%{transform:translateY(-4px) rotate(2deg);}
   }
 
-
+  /* The public brand site shows no IP characters (§503 rule 49). The editor
+     stage still draws them so a block's pick can be checked before publish. */
+  body:not(.cms-stage) .shop-blocks .sb-char{display:none !important;}
 
   /* Oat band before a hero that follows another block (menu rail → full-bleed
      image, product grid → poster, etc.). Desktop always had 32px; phone did
@@ -344,8 +306,6 @@
       width:100vw;max-width:none;position:relative;left:50%;transform:translateX(-50%);
     }
     body .shop-blocks .sb-announce{font-size:24px;padding:18px 40px;letter-spacing:0.04em;}
-    /* No IP characters on a computer (§503 rule 49). They stay on a phone. */
-    body .shop-blocks .sb-char{display:none;}
   }
   /* The floating WhatsApp button (§503 rule 20): bottom corner, clear of the
      phone's safe area, an icon with an accessible name and no words. */
@@ -591,21 +551,15 @@ async function loadProducts(layout){
   return base;
 }
 
-// §503 rule 42. A section with no character stored still shows the next of
-// the white-line cast, so the page is not bare. The editor's stage does not
-// do this: there, None stays None. A character the block already stores wins.
-const PHONE_CAST=['skater','onion','radishes','broccoli','flex','peas','mushroom'];
-const CAST_TYPES={fact_band:1,steps:1,store_info:1,contact_links:1,recipe_story:1,product_grid:1};
-function withCast(layout){
-  if(STAGE_MODE) return layout;
-  let n=0;
+// §503 rule 49. The live brand site does not show IP characters. The editor
+// stage keeps them so None vs a pick stays visible while editing.
+function withoutSiteIp(layout){
+  if(STAGE_MODE||!Array.isArray(layout)) return layout;
   return layout.map(b=>{
-    if(!b||!CAST_TYPES[b.type]) return b;
-    if(b.character&&/^[a-z0-9-]{1,30}$/.test(String(b.character))) return b;
+    if(!b||(!b.character&&!b.character_side)) return b;
     const next=Object.assign({},b);
-    next.character=PHONE_CAST[n%PHONE_CAST.length];
-    if(next.character_side!=='left'&&next.character_side!=='right') next.character_side=n%2?'left':'right';
-    n++;
+    delete next.character;
+    delete next.character_side;
     return next;
   });
 }
@@ -1091,7 +1045,7 @@ function showFounderStory(){
 async function render(){
   const view=$('#view');
   const published=state.config&&state.config.website&&state.config.website.layout;
-  let layout=(window.ShopBlocks&&Array.isArray(published))?withCast(ShopBlocks.forSurface(published)):[];
+  let layout=(window.ShopBlocks&&Array.isArray(published))?withoutSiteIp(ShopBlocks.forSurface(published)):[];
   if(layout.length) layout=await placeShopPins(layout);
   siteLayout=layout;
   if(!layout.length){
