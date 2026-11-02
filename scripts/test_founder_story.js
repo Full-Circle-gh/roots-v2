@@ -118,5 +118,37 @@ yes(!aboutWxml.includes('goStory'), 'About on the mini app does not open one');
 yes(!home.includes('withFrontFacts'), 'the mini app home does not draw the strip');
 yes(!fs.existsSync(path.join(ROOT, 'miniapp/utils/front-facts.js')), 'the mini app copy of the strip rule is gone');
 
+section('4 · the strip is a thin attached cap, full-bleed on a computer (§503 rule 56)');
+
+ShopBlocks.setContext({ lang: 'en', products: [], categories: [], flashSales: [], config: null });
+const factsHtml = ShopBlocks.render([{
+  id: 'about-stats', type: 'about_stats', full_bleed: true, stats: STATS.stats,
+}]);
+yes(factsHtml.includes('class="sb-facts"'), 'the strip is the facts bar');
+yes(factsHtml.includes('class="sb-facts-cell"'), 'each number is a facts cell');
+yes(!/<div class="sb-fact">/.test(factsHtml), 'the strip does not reuse the promise band class');
+yes(factsHtml.includes('sb-fact-v') && factsHtml.includes('2017'), 'values are drawn');
+
+const bandHtml = ShopBlocks.render([{
+  id: 'fb', type: 'fact_band',
+  items: [{ title_en: 'Since 2017', body_en: 'Guangzhou' }],
+}]);
+yes(/class="sb-fact"/.test(bandHtml), 'the promise band still uses sb-fact');
+yes(!bandHtml.includes('sb-facts-cell'), 'the promise band is not a facts cell');
+
+const css = read('public/shop/blocks.css');
+yes(!/\.sb-facts\s*\{[^}]*max-width:\s*70%/.test(css), 'the strip is not a 70% island');
+yes(/\.sb-facts\s*\{[^}]*margin:\s*0/.test(css), 'the strip has no beige gap under it');
+yes(/data-block-type="about_stats"[\s\S]{0,180}max-width:\s*none/.test(css),
+  'on a computer the strip is the full window, like the green band');
+yes(/data-block-type="fact_band"[\s\S]{0,180}max-width:\s*none/.test(css),
+  'the promise band still runs the full window');
+yes(!/data-block-type="about_stats"[\s\S]{0,80}max-width:\s*1240px/.test(css),
+  'the strip is no longer capped at 1240px with the story block');
+
+yes(/body \.shop-blocks \.sb-facts\{/.test(site), 'the phone sizes the black bar on its own');
+yes(/body \.shop-blocks \.sb-fact\{padding:36px 22px 32px;\}/.test(site),
+  'the phone padding on sb-fact still belongs to the green band');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

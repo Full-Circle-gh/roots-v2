@@ -848,7 +848,7 @@
     }).filter(Boolean);
     if (!stats.length) return '';
     return '<div class="sb-facts">' + stats.map(function (s) {
-      return '<div class="sb-fact"><div class="sb-fact-v">' + escapeHtml(s.value) + '</div>' +
+      return '<div class="sb-facts-cell"><div class="sb-fact-v">' + escapeHtml(s.value) + '</div>' +
         (s.label ? '<div class="sb-fact-l">' + escapeHtml(s.label) + '</div>' : '') + '</div>';
     }).join('') + '</div>';
   };

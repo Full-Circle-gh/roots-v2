@@ -377,11 +377,20 @@
 .shop-blocks .sb-rcp-para { margin-top: calc(18 * var(--u)); font-family: var(--f-aleo); font-size: calc(28 * var(--u) * var(--font-scale)); line-height: 1.55; white-space: pre-line; }
 .shop-blocks .sb-rcp-short { display: none; }
 .shop-blocks .sb-recipe-blk[role="link"] { cursor: pointer; }
-.shop-blocks .sb-facts { max-width: 70%; margin: calc(24 * var(--u)) auto; background: var(--ink); color: #fff; display: flex; padding: calc(28 * var(--u)) calc(16 * var(--u)); }
-.shop-blocks .sb-fact { flex: 1; padding: 0 calc(12 * var(--u)); min-width: 0; text-align: center; }
-.shop-blocks .sb-fact + .sb-fact { border-left: 1px solid rgba(255,255,255,.18); }
-.shop-blocks .sb-fact-v { font-family: var(--f-bear); font-size: calc(40 * var(--u) * var(--font-scale)); line-height: 1; color: var(--lime); }
-.shop-blocks .sb-fact-l { font-family: var(--f-toni); font-size: calc(18 * var(--u) * var(--font-scale)); letter-spacing: .1em; text-transform: uppercase; opacity: .6; margin-top: calc(8 * var(--u)); white-space: nowrap; }
+/* About facts (§503 rule 56): a thin black cap on the green promise band.
+   Cells are .sb-facts-cell, not .sb-fact — that class is the promise band
+   itself, and sharing it used to dump the band's padding onto these numbers. */
+.shop-blocks .sb-facts {
+  width: 100%; max-width: none; margin: 0;
+  background: var(--ink); color: #fff;
+  display: flex; align-items: center;
+  padding: calc(18 * var(--u)) calc(16 * var(--u));
+  min-height: calc(88 * var(--u));
+}
+.shop-blocks .sb-facts-cell { flex: 1; padding: 0 calc(12 * var(--u)); min-width: 0; text-align: center; }
+.shop-blocks .sb-facts-cell + .sb-facts-cell { border-left: 1px solid rgba(255,255,255,.18); }
+.shop-blocks .sb-fact-v { font-family: var(--f-bear); font-size: calc(36 * var(--u) * var(--font-scale)); line-height: 1; color: var(--lime); }
+.shop-blocks .sb-fact-l { font-family: var(--f-toni); font-size: calc(16 * var(--u) * var(--font-scale)); letter-spacing: .1em; text-transform: uppercase; opacity: .6; margin-top: calc(6 * var(--u)); white-space: nowrap; }
 @media (max-width: 767px) {
   .shop-blocks .sb-rcp-paras.tease .sb-rcp-full { display: none; }
   .shop-blocks .sb-rcp-paras.tease .sb-rcp-short { display: block; overflow: visible; }
@@ -949,8 +958,7 @@
 /* ⑤ RECIPE / EDITORIAL — magazine side-by-side (image | text), fixed-px type.
    Markup is image + body siblings, so CSS lays them out as 2 columns. */
 @media (min-width: 768px) {
-  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"],
-  .shop-blocks .sb-blk-outer[data-block-type="about_stats"] {
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] {
     width: 100vw; max-width: 1240px; position: relative; left: 50%; transform: translateX(-50%);
   }
   .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-recipe-blk {
@@ -2746,10 +2754,10 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   WEBSITE-ONLY BLOCKS (§503) — the brand website's promise band and steps,
-   and the Stores block's Chinese address line. Phone sizes in --u like every
-   block above; from 768px both bands run the full width of the window with
-   fixed px type, the way the PC-native blocks do.
+   WEBSITE-ONLY BLOCKS (§503) — the brand website's promise band, the About
+   facts cap that sits on it, the steps, and the Stores block's Chinese
+   address line. Phone sizes in --u like every block above; from 768px the
+   bands run the full width of the window with fixed px type.
    ════════════════════════════════════════════════════════════════════════ */
 .shop-blocks .sb-fact { padding: calc(40 * var(--u)) calc(36 * var(--u)); }
 .shop-blocks .sb-fact-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(32 * var(--u)) calc(28 * var(--u)); }
@@ -2817,9 +2825,14 @@
 
 @media (min-width: 768px) {
   .shop-blocks .sb-blk-outer[data-block-type="fact_band"],
+  .shop-blocks .sb-blk-outer[data-block-type="about_stats"],
   .shop-blocks .sb-blk-outer[data-block-type="steps"] {
     width: 100vw; max-width: none; position: relative; left: 50%; transform: translateX(-50%);
   }
+  .shop-blocks .sb-facts { padding: 10px 40px; min-height: 52px; }
+  .shop-blocks .sb-facts-cell { padding: 0 16px; }
+  .shop-blocks .sb-fact-v { font-size: 22px; }
+  .shop-blocks .sb-fact-l { font-size: 10px; letter-spacing: .12em; margin-top: 4px; }
   .shop-blocks .sb-fact { padding: 32px max(40px, calc((100vw - 1120px) / 2)); }
   .shop-blocks .sb-fact-row { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px 32px; }
   .shop-blocks .sb-fact-t { font-size: 36px; }
