@@ -204,8 +204,8 @@ yes(!/padding-right:84px/.test(SITE),
   'the title is not kept narrow beside the drawing');
 yes(/if\(STAGE_MODE\) return layout;/.test(SITE),
   'the editor\'s stage does not invent a character');
-yes(/function alignRecipeStoryCharacters\(/.test(SITE) && /getComputedStyle\(body\)\.paddingTop/.test(SITE),
-  'a story character is pinned to the kicker row after layout, not a viewport guess');
+yes(/function dockRecipeStoryCharacters\(/.test(SITE) && /kicker\.appendChild\(ch\)/.test(SITE),
+  'a story character is docked into the kicker row on a phone');
 yes(/recipe_story.*\.sb-rcp-img[\s\S]{0,120}aspect-ratio:auto/.test(SITE),
   'a story photo keeps its own shape on a phone');
 yes(!/font-size:17px/.test(read('public/shop/blocks.css').slice(0, 200)) && /--u: calc\(100vw \/ 750\)/.test(read('public/shop/blocks.css')),

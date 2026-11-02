@@ -1,17 +1,22 @@
 #!/usr/bin/env node
 /**
  * Brand site (§503 rule 43): on a phone a story IP character sits in the
- * kicker row; the headline starts below. alignRecipeStoryCharacters pins the
- * drawing after layout when the photo height is not fixed.
+ * kicker row; the headline starts below. dockRecipeStoryCharacters moves the
+ * drawing into the kicker flex row so it cannot overlap the title.
  */
+'use strict';
+
+/* global document, dockRecipeStoryCharacters */
+/* Browser globals used only inside page.evaluate() — see test_channel_money_panel.js */
+
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 
 const SITE = fs.readFileSync(path.join(__dirname, '../public/site.html'), 'utf8');
-const fnBlock = SITE.match(/function alignRecipeStoryCharacters[\s\S]*?^}/m);
+const fnBlock = SITE.match(/function dockRecipeStoryCharacters[\s\S]*?^}/m);
 if (!fnBlock) {
-  console.error('alignRecipeStoryCharacters not found in public/site.html');
+  console.error('dockRecipeStoryCharacters not found in public/site.html');
   process.exit(1);
 }
 
@@ -32,12 +37,8 @@ body{margin:0;background:#F2E7DF;font-family:serif;}
 <img class="sb-char" src="/assets/brand/cutout/ip-peas.png" alt=""></div></div>
 <script>
 ${fnBlock[0]}
-window.addEventListener('load',()=>alignRecipeStoryCharacters(document.body));
+window.addEventListener('load',()=>dockRecipeStoryCharacters(document.body));
 </script></body></html>`;
-
-function rectsOverlap(a, b) {
-  return a.bottom > b.top + 2 && a.right > b.left + 20;
-}
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
@@ -53,28 +54,26 @@ function rectsOverlap(a, b) {
     const img = document.getElementById('photo');
     return img && img.offsetHeight > 400;
   });
-  await page.evaluate(() => alignRecipeStoryCharacters(document.body));
+  await page.evaluate(() => dockRecipeStoryCharacters(document.body));
 
-  const shot = path.join('/opt/cursor/artifacts', 'ip-character-align-after.png');
+  const shot = path.join('/opt/cursor/artifacts', 'ip-character-dock-after.png');
   await page.locator('.sb-blk-outer[data-block-type="recipe_story"]').screenshot({ path: shot });
 
   const m = await page.evaluate(() => {
     const outer = document.querySelector('.sb-blk-outer[data-block-type="recipe_story"]');
-    const ch = outer.querySelector(':scope > .sb-char');
     const kicker = outer.querySelector('.sb-rcp-kicker');
+    const ch = kicker.querySelector('.sb-char');
     const headline = outer.querySelector('.sb-rcp-headline');
-    const body = outer.querySelector('.sb-rcp-body');
     const r = (el) => el.getBoundingClientRect();
     const cr = r(ch), kr = r(kicker), hr = r(headline);
     return {
-      inlineTop: ch.style.top,
-      expectedTop: body.offsetTop + parseFloat(getComputedStyle(body).paddingTop || 0),
+      dockedInKicker: kicker.contains(ch) && !outer.querySelector(':scope > .sb-char'),
       charTop: Math.round(cr.top),
       kickerTop: Math.round(kr.top),
       headlineTop: Math.round(hr.top),
       charBottom: Math.round(cr.bottom),
       overlapHeadline: cr.bottom > hr.top + 2 && cr.right > hr.left + 20,
-      charInKickerRow: cr.top >= kr.top - 4 && cr.top <= kr.bottom - 8,
+      charAboveHeadline: cr.bottom <= hr.top + 2,
     };
   });
 
@@ -86,11 +85,11 @@ function rectsOverlap(a, b) {
     else { console.log('  ✗', msg); failed++; }
   }
 
-  console.log('\nSite recipe story character align');
-  ok(m.inlineTop === (m.expectedTop + 'px'), 'character top matches body offset + 16px');
+  console.log('\nSite recipe story character dock');
+  ok(m.dockedInKicker, 'character is moved into the kicker row');
   ok(!m.overlapHeadline, 'character does not overlap the headline');
   ok(m.charBottom <= m.headlineTop + 2, 'character ends at or above the headline');
-  ok(m.charInKickerRow, 'character sits in the kicker row');
+  ok(m.charAboveHeadline, 'character sits above the headline');
 
   if (failed) process.exit(1);
   console.log('\nAll checks passed. Screenshot:', shot);
