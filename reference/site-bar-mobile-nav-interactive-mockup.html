@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roots — mobile nav (interactive · hamburger + fade)</title>
+<style>
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --lime:#CCD900;
+    --paper:#fff; --line:rgba(0,0,0,.08);
+    --f-bear:'Bear Serif',Georgia,serif;
+    --f-toni:'Toni Grotesk',sans-serif;
+    --f-aleo:'Aleo',Georgia,serif;
+    --nav-fade:.28s;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:var(--f-aleo);background:#e8e0d8;color:var(--ink);min-height:100vh;}
+  .hint{max-width:520px;margin:0 auto;padding:20px 16px 8px;font-size:14px;line-height:1.5;color:#4a4a44;text-align:center;}
+  .hint b{font-family:var(--f-bear);font-size:17px;display:block;margin-bottom:6px;color:var(--ink);}
+  .phone-wrap{max-width:420px;margin:0 auto;padding:8px 16px 40px;}
+  .phone{
+    border-radius:28px;overflow:hidden;border:2px solid var(--ink);background:var(--oat);
+    box-shadow:0 16px 40px rgba(0,0,0,.15);position:relative;min-height:640px;
+  }
+  .site-bar{background:var(--paper);border-bottom:1px solid var(--line);padding:12px 16px;position:relative;z-index:2;}
+  .bar-in{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .wordmark img{height:38px;width:auto;display:block;}
+  .bar-nav-open-btn{
+    width:48px;height:48px;border:2px solid var(--ink);border-radius:8px;background:rgba(255,255,255,.92);
+    display:inline-flex;align-items:center;justify-content:center;padding:0;flex:none;cursor:pointer;color:var(--ink);
+    position:relative;
+  }
+  .bar-nav-open-btn svg{position:absolute;width:24px;height:24px;transition:opacity var(--nav-fade) ease,transform var(--nav-fade) ease;}
+  .bar-nav-open-btn .bar-nav-icon-close{opacity:0;transform:scale(0.85);}
+  .bar-nav-open-btn.is-open .bar-nav-icon-open{opacity:0;transform:scale(0.85);}
+  .bar-nav-open-btn.is-open .bar-nav-icon-close{opacity:1;transform:scale(1);}
+  .hero-img{height:200px;background:url('/assets/brand/roots-wordmark.png') center/40% no-repeat,linear-gradient(135deg,#ddd,#c5c5c5);}
+  .hero-copy{padding:16px 18px 20px;font-family:var(--f-bear);font-size:18px;line-height:1.15;}
+  .hero-copy em{font-style:normal;background:var(--lime);padding:0 2px;}
+  .site-mobile-nav{
+    position:absolute;inset:0;z-index:5;background:#fff;display:flex;flex-direction:column;
+    padding:14px 16px 18px;opacity:0;visibility:hidden;pointer-events:none;
+    transition:opacity var(--nav-fade) ease,visibility var(--nav-fade) ease;
+  }
+  .site-mobile-nav.is-open{opacity:1;visibility:visible;pointer-events:auto;}
+  .site-mobile-nav-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+  .site-mobile-nav-kicker{font-family:var(--f-toni);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--forest);}
+  .site-mobile-nav-links{list-style:none;flex:1;overflow:auto;}
+  .site-mobile-nav-links a{
+    display:flex;align-items:center;min-height:48px;font-family:var(--f-bear);font-size:21px;
+    text-decoration:none;color:var(--ink);padding:12px 0;border-bottom:2px solid var(--line);
+  }
+  .menu-row{
+    display:flex;align-items:center;justify-content:center;min-height:52px;margin-top:12px;
+    font-family:var(--f-toni);font-weight:700;font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+    background:var(--forest);color:#fff;border:0;border-radius:999px;width:100%;
+  }
+  @media (prefers-reduced-motion:reduce){
+    .site-mobile-nav,.bar-nav-open-btn svg{transition:none;}
+  }
+</style>
+</head>
+<body>
+<p class="hint"><b>Tap the button on the phone</b> Closed: three lines only. Open: the same button shows an × and the menu fades in. Tap × or a link to fade out.</p>
+<div class="phone-wrap">
+  <div class="phone" id="demoPhone">
+    <header class="site-bar">
+      <div class="bar-in">
+        <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+        <button type="button" class="bar-nav-open-btn" id="demoBtn" aria-expanded="false" aria-label="Open menu">
+          <svg class="bar-nav-icon-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          <svg class="bar-nav-icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+    </header>
+    <div class="hero-img" aria-hidden="true"></div>
+    <p class="hero-copy">Landed in Guangzhou? <em>Fresh food, sorted.</em></p>
+    <div class="site-mobile-nav" id="demoNav" aria-hidden="true">
+      <div class="site-mobile-nav-top"><span class="site-mobile-nav-kicker">Jump to</span></div>
+      <ul class="site-mobile-nav-links">
+        <li><a href="#" data-close>New to China</a></li>
+        <li><a href="#" data-close>Our products</a></li>
+        <li><a href="#" data-close>Our location</a></li>
+        <li><a href="#" data-close>Social</a></li>
+        <li><a href="#" data-close>Our story</a></li>
+        <li><a href="#" data-close>Canton Fair</a></li>
+      </ul>
+      <button type="button" class="menu-row" data-close>Menu</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  const btn=document.getElementById('demoBtn');
+  const nav=document.getElementById('demoNav');
+  function setOpen(open){
+    btn.classList.toggle('is-open',open);
+    nav.classList.toggle('is-open',open);
+    btn.setAttribute('aria-expanded',open?'true':'false');
+    btn.setAttribute('aria-label',open?'Close menu':'Open menu');
+    nav.setAttribute('aria-hidden',open?'false':'true');
+  }
+  btn.addEventListener('click',()=>setOpen(!btn.classList.contains('is-open')));
+  nav.querySelectorAll('[data-close]').forEach(el=>{
+    el.addEventListener('click',ev=>{ ev.preventDefault(); setOpen(false); });
+  });
+})();
+</script>
+</body>
+</html>

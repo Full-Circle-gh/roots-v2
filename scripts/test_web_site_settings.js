@@ -299,6 +299,9 @@ section('12 · phone hamburger nav (§503 rule 55 · option C)');
 yes(/id="barNavOpenBtn"/.test(SITE) && /id="siteMobileNav"/.test(SITE) && /Jump to/.test(SITE)
   && /function mountMobileNav\(/.test(SITE) && /function openMobileNav\(/.test(SITE),
   'a phone opens a full-screen panel with the same bar links and Menu');
+yes(/bar-nav-open-btn\.is-open/.test(SITE) && /site-mobile-nav\.is-open/.test(SITE)
+  && /transition:opacity/.test(SITE),
+  'the hamburger swaps to an × and the panel fades in and out');
 yes(/header\.site-bar \.bar-menu-btn\{display:none/.test(SITE),
   'the forest Menu pill is not on the phone bar');
 const BAR_MOCK = read('reference/site-bar-section-links-mockup.html');
