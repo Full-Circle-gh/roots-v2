@@ -200,6 +200,12 @@ yes(/body \.shop-blocks \.sb-char-left,body \.shop-blocks \.sb-char-right\{right
   'on a phone every character sits on the right, including one stored on the left');
 yes(/\.sb-steps-kicker,\.sb-cl-kicker,\.sb-menu-kicker,\.sb-st-kicker,\.sb-rcp-kicker,\.sb-grid-block \.sb-kicker/.test(SITE) && /min-height:80px;padding-right:112px/.test(SITE),
   'the small label shares the character\'s row, so the title starts under it');
+yes(!/sb-fact-item:first-child\{padding-right:112px\}/.test(SITE),
+  'the promise band does not shift the first fact for the character');
+yes(/data-block-type="fact_band"\]:has\(> \.sb-char\) \.sb-fact\{padding-top:96px\}/.test(SITE),
+  'the promise band keeps the character in a top band above the facts');
+yes(/data-block-type="fact_band"\] \.sb-fact-item\{text-align:center\}/.test(SITE),
+  'every promise-band fact is centered on a phone');
 yes(!/padding-right:84px/.test(SITE),
   'the title is not kept narrow beside the drawing');
 yes(/if\(STAGE_MODE\) return layout;/.test(SITE),
