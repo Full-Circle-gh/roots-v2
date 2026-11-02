@@ -194,24 +194,14 @@ yes(/\.shop-blocks \.sb-fact-row\{grid-template-columns:1fr/.test(SITE),
   'the promise band stacks in one column');
 yes(/\.shop-blocks \.sb-hero-split\{grid-template-columns:1fr/.test(SITE),
   'a split hero stacks, photo then words');
-yes(/height:72px/.test(SITE) && /PHONE_CAST=\['skater','onion','radishes','broccoli','flex','peas','mushroom'\]/.test(SITE),
-  'a section with no character shows the next of the white-line cast, 72px');
-yes(/body \.shop-blocks \.sb-char-left,body \.shop-blocks \.sb-char-right\{right:12px;left:auto;?\}/.test(SITE),
-  'on a phone every character sits on the right, including one stored on the left');
-yes(/\.sb-steps-kicker,\.sb-cl-kicker,\.sb-menu-kicker,\.sb-st-kicker,\.sb-rcp-kicker,\.sb-grid-block \.sb-kicker/.test(SITE) && /min-height:80px;padding-right:112px/.test(SITE),
-  'the small label shares the character\'s row, so the title starts under it');
-yes(!/sb-fact-item:first-child\{padding-right:112px\}/.test(SITE),
-  'the promise band does not shift the first fact for the character');
-yes(/data-block-type="fact_band"\]:has\(> \.sb-char\) \.sb-fact\{padding-top:96px\}/.test(SITE),
-  'the promise band keeps the character in a top band above the facts');
-yes(/data-block-type="fact_band"\] \.sb-fact-item\{text-align:center\}/.test(SITE),
-  'every promise-band fact is centered on a phone');
-yes(!/padding-right:84px/.test(SITE),
-  'the title is not kept narrow beside the drawing');
-yes(/if\(STAGE_MODE\) return layout;/.test(SITE),
-  'the editor\'s stage does not invent a character');
+yes(/function withoutSiteIp\(layout\)/.test(SITE) && /delete next\.character/.test(SITE),
+  'the live brand site strips IP characters before render');
+yes(/if\(STAGE_MODE\|\|!Array\.isArray\(layout\)\) return layout;/.test(SITE),
+  'the editor stage keeps a block\'s character pick for preview');
+yes(/body:not\(\.cms-stage\) \.shop-blocks \.sb-char\{display:none/.test(SITE),
+  'the public brand site hides any stray IP character art');
 yes(/function dockRecipeStoryCharacters\(/.test(SITE) && /kicker\.appendChild\(ch\)/.test(SITE),
-  'a story character is docked into the kicker row on a phone');
+  'a story character is docked into the kicker row on the editor stage phone preview');
 yes(/recipe_story.*\.sb-rcp-img[\s\S]{0,120}aspect-ratio:auto/.test(SITE),
   'a story photo keeps its own shape on a phone');
 yes(!/font-size:17px/.test(read('public/shop/blocks.css').slice(0, 200)) && /--u: calc\(100vw \/ 750\)/.test(read('public/shop/blocks.css')),
@@ -273,12 +263,12 @@ yes(/website_hero_fresh_food_sorted_v1/.test(read('database.js')),
 
 
 // ─────────────────────────────────────────────────────────────────────────
-section('9 · no IP characters on a computer (§503 rule 49)');
+section('9 · no IP characters on the brand site (§503 rule 49)');
 
-yes(/No IP characters on a computer/.test(SITE) && /body \.shop-blocks \.sb-char\{display:none;?\}/.test(SITE),
-  'on a computer the brand site hides the IP characters');
-yes(/Every character in the top right/.test(SITE) && /@media \(max-width:767px\)/.test(SITE) && /height:72px;width:auto;max-width:96px/.test(SITE),
-  'a phone still draws the characters');
+yes(/withoutSiteIp\(ShopBlocks\.forSurface/.test(SITE),
+  'published layout is stripped of IP characters before draw');
+yes(!/PHONE_CAST=/.test(SITE) && !/function withCast\(/.test(SITE),
+  'the white-line auto cast is gone from the brand site');
 
 // ─────────────────────────────────────────────────────────────────────────
 section('10 · QR menu in a phone frame on a computer (§503 rule 51)');
