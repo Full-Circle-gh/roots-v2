@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.619
+# Tacet shared-core consolidation — decisions record, v4.620
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,6 +23,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 2026-11-02 · v4.619 — **§503 AMENDED · OUR PRODUCTS STARTS AT THE PLATTERS — ASH.** Ash cancelled a separate Ramada link and said *"our products" will start from the platters section*, then *"deploy live"*. The **Our products** bar link, on the computer bar and in the phone list, scrolls to the menu showcase whose title or id names platters. Toasts, salads, wraps, drinks and the take-home grid follow on the page. If that showcase is missing, the link still lands on the product grid. The 22px size from v4.618 stands. No new words. No change to `.gitignore` or CI.
+
+2026-11-02 · v4.620 — **§503 AMENDED · THE COMPUTER BAR LINKS USE MOCKUP OPTION B — ASH.** Ash picked option B from `reference/site-bar-link-font-options-mockup.html` (*"option b build"*). The six section links on `public/site.html` are Toni Grotesk 500 at 21px with `.02em` letter-spacing (replacing 22px bold). Menu stays the forest pill. Phone jump-list unchanged. No new words. No change to `.gitignore` or CI.
 
 2026-11-02 · v4.618 — **§503 AMENDED · THE COMPUTER BAR LINKS ARE 22px — ASH.** Ash, on the live sticky bar: *"font too small"*. The six section links on `public/site.html` were 14px Toni. A same-day bump had enlarged `.bar-nav` (the unused main nav) and left `.bar-links` as they were. They are 22px Toni Grotesk 700. Phone jump-list stays Bear 22px. No new words. No change to `.gitignore` or CI.
 
@@ -33707,7 +33709,7 @@ Ash: *"pc - top bar should be sticky and also menu where a user can click on a l
 
 53. **Withdrawn the same day.** A list of every section under Menu is not the bar. Ash: the list is too long, and Menu is the button that opens the Ramada menu. The mockup was `reference/site-bar-section-links-mockup.html`.
 
-54. **On a computer the bar carries six links, and Menu stays Ramada.** From 768px up the brand site draws, in this order: **New to China** (the steps block), **Our products** (the platters showcase — toasts, salads, wraps, drinks and the take-home grid follow as you scroll; if there is no platters showcase, the product grid), **Our location** (the store block), **Social** (the contact block), **Our story** (the story block), **Canton Fair** (the banner whose headline names the fair). A click scrolls that block so its top sits just under the bar. The links are 22px Toni Grotesk 700. **Menu** is still the forest pill; it opens the Ramada QR menu, in the phone frame on a computer (rule 51). The labels are fixed English (rule 32). The other lobby showcases are not their own bar links. No new settings.
+54. **On a computer the bar carries six links, and Menu stays Ramada.** From 768px up the brand site draws, in this order: **New to China** (the steps block), **Our products** (the platters showcase — toasts, salads, wraps, drinks and the take-home grid follow as you scroll; if there is no platters showcase, the product grid), **Our location** (the store block), **Social** (the contact block), **Our story** (the story block), **Canton Fair** (the banner whose headline names the fair). A click scrolls that block so its top sits just under the bar. The links are Toni Grotesk 500 at 21px with a little letter-spacing (mockup option B). **Menu** is still the forest pill; it opens the Ramada QR menu, in the phone frame on a computer (rule 51). The labels are fixed English (rule 32). The other lobby showcases are not their own bar links. No new settings.
 
 55. **On a phone the bar carries a hamburger, and the same six links open full screen.** Ash chose option C (`reference/site-bar-mobile-nav-option-c-only.html`) and asked to deploy live. Below 768px the bar is wordmark and a three-line button (not the forest Menu pill on the bar). Tap opens a full-screen white panel headed **Jump to**, listing the same six section links as the computer bar in Bear type, then **Menu** for the Ramada QR menu. A section tap scrolls and closes the panel; Menu follows the link on a phone (rule 51). The hamburger becomes an × while the panel is open. One composed string (vocabulary v1.375). No new settings.
 
