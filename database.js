@@ -8752,6 +8752,47 @@ try {
 } catch (e) { console.error('[migration ramada_banner_aspect_restore_v1]', e); }
 
 
+// ── One-off: brand website hero — all-day food, not lunch only ───────────────
+//
+// The Yuexiu / brand site hero read "Lunch is sorted." Roots serves breakfast
+// through dinner; Ash locked the English line as "Fresh food, sorted."
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('website_hero_fresh_food_sorted_v1');
+  if (!ran) {
+    const patchHeadlineEn = (s) => {
+      if (typeof s !== 'string' || !/Lunch is sorted/i.test(s)) return s;
+      return s.replace(/Lunch is sorted\.?/gi, 'Fresh food, sorted.');
+    };
+    db.transaction(() => {
+      let total = 0;
+      for (const key of ['website.layout', 'cms.draft.website_layout']) {
+        const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+        if (!row) continue;
+        let layout;
+        try { layout = JSON.parse(row.value_json); } catch { continue; }
+        if (!Array.isArray(layout)) continue;
+        let changed = 0;
+        for (const b of layout) {
+          if (!b || typeof b.headline_en !== 'string') continue;
+          const next = patchHeadlineEn(b.headline_en);
+          if (next === b.headline_en) continue;
+          b.headline_en = next;
+          changed++;
+        }
+        if (!changed) continue;
+        db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?').run(JSON.stringify(layout), key);
+        console.log('[migration] website_hero_fresh_food_sorted_v1: ' + key + ' patched ' + changed + ' headline(s)');
+        total += changed;
+      }
+      if (!total) {
+        console.log('[migration] website_hero_fresh_food_sorted_v1: no "Lunch is sorted" headline found');
+      }
+      db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('website_hero_fresh_food_sorted_v1');
+    })();
+  }
+} catch (e) { console.error('[migration website_hero_fresh_food_sorted_v1]', e); }
+
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
