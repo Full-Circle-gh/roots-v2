@@ -75,6 +75,11 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+  // CMS headline fields may carry \n for an intentional line break (split hero).
+  function htmlWithLineBreaks(s) {
+    if (s == null) return '';
+    return escapeHtml(String(s)).replace(/\n/g, '<br>');
+  }
   // Lime highlighter pen — wrap marked runs in subtitle/body copy with
   // <<PEN>>…<</PEN>> (editable in CMS; not HTML, so escapeHtml stays safe).
   var PEN_OPEN = '<<PEN>>', PEN_CLOSE = '<</PEN>>';
@@ -223,7 +228,7 @@
       return '<div class="sb-hero sb-hero-split">' +
         '<div class="sb-split-img">' + media() + '</div>' +
         '<div class="sb-split-panel" style="background:' + attr(panelBg) + ';color:' + attr(panelFg) + '">' +
-        (headline ? '<div class="sb-headline">' + escapeHtml(headline) + '</div>' : '') +
+        (headline ? '<div class="sb-headline">' + htmlWithLineBreaks(headline) + '</div>' : '') +
         (subtitle ? '<div class="sb-subtitle">' + htmlWithPenMarks(subtitle) + '</div>' : '') +
         ctaStack('') +
         '</div></div>';
