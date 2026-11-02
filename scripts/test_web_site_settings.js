@@ -292,8 +292,9 @@ yes(/function openSiteBarMenu\(url,ev\)/.test(SITE) && /siteMenuDesktop\(\)\) op
   'a computer opens the bar Menu in the phone frame; a phone follows the link');
 yes(/overflow-x:clip/.test(SITE) && /id="barLinks"/.test(SITE) && /SITE_BAR_LINKS/.test(SITE) && /function mountBarLinks\(/.test(SITE) && !/id="barMenuPanel"/.test(SITE),
   'on a computer the bar stays put and carries six section links beside Menu');
-yes(/\.bar-links\{[^}]*font-size:22px/.test(SITE),
-  'the computer bar section links are 22px (not the unused .bar-nav)');
+yes(/\.bar-links\{[^}]*font-weight:500/.test(SITE) && /\.bar-links\{[^}]*font-size:21px/.test(SITE)
+  && /\.bar-links\{[^}]*letter-spacing:\.02em/.test(SITE),
+  'the computer bar section links are option B (Toni 21px medium + tracking)');
 yes(/label:'Our products', match:b=>b\.type==='menu_showcase'&&\/platter\/i/.test(SITE)
   && /fallback:b=>b\.type==='product_grid'/.test(SITE),
   'Our products starts at the platters showcase, and the product grid is the fallback');
