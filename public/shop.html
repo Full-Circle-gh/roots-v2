@@ -766,7 +766,14 @@
     .ab-founder-name{font-family:var(--bf-bear);font-size:24px;line-height:.95;color:var(--ink);}
     .ab-founder-title{font-family:var(--bf-toni);font-size:11px;letter-spacing:.18em;color:var(--olive);margin-top:5px;text-transform:uppercase;}
     .ab-founder-quote{font-family:var(--f-aleo);font-size:14px;line-height:1.4;color:var(--forest);font-style:italic;margin-top:9px;white-space:pre-line;}
-    .ab-founder-quote.clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;overflow:hidden;}
+    .ab-founder-quote.clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;}
+    .story-hero{width:100%;height:240px;overflow:hidden;background:var(--oat);}
+    .story-hero img{width:100%;height:100%;object-fit:cover;object-position:42% 46%;display:block;}
+    .story-body{padding:28px 26px 36px;}
+    .story-title{font-family:var(--bf-bear);font-size:40px;line-height:.95;color:var(--ink);margin-top:8px;}
+    .story-meta{font-family:var(--bf-toni);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--olive);margin-top:10px;}
+    .story-para{font-family:var(--f-aleo);font-size:16px;line-height:1.6;color:var(--forest);white-space:pre-line;margin-top:16px;}
+    .story-sign{font-family:var(--bf-bear);font-size:28px;line-height:1.1;color:var(--forest);margin-top:28px;}
     .ab-founder-link{display:inline-block;margin-top:9px;font-family:var(--bf-toni);font-size:11px;letter-spacing:.15em;color:var(--ink);border-bottom:2px solid var(--ink);padding-bottom:2px;cursor:pointer;}
     .ab-promise-title{font-family:var(--bf-bear);font-size:34px;line-height:1;margin-top:5px;color:var(--ink);}
     .ab-promise-title .hl{background:var(--lime);padding:0 6px;}
@@ -4677,7 +4684,48 @@ async function renderVoting(){
    The copy itself is not lost: scripts/seed_about_account1.js writes it into
    account #1's own storefront_config, where it should always have been — their
    story, saved by them, editable from Settings like any other shop's. */
-let aboutExpanded=false;
+function storyCardFromHome(){
+  const layout=(state.config&&state.config.home&&state.config.home.layout)||[];
+  const list=Array.isArray(layout)?layout:[];
+  return list.find(b=>b&&b.type==='recipe_story'&&(b.cta_target==='about'||b.cta_target==='story'))||null;
+}
+async function renderStory(){
+  const v=$('#view'),cn=state.lang==='cn';
+  document.title=(cn?'我们的故事':'Our story')+' · '+state.brand;
+  const stored=(state.config&&state.config.about&&state.config.about.content)||null;
+  const c=(stored&&typeof stored==='object')?stored:{};
+  const card=storyCardFromHome();
+  const quote=pick(c.founder_quote_en,c.founder_quote_cn);
+  const cardBody=card?pick(card.body_en,card.body_cn):'';
+  const essay=quote||cardBody;
+  const name=pick(c.founder_name_en,c.founder_name_cn);
+  const role=pick(c.founder_title_en,c.founder_title_cn);
+  const headline=(card&&pick(card.headline_en,card.headline_cn))||name||(cn?'我们的故事':'Our story');
+  const kicker=(card&&pick(card.kicker_en,card.kicker_cn))||pick(c.founder_kicker_en,c.founder_kicker_cn);
+  const minutes=card&&Number(card.read_time_minutes);
+  const bits=[];
+  if(name)bits.push(name);
+  if(role)bits.push(role);
+  if(minutes)bits.push(minutes+(cn?' 分钟':' min'));
+  const byline=bits.length?bits.join(' · '):(card?pick(card.byline_en,card.byline_cn):'');
+  const image=String((card&&card.image_url)||c.founder_photo_url||c.hero_image_url||'').trim();
+  const outro=pick(c.outro_en,c.outro_cn);
+  const cta=pick(c.cta_en,c.cta_cn)||(cn?'去逛逛':'SHOP NOW');
+  const paras=String(essay||'').split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
+  const back=`<button class="sp-back" id="storyBack" aria-label="${cn?'返回':'Back'}"><svg class="sp-back-ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>`;
+  v.innerHTML=`<div class="sp ab-page">${back}
+    ${image?`<div class="story-hero"><img src="${escAttr(image)}" alt=""></div>`:''}
+    <div class="story-body">
+      ${kicker?`<div class="ab-kicker">${esc(kicker)}</div>`:''}
+      <div class="story-title">${esc(headline)}</div>
+      ${byline?`<div class="story-meta">${esc(byline)}</div>`:''}
+      ${paras.map(p=>`<div class="story-para">${esc(p)}</div>`).join('')}
+      ${outro?`<div class="story-sign">${esc(outro)}</div>`:''}
+      <div class="ab-outro-cta" data-go="#/shop">${esc(cta)} →</div>
+    </div></div>`;
+  const backBtn=$('#storyBack');
+  if(backBtn)backBtn.addEventListener('click',()=>{ if(history.length>1)history.back(); else location.hash='#/about'; });
+}
 async function renderAbout(){
   const v=$('#view'),cn=state.lang==='cn';
   document.title=(cn?'关于':'About')+' · '+state.brand;
@@ -4740,8 +4788,8 @@ async function renderAbout(){
         <div class="ab-founder-photo">${founderPhoto?`<img src="${escAttr(founderPhoto)}" alt="">`:`<div class="ab-founder-empty">${cn?'照片':'PHOTO'}</div>`}</div>
         <div class="ab-founder-name">${esc(pickC('founder_name_en','founder_name_cn'))}</div>
         <div class="ab-founder-title">${esc(pickC('founder_title_en','founder_title_cn'))}</div>
-        ${founderQuote?`<div class="ab-founder-quote ${aboutExpanded?'':'clamp'}">${esc(founderQuote)}</div>
-        <div class="ab-founder-link" id="abStory">${aboutExpanded?(cn?'收起 ↑':'SHOW LESS ↑'):(cn?'阅读完整故事 →':'READ THE FULL STORY →')}</div>`:''}
+        ${founderQuote?`<div class="ab-founder-quote clamp">${esc(founderQuote)}</div>
+        <div class="ab-founder-link" data-go="#/story">${cn?'阅读完整故事 →':'READ THE FULL STORY →'}</div>`:''}
       </div>
     </div>`:''}
     ${(inItems.length||outItems.length)?`<div class="ab-sec">
@@ -4756,7 +4804,6 @@ async function renderAbout(){
       ${cn?`<div class="ab-outro-cn">${esc(pickC('outro_en','outro_cn'))}</div>`:`<div class="ab-outro-title">${esc(pickC('outro_en','outro_cn'))}</div>`}
       <div class="ab-outro-cta" data-go="#/shop">${esc(pickC('cta_en','cta_cn'))||(cn?'去逛逛':'SHOP NOW')} →</div>
     </div>`:''}</div>`;
-  const st=$('#abStory');if(st)st.addEventListener('click',()=>{aboutExpanded=!aboutExpanded;renderAbout();});
 }
 
 async function renderFaq(){
@@ -5073,6 +5120,7 @@ async function routeDispatch(){
     if(seg[0]==='affiliate')       return renderAffiliate();
     if(seg[0]==='notifications')   return renderNotifications();
     if(seg[0]==='voting')          return renderVoting();
+    if(seg[0]==='story')           return renderStory();
     if(seg[0]==='about')           return renderAbout();
     if(seg[0]==='faq')             return renderFaq();
     if(seg[0]==='feedback'&&seg[1])return renderFeedbackThread(seg[1]);
@@ -5181,7 +5229,9 @@ async function renderHome(){
   ShopBlocks.stopTimers();
   ShopBlocks.setContext({ lang:state.lang, products:state.homeProducts||[], categories:state.cats, flashSales:state.flash||[], config:homeConfig });
   const view=$('#view');
-  view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layout)+'</div>';
+  const aboutContent=state.config&&state.config.about&&state.config.about.content;
+  const shown=ShopBlocks.withFrontFacts?ShopBlocks.withFrontFacts(layout,aboutContent):layout;
+  view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(shown)+'</div>';
   ShopBlocks.startTimers(view);
   stageHighlight(true);
 }
@@ -6570,7 +6620,9 @@ function ctaRoute(t){
   if(t.indexOf('copy:')===0){ const code=t.slice(5);
     try{ navigator.clipboard.writeText(code); }catch{}
     toast((state.lang==='cn'?'已复制 ':'Copied ')+code); return; }
-  // cart / wallet / coupons / voting / wecom / notifications / order:* → later phases
+  if(t==='about'){ location.hash='#/about'; return; }
+  if(t==='story'){ location.hash='#/story'; return; }
+  // cart / wallet / coupons / wecom / notifications / order:* → later phases
   toast(state.lang==='cn'?'此功能即将上线 🌱':'That feature is coming soon 🌱');
 }
 

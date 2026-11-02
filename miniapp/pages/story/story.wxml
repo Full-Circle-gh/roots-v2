@@ -1,0 +1,11 @@
+<view class="page">
+  <image wx:if="{{image}}" class="hero" src="{{image}}" mode="aspectFill"/>
+  <view class="body">
+    <view wx:if="{{kicker}}" class="kicker f-toni">{{kicker}}</view>
+    <view class="title f-bear">{{headline}}</view>
+    <view wx:if="{{byline}}" class="meta f-toni">{{byline}}</view>
+    <view wx:for="{{paragraphs}}" wx:key="*this" class="para f-aleo">{{item}}</view>
+    <view wx:if="{{outro}}" class="signoff f-bear">{{outro}}</view>
+    <view class="cta f-gothic" bindtap="goShop">{{cta}} →</view>
+  </view>
+</view>

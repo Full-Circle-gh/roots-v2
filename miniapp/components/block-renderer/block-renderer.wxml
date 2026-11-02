@@ -1191,7 +1191,14 @@
   <view wx:if="{{kitchenCard.ctaLabel}}" class="kit-cta">{{kitchenCard.ctaLabel}} →</view>
 </view>
 
-<view wx:elif="{{type === 'recipe_story' && recipe}}" class="recipe-blk recipe-{{recipe.imageView}} corner-{{recipeCorner}}" style="background:{{bg}};color:{{fg}}">
+<view wx:elif="{{type === 'about_stats' && facts.length}}" class="facts">
+  <view wx:for="{{facts}}" wx:key="key" class="fact">
+    <view class="fact-v f-bear">{{item.value}}</view>
+    <view class="fact-l f-toni">{{item.label}}</view>
+  </view>
+</view>
+
+<view wx:elif="{{type === 'recipe_story' && recipe}}" class="recipe-blk recipe-{{recipe.imageView}} corner-{{recipeCorner}}" style="background:{{bg}};color:{{fg}}" bindtap="onRecipeCardTap">
   <view class="rcp-img">
     <image wx:if="{{recipe.imageUrl}}" src="{{recipe.imageUrl}}" mode="aspectFill" class="img-full"/>
     <view wx:else class="rcp-img-placeholder">No image</view>
@@ -1204,8 +1211,11 @@
       <text wx:if="{{recipe.byline && recipe.readTime}}"> · </text>
       <text wx:if="{{recipe.readTime}}">{{recipe.readTime}}</text>
     </view>
-    <view wx:for="{{recipe.paragraphs}}" wx:key="*this" class="rcp-para">{{item}}</view>
-    <view wx:if="{{recipe.linkedProduct}}" class="rcp-card" data-id="{{recipe.linkedProduct.id}}" bindtap="onProductTap">
+    <view wx:if="{{recipe.tease}}" class="rcp-para rcp-tease">{{recipe.teaseText}}</view>
+    <block wx:else>
+      <view wx:for="{{recipe.paragraphs}}" wx:key="*this" class="rcp-para">{{item}}</view>
+    </block>
+    <view wx:if="{{recipe.linkedProduct}}" class="rcp-card" data-id="{{recipe.linkedProduct.id}}" catchtap="onProductTap">
       <view class="rcp-card-img">
         <image wx:if="{{recipe.linkedProduct.image}}" src="{{recipe.linkedProduct.image}}" mode="aspectFill" class="img-full"/>
       </view>
@@ -1215,7 +1225,8 @@
         <view wx:if="{{recipe.linkedProduct.price}}" class="rcp-card-price">{{recipe.linkedProduct.price}} →</view>
       </view>
     </view>
-    <view wx:if="{{recipe.ctaLabel}}" class="rcp-cta" style="background:{{recipe.btnBg}};color:{{recipe.btnFg}}" bindtap="onRecipeCtaTap">{{recipe.ctaLabel}} →</view>
+    <view wx:if="{{recipe.ctaLabel && recipe.tease}}" class="rcp-cta" style="background:{{recipe.btnBg}};color:{{recipe.btnFg}}">{{recipe.ctaLabel}} →</view>
+    <view wx:elif="{{recipe.ctaLabel}}" class="rcp-cta" style="background:{{recipe.btnBg}};color:{{recipe.btnFg}}" catchtap="onRecipeCtaTap">{{recipe.ctaLabel}} →</view>
   </view>
 </view>
 

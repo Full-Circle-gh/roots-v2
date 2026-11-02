@@ -28,6 +28,7 @@
     "pages/onboarding/onboarding",
     "pages/profile/profile",
     "pages/about/about",
+    "pages/story/story",
     "pages/faq/faq",
     "pages/voting/voting",
     "pages/favorites/favorites",

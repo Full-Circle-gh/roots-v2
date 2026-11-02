@@ -1,0 +1,53 @@
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding-bottom: 48rpx;
+}
+.hero {
+  width: 100%;
+  height: 520rpx;
+  display: block;
+  background: var(--oat);
+}
+.body { padding: 36rpx 52rpx 0; }
+.kicker {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--olive);
+}
+.title {
+  font-size: calc(64rpx * var(--font-scale));
+  line-height: 0.95;
+  margin-top: 12rpx;
+  color: var(--ink);
+}
+.meta {
+  margin-top: 16rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--olive);
+}
+.para {
+  margin-top: 28rpx;
+  font-size: calc(30rpx * var(--font-scale));
+  line-height: 1.55;
+  color: var(--forest);
+  white-space: pre-line;
+}
+.signoff {
+  margin-top: 56rpx;
+  font-size: calc(56rpx * var(--font-scale));
+  line-height: 1;
+  color: var(--forest);
+}
+.cta {
+  margin-top: 36rpx;
+  background: var(--ink);
+  color: var(--lime);
+  text-align: center;
+  padding: 28rpx 0;
+  font-size: calc(32rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+}

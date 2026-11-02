@@ -34,7 +34,7 @@ const PROMO_TUCK_ROOM_PX = 320;
 // the editor's link picker offers and Home routes (pages/home/home.js
 // routeTarget); pages that are plain navigateTo destinations are listed here.
 const PROMO_NAV_PAGES = [
-  'membership', 'about', 'coupons', 'wallet', 'voting', 'faq', 'affiliate',
+  'membership', 'about', 'story', 'coupons', 'wallet', 'voting', 'faq', 'affiliate',
   'topup', 'favorites', 'orders', 'leaderboard', 'notifications',
 ];
 

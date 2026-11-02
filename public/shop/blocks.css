@@ -375,6 +375,17 @@
 .shop-blocks .sb-rcp-headline { font-family: var(--f-bear); font-size: calc(56 * var(--u) * var(--font-scale)); line-height: 1.0; padding-top: calc(6 * var(--u)); margin-top: calc(10 * var(--u)); }
 .shop-blocks .sb-rcp-meta { margin-top: calc(8 * var(--u)); font-family: var(--f-toni); font-size: calc(20 * var(--u) * var(--font-scale)); letter-spacing: 0.12em; color: var(--olive); text-transform: uppercase; }
 .shop-blocks .sb-rcp-para { margin-top: calc(18 * var(--u)); font-family: var(--f-aleo); font-size: calc(28 * var(--u) * var(--font-scale)); line-height: 1.55; white-space: pre-line; }
+.shop-blocks .sb-rcp-short { display: none; }
+.shop-blocks .sb-recipe-blk[role="link"] { cursor: pointer; }
+.shop-blocks .sb-facts { margin: calc(24 * var(--u)) 0; background: var(--ink); color: #fff; display: flex; padding: calc(28 * var(--u)) calc(16 * var(--u)); }
+.shop-blocks .sb-fact { flex: 1; padding: 0 calc(12 * var(--u)); min-width: 0; }
+.shop-blocks .sb-fact + .sb-fact { border-left: 1px solid rgba(255,255,255,.18); }
+.shop-blocks .sb-fact-v { font-family: var(--f-bear); font-size: calc(40 * var(--u) * var(--font-scale)); line-height: 1; color: var(--lime); }
+.shop-blocks .sb-fact-l { font-family: var(--f-toni); font-size: calc(18 * var(--u) * var(--font-scale)); letter-spacing: .1em; text-transform: uppercase; opacity: .6; margin-top: calc(8 * var(--u)); }
+@media (max-width: 767px) {
+  .shop-blocks .sb-rcp-paras.tease .sb-rcp-full { display: none; }
+  .shop-blocks .sb-rcp-paras.tease .sb-rcp-short { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+}
 .shop-blocks .sb-rcp-card { margin-top: calc(24 * var(--u)); display: flex; align-items: center; gap: calc(20 * var(--u)); padding: calc(16 * var(--u)); border: calc(2 * var(--u)) solid var(--ink); background: rgba(255,255,255,0.5); }
 .shop-blocks .sb-rcp-card-img { width: calc(140 * var(--u)); height: calc(140 * var(--u)); background: rgba(0,0,0,0.08); flex-shrink: 0; overflow: hidden; }
 .shop-blocks .sb-rcp-card-meta { flex: 1; min-width: 0; }
@@ -926,7 +937,8 @@
 /* ⑤ RECIPE / EDITORIAL — magazine side-by-side (image | text), fixed-px type.
    Markup is image + body siblings, so CSS lays them out as 2 columns. */
 @media (min-width: 768px) {
-  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] {
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"],
+  .shop-blocks .sb-blk-outer[data-block-type="about_stats"] {
     width: 100vw; max-width: 1240px; position: relative; left: 50%; transform: translateX(-50%);
   }
   .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-recipe-blk {
