@@ -245,7 +245,9 @@
     }
     body .shop-blocks .sb-blk-outer:has(.sb-char)[data-block-type="recipe_story"] .sb-rcp-headline{margin-top:0;}
     body .shop-blocks .sb-blk-outer:has(.sb-char) .sb-grid-head{align-items:flex-end;}
-    body .shop-blocks .sb-blk-outer:has(.sb-char) .sb-fact-item:first-child{padding-right:112px;}
+    /* Promise band: the drawing sits in a top band; facts stay centered (§503 r.43). */
+    body .shop-blocks .sb-blk-outer[data-block-type="fact_band"]:has(> .sb-char) .sb-fact{padding-top:96px;}
+    body .shop-blocks .sb-blk-outer[data-block-type="fact_band"] .sb-fact-item{text-align:center;}
   }
   @keyframes site-char-bob{
     0%,100%{transform:rotate(-2deg);}
