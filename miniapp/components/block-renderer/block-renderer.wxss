@@ -3187,7 +3187,7 @@ button.cp-cta::after { border: none; }
   display: flex;
   padding: 28rpx 16rpx;
 }
-.fact { flex: 1; padding: 0 12rpx; min-width: 0; }
+.fact { flex: 1; padding: 0 12rpx; min-width: 0; text-align: center; }
 .fact + .fact { border-left: 1rpx solid rgba(255,255,255,.18); }
 .fact-v {
   font-size: calc(40rpx * var(--font-scale));
@@ -3200,6 +3200,7 @@ button.cp-cta::after { border: none; }
   text-transform: uppercase;
   opacity: .6;
   margin-top: 8rpx;
+  white-space: nowrap;
 }
 .rcp-card {
   margin-top: 24rpx;
