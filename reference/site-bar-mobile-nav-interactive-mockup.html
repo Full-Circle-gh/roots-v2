@@ -57,10 +57,11 @@
     text-decoration:none;color:var(--ink);padding:12px 0;border-bottom:2px solid var(--line);
   }
   .menu-row{
-    display:flex;align-items:center;justify-content:center;min-height:52px;margin-top:12px;
-    font-family:var(--f-toni);font-weight:700;font-size:13px;letter-spacing:.12em;text-transform:uppercase;
-    background:var(--forest);color:#fff;border:0;border-radius:999px;width:100%;
+    display:flex;align-items:center;justify-content:center;gap:10px;min-height:56px;margin-top:12px;padding:14px 20px;
+    font-family:var(--f-toni);font-weight:700;font-size:17px;letter-spacing:.06em;text-transform:uppercase;
+    background:var(--lime);color:var(--ink);border:2px solid var(--ink);border-radius:0;width:100%;cursor:pointer;
   }
+  .menu-row svg{width:22px;height:22px;flex:none;}
   @media (prefers-reduced-motion:reduce){
     .site-mobile-nav,.bar-nav-open-btn svg{transition:none;}
   }
@@ -94,7 +95,7 @@
         <li><a href="#" data-close>Our story</a></li>
         <li><a href="#" data-close>Canton Fair</a></li>
       </ul>
-      <button type="button" class="menu-row" data-close>Menu</button>
+      <button type="button" class="menu-row" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Food menu</button>
     </div>
   </div>
 </div>
