@@ -1802,7 +1802,7 @@
       '<span class="sb-cl-ico">' + CONTACT_ICONS.email + '</span>' +
       '<span class="sb-cl-txt"><span class="sb-cl-name">' + (CN() ? '邮箱' : 'Email') + '</span>' +
       '<span class="sb-cl-sub sb-cl-copy">' + escapeHtml(em) + '</span></span></a>');
-    if (wc || qr) items.push('<div class="sb-cl-item sb-cl-wechat">' +
+    if (wc || qr) items.push('<div class="sb-cl-item sb-cl-wechat' + (qr ? ' sb-cl-wechat--qr' : '') + '">' +
       '<span class="sb-cl-ico">' + CONTACT_ICONS.wechat + '</span>' +
       '<span class="sb-cl-txt"><span class="sb-cl-name">' + (CN() ? '微信' : 'WeChat') + '</span>' +
       (wc ? '<span class="sb-cl-sub sb-cl-copy sb-cl-wechat-id" data-wc-id="' + attr(wc) + '" title="' + (CN() ? '点击复制微信号' : 'Tap to copy WeChat ID') + '">' + escapeHtml(wc) + '</span>' : '') + '</span>' +
