@@ -54,6 +54,13 @@
      same one the mini app's footer shows; the name is the fallback. */
   .wordmark img{height:40px;width:auto;display:block;}
   .foot-in .fm img{height:28px;width:auto;display:block;}
+  .bar-actions{display:flex;align-items:center;gap:16px;margin-left:auto;flex:none;}
+  /* Option A — forest pill (reference/site-bar-menu-button-mockup.html). */
+  .bar-menu-btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 20px;
+    font-family:var(--f-toni);font-weight:700;font-size:13px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;
+    background:var(--forest);color:#fff;border:0;border-radius:999px;-webkit-tap-highlight-color:transparent;}
+  .bar-menu-btn:focus-visible{outline:3px solid var(--lime);outline-offset:2px;}
+  .bar-menu-btn[hidden]{display:none!important;}
   .bar-nav{display:flex;align-items:center;gap:22px;font-size:15px;}
   .bar-nav a{text-decoration:none;}
   .bar-nav a:hover{text-decoration:underline;text-underline-offset:4px;}
@@ -74,6 +81,8 @@
   @media (max-width:767px){
     .bar-in{flex-wrap:wrap;align-items:center;padding:12px 16px;}
     .wordmark img{height:40px;}
+    .bar-actions{gap:12px;}
+    .bar-menu-btn{font-size:13px;padding:10px 18px;}
     .bar-nav{flex-wrap:wrap;gap:4px 16px;font-size:13px;}
     .bar-nav a{
       display:inline-flex;align-items:center;min-height:44px;
@@ -319,9 +328,12 @@
 <header class="site-bar">
   <div class="bar-in">
     <a class="wordmark" id="wordmark" href="/"></a>
-    <nav class="bar-nav" id="barNav" aria-label="Main">
-      <span id="navLinks" style="display:contents"></span>
-    </nav>
+    <div class="bar-actions">
+      <a class="bar-menu-btn" id="barMenuBtn" href="#" hidden>Menu</a>
+      <nav class="bar-nav" id="barNav" aria-label="Main">
+        <span id="navLinks" style="display:contents"></span>
+      </nav>
+    </div>
   </div>
 </header>
 <main id="view"></main>
@@ -419,6 +431,7 @@ function renderChrome(){
   const links=Array.isArray(site.links)?site.links:[];
   for(const l of links){ const a=document.createElement('a'); a.href=l.url; a.target='_blank'; a.rel='noopener'; a.textContent=pick(l.label_en,l.label_cn); row.appendChild(a); }
   row.hidden=!links.length;
+  bindSiteBarMenu();
   // The website's own words first (website.meta, §503 rule 15), then the web
   // shop's — the same order serveSite used to write the page's head.
   const meta=(state.config&&state.config.website&&state.config.website.meta)||{};
@@ -538,6 +551,40 @@ function trySiteMenuCtaClick(ev){
   ev.stopPropagation();
   openSiteMenuPhone(t);
   return true;
+}
+function shopMenuUrlInBlocks(layout){
+  if(!Array.isArray(layout)) return '';
+  for(const b of layout){
+    if(!b||typeof b!=='object') continue;
+    const targets=[];
+    if(b.cta_target) targets.push(b.cta_target);
+    for(const c of (Array.isArray(b.ctas)?b.ctas:[])) if(c&&c.target) targets.push(c.target);
+    for(const t of targets) if(isShopMenuUrl(t)) return t;
+  }
+  return '';
+}
+function siteBarMenuUrl(){
+  const site=siteCfg();
+  if(isShopMenuUrl(site.menu)) return site.menu;
+  for(const it of (Array.isArray(site.nav)?site.nav:[])) if(isShopMenuUrl(it.target)) return it.target;
+  for(const l of (Array.isArray(site.links)?site.links:[])) if(isShopMenuUrl(l.url)) return l.url;
+  const pub=state.config&&state.config.website&&state.config.website.layout;
+  return shopMenuUrlInBlocks(pub)||'';
+}
+function openSiteBarMenu(url,ev){
+  if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+  if(siteMenuDesktop()) openSiteMenuPhone(url);
+  else location.href=url;
+}
+function bindSiteBarMenu(){
+  const btn=$('#barMenuBtn'); if(!btn) return;
+  const url=siteBarMenuUrl();
+  if(!url){ btn.hidden=true; return; }
+  btn.hidden=false;
+  btn.href=url;
+  if(btn.dataset.wired==='1') return;
+  btn.dataset.wired='1';
+  btn.addEventListener('click',ev=>openSiteBarMenu(url,ev));
 }
 
 async function placeShopPins(layout){
@@ -833,6 +880,7 @@ function renderChatButton(layout){
     // Clicks: a block selects itself in the editor; everything else is inert.
     document.addEventListener('click',ev=>{
       if(trySiteMenuCtaClick(ev)) return;
+      if(ev.target.closest('#barMenuBtn')){ const u=siteBarMenuUrl(); if(u) openSiteBarMenu(u,ev); return; }
       const blk=ev.target.closest('.sb-blk-outer');
       if(blk){
         ev.preventDefault(); ev.stopPropagation();
