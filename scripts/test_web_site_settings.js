@@ -284,7 +284,9 @@ yes(/class="bar-menu-btn" id="barMenuBtn"/.test(SITE) && /background:var\(--fore
 yes(/function siteBarMenuUrl\(\)/.test(SITE) && /function bindSiteBarMenu\(\)/.test(SITE),
   'the Menu href is resolved from web.site.menu, nav, footer or layout');
 yes(/function openSiteBarMenu\(url,ev\)/.test(SITE) && /siteMenuDesktop\(\)\) openSiteMenuPhone\(url\)/.test(SITE),
-  'a computer opens the bar Menu in the phone frame; a phone follows the link');
+  'a phone follows the bar Menu link; a block button on a computer still opens the phone frame');
+yes(/overflow-x:clip/.test(SITE) && /function pageSections\(/.test(SITE) && /function goToSection\(/.test(SITE) && /id="barMenuPanel"/.test(SITE),
+  'on a computer the bar stays put and Menu scrolls to the section on this page');
 yes(/menu: webSiteUrl\(r\.menu\)/.test(ROUTE),
   'web.site.menu is cleaned on the way in');
 yes(/web_site_bar_menu_v1/.test(read('database.js')),

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.610
+# Tacet shared-core consolidation — decisions record, v4.611
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-02 · v4.611 — **§503 AMENDED · ON A COMPUTER THE BAR STAYS PUT, AND MENU JUMPS TO THE SECTION — DECIDED BY ASH.** Ash: *"pc - top bar should be sticky and also menu where a user can click on a link and it will direct him exacly where it is on the page"*. The bar was already `position: sticky`. From 768px up the shop block sheet sets `overflow-x: hidden` on `html` and `body`, and a hidden axis forces the other axis to `auto`, so the page scrolled in one box and the bar lived in the other. The bar scrolled away. On the brand site that sideways clip is `overflow-x: clip`, which does not make a scroll box. On a computer, Menu opens the sections of this page (each block's own title, headline, or kicker). A click scrolls that block to sit just under the bar. A phone still opens the QR menu. A block button to the QR menu still opens the phone frame (rule 51). No new words. No change to `.gitignore` or CI.
 
 2026-11-01 · v4.610 — **§503 AMENDED · A FINGER ON THE STORE MAP SCROLLS THE PAGE — DECIDED BY ASH.** Ash, on a phone: *"cant scroll on mobile over the map area"*, circling the Yuexiu map. Rule 39 already said the page scrolls past the map. Turning Amap's drag off does not do that: the map node gets `touch-action: none` and cancels the move, and a layer inside that node cannot undo it. On a touch screen `shieldStoreMap` in `public/site.html` puts a clear layer beside the map node. The page scrolls. A tap that did not move still opens the phone's map app. The editor's stage does not add the layer, and a computer with a mouse still drags the map. No new words. No change to `.gitignore` or CI.
 
@@ -33674,6 +33676,20 @@ Ash: *"i want also a menu like open toast for wraps and salads"*, then *"deploy 
 Ash: the store section on a computer did not look right; *"build it deploy it live"* after the mock-up.
 
 50. **The store visit is one card — map and details together.** Below 768px the map is on top inside a single white card; the English address is a tap bar under the title; a full-width green **Get directions** button and the Apple / Google / Amap links as small underlined text follow. From 768px up the same card is a grid: map on the left, the store name and address beside it, the same button and text links (not three large pills). `mountStoreVisit` in `public/site.html` wraps the engine output; the web shop renderer is unchanged.
+
+### Amended 2026-10-31 — a QR menu link on a computer opens in a phone frame
+
+Ash: *"once clicking ramada menu on pc it should show the menu inside a phone mock up because the menu is not built for pc"*.
+
+51. **On a computer a block button to the QR menu opens in a phone frame.** From 768px up, a button whose target is a shop QR menu (`https://…/s/<code>`) opens that menu in a phone-shaped overlay. A phone still opens it as a page. The menu page allows the brand site to frame it. The link under the frame is "Open full screen".
+
+### Amended 2026-11-02 — the computer bar stays, and Menu jumps down the page
+
+Ash: *"pc - top bar should be sticky and also menu where a user can click on a link and it will direct him exacly where it is on the page"*.
+
+52. **On a computer the top bar stays on screen.** From 768px up `public/shop/blocks.css` sets `overflow-x: hidden` on `html` and `body` so a full-bleed block cannot grow a sideways scrollbar. A hidden axis forces the other axis to `auto`. The page then scrolled in one box and the sticky bar belonged to the other, so the bar left with the scroll. On the brand site only, that rule is overridden with `overflow-x: clip`. Clip still hides the sideways overflow and does not make a scroll box, so `header.site-bar` stays at the top. The web shop is unchanged.
+
+53. **On a computer, Menu is a list of this page.** The button opens the sections already on the website. The label is the block's own title, or its headline, or the part of its kicker before a middle dot. The opening hero is not listed — the wordmark goes there. Spacers, the green slogan line, and the promise band (it has no words of its own) are not listed. A click scrolls that block so its top sits just under the bar. The address bar keeps the section. A phone still follows the QR menu link. A block button whose target is the QR menu still opens the phone frame (rule 51). No new words.
 
 ## §504 — EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS
 
