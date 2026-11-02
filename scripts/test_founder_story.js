@@ -110,6 +110,8 @@ const home = read('miniapp/pages/home/home.js');
 
 yes(site.includes('function showFounderStory()'), 'the Yuexiu website has the essay');
 yes(site.includes('siteStoryScrim') && site.includes('closeSiteStoryPopup'), 'the essay opens in a popup');
+yes(!site.includes('site-story-cta') && !/if\(cta&&menu\)/.test(site),
+  'the essay has no Shop now button');
 yes(site.includes('layoutForSite') && site.includes('ShopBlocks.withFrontFacts'), 'the website draws the facts strip');
 yes(site.includes("t==='story'"), 'the story link opens the essay');
 yes(!shop.includes('function renderStory') && !shop.includes('withFrontFacts'), 'the web shop does not');
