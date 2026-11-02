@@ -799,7 +799,8 @@
     var btnBg = color(b.btn_color || ''), btnFg = b.btn_color ? btnText(b.btn_color) : '';
 
     var img = '<div class="sb-rcp-img">' + (imageUrl ? '<img class="sb-img-full" src="' + attr(imageUrl) + '" alt="">' : '<div class="sb-rcp-img-placeholder">No image</div>') + '</div>';
-    var meta = (byline || readTime) ? '<div class="sb-rcp-meta">' +
+    // The brand website's founder essay drops author and read time (§503).
+    var meta = (!opensStory && (byline || readTime)) ? '<div class="sb-rcp-meta">' +
       (byline ? '<span>' + escapeHtml(byline) + '</span>' : '') +
       (byline && readTime ? '<span> · </span>' : '') +
       (readTime ? '<span>' + escapeHtml(readTime) + '</span>' : '') + '</div>' : '';

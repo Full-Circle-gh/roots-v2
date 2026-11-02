@@ -295,6 +295,12 @@
   body .shop-blocks .sb-blk-outer[data-block-type="hero_banner"]:not(:first-child){
     margin-top:32px;
   }
+  /* Same band after a full-bleed poster (spread hero ? product grid). Without
+     it the kicker sat on the banner edge on desktop; phone grid padding alone
+     was half the rhythm of menu ? hero. */
+  body .shop-blocks .sb-blk-outer[data-block-type="hero_banner"]:not(:last-child){
+    margin-bottom:32px;
+  }
 
   /* One visit card: map + details together (§503 rule 50). */
   body .shop-blocks .sb-st-visit{background:#fff;border-radius:22px;overflow:hidden;}
@@ -426,6 +432,7 @@
     .bar-links a:hover{border-bottom-color:var(--ink);}
     .bar-links a.on{color:var(--forest);border-bottom-color:var(--forest);}
     body .shop-blocks .sb-blk-outer{scroll-margin-top:calc(var(--site-bar-h, 80px) + 12px);}
+    body .shop-blocks .sb-grid-block{padding:32px calc(44 * var(--u)) 36px;}
   }
   @media (max-width:767px){
     .bar-links{display:none!important;}
@@ -717,7 +724,7 @@ const SITE_BAR_LINKS=[
   {label:'Our products', match:b=>b.type==='menu_showcase'&&/platter/i.test(String(pick(b.title_en,b.title_cn)||b.id||'')), fallback:b=>b.type==='product_grid'},
   {label:'Our location', match:b=>b.type==='store_info'},
   {label:'Social', match:b=>b.type==='contact_links'},
-  {label:'Our story', match:b=>b.type==='recipe_story'||/our story/i.test(String(pick(b.kicker_en,b.kicker_cn)||''))},
+  {label:"Founder's Story", match:b=>b.type==='recipe_story'||/our story/i.test(String(pick(b.kicker_en,b.kicker_cn)||''))},
   {label:'Canton Fair', match:b=>b.type==='hero_banner'&&/canton fair/i.test(String(pick(b.headline_en,b.headline_cn)||pick(b.subtitle_en,b.subtitle_cn)||''))},
 ];
 function validBlockId(id){
@@ -1048,13 +1055,19 @@ function isOurStory(b){
   if(b.cta_target==='story'||b.cta_target==='about') return true;
   return /our story/i.test(String(pick(b.kicker_en,b.kicker_cn)||''));
 }
+const FOUNDER_STORY_KICKER_EN="Founder's Story";
+const FOUNDER_STORY_KICKER_CN='\u521b\u59cb\u4eba\u6545\u4e8b';
 let siteLayout=[];
 function layoutForSite(layout){
   const about=state.config&&state.config.about&&state.config.about.content;
   const base=(window.ShopBlocks&&ShopBlocks.withFrontFacts)
     ?ShopBlocks.withFrontFacts(layout,about)
     :(Array.isArray(layout)?layout:[]);
-  return base.map(b=>isOurStory(b)?Object.assign({},b,{cta_target:'story'}):b);
+  return base.map(b=>isOurStory(b)?Object.assign({},b,{
+    cta_target:'story',
+    kicker_en:FOUNDER_STORY_KICKER_EN,
+    kicker_cn:FOUNDER_STORY_KICKER_CN,
+  }):b);
 }
 let siteStoryCloseTimer=0;
 function finishCloseSiteStoryPopup(){
@@ -1105,15 +1118,8 @@ function showFounderStory(){
   const cardBody=card?String(pick(card.body_en,card.body_cn)||'').trim():'';
   const essay=quote||cardBody;
   const name=String(pick(c.founder_name_en,c.founder_name_cn)||'').trim();
-  const role=String(pick(c.founder_title_en,c.founder_title_cn)||'').trim();
   const headline=(card&&String(pick(card.headline_en,card.headline_cn)||'').trim())||name||(cn?'我们的故事':'Our story');
-  const kicker=(card&&String(pick(card.kicker_en,card.kicker_cn)||'').trim())||String(pick(c.founder_kicker_en,c.founder_kicker_cn)||'').trim();
-  const minutes=card&&Number(card.read_time_minutes);
-  const bits=[];
-  if(name) bits.push(name);
-  if(role) bits.push(role);
-  if(minutes) bits.push(minutes+(cn?' 分钟':' min'));
-  const byline=bits.length?bits.join(' · '):(card?String(pick(card.byline_en,card.byline_cn)||'').trim():'');
+  const kicker=cn?FOUNDER_STORY_KICKER_CN:FOUNDER_STORY_KICKER_EN;
   const image=String((card&&card.image_url)||c.founder_photo_url||c.hero_image_url||'').trim();
   const outro=String(pick(c.outro_en,c.outro_cn)||'').trim();
   scroll.innerHTML='';
@@ -1123,7 +1129,6 @@ function showFounderStory(){
   const body=document.createElement('div'); body.className='site-story-body';
   if(kicker){ const k=document.createElement('div'); k.className='site-story-kicker'; k.textContent=kicker; body.appendChild(k); }
   const h=document.createElement('h1'); h.className='site-story-title'; h.id='siteStoryTitle'; h.textContent=headline; body.appendChild(h);
-  if(byline){ const m=document.createElement('div'); m.className='site-story-meta'; m.textContent=byline; body.appendChild(m); }
   String(essay||'').split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean).forEach(p=>{
     const para=document.createElement('p'); para.className='site-story-para'; para.textContent=p; body.appendChild(para);
   });
