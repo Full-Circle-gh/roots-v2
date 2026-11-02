@@ -222,11 +222,13 @@ yes(/\.sb-split-img\{height:auto;background:var\(--oat\)/.test(SITE),
   'a split hero picture sits on oat, not #ddd');
 yes(!/height:196px/.test(SITE),
   'the picture is not locked into a short strip');
-yes(/\.sb-steps-kicker,body \.shop-blocks \.sb-cl-kicker[\s\S]{0,220}font-size:16px/.test(SITE),
-  'the small labels are 16px');
-yes(/\.sb-grid-block \.sb-more,body \.shop-blocks \.sb-cattabs \.sb-more\{\s*font-size:18px/.test(SITE)
-  && /white-space:nowrap;flex-shrink:0/.test(SITE),
-  'SEE ALL is 18px and stays on one line');
+yes(/--site-accent-size:20px/.test(SITE) && /--site-accent-size:24px/.test(SITE)
+  && /body \.shop-blocks \.sb-steps-kicker,[\s\S]{0,900}font-size:var\(--site-accent-size\)/.test(SITE)
+  && /body \.shop-blocks \.sb-grid-block \.sb-more,[\s\S]{0,220}font-size:var\(--site-accent-size\)/.test(SITE),
+  'accent labels match the announcement bar type (20px phone, 24px desktop)');
+yes(/white-space:nowrap;flex-shrink:0/.test(SITE)
+  && !/sb-cattabs \.sb-more\{\s*font-size:18px/.test(SITE),
+  'SEE ALL uses the announcement bar size and stays on one line');
 yes(/body \.shop-blocks \.sb-grid-block\{padding:32px calc\(44 \* var\(--u\)\) 36px;/.test(SITE),
   'a product grid breathes like the menu and steps blocks on a phone');
 yes(/body \.shop-blocks \.sb-blk-outer\[data-block-type="hero_banner"\]:not\(:first-child\)\{\s*margin-top:32px;/.test(SITE)
