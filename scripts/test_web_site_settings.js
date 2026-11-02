@@ -236,6 +236,8 @@ yes(/body \.shop-blocks \.sb-blk-outer\[data-block-type="hero_banner"\]:not\(:fi
   'a hero after a menu or grid gets the same 32px oat band on phone and desktop');
 yes(/body \.shop-blocks \.sb-blk-outer\[data-block-type="hero_banner"\]:not\(:last-child\)\{\s*margin-bottom:32px;/.test(SITE),
   'a full-bleed hero leaves the same 32px oat band before the block below');
+yes(/body \.shop-blocks \.sb-blk-outer\[data-block-type="recipe_story"\] \+ \.sb-blk-outer\[data-block-type="hero_banner"\]\{\s*margin-top:16px;/.test(SITE),
+  'the welcome poster after the founder story gets a slimmer top band than menu → hero');
 yes(/@media \(min-width:768px\)\{[\s\S]*body \.shop-blocks \.sb-grid-block\{padding:32px calc\(44 \* var\(--u\)\) 36px;/.test(SITE),
   'a product grid breathes on desktop like the phone mock-up');
 yes(/function placeShopPins\(layout\)/.test(SITE) && /en\.length>=4&&name\.includes\(en\)/.test(SITE) && /rows\.stores/.test(SITE),
