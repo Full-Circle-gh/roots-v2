@@ -379,7 +379,6 @@
   .site-story-meta{font-family:var(--f-toni);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--olive);margin-top:10px;}
   .site-story-para{font-family:var(--f-aleo);font-size:17px;line-height:1.6;color:var(--forest);white-space:pre-line;margin:16px 0 0;}
   .site-story-sign{font-family:var(--f-bear);font-size:28px;line-height:1.1;color:var(--forest);margin-top:28px;}
-  .site-story-cta{display:inline-block;margin-top:22px;background:var(--ink);color:var(--lime);padding:16px 22px;font-family:var(--f-toni);letter-spacing:.14em;text-transform:uppercase;text-decoration:none;}
 </style>
 <link rel="stylesheet" href="/assets/shop/blocks.css">
 <style>
@@ -1086,8 +1085,6 @@ function showFounderStory(){
   const byline=bits.length?bits.join(' · '):(card?String(pick(card.byline_en,card.byline_cn)||'').trim():'');
   const image=String((card&&card.image_url)||c.founder_photo_url||c.hero_image_url||'').trim();
   const outro=String(pick(c.outro_en,c.outro_cn)||'').trim();
-  const cta=String(pick(c.cta_en,c.cta_cn)||'').trim();
-  const menu=siteBarMenuUrl();
   scroll.innerHTML='';
   const art=document.createElement('article');
   art.className='site-story';
@@ -1100,7 +1097,6 @@ function showFounderStory(){
     const para=document.createElement('p'); para.className='site-story-para'; para.textContent=p; body.appendChild(para);
   });
   if(outro){ const s=document.createElement('div'); s.className='site-story-sign'; s.textContent=outro; body.appendChild(s); }
-  if(cta&&menu){ const a=document.createElement('a'); a.className='site-story-cta'; a.href=menu; a.textContent=cta; body.appendChild(a); }
   art.appendChild(body);
   scroll.appendChild(art);
   clearTimeout(siteStoryCloseTimer);
