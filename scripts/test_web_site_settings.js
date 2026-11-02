@@ -308,7 +308,7 @@ yes(/label:'Our products', match:b=>b\.type==='menu_showcase'&&\/platter\/i/.tes
 // ─────────────────────────────────────────────────────────────────────────
 section('12 · phone hamburger nav (§503 rule 55 · option C)');
 
-yes(/id="barNavOpenBtn"/.test(SITE) && /id="siteMobileNav"/.test(SITE) && /Jump to/.test(SITE)
+yes(/id="barNavOpenBtn"/.test(SITE) && /id="siteMobileNav"/.test(SITE) && /id="siteMobileNavClose"/.test(SITE)
   && /function mountMobileNav\(/.test(SITE) && /function openMobileNav\(/.test(SITE),
   'a phone opens a full-screen panel with the same bar links and Menu');
 yes(/site-mobile-nav\.is-open/.test(SITE) && /transition:opacity/.test(SITE),
