@@ -890,9 +890,8 @@
   .shop-blocks .sb-split-panel .sb-subtitle { font-size: 19px; }
 }
 
-/* ③ PRODUCT GRID — multi-up with hover lift + quick-view overlay (cosmetic;
-   the whole card links to the product). Quick-view shows on hover, desktop only. */
-.shop-blocks .sb-qadd { display: none; }
+/* ③ PRODUCT GRID — multi-up with hover lift; the whole card links to the product. */
+.shop-blocks .sb-qadd { display: none !important; }
 @media (min-width: 768px) {
   .shop-blocks .sb-blk-outer[data-block-type="product_grid"] { max-width: 1240px; }
   .shop-blocks .sb-grid-block .sb-ttl { font-size: 40px; }
@@ -910,14 +909,6 @@
   }
   .shop-blocks .sb-card { transition: transform .18s ease; }
   .shop-blocks .sb-card:hover { transform: translateY(-4px); }
-  .shop-blocks .sb-qadd {
-    display: block; position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 2;
-    background: var(--ink); color: var(--oat); text-align: center; border-radius: 999px;
-    font-family: var(--f-toni); font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-    font-size: 12px; padding: 11px 0; opacity: 0; transform: translateY(8px);
-    transition: opacity .18s ease, transform .18s ease; pointer-events: none;
-  }
-  .shop-blocks .sb-card:hover .sb-qadd { opacity: 1; transform: none; }
 }
 
 /* ④ GREETING — LIGHT PASS ONLY. The full PC "member banner" (name + points
