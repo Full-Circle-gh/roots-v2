@@ -75,6 +75,23 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+  // Lime highlighter pen — wrap marked runs in subtitle/body copy with
+  // <<PEN>>…<</PEN>> (editable in CMS; not HTML, so escapeHtml stays safe).
+  var PEN_OPEN = '<<PEN>>', PEN_CLOSE = '<</PEN>>';
+  function htmlWithPenMarks(s) {
+    if (s == null) return '';
+    var raw = String(s), out = '', i = 0;
+    while (i < raw.length) {
+      var a = raw.indexOf(PEN_OPEN, i);
+      if (a < 0) { out += escapeHtml(raw.slice(i)); break; }
+      if (a > i) out += escapeHtml(raw.slice(i, a));
+      var b = raw.indexOf(PEN_CLOSE, a);
+      if (b < 0) { out += escapeHtml(raw.slice(a)); break; }
+      out += '<span class="sb-pen-mark">' + escapeHtml(raw.slice(a + PEN_OPEN.length, b)) + '</span>';
+      i = b + PEN_CLOSE.length;
+    }
+    return out;
+  }
   // Inline-style values (already trusted tokens/numbers) — strip only quotes
   // that would break an attribute. Used for pre-built style strings.
   function attr(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
@@ -207,7 +224,7 @@
         '<div class="sb-split-img">' + media() + '</div>' +
         '<div class="sb-split-panel" style="background:' + attr(panelBg) + ';color:' + attr(panelFg) + '">' +
         (headline ? '<div class="sb-headline">' + escapeHtml(headline) + '</div>' : '') +
-        (subtitle ? '<div class="sb-subtitle">' + escapeHtml(subtitle) + '</div>' : '') +
+        (subtitle ? '<div class="sb-subtitle">' + htmlWithPenMarks(subtitle) + '</div>' : '') +
         ctaStack('') +
         '</div></div>';
     }
