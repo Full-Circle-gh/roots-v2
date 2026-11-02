@@ -2516,6 +2516,11 @@
   .b-hero-split .split-panel .subtitle {
     font: 500 12px var(--bf-aleo); opacity: .8; line-height: 1.4;
   }
+  .b-hero-split .split-panel .pen-mark {
+    background: linear-gradient(180deg, transparent 58%, rgba(204, 217, 0, 0.52) 58%, rgba(204, 217, 0, 0.52) 95%, transparent 95%);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
   .b-hero-split .split-panel .cta-stack {
     position: static; transform: none; padding: 0; margin-top: 8px;
     display: flex; flex-direction: column; gap: 6px;
@@ -9097,7 +9102,7 @@ function renderBlockBody(b) {
           <div class="split-img">${imgHtml}</div>
           <div class="split-panel" style="background:${panelBg};color:${panelFg}">
             ${hl.en || hl.cn ? `<div class="headline">${biLabel(hl.en, hl.cn)}</div>` : ''}
-            ${sub.en || sub.cn ? `<div class="subtitle">${biLabel(sub.en, sub.cn)}</div>` : ''}
+            ${sub.en || sub.cn ? `<div class="subtitle">${renderPenMarkedHtml(pickLang(sub.en, sub.cn))}</div>` : ''}
             ${ctas.length ? `<div class="cta-stack">${ctas.map(c =>
               `<div class="cta-btn ${escapeAttr(c.style || 'primary')}"${(c.style || 'primary') === 'primary' ? btnPreviewStyle(b.btn_color) : ''}>${biLabel(c.label_en, c.label_cn)}</div>`
             ).join('')}</div>` : ''}
@@ -15880,6 +15885,23 @@ function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function escapeAttr(s) { return escapeHtml(s); }
+
+const PEN_OPEN = '<<PEN>>', PEN_CLOSE = '<</PEN>>';
+function renderPenMarkedHtml(s) {
+  if (s == null) return '';
+  const raw = String(s);
+  let out = '', i = 0;
+  while (i < raw.length) {
+    const a = raw.indexOf(PEN_OPEN, i);
+    if (a < 0) { out += escapeHtml(raw.slice(i)); break; }
+    if (a > i) out += escapeHtml(raw.slice(i, a));
+    const b = raw.indexOf(PEN_CLOSE, a);
+    if (b < 0) { out += escapeHtml(raw.slice(a)); break; }
+    out += '<span class="pen-mark">' + escapeHtml(raw.slice(a + PEN_OPEN.length, b)) + '</span>';
+    i = b + PEN_CLOSE.length;
+  }
+  return out;
+}
 
 // Rich descriptions are TinyMCE HTML (e.g. "<!-- x-tinymce/html --><p><strong>…").
 // When we fall back to one as a short tagline, flatten it to readable plain text
