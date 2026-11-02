@@ -8983,6 +8983,42 @@ try {
 } catch (e) { console.error('[migration website_intro_pen_marks_v2]', e); }
 
 
+// ── One-off: the facts strip and the founder essay become website blocks ──
+//
+// The black strip was drawn from About, and the essay popup read About's
+// founder quote, so neither could be edited on the Website page. Copy both
+// onto the published layout and its draft. A later edit in the editor wins;
+// this does not run again.
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('website_facts_and_essay_editable_v1');
+  if (!ran) {
+    const { withEditableFacts, withEditableStory } = require('./lib/website-editor-blocks');
+    let about = {};
+    const aboutRow = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'about.content'").get();
+    if (aboutRow) {
+      try { about = JSON.parse(aboutRow.value_json) || {}; } catch { about = {}; }
+    }
+    db.transaction(() => {
+      for (const key of ['website.layout', 'cms.draft.website_layout']) {
+        const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+        if (!row) continue;
+        let layout;
+        try { layout = JSON.parse(row.value_json); } catch { continue; }
+        if (!Array.isArray(layout)) continue;
+        const next = withEditableStory(withEditableFacts(layout, about), about);
+        if (next === layout) {
+          console.log('[migration] website_facts_and_essay_editable_v1: ' + key + ' already editable, left alone');
+          continue;
+        }
+        db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?').run(JSON.stringify(next), key);
+        console.log('[migration] website_facts_and_essay_editable_v1: ' + key + ' now has the strip and the essay on the story card');
+      }
+      db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('website_facts_and_essay_editable_v1');
+    })();
+  }
+} catch (e) { console.error('[migration website_facts_and_essay_editable_v1]', e); }
+
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;

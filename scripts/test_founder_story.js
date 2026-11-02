@@ -4,9 +4,9 @@
  * website only. The mini app and the web shop do not open that essay and
  * do not draw the strip.
  *
- * The website marks its Our story card with cta_target "story" at draw
- * time. The block engine shortens that card on a phone and makes the card
- * the link. A card aimed at About stays a normal card.
+ * The story card stores cta_target "story". The block engine shortens
+ * that card on a phone and makes the read line the link. A card aimed
+ * at About stays a normal card.
  */
 'use strict';
 
@@ -108,11 +108,11 @@ const appJson = read('miniapp/app.json');
 const aboutWxml = read('miniapp/pages/about/about.wxml');
 const home = read('miniapp/pages/home/home.js');
 
-yes(site.includes('function showFounderStory()'), 'the Yuexiu website has the essay');
+yes(site.includes('function showFounderStory'), 'the Yuexiu website has the essay');
 yes(site.includes('siteStoryScrim') && site.includes('closeSiteStoryPopup'), 'the essay opens in a popup');
 yes(!site.includes('site-story-cta') && !/if\(cta&&menu\)/.test(site),
   'the essay has no Shop now button');
-yes(site.includes('layoutForSite') && site.includes('ShopBlocks.withFrontFacts'), 'the website draws the facts strip');
+yes(site.includes('essay_en') && !site.includes('withFrontFacts'), 'the website reads a saved essay and does not invent the facts strip');
 yes(site.includes("t==='story'"), 'the story link opens the essay');
 yes(!shop.includes('function renderStory') && !shop.includes('withFrontFacts'), 'the web shop does not');
 yes(!appJson.includes('pages/story/story'), 'the mini app has no essay screen');

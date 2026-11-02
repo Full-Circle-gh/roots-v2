@@ -2127,9 +2127,11 @@
   // 'web' and drops 'miniapp'. Hosts that walk the layout before rendering
   // (shop.html's renderHome pre-fetches the products a layout names) call
   // forSurface() first so a hidden block costs no request either.
-  // The Yuexiu website draws the About facts under its first hero. The
-  // web shop and the mini app do not call this. Never writes the layout
-  // back, so a site with no numbers does not grow a strip.
+  // The brand website used to call this so the About facts appeared under
+  // the first hero without being a saved block. It does not call it any
+  // more: the strip is an about_stats block on the Website page, and
+  // inventing one here would put back a strip the editor had deleted.
+  // Never writes the layout back.
   function withFrontFacts(layout, about) {
     var blocks = Array.isArray(layout) ? layout : [];
     if (!blocks.length) return blocks;

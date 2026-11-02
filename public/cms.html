@@ -5731,6 +5731,7 @@ const ICONS = {
   steps:            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="5" cy="18" r="2"/><path d="M10 6h11M10 12h11M10 18h11"/></svg>',
   contact_links:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M9 11h6M9 14h4"/></svg>',
   menu_showcase:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><circle cx="12" cy="13" r="3"/><path d="M3 4v6M5 4v6M3 7h2M4 10v10M20 4c-1.5 1-2 3-2 6h2v10"/></svg>',
+  about_stats:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="9" width="20" height="6" rx="1"/><path d="M8 9v6M14 9v6"/></svg>',
 };
 
 // Preview device presets — covers the popular phones our customers use.
@@ -5788,6 +5789,9 @@ const BLOCK_META = {
   contact_links:    { website_only: true, name: 'Contact & reviews', name_cn: '联系与评价', desc: 'TripAdvisor, HappyCow, Instagram, WhatsApp, email and WeChat', desc_cn: 'TripAdvisor、HappyCow、Instagram、WhatsApp、邮箱和微信' },
   // §503 rule 33 — name and description composed (vocabulary v1.366).
   menu_showcase:    { website_only: true, name: 'Menu showcase', name_cn: '菜单展示', desc: 'Up to 10 dishes, each with a photo, name, price and a line', desc_cn: '最多 10 道菜 · 每道配图片、名称、价格和一句介绍' },
+  // The black facts strip. Name copied from the About editor (Stat strip · 数据条).
+  // Description composed, declared in tacet-delivery-vocabulary v1.379.
+  about_stats:      { website_only: true, name: 'Stat strip', name_cn: '数据条', desc: 'Up to 4 short facts, each a big line and a small line', desc_cn: '最多 4 条简短数据 · 每条一行大字和一行小字' },
 };
 
 const state = {
@@ -8691,6 +8695,14 @@ function makeBlock(type) {
       items: [{ id: uid(), name_en: '', name_cn: '', price: '', text_en: '', text_cn: '', image_url: '' }],
       bg_color: 'oat-milk', fg_color: 'ink', accent_color: 'berry-punch',
     };
+    case 'about_stats': return {
+      id, type,
+      full_bleed: true,
+      stats: [
+        { id: uid(), value_en: '2017', value_cn: '', label_en: 'Started', label_cn: '' },
+        { id: uid(), value_en: '100%', value_cn: '', label_en: 'Plant-based', label_cn: '' },
+      ],
+    };
     case 'contact_links': return {
       id, type,
       kicker_en: 'Find us online', kicker_cn: '',
@@ -9140,7 +9152,8 @@ function renderBlockBody(b) {
     case 'fact_band':
     case 'steps':
     case 'contact_links':
-    case 'menu_showcase': {
+    case 'menu_showcase':
+    case 'about_stats': {
       d.className = 'b-website-only';
       d.innerHTML = `<div class="placeholder">${ICONS[b.type]}</div>`;
       return d;
@@ -11400,6 +11413,7 @@ function renderInspector() {
     case 'steps':            buildStepsForm(body, b); break;
     case 'contact_links':    buildContactLinksForm(body, b); break;
     case 'menu_showcase':    buildMenuShowcaseForm(body, b); break;
+    case 'about_stats':      buildAboutStatsForm(body, b); break;
     case 'order_tracker':    buildOrderTrackerForm(body, b); break;
     case 'notification_bar': buildNotificationBarForm(body, b); break;
   }
@@ -13835,13 +13849,29 @@ function buildRecipeStoryForm(m, b) {
   bodyRow.appendChild(bodyHelp);
   secContent.appendChild(bodyRow);
 
+  // Website only: the card shows Body. The button opens this piece.
+  // Field name is the existing Founder's Story pair (vocabulary v1.376).
+  // The helper is composed (vocabulary v1.379). Sign-off is copied from About.
+  if (state.page === 'website') {
+    secContent.appendChild(field(T("Founder's Story", '创始人故事'),
+      T("The piece this card's button opens. The card itself keeps showing Body.",
+        '此卡片的按钮打开的完整故事。卡片本身仍显示正文。'),
+      txtPair(b.essay_en, b.essay_cn, ({ en, cn }) => updateBlockSilent(b.id, { essay_en: en, essay_cn: cn }), {}, { multiline: true, rows: 8 })));
+    secContent.appendChild(field(T('Sign-off', '结尾'), '',
+      txtPair(b.signoff_en, b.signoff_cn, ({ en, cn }) => updateBlockSilent(b.id, { signoff_en: en, signoff_cn: cn }))));
+  }
+
   secContent.appendChild(field(T('Linked product (optional)', '关联商品(可选)'),
     T('Shows a product you can tap at the bottom of the story.', '在故事底部显示一个可点击的商品。'),
     productPicker({ multi: false, value: b.product_id, onChange: v => updateBlock(b.id, { product_id: v }) })));
   secContent.appendChild(field(T('Button text', '按钮文字'), T('Optional — e.g. "READ MORE". Leave empty to hide the button.', '可选 — 例如「READ MORE」。留空则隐藏按钮。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
+  // The shop and product pages keep the one-line call the phone sheet mirrors.
+  // On the Website page the button opens the founder essay, so that is the suggestion.
   secContent.appendChild(field(T('Button link', '按钮链接'), T('Pick where this button takes the customer.', '选择按钮将顾客带到哪里。'),
-    targetPicker({ value: b.cta_target, onChange: v => updateBlockSilent(b.id, { cta_target: v }), suggest: b.product_id ? null : 'shop' })));
+    state.page === 'website'
+      ? targetPicker({ value: b.cta_target, onChange: v => updateBlockSilent(b.id, { cta_target: v }), suggest: 'story' })
+      : targetPicker({ value: b.cta_target, onChange: v => updateBlockSilent(b.id, { cta_target: v }), suggest: b.product_id ? null : 'shop' })));
 
   // ── Colours ─────────────────────────────────────────────────────────
   secColours.appendChild(field(T('Background colour', '背景颜色'), '',
@@ -14508,6 +14538,25 @@ function buildFactBandForm(m, b) {
     },
   });
   websiteColours(m, b, { bg: 'forest-kale', fg: 'white', accent: 'lime-leaf' });
+}
+
+// The black facts strip. Title and Text are the big line and the small line,
+// the same pair the promise band uses. Up to four, matching what the page draws.
+const ABOUT_STATS_MAX = 4;
+function buildAboutStatsForm(m, b) {
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  websiteItemList(secContent, b, 'stats', {
+    max: ABOUT_STATS_MAX,
+    label: n => B(`Card ${n}`, `卡片 ${n}`),
+    addLabel: (n, max) => T(`+ Add card (${n} of ${max})`, `+ 添加卡片(${n} / ${max})`),
+    blank: { value_en: '', value_cn: '', label_en: '', label_cn: '' },
+    fill: (card, it, set) => {
+      card.appendChild(field(T('Title', '标题'), '',
+        txtPair(it.value_en, it.value_cn, ({ en, cn }) => set({ value_en: en, value_cn: cn }))));
+      card.appendChild(field(T('Text', '正文'), '',
+        txtPair(it.label_en, it.label_cn, ({ en, cn }) => set({ label_en: en, label_cn: cn }))));
+    },
+  });
 }
 
 const STEPS_MAX = 4;
@@ -15226,6 +15275,13 @@ function productPicker({ multi, value, onChange, bundlesOnly }) {
 // Unknown / legacy hand-typed values are preserved (shown as a "Custom" chip)
 // and stay editable via the manual escape hatch, so switching an existing
 // block to the picker never silently breaks a link that was typed by hand.
+// The Website page's story button opens the founder essay. The pair is the
+// one already on that card (vocabulary v1.376). Other pages do not offer it:
+// a mini-app story has nowhere to open.
+function cmsLinkPages() {
+  if (state.page !== 'website') return TARGET_PAGES;
+  return [{ v: 'story', en: "Founder's Story", cn: '创始人故事' }].concat(TARGET_PAGES);
+}
 const TARGET_PAGES = [
   { v: 'shop',          en: 'Shop',              cn: '商店' },
   { v: 'cart',          en: 'Cart',              cn: '购物车' },
@@ -15269,7 +15325,7 @@ function targetPicker({ value, onChange, suggest }) {
   function describe(val) {
     const v = (val || '').trim();
     if (!v) return null;
-    const page = TARGET_PAGES.find(p => p.v === v);
+    const page = cmsLinkPages().find(p => p.v === v);
     if (page) return { kind: 'page', label: T(page.en, page.cn) };
     if (v.startsWith('product:')) {
       const id = v.split(':')[1];
@@ -15347,7 +15403,7 @@ function targetPicker({ value, onChange, suggest }) {
 
   // ── Pages (suggested one floated to the top) ──
   addGroup(T('Pages', '页面'));
-  const pages = TARGET_PAGES.slice();
+  const pages = cmsLinkPages().slice();
   if (suggest) {
     const i = pages.findIndex(p => p.v === suggest);
     if (i > 0) pages.unshift(pages.splice(i, 1)[0]);
