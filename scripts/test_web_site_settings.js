@@ -292,6 +292,8 @@ yes(/function openSiteBarMenu\(url,ev\)/.test(SITE) && /siteMenuDesktop\(\)\) op
   'a computer opens the bar Menu in the phone frame; a phone follows the link');
 yes(/overflow-x:clip/.test(SITE) && /id="barLinks"/.test(SITE) && /SITE_BAR_LINKS/.test(SITE) && /function mountBarLinks\(/.test(SITE) && !/id="barMenuPanel"/.test(SITE),
   'on a computer the bar stays put and carries six section links beside Menu');
+yes(/\.bar-links\{[^}]*font-size:22px/.test(SITE),
+  'the computer bar section links are 22px (not the unused .bar-nav)');
 
 // ─────────────────────────────────────────────────────────────────────────
 section('12 · phone hamburger nav (§503 rule 55 · option C)');
