@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roots — bar links mockup</title>
+<style>
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --lime:#CCD900; --paper:#fff;
+    --line:rgba(0,0,0,.08); --muted:#5c5c54;
+    --f-bear:'Bear Serif',Georgia,serif;
+    --f-toni:'Toni Grotesk',sans-serif;
+    --f-aleo:'Aleo',Georgia,serif;
+    --bar:76px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{font-family:var(--f-aleo);background:var(--oat);color:var(--ink);-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}
+
+  header.site-bar{
+    position:sticky;top:0;z-index:20;background:var(--paper);
+    border-bottom:1px solid var(--line);height:var(--bar);
+  }
+  .bar-in{
+    max-width:1180px;height:100%;margin:0 auto;padding:0 20px;
+    display:flex;align-items:center;gap:28px;
+  }
+  .wordmark{display:flex;align-items:center;flex:none;text-decoration:none;}
+  .wordmark img{height:40px;width:auto;display:block;}
+  .bar-links{
+    display:flex;align-items:center;gap:22px;margin-left:auto;
+    font-family:var(--f-toni);font-weight:700;font-size:15px;line-height:1.2;
+  }
+  .bar-links a{
+    text-decoration:none;padding:8px 0;border-bottom:2px solid transparent;
+    white-space:nowrap;
+  }
+  .bar-links a:hover{border-bottom-color:var(--ink);}
+  .bar-links a.on{color:var(--forest);border-bottom-color:var(--forest);}
+  .bar-links a:focus-visible,.menu-btn:focus-visible{outline:3px solid var(--lime);outline-offset:3px;}
+  .menu-btn{
+    flex:none;display:inline-flex;align-items:center;justify-content:center;
+    min-height:44px;padding:10px 20px;border:0;border-radius:999px;cursor:pointer;
+    font-family:var(--f-toni);font-weight:700;font-size:13px;letter-spacing:.12em;
+    text-transform:uppercase;background:var(--forest);color:#fff;
+  }
+
+  .hero{padding:72px 20px 56px;max-width:820px;margin:0 auto;}
+  .hero h1{font-family:var(--f-bear);font-size:64px;line-height:1.02;font-weight:500;margin:12px 0 16px;}
+  .kicker{font-family:var(--f-toni);font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--forest);}
+  .lead{font-size:18px;line-height:1.5;max-width:62ch;}
+  .note{margin-top:18px;font-size:15px;line-height:1.45;color:var(--muted);max-width:68ch;}
+
+  section{scroll-margin-top:calc(var(--bar) + 12px);padding:28px 20px 72px;min-height:78vh;}
+  .sec-in{max-width:820px;margin:0 auto;}
+  section h2{font-family:var(--f-bear);font-size:48px;line-height:1.05;font-weight:500;margin:8px 0 14px;}
+  section p{font-size:18px;line-height:1.5;max-width:62ch;}
+  .lands{margin-top:22px;padding:14px 16px;background:rgba(255,255,255,.72);font-size:15px;line-height:1.45;}
+  .lands b{font-family:var(--f-bear);font-weight:500;}
+
+  #new-to-china{background:#fff;}
+  #lobby{background:var(--forest);color:var(--lime);min-height:52vh;}
+  #lobby .kicker{color:var(--lime);}
+  #lobby .lands{background:rgba(0,0,0,.18);color:#fff;}
+  #products{background:#fff;}
+  #location{background:#E7E0D4;}
+  #social{background:#fff;}
+  #story{background:#1a1a17;color:var(--oat);}
+  #story .kicker{color:var(--lime);}
+  #story .lands{background:rgba(255,255,255,.08);color:#fff;}
+  #fair{background:#fff;}
+  .end{height:70vh;}
+
+  .scrim{position:fixed;inset:0;z-index:40;background:rgba(26,26,23,.62);display:flex;align-items:center;justify-content:center;padding:24px;}
+  .scrim[hidden]{display:none;}
+  .phone{width:390px;max-width:calc(100vw - 48px);height:min(720px,calc(100vh - 80px));background:var(--oat);border-radius:36px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.28);display:flex;flex-direction:column;}
+  .phone-bar{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 12px;background:#fff;border-bottom:2px solid var(--ink);font-family:var(--f-bear);font-size:22px;}
+  .phone-x{width:40px;height:40px;border:0;background:transparent;font-size:28px;cursor:pointer;line-height:1;}
+  .phone-x:focus-visible{outline:3px solid var(--forest);}
+  .phone ul{list-style:none;padding:8px 0;}
+  .phone li{padding:16px 18px;border-bottom:1px solid rgba(0,0,0,.08);font-family:var(--f-bear);font-size:22px;}
+  .phone .stand{padding:14px 18px 0;font-size:14px;line-height:1.4;color:var(--muted);}
+</style>
+</head>
+<body>
+<header class="site-bar">
+  <div class="bar-in">
+    <a class="wordmark" href="#top"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+    <nav class="bar-links" aria-label="On this page">
+      <a href="#new-to-china">New to China</a>
+      <a href="#products">Our products</a>
+      <a href="#location">Our location</a>
+      <a href="#social">Social</a>
+      <a href="#story">Our story</a>
+      <a href="#fair">Canton Fair</a>
+      <button type="button" class="menu-btn" id="menuBtn">Menu</button>
+    </nav>
+  </div>
+</header>
+
+<div class="hero" id="top">
+  <p class="kicker">Mockup · computer only</p>
+  <h1>Landed in Guangzhou? Fresh food, sorted.</h1>
+  <p class="lead">The bar stays put. Each name is a link on the bar, not a list under Menu. Menu opens the Ramada menu.</p>
+  <p class="note">The six names are yours. They sit in the order the page already uses. Menu stays the green button, because it opens the Ramada menu instead of scrolling.</p>
+</div>
+
+<section id="new-to-china">
+  <div class="sec-in">
+    <p class="kicker">Bar link · New to China</p>
+    <h2>Two ways from hungry to happy.</h2>
+    <p>The live block already starts with the small line “New to China?”. This link scrolls here.</p>
+    <p class="lands"><b>Lands on</b> the steps block. Not the opening hero.</p>
+  </div>
+</section>
+
+<section id="lobby">
+  <div class="sec-in">
+    <p class="kicker">Not a bar link</p>
+    <h2>Platters, toasts, salads, wraps, drinks.</h2>
+    <p>These stay on the page where they are. They are not six more links. The green Menu button opens the full Ramada menu.</p>
+    <p class="lands"><b>No bar name.</b> Menu is the way in.</p>
+  </div>
+</section>
+
+<section id="products">
+  <div class="sec-in">
+    <p class="kicker">Bar link · Our products</p>
+    <h2>Healthy plant-based food, made in our own kitchen.</h2>
+    <p>This is the take-home grid, the jars and the things you can order. It is not the lobby dishes above.</p>
+    <p class="lands"><b>Lands on</b> the product grid. The small line there is “Approved by taste buds”.</p>
+  </div>
+</section>
+
+<section id="location">
+  <div class="sec-in">
+    <p class="kicker">Bar link · Our location</p>
+    <h2>Come say hi.</h2>
+    <p>The Yuexiu visit card: the map, the address, and Get directions. Tianhe is not on this page.</p>
+    <p class="lands"><b>Lands on</b> the store block. Its small line is “Come say hi”.</p>
+  </div>
+</section>
+
+<section id="social">
+  <div class="sec-in">
+    <p class="kicker">Bar link · Social</p>
+    <h2>Find us online.</h2>
+    <p>TripAdvisor, HappyCow, Instagram, WhatsApp, email, and WeChat. “Social” is a little narrow: this block is also reviews and email. The link still lands here.</p>
+    <p class="lands"><b>Lands on</b> the contact block. The live title is “Read the reviews, then come say hi.”</p>
+  </div>
+</section>
+
+<section id="story">
+  <div class="sec-in">
+    <p class="kicker">Bar link · Our story</p>
+    <h2>The Roots of It All</h2>
+    <p>The live small line is already “Our story”. This link scrolls to Asher’s piece.</p>
+    <p class="lands"><b>Lands on</b> the story block.</p>
+  </div>
+</section>
+
+<section id="fair">
+  <div class="sec-in">
+    <p class="kicker">Bar link · Canton Fair</p>
+    <h2>In town for the Canton Fair? We'll pack your food.</h2>
+    <p>The last banner on the page. Nothing after it.</p>
+    <p class="lands"><b>Lands on</b> the Canton Fair banner.</p>
+  </div>
+</section>
+<div class="end"></div>
+
+<div class="scrim" id="scrim" hidden>
+  <div class="phone" role="dialog" aria-modal="true" aria-label="Ramada menu">
+    <div class="phone-bar">
+      <span>Ramada menu</span>
+      <button type="button" class="phone-x" id="menuClose" aria-label="Close">&times;</button>
+    </div>
+    <p class="stand">Stand-in. On the live site this is the phone frame with the real menu. It does not scroll this page.</p>
+    <ul>
+      <li>Platters</li>
+      <li>Open toasts</li>
+      <li>Salads</li>
+      <li>Wraps</li>
+      <li>Beverages</li>
+    </ul>
+  </div>
+</div>
+<script>
+(function(){
+  var links=[].slice.call(document.querySelectorAll('.bar-links a'));
+  var sections=links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+  function mark(){
+    var line=document.querySelector('header.site-bar').offsetHeight+20;
+    var current=null;
+    sections.forEach(function(s){ if(s && s.getBoundingClientRect().top<=line) current=s; });
+    links.forEach(function(a,i){ a.classList.toggle('on', sections[i]===current); });
+  }
+  document.addEventListener('scroll', mark, {passive:true});
+  window.addEventListener('hashchange', mark);
+  mark();
+  var scrim=document.getElementById('scrim');
+  document.getElementById('menuBtn').addEventListener('click', function(){ scrim.hidden=false; document.getElementById('menuClose').focus(); });
+  function close(){ scrim.hidden=true; document.getElementById('menuBtn').focus(); }
+  document.getElementById('menuClose').addEventListener('click', close);
+  scrim.addEventListener('click', function(ev){ if(ev.target===scrim) close(); });
+  document.addEventListener('keydown', function(ev){ if(ev.key==='Escape' && !scrim.hidden) close(); });
+})();
+</script>
+</body>
+</html>
