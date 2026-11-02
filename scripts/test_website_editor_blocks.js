@@ -116,6 +116,8 @@ yes(cms.includes('essay_en') && cms.includes("T('Sign-off', '结尾')"), 'the st
 yes(/v:\s*'story'/.test(cms), 'the button can point at the essay');
 yes(retail.includes("'about_stats'"), 'the server accepts the strip on save');
 yes(site.includes('essay_en') && site.includes('signoff_en'), 'the popup reads the card');
+yes(/const clicked=blockId&&cards\.find\(b=>b&&b\.id===blockId\);\s*const card=\(clicked&&isOurStory\(clicked\)\)\?clicked:\(cards\.find\(isOurStory\)\|\|null\);/.test(site),
+  'a button on another block still opens the story card');
 yes(!site.includes('withFrontFacts'), 'the website does not invent the strip at draw time');
 yes(!site.includes('kicker_en:FOUNDER_STORY_KICKER_EN'), 'the saved kicker is the one that shows');
 yes(!shop.includes('withFrontFacts'), 'the web shop does not draw the strip');

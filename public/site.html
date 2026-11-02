@@ -1111,7 +1111,10 @@ function showFounderStory(blockId){
   const stored=state.config&&state.config.about&&state.config.about.content;
   const c=(stored&&typeof stored==='object')?stored:{};
   const cards=Array.isArray(siteLayout)?siteLayout:[];
-  const card=(blockId&&cards.find(b=>b&&b.id===blockId))||cards.find(isOurStory)||null;
+  // A button on another block can open this essay. The words still come from
+  // the story card. Only a click on that card itself uses the block that was clicked.
+  const clicked=blockId&&cards.find(b=>b&&b.id===blockId);
+  const card=(clicked&&isOurStory(clicked))?clicked:(cards.find(isOurStory)||null);
   // The essay and the sign-off are fields on the card, edited on the Website
   // page. A card saved before those fields existed still reads About.
   const owns=function(key){ return !!(card&&Object.prototype.hasOwnProperty.call(card,key)); };
