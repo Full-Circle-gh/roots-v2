@@ -1350,7 +1350,12 @@ const state = {
       from:null,             // ask-for-stock: the location being asked to supply
       to:null,               // ...and the one asking, where there is a choice
       qty:{},busy:false,err:'',sent:null,
-      typing:{},typeErr:{}},  // a quantity being typed, and why it was refused
+      typing:{},typeErr:{},  // a quantity being typed, and why it was refused
+      /* §512 — physical counts at the shops already chosen, keyed by store id.
+         The catalogue is one list; the numbers are per location and change
+         when either chip does. `shelfTried` is this visit, so a reopen reads
+         again; the maps stay so a restored dest can paint last-known. */
+      shelf:{},shelfTried:{}},
   /* ASKING THE BUYER TO BUY A MATERIAL (§86). Its own basket, NOT `rq` above,
      and the reason is the subject rather than tidiness: `rq` holds PRODUCTS —
      things the business sells, counted in pieces — and this holds MATERIALS,
@@ -2245,8 +2250,9 @@ reg('rqTo', id=>{ state.rq.to=Number(id);
   // The supplier list is everywhere except the asker, so a destination change
   // can leave a supplier that is now the destination itself.
   if(state.rq.from===state.rq.to) state.rq.from=null;
+  loadRqShelf(state.rq.to);
   render(); });
-reg('rqFrom', id=>{ state.rq.from=Number(id); render(); });
+reg('rqFrom', id=>{ state.rq.from=Number(id); loadRqShelf(state.rq.from); render(); });
 /* §498 — CHANGE THE SHOPS ON, OR WITHDRAW, A REQUEST NOBODY HAS STARTED PICKING.
    The server decides whether it still can (`can_change` on the row) and says so
    again on the write, so a stale screen is refused rather than obeyed. */
@@ -20827,6 +20833,9 @@ reg('shmAddAll', ()=>{
 function rqReset(){
   const r=state.rq;
   r.purpose=null; r.from=null; r.qty={}; r.typing={}; r.typeErr={}; r.q=''; r.kind='all'; r.err=''; r.sent=null; r.busy=false;
+  // The maps stay: a restored dest can paint last-known while this visit
+  // re-reads. Tried is this visit, so a reopen is not a stale count.
+  r.shelfTried={};
   // One store is not a choice; more than one is a question this app has to ask
   // and the old screen never did, because it ran pinned to a single shelf.
   const st=state.stores||[];
@@ -20973,6 +20982,61 @@ function loadRqProducts(){
       name_en:p.name_en,name_cn:p.name_cn,sku:p.sku,material:Number(p.is_restock_only)===1}));
     r.fromShelf=true; render();
   });
+}
+/* §512 — PHYSICAL COUNTS AT THE SHOPS ALREADY CHOSEN. Ash, filling Ask for
+   stock: the list named the products and not what was on either shelf, so the
+   quantities had to be walked. The same `/stores/:id/stock` Add stock already
+   reads; `physical_qty` is the shelf, not sellable (waste's on-hand rule, §10).
+   One fetch per shop per visit. A shop that answers after they switched is
+   still that shop's number, and is stored under its own id. */
+function rqShelfMap(rows){
+  const list=Array.isArray(rows)?rows:((rows&&rows.rows)||[]);
+  const m={};
+  for(const row of list){
+    const pid=row.product_id!=null?row.product_id:row.id;
+    if(pid==null||row.physical_qty==null) continue;
+    m[pid]=row.physical_qty|0;
+  }
+  return m;
+}
+function loadRqShelf(storeId){
+  const id=Number(storeId);
+  if(!id) return;
+  const r=state.rq;
+  if(!r.shelfTried) r.shelfTried={};
+  if(r.shelfTried[id]) return;
+  r.shelfTried[id]=true;
+  api('/stores/'+id+'/stock').then(rows=>{
+    if(!r.shelf) r.shelf={};
+    r.shelf[id]=rqShelfMap(rows);
+    if(r.to===id||r.from===id) render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    if(!r.shelf) r.shelf={};
+    r.shelf[id]=null;
+    if(r.to===id||r.from===id) render();
+  });
+}
+/* Under the SKU, and only on Ask for stock. Ask the kitchen shares the picker
+   and has no location chips, so a number here would be a shop they did not
+   pick. Destination first, then the shop being asked — the order of the two
+   questions. A shop whose answer has not landed, failed, or came back with no
+   quantities (add-mode strips them) is omitted rather than drawn as 0. */
+function rqShelfNote(p){
+  const top=(state.stack||[])[(state.stack||[]).length-1];
+  if(!top||top.route!=='askstock') return '';
+  const r=state.rq, bits=[], seen={};
+  for(const sid of [r.to, r.from]){
+    if(sid==null||seen[sid]) continue;
+    seen[sid]=1;
+    const map=r.shelf&&r.shelf[sid];
+    if(!map||!Object.keys(map).length) continue;
+    const q=map[p.id]==null?0:map[p.id];
+    bits.push(escAttr(rqStoreName(sid))+' '+q);
+  }
+  if(!bits.length) return '';
+  return `<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${
+    T('On the shelf','在架')} · ${bits.join(' · ')}</span>`;
 }
 function rqName(p){ return LANG==='en'?(p.name_en||p.name_cn||''):(p.name_cn||p.name_en||''); }
 /* MATERIALS AND WHAT IS SOLD, APART. Ash, restocking Yuexiu: the cups and the
@@ -24035,6 +24099,7 @@ function rqBodyHtml(){
       <span style="flex:1;min-width:0">
         <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rqName(p))}</span>
         ${p.sku?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${escAttr(p.sku)}</span>`:''}
+        ${rqShelfNote(p)}
         <span id="rqerr-${p.id}" style="display:${terr?'block':'none'};font-size:13px;color:var(--brick-ink);margin-top:3px">${escAttr(terr)}</span>
       </span>
       <button id="rqless-${p.id}" class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},-1)"${n<=0?' disabled':''}
@@ -24122,6 +24187,8 @@ function screenAskKitchen(){
 function screenAskStock(){
   loadRqProducts();
   const r=state.rq;
+  if(r.to!=null) loadRqShelf(r.to);
+  if(r.from!=null) loadRqShelf(r.from);
   if(r.sent) return rqSentHtml(T('Sent','已发送'),
     T('They pick it and send it. Count it in when it arrives.','对方拣货发出后，到货时清点入库。'));
   const stores=state.stores||[];
