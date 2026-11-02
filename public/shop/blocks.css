@@ -2868,16 +2868,12 @@
 .shop-blocks .sb-cl-off { opacity: 0.25; }
 /* An ID or an address is one word to copy: it never breaks inside itself. */
 .shop-blocks .sb-cl-sub.sb-cl-copy { overflow-wrap: normal; word-break: keep-all; white-space: nowrap; }
-/* WeChat ID: tap to copy (beside QR it may wrap — see .sb-cl-wechat--qr). */
+/* WeChat ID: tap to copy. */
 .shop-blocks .sb-cl-wechat-id { cursor: pointer; }
 .shop-blocks .sb-cl-wechat-id:active { opacity: 0.6; }
-/* WeChat ID beside QR: wrap up to two lines so the ID stays readable in narrow grid cells. */
-.shop-blocks .sb-cl-wechat--qr { align-items: flex-start; }
-.shop-blocks .sb-cl-wechat--qr .sb-cl-txt { overflow: hidden; padding-inline-end: calc(8 * var(--u)); min-width: 0; }
-.shop-blocks .sb-cl-wechat--qr .sb-cl-wechat-id {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  overflow: hidden; white-space: normal; overflow-wrap: anywhere; word-break: break-all;
-}
+/* WeChat + QR: keep the ID one line; desktop row spans the grid (see 768px block). */
+.shop-blocks .sb-cl-wechat--qr .sb-cl-txt { min-width: 0; flex: 1; padding-inline-end: calc(8 * var(--u)); }
+.shop-blocks .sb-cl-wechat--qr .sb-cl-wechat-id { display: block; }
 .shop-blocks .sb-cl-wechat--qr .sb-cl-qr { margin-inline-start: calc(12 * var(--u)); }
 .shop-blocks .sb-cl-qr { flex: none; width: calc(140 * var(--u)); height: calc(140 * var(--u)); object-fit: contain; background: #fff; border-radius: calc(10 * var(--u)); }
 
@@ -2889,6 +2885,7 @@
   .shop-blocks .sb-cl-kicker { font-size: 16px; }
   .shop-blocks .sb-cl-title { font-size: 40px; margin-top: 10px; max-width: 22ch; }
   .shop-blocks .sb-cl-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 32px; }
+  .shop-blocks .sb-cl-grid .sb-cl-wechat--qr { grid-column: 1 / -1; }
   .shop-blocks .sb-cl-item { padding: 18px 20px; gap: 16px; border-width: 2px; border-radius: 16px; }
   .shop-blocks .sb-cl-ico { width: 30px; height: 30px; }
   .shop-blocks .sb-cl-name { font-size: 20px; }
