@@ -329,6 +329,19 @@
      clip hides the sideways overflow and does not make a scroll box. */
   @media (min-width:768px){
     html, body{overflow-x:clip;}
+    .bar-links{
+      display:flex;align-items:center;gap:18px;flex-wrap:wrap;justify-content:flex-end;
+      font-family:var(--f-toni);font-weight:700;font-size:14px;line-height:1.2;
+    }
+    .bar-links a{
+      text-decoration:none;padding:6px 0;border-bottom:2px solid transparent;white-space:nowrap;
+    }
+    .bar-links a:hover{border-bottom-color:var(--ink);}
+    .bar-links a.on{color:var(--forest);border-bottom-color:var(--forest);}
+    body .shop-blocks .sb-blk-outer{scroll-margin-top:calc(var(--site-bar-h, 80px) + 12px);}
+  }
+  @media (max-width:767px){
+    .bar-links{display:none!important;}
   }
 </style>
 <script src="/assets/shop/blocks.js"></script>
@@ -338,6 +351,7 @@
   <div class="bar-in">
     <a class="wordmark" id="wordmark" href="/"></a>
     <div class="bar-actions">
+      <nav class="bar-links" id="barLinks" aria-label="On this page" hidden></nav>
       <a class="bar-menu-btn" id="barMenuBtn" href="#" hidden>Menu</a>
       <nav class="bar-nav" id="barNav" aria-label="Main">
         <span id="navLinks" style="display:contents"></span>
@@ -585,15 +599,104 @@ function openSiteBarMenu(url,ev){
   if(siteMenuDesktop()) openSiteMenuPhone(url);
   else location.href=url;
 }
+// §503 rule 54 · computer bar links (vocabulary v1.374). Menu stays Ramada.
+const SITE_BAR_LINKS=[
+  {label:'New to China', match:b=>b.type==='steps'||/new to china/i.test(String(pick(b.kicker_en,b.kicker_cn)||''))},
+  {label:'Our products', match:b=>b.type==='product_grid'},
+  {label:'Our location', match:b=>b.type==='store_info'},
+  {label:'Social', match:b=>b.type==='contact_links'},
+  {label:'Our story', match:b=>b.type==='recipe_story'||/our story/i.test(String(pick(b.kicker_en,b.kicker_cn)||''))},
+  {label:'Canton Fair', match:b=>b.type==='hero_banner'&&/canton fair/i.test(String(pick(b.headline_en,b.headline_cn)||pick(b.subtitle_en,b.subtitle_cn)||''))},
+];
+function validBlockId(id){
+  return /^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(String(id||''));
+}
+function resolveBarLinks(layout){
+  const used=new Set(), out=[];
+  for(const spec of SITE_BAR_LINKS){
+    const hit=(Array.isArray(layout)?layout:[]).find(b=>b&&typeof b==='object'&&validBlockId(b.id)&&!used.has(b.id)&&spec.match(b));
+    if(!hit) continue;
+    used.add(hit.id);
+    out.push({label:spec.label, id:hit.id});
+  }
+  return out;
+}
+function syncSiteBarHeight(){
+  const bar=document.querySelector('header.site-bar');
+  if(bar) document.documentElement.style.setProperty('--site-bar-h', bar.offsetHeight+'px');
+}
+function goToBarSection(id,ev){
+  if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+  const el=document.getElementById(id); if(!el) return;
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  el.scrollIntoView({block:'start',behavior:reduce?'auto':'smooth'});
+  if(!STAGE_MODE){ try{ history.replaceState(null,'','#'+id); }catch(e){} }
+}
+let barLinkObs=null;
+function wireBarLinkScroll(links){
+  if(barLinkObs){ barLinkObs.disconnect(); barLinkObs=null; }
+  if(!siteMenuDesktop()||!links.length||!window.IntersectionObserver) return;
+  const map={};
+  links.forEach(l=>{ map[l.id]=document.querySelector('.bar-links a[href="#'+CSS.escape(l.id)+'"]'); });
+  const sections=links.map(l=>document.getElementById(l.id)).filter(Boolean);
+  if(!sections.length) return;
+  barLinkObs=new IntersectionObserver(es=>{
+    let current=null;
+    for(const e of es){ if(e.isIntersecting) current=e.target; }
+    if(!current){
+      const line=(document.querySelector('header.site-bar')||{offsetHeight:0}).offsetHeight+20;
+      sections.forEach(s=>{ if(s.getBoundingClientRect().top<=line) current=s; });
+    }
+    Object.values(map).forEach(a=>{ if(a) a.classList.remove('on'); });
+    if(current&&map[current.id]) map[current.id].classList.add('on');
+  },{rootMargin:'-20% 0px -70% 0px',threshold:0});
+  sections.forEach(s=>barLinkObs.observe(s));
+}
+function mountBarLinks(layout){
+  const nav=$('#barLinks'); if(!nav) return;
+  nav.innerHTML='';
+  const links=resolveBarLinks(layout);
+  if(!siteMenuDesktop()||!links.length){ nav.hidden=true; wireBarLinkScroll([]); syncSiteBarHeight(); return; }
+  for(const l of links){
+    const a=document.createElement('a');
+    a.href='#'+l.id;
+    a.textContent=l.label;
+    a.addEventListener('click',ev=>goToBarSection(l.id,ev));
+    nav.appendChild(a);
+  }
+  nav.hidden=false;
+  document.querySelectorAll('.sb-blk-outer[data-block-id]').forEach(el=>{
+    const id=el.getAttribute('data-block-id')||'';
+    if(validBlockId(id)) el.id=id;
+  });
+  syncSiteBarHeight();
+  wireBarLinkScroll(links);
+  scrollToBarHash();
+}
+let scrollToBarHashDone=false;
+function scrollToBarHash(){
+  if(STAGE_MODE||scrollToBarHashDone) return;
+  const id=(location.hash||'').slice(1);
+  if(!validBlockId(id)) return;
+  const el=document.getElementById(id); if(!el) return;
+  scrollToBarHashDone=true;
+  el.scrollIntoView({block:'start'});
+}
 function bindSiteBarMenu(){
   const btn=$('#barMenuBtn'); if(!btn) return;
   const url=siteBarMenuUrl();
   if(!url){ btn.hidden=true; return; }
   btn.hidden=false;
   btn.href=url;
+  syncSiteBarHeight();
   if(btn.dataset.wired==='1') return;
   btn.dataset.wired='1';
-  btn.addEventListener('click',ev=>openSiteBarMenu(url,ev));
+  btn.addEventListener('click',ev=>openSiteBarMenu(siteBarMenuUrl(),ev));
+  window.addEventListener('resize',()=>{
+    syncSiteBarHeight();
+    const pub=state.config&&state.config.website&&state.config.website.layout;
+    mountBarLinks(Array.isArray(pub)?pub:[]);
+  });
 }
 
 async function placeShopPins(layout){
@@ -724,6 +827,7 @@ async function render(){
     // On the stage, the editor's own live pair (public/cms.html) says what to
     // do; a visitor sees the brand's header and footer around an empty body.
     view.innerHTML=STAGE_MODE?'<p class="empty">'+(state.lang==='cn'?'添加模块':'Add a block')+'</p>':'';
+    mountBarLinks([]);
     return;
   }
   if(!state.products) state.products=await loadProducts(layout);
@@ -731,6 +835,8 @@ async function render(){
   ShopBlocks.setContext({ lang:state.lang, products:state.products, categories:[], flashSales:[], config:state.config });
   view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layout)+'</div>';
   ShopBlocks.startTimers(view);
+  scrollToBarHashDone=false;
+  mountBarLinks(layout);
   stageHighlight(true);
   renderChatButton(layout);
   mountStoreVisit(view);
@@ -890,6 +996,12 @@ function renderChatButton(layout){
     document.addEventListener('click',ev=>{
       if(trySiteMenuCtaClick(ev)) return;
       if(ev.target.closest('#barMenuBtn')){ const u=siteBarMenuUrl(); if(u) openSiteBarMenu(u,ev); return; }
+      const barA=ev.target.closest('#barLinks a');
+      if(barA){
+        const id=(barA.getAttribute('href')||'').slice(1);
+        if(validBlockId(id)){ ev.preventDefault(); ev.stopPropagation(); goToBarSection(id,ev); }
+        return;
+      }
       const blk=ev.target.closest('.sb-blk-outer');
       if(blk){
         ev.preventDefault(); ev.stopPropagation();

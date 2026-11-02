@@ -285,8 +285,8 @@ yes(/function siteBarMenuUrl\(\)/.test(SITE) && /function bindSiteBarMenu\(\)/.t
   'the Menu href is resolved from web.site.menu, nav, footer or layout');
 yes(/function openSiteBarMenu\(url,ev\)/.test(SITE) && /siteMenuDesktop\(\)\) openSiteMenuPhone\(url\)/.test(SITE),
   'a computer opens the bar Menu in the phone frame; a phone follows the link');
-yes(/overflow-x:clip/.test(SITE) && !/id="barMenuPanel"/.test(SITE),
-  'on a computer the bar stays put; Menu is not a list of page sections');
+yes(/overflow-x:clip/.test(SITE) && /id="barLinks"/.test(SITE) && /SITE_BAR_LINKS/.test(SITE) && /function mountBarLinks\(/.test(SITE) && !/id="barMenuPanel"/.test(SITE),
+  'on a computer the bar stays put and carries six section links beside Menu');
 const BAR_MOCK = read('reference/site-bar-section-links-mockup.html');
 yes(/href="#new-to-china">New to China/.test(BAR_MOCK)
   && /href="#products">Our products/.test(BAR_MOCK)

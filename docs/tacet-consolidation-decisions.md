@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.612
+# Tacet shared-core consolidation — decisions record, v4.613
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-02 · v4.613 — **§503 AMENDED · THE SIX BAR LINKS GO LIVE ON A COMPUTER — ASH.** Ash confirmed the mockup and said *"confirmed,deploy live"*. From 768px up `public/site.html` draws six links on the sticky bar — New to China, Our products, Our location, Social, Our story, Canton Fair — each scrolling to the matching block on the published website. Menu stays the forest pill that opens the Ramada QR menu (phone frame on a computer). A phone keeps wordmark and Menu only. The sticky fix (rule 52) stands. Six composed strings (vocabulary v1.374). No change to `.gitignore` or CI.
 
 2026-11-02 · v4.612 — **§503 AMENDED · THE LONG LIST UNDER MENU IS NOT THE BAR — ASH.** Ash, on the list that opened under Menu: *"i dont want all this menu list is too long . also on pc thats not what i mean . i wan there will be on the sticky bar few link that once clicking it will go directly to the page. i dont want it to be under menu . the menu is one of the button user can click to see ramada menu , the rest of the links can be : new to china, our products, our location , social , our story , canton fair"* and asked for a mockup he can test. Rule 53 is withdrawn. Menu stays the Ramada button. The six names are drawn on the bar in `reference/site-bar-section-links-mockup.html`, in page order, and are not on the live site. The sticky fix from v4.611 stays. No new words on the live site. No change to `.gitignore` or CI.
 
@@ -33691,7 +33693,9 @@ Ash: *"pc - top bar should be sticky and also menu where a user can click on a l
 
 52. **On a computer the top bar stays on screen.** From 768px up `public/shop/blocks.css` sets `overflow-x: hidden` on `html` and `body` so a full-bleed block cannot grow a sideways scrollbar. A hidden axis forces the other axis to `auto`. The page then scrolled in one box and the sticky bar belonged to the other, so the bar left with the scroll. On the brand site only, that rule is overridden with `overflow-x: clip`. Clip still hides the sideways overflow and does not make a scroll box, so `header.site-bar` stays at the top. The web shop is unchanged.
 
-53. **Withdrawn the same day.** A list of every section under Menu is not the bar. Ash: the list is too long, and Menu is the button that opens the Ramada menu. The other links sit on the bar itself. They are not on the live site. The mockup is `reference/site-bar-section-links-mockup.html`.
+53. **Withdrawn the same day.** A list of every section under Menu is not the bar. Ash: the list is too long, and Menu is the button that opens the Ramada menu. The mockup was `reference/site-bar-section-links-mockup.html`.
+
+54. **On a computer the bar carries six links, and Menu stays Ramada.** From 768px up the brand site draws, in this order: **New to China** (the steps block), **Our products** (the product grid), **Our location** (the store block), **Social** (the contact block), **Our story** (the story block), **Canton Fair** (the banner whose headline names the fair). A click scrolls that block so its top sits just under the bar. **Menu** is still the forest pill; it opens the Ramada QR menu, in the phone frame on a computer (rule 51). Below 768px the six links are hidden; the bar is wordmark and Menu. The labels are fixed English (rule 32); they resolve each block by type and content, not by block id. Lobby menu showcases are not bar links. No new settings.
 
 ## §504 — EACH OF ROOTS' CHARACTER KEYS SHOWS THE DRAWING ITS NAME SAYS
 
