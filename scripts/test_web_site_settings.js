@@ -229,6 +229,9 @@ yes(/\.sb-grid-block \.sb-more,body \.shop-blocks \.sb-cattabs \.sb-more\{\s*fon
   'SEE ALL is 18px and stays on one line');
 yes(/body \.shop-blocks \.sb-grid-block\{padding:32px calc\(44 \* var\(--u\)\) 36px;/.test(SITE),
   'a product grid breathes like the menu and steps blocks on a phone');
+yes(/body \.shop-blocks \.sb-blk-outer\[data-block-type="hero_banner"\]:not\(:first-child\)\{\s*margin-top:32px;/.test(SITE)
+  && !/@media \(min-width:768px\)\{[\s\S]*hero_banner"\]:not\(:first-child\)/.test(SITE),
+  'a hero after a menu or grid gets the same 32px oat band on phone and desktop');
 yes(/function placeShopPins\(layout\)/.test(SITE) && /en\.length>=4&&name\.includes\(en\)/.test(SITE) && /rows\.stores/.test(SITE),
   'a store with no pin takes the position of the shop it names');
 yes(/function mountStoreVisit\(root\)/.test(SITE) && /\.sb-st-visit/.test(SITE) && /Get directions/.test(SITE) && /openInMapApp\(p\)/.test(SITE),

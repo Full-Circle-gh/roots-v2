@@ -243,6 +243,14 @@
 
 
 
+  /* Oat band before a hero that follows another block (menu rail → full-bleed
+     image, product grid → poster, etc.). Desktop always had 32px; phone did
+     not, so Beverages sat on the coffee/spread hero. Pairs with each section's
+     own bottom padding (menu/grid 36px) like the gap between menu sections. */
+  body .shop-blocks .sb-blk-outer[data-block-type="hero_banner"]:not(:first-child){
+    margin-top:32px;
+  }
+
   /* One visit card: map + details together (§503 rule 50). */
   body .shop-blocks .sb-st-visit{background:#fff;border-radius:22px;overflow:hidden;}
   /* The scroll shield sits beside the map node, not inside it (§503 rule 39).
@@ -275,9 +283,6 @@
       border-top:2px solid var(--ink);
       border-bottom:2px solid var(--ink);
       border-radius:0;
-    }
-    body .shop-blocks .sb-blk-outer[data-block-type="hero_banner"]:not(:first-child){
-      margin-top:32px;
     }
     body .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] .sb-split-img{
       background:var(--paper);
