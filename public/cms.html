@@ -9659,7 +9659,7 @@ function renderBlockBody(b) {
     case 'spacer': {
       const dStyle = b.divider_style || 'none';
       d.className = 'b-spacer divider-' + dStyle;
-      d.style.height = (b.height_px || 24) + 'px';
+      d.style.height = shapePhone(b, 'height_px', 24) + 'px';
       if (dStyle !== 'none') {
         const dc = brandColorVar(b.divider_color) || 'var(--b-olive, #6A6E2D)';
         d.style.setProperty('--divider-color', dc);
@@ -12935,6 +12935,12 @@ function buildGridForm(m, b) {
 function buildSpacerForm(m, b) {
   const secLayout = inspectorSection(m, b.type, 'layout', T('Style & layout', '样式与版式'), { open: true });
   secLayout.appendChild(field(T('Height (px)', '高度(像素)'), '', num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 4, max: 200 })));
+  // §515 — the spacer's height wears the same phone twin as the shape picks:
+  // empty means "same as computer", so one gap can serve both widths until
+  // the office gives the phone a gap of its own.
+  secLayout.appendChild(field(T('On phone', '手机上'),
+    T('The gap this spacer leaves on a phone. Empty means same as computer.', '手机上的留空高度。留空表示与电脑相同。'),
+    num(b.height_px_phone ?? '', v => updateBlock(b.id, { height_px_phone: v > 0 ? v : undefined }), { min: 4, max: 200 })));
   secLayout.appendChild(field(T('Divider', '分隔线'), T('An optional line in the middle that turns the gap into a section break.', '可选 — 中间的一条线,把留白变成区块分隔。'),
     sel(b.divider_style || 'none', DIVIDER_STYLE_OPTIONS,
         v => updateBlock(b.id, { divider_style: v }))));

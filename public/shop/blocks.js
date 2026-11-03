@@ -392,7 +392,7 @@
 
   // spacer ------------------------------------------------------------------
   renderers.spacer = function (b) {
-    var h = b.height_px || 24;
+    var h = shapeOn(b, 'height_px', 24);
     var ds = b.divider_style || 'none';
     var dc = color(b.divider_color || 'olive-moss');
     var divider = ds !== 'none'

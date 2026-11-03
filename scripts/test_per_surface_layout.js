@@ -119,5 +119,19 @@ section('4 · nothing else changed shape');
 yes(/function showsOnWeb\(b\) \{ return !!b && b\.show_on !== 'miniapp'; \}/.test(BLOCKS), 'show_on still gates the surface, not the shape');
 yes(/ALLOWED_BLOCK_TYPES/.test(read('routes/retail.js')), 'the server still whitelists block types, and fields pass through as before');
 
+// ─────────────────────────────────────────────────────────────────────────
+section('5 · the spacer\'s gap wears the twin too (§515)');
+
+yes(/num\(b\.height_px_phone \?\? '', v => updateBlock\(b\.id, \{ height_px_phone: v > 0 \? v : undefined \}\)/.test(CMS),
+  'the spacer form carries an On phone height, and clearing it returns to same-as-computer');
+yes(/d\.style\.height = shapePhone\(b, 'height_px', 24\) \+ 'px';/.test(CMS), 'the editor\'s phone DOM reads the twin gap');
+yes(/var h = shapeOn\(b, 'height_px', 24\);/.test(BLOCKS), 'the web engine reads the twin gap at the viewport\'s width');
+yes(/style="height: \$\{\(b\.height_px_phone \|\| b\.height_px\) \|\| 24\}px"/.test(STORE), 'the phone drawer reads the twin gap');
+yes(/out\.height = \(b\.height_px_phone \|\| b\.height_px\) \|\| 24;/.test(MINI), 'the mini app reads the twin gap');
+yes(onPhone({ height_px: 40, height_px_phone: 12 }, 'height_px', 24) === 12 &&
+    onDesk({ height_px: 40, height_px_phone: 12 }, 'height_px', 24) === 40 &&
+    onPhone({ height_px: 40 }, 'height_px', 24) === 40,
+  'a phone gap of its own when set; one shared gap while unset');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

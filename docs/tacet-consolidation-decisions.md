@@ -33942,3 +33942,13 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 4. **The mini app is a phone.** Its renderer reads the twin first, unconditionally; it has no computer width to fall across.
 
 5. **Words.** Two composed pairs and one hint (vocabulary v1.385): the twin's label, its "same" option, and the line under it. Nothing retired; the base labels stay live.
+
+## §515 — THE SPACER'S GAP WEARS THE TWIN TOO
+
+**2026-11-03 · DECIDED BY ASH.** Ash, on the Website page's phone stage with a Spacer selected, after §514 shipped: *"the space actually changin on desktop not mobile. mopbile stay the same"*, and when asked: separate phone height, not a redraw bug. §514 covered the shape dropdowns; the spacer's Height is a number, and one number fed both widths.
+
+1. **`height_px_phone`, empty means same as computer.** The spacer form gains a second number field under Height, labelled with §514's live `On phone · 手机上` pair. Cleared, it writes nothing and the phone keeps sharing the computer's gap; filled, the phone holds its own gap whatever the computer's does afterwards.
+
+2. **The same four readers.** The web engine reads it through §514's `shapeOn` at the viewport's width; the editor's phone DOM through `shapePhone`; the mini app and the editor's phone drawer twin-first. The divider inside the spacer is unchanged at both widths.
+
+3. **Words.** One composed hint (vocabulary v1.386); the label is §514's, reused. Nothing retired.
