@@ -37,9 +37,13 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const MH = fs.readFileSync(path.join(ROOT, 'public/m.html'), 'utf8');
-const CM = fs.readFileSync(path.join(ROOT, 'public/cms-mobile.html'), 'utf8');
-const CD = fs.readFileSync(path.join(ROOT, 'public/cms.html'), 'utf8');
+// Assertions match on \n. A Windows checkout (core.autocrlf) hands some of
+// these pages over as CRLF, which failed regexes that never meant to ask
+// about line endings.
+const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
+const MH = read('public/m.html');
+const CM = read('public/cms-mobile.html');
+const CD = read('public/cms.html');
 
 let passed = 0, failed = 0;
 const queue = [];
