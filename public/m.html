@@ -21017,11 +21017,13 @@ function loadRqShelf(storeId){
     if(r.to===id||r.from===id) render();
   });
 }
-/* Under the SKU, and only on Ask for stock. Ask the kitchen shares the picker
-   and has no location chips, so a number here would be a shop they did not
-   pick. Destination first, then the shop being asked — the order of the two
-   questions. A shop whose answer has not landed, failed, or came back with no
-   quantities (add-mode strips them) is omitted rather than drawn as 0. */
+/* Under the whole row, and only on Ask for stock. Ask the kitchen shares the
+   picker and has no location chips, so a number here would be a shop they
+   did not pick. Destination first, then the shop being asked — the order of
+   the two questions. A shop whose answer has not landed, failed, or came back
+   with no quantities (add-mode strips them) is omitted rather than drawn as 0.
+   The line sits under name and steppers together: beside the +/− it is too
+   narrow, and Ash twice saw Tianhe's count on the next line. */
 function rqShelfNote(p){
   const top=(state.stack||[])[(state.stack||[]).length-1];
   if(!top||top.route!=='askstock') return '';
@@ -21032,12 +21034,10 @@ function rqShelfNote(p){
     const map=r.shelf&&r.shelf[sid];
     if(!map||!Object.keys(map).length) continue;
     const q=map[p.id]==null?0:map[p.id];
-    // Shop and count are one wrap unit. Ash, live: Tianhe's number sat
-    // alone on the next line because the space before it was a break.
     bits.push(`<span style="white-space:nowrap">${escAttr(rqStoreName(sid))} ${q}</span>`);
   }
   if(!bits.length) return '';
-  return `<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${
+  return `<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);white-space:nowrap;margin-top:4px">${
     T('On the shelf','在架')} · ${bits.join(' · ')}</span>`;
 }
 function rqName(p){ return LANG==='en'?(p.name_en||p.name_cn||''):(p.name_cn||p.name_en||''); }
@@ -24097,11 +24097,11 @@ function rqBodyHtml(){
     T('No products match','没有匹配的商品')}</div>`;
   return note+`<div>${rows.map(p=>{
     const n=r.qty[p.id]||0, typing=(r.typing||{})[p.id], terr=(r.typeErr||{})[p.id]||'';
-    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+    return `<div style="padding:12px 16px;border-top:1px solid var(--border-default)">
+      <div style="display:flex;align-items:center;gap:12px">
       <span style="flex:1;min-width:0">
         <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rqName(p))}</span>
         ${p.sku?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${escAttr(p.sku)}</span>`:''}
-        ${rqShelfNote(p)}
         <span id="rqerr-${p.id}" style="display:${terr?'block':'none'};font-size:13px;color:var(--brick-ink);margin-top:3px">${escAttr(terr)}</span>
       </span>
       <button id="rqless-${p.id}" class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},-1)"${n<=0?' disabled':''}
@@ -24109,6 +24109,8 @@ function rqBodyHtml(){
       ${rqCountCell(p)}
       <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},1)"
         aria-label="${T('More','增加')}">${ic('plus',18)}</button>
+      </div>
+      ${rqShelfNote(p)}
     </div>`;
   }).join('')}</div>`;
 }
