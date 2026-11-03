@@ -28,6 +28,7 @@
  *  13. a draft does not keep the counts
  *  14. the label is Add stock's live pair, not a composed one
  *  15. shop name and count are one wrap unit, so Tianhe's number cannot sit alone
+ *  16. the line sits under the whole row (after the steppers), not in the name column
  */
 
 'use strict';
@@ -155,6 +156,10 @@ console.log('\n══ what the row draws ══');
      'and a zero at the destination is drawn, not skipped');
   ok(body.indexOf('1-10') < body.indexOf(shelfLine('On the shelf', 'Yuexiu 2', 'Tianhe 15')),
      'the SKU stays on its own line above the counts');
+  ok(body.indexOf('rqless-7') < body.indexOf(shelfLine('On the shelf', 'Yuexiu 2', 'Tianhe 15')),
+     'the counts sit under the whole row, after the steppers — not in the squeezed name column');
+  ok(/white-space:nowrap;margin-top:4px/.test(body),
+     'and the line itself does not wrap');
   ok((body.match(/On the shelf/g) || []).length === 2, 'each row carries the label once');
   ok(body.includes(nowrap('Tianhe 15')) && !/Tianhe\s+15/.test(body.replace(/<span style="white-space:nowrap">Tianhe 15<\/span>/g, '')),
      'Tianhe and its number are one wrap unit, not a space the line can break on');
@@ -298,6 +303,8 @@ async function asyncCases() {
        'waste\'s on-hand pair is not reused here — that screen writes off, this one asks');
     ok(note.includes('white-space:nowrap'),
        'shop name and count cannot wrap apart — Ash, live: Tianhe\'s number jumped');
+    ok(/display:block;font-size:12\.5px;color:var\(--text-secondary\);white-space:nowrap/.test(note),
+       'the whole line is nowrap — sitting under the row, not beside the steppers');
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
