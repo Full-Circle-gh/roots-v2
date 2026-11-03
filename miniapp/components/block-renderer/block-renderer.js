@@ -367,7 +367,7 @@ Component({
           break;
         }
         case 'hero_banner': {
-          out.heroView = b.view || 'full';
+          out.heroView = (b.view_phone || b.view) || 'full';
           out.imageUrl = absUrl(b.image_url);
           out.heroVideo = absUrl(b.video_url);
           if (b.image_aspect && b.image_url) out.aspectRatio = String(b.image_aspect);
@@ -421,7 +421,7 @@ Component({
           out.seeAll  = L === 'cn' ? '查看全部' : 'SEE ALL';
           out.seeAllTarget = b.link_target || 'shop';
           out.catWord = L === 'cn' ? '分类' : 'CATEGORY';
-          out.catView = b.view || 'tiles';
+          out.catView = (b.view_phone || b.view) || 'tiles';
           // Visual direction. 'classic' uses the `view` Layout (tiles/icons/
           // scroll). index/bento/sticker are the three "Shop the garden"
           // design directions, each a self-contained layout that ignores view.
@@ -521,7 +521,7 @@ Component({
           // page bg shows through); `card_bg_color` / `card_fg_color` paint
           // the inner card. Legacy blocks without these fields keep the old
           // hardcoded look (ink card + oat-milk text).
-          out.featuredView    = b.view || 'card';
+          out.featuredView    = (b.view_phone || b.view) || 'card';
           out.featuredBg      = b.bg_color ? color(b.bg_color) : 'transparent';
           out.featuredCardBg  = color(b.card_bg_color || 'ink');
           out.featuredCardFg  = color(b.card_fg_color || 'oat-milk');
@@ -543,7 +543,7 @@ Component({
           // that category; everything else opens the Shop tab.
           out.seeAllTarget = b.link_target || (b.category_id ? ('category:' + b.category_id) : 'shop');
           out.cols   = b.columns || 2;
-          out.gridView = b.view || 'grid';
+          out.gridView = (b.view_phone || b.view) || 'grid';
           // 2026-05-20 enhancements: card corner radius + grid density +
           // rank badge gating (only relevant for top_selling source).
           out.gridCorner  = b.corner_radius || 'subtle';
@@ -786,7 +786,7 @@ Component({
           // Standalone unread-notifications bar. Text/icon/count come from the
           // shared notif-* props (fed to every block by the home page); the
           // operator controls only the look here. Default surface is ink/black.
-          out.nbarView = b.view || 'bar';
+          out.nbarView = (b.view_phone || b.view) || 'bar';
           out.nbarBg = color(b.bg_color || 'ink');
           out.nbarFg = color(b.fg_color || 'white');
           // Action chip (the arrow). Blank → falls back to the text colour so
@@ -844,12 +844,12 @@ Component({
           // Sale accent for the per-card sale price + sold-meter bar. Blank
           // by default so unset strips keep the brand-red (#E96174) WXSS look.
           out.flashAccent = b.accent_color ? color(b.accent_color) : '';
-          const view = b.view || 'strip';
+          const view = (b.view_phone || b.view) || 'strip';
           out.flashView = view;
           // Card layout: 'grid' wraps the product cards two-per-row so a few
           // show at once without swiping; default 'carousel' keeps the
           // sideways-scrolling row. Banner has no cards, so never grid.
-          out.flashGrid = b.card_layout === 'grid' && view !== 'banner';
+          out.flashGrid = (b.card_layout_phone || b.card_layout) === 'grid' && view !== 'banner';
           out.flashDesign = null;
           const all = this.properties.flashSales || [];
           const active = all.filter(p => p.flash && p.flash.state === 'active');
@@ -1084,7 +1084,7 @@ Component({
             };
           });
           out.topUp = {
-            layout:  b.layout || 'a',                 // a card-row · b receipt · c hero+strip
+            layout:  (b.layout_phone || b.layout) || 'a',                 // a card-row · b receipt · c hero+strip
             accent:  b.accent_color ? color(b.accent_color) : '#CCD900', // lime-leaf
             kicker:  lang.pick(b.kicker_en, b.kicker_cn, L),
             title:   lang.pick(b.title_en,  b.title_cn,  L),
@@ -1101,7 +1101,7 @@ Component({
           out.fg = color(b.fg_color || 'ink');
           // Star colour for filled stars. Blank → WXSS gold (#F2CA6C) default.
           out.starColor = b.star_color ? color(b.star_color) : '';
-          out.reviewView = b.view || 'card';
+          out.reviewView = (b.view_phone || b.view) || 'card';
           // Migrate legacy single-review blocks transparently.
           let reviews = Array.isArray(b.reviews) && b.reviews.length ? b.reviews : null;
           if (!reviews && (b.quote_en || b.quote_cn || b.author_name)) {
@@ -1207,7 +1207,7 @@ Component({
           // show an empty-state nudge instead.
           out.bg = color(b.bg_color || 'oat-milk');
           out.fg = color(b.fg_color || 'ink');
-          const view = b.view || 'scroll';            // 'scroll' | 'grid'
+          const view = (b.view_phone || b.view) || 'scroll';            // 'scroll' | 'grid'
           const limit = Math.max(1, Math.min(12, b.limit || 6));
           const favs = Array.isArray(this.properties.favorites) ? this.properties.favorites : [];
           const hideEmpty = b.hide_when_empty !== false;
@@ -1260,7 +1260,7 @@ Component({
           // button switches to the accent-coloured "CAST VOTE" state.
           const promptBg   = b.prompt_bg_color   ? color(b.prompt_bg_color)   : '';
           const promptText = b.prompt_text_color ? color(b.prompt_text_color) : '';
-          const view = b.view || (b.title_en || b.title_cn ? 'teaser' : 'peek');
+          const view = (b.view_phone || b.view) || (b.title_en || b.title_cn ? 'teaser' : 'peek');
           const src  = b.data_source || 'auto_pull';
 
           // Resolve poll for auto-pull views.
@@ -1378,7 +1378,7 @@ Component({
           // View variants (b.view): 'card' (default, full lime card),
           // 'strip' (one-line horizontal), 'stat' (big earned-¥ hero),
           // 'receipt' (dashed receipt-paper aesthetic).
-          const view = b.view || 'card';
+          const view = (b.view_phone || b.view) || 'card';
           // Per-view colour defaults so a fresh block looks intentional.
           const bgDefault = view === 'stat'    ? 'ink'
                           : view === 'receipt' ? 'oat-milk'
@@ -1486,7 +1486,7 @@ Component({
           // flipped to 1 pt = ¥1.
           const ptVal = Number(c.point_value_yuan) > 0 ? Number(c.point_value_yuan) : 0.01;
           const ptsValue = (pts * ptVal).toFixed(2);
-          const view = b.view || 'card';
+          const view = (b.view_phone || b.view) || 'card';
           const isDesign = view === 'classic' || view === 'wallet' || view === 'coin';
           out.greeting = {
             view,
@@ -1806,7 +1806,7 @@ Component({
           //    WeCom CRM. Generated in 企微后台 → 客户联系 → 联系我.
           out.bg = color(b.bg_color || 'oat-milk');
           out.fg = color(b.fg_color || 'ink');
-          const view = b.view === 'strip' ? 'strip' : 'card';
+          const view = (b.view_phone || b.view) === 'strip' ? 'strip' : 'card';
           // Card art direction (card view only): warm | coupon | poster |
           // compact. Mirrors the four styles in the Mini App Editor.
           const cardStyle = ['warm', 'coupon', 'poster', 'compact'].includes(b.card_style) ? b.card_style : 'warm';

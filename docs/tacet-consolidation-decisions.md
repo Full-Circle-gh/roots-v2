@@ -33928,3 +33928,17 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 3. **The preference persists as before** (cms_stage). A tenant who left the switch on Phone lands on the phone-width site when they open the Website page, and on the mini-app phone frame on every other page that allows it.
 
 4. **Words.** One composed pair (vocabulary v1.383): the Phone button's tooltip on this page, built in the desktop pair's own shape. The v1.361 pair that explained the disabled button — the website is edited on Desktop and adapts by itself — is retired with the button state it explained.
+
+## §514 — EVERY SHAPE PICK WEARS A PHONE TWIN: A BLOCK MAY SIT DIFFERENTLY ON EACH WIDTH
+
+**2026-11-03 · DECIDED BY ASH.** Ash, in the editor with a Product grid selected, where one Layout dropdown fed every width: *"i should beable to select diffeerent layout between phone and desktop. and i am reffering to any block. right now i change the layout , it change both in desktop and also on mobile"*. One shape value per block served every surface; a tenant who wants a scrolling row on the phone and a grid on the computer had no way to say so.
+
+1. **A phone override field, falling back to the base.** Every shape field F (`view`, `layout`, `card_layout`) gains an optional sibling `F_phone`. Phone surfaces — the brand site below 768px, the web shop on a phone, the WeChat mini app, the editor's phone DOM and phone sheet — read `F_phone` when set, else F. Computer surfaces read F. Nothing migrates: with no override set, every saved block draws exactly as it draws today, at both widths.
+
+2. **The inspector shows the twin.** Under each shape dropdown sits a second one, `On phone · 手机上`, offering the same choices plus `Same as computer · 与电脑相同`, which is the unset state and clears the field. The base dropdown keeps its live label and remains the computer's value and the default. The mobile editor's phone sheet mirrors both controls like any other.
+
+3. **The web renderer picks at draw time and redraws on the crossing.** public/shop/blocks.js asks the viewport (max-width:767px) as it draws; site.html and shop.html register a redraw for the moment the viewport crosses the breakpoint, so a browser dragged across it shows the other shape without a reload. The editor's stages need no extra wiring: the desktop stage draws those pages at 1280 and the Website's phone stage at 390, so each stage shows — and the phone DOM beside it edits — its own width's value.
+
+4. **The mini app is a phone.** Its renderer reads the twin first, unconditionally; it has no computer width to fall across.
+
+5. **Words.** Two composed pairs and one hint (vocabulary v1.385): the twin's label, its "same" option, and the line under it. Nothing retired; the base labels stay live.

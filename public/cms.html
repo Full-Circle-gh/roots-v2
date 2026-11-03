@@ -9103,7 +9103,7 @@ function renderBlockBody(b) {
       return d;
     }
     case 'hero_banner': {
-      const view = b.view || 'full';
+      const view = shapePhone(b, 'view', 'full');
       d.className = 'b-hero b-hero-' + view;
 
       if (view === 'split') {
@@ -9342,8 +9342,8 @@ function renderBlockBody(b) {
       return d;
     }
     case 'notification_bar': {
-      d.className = 'b-nbar b-nbar-' + (b.view || 'bar');
-      const view = b.view || 'bar';
+      d.className = 'b-nbar b-nbar-' + (shapePhone(b, 'view', 'bar'));
+      const view = shapePhone(b, 'view', 'bar');
       const nbg = brandColorVar(b.bg_color) || 'var(--b-ink)';
       const nfg = brandColorVar(b.fg_color) || 'var(--b-white)';
       const nbtnHex = b.btn_color ? dcResolveHex(b.btn_color) : null;
@@ -9375,7 +9375,7 @@ function renderBlockBody(b) {
       return d;
     }
     case 'category_tabs': {
-      const view = b.view || 'tiles';
+      const view = shapePhone(b, 'view', 'tiles');
       // Visual direction. 'classic' keeps the Layout (tiles/icons/scroll);
       // index/bento/sticker are the three "Shop the garden" directions, each a
       // self-contained layout that ignores `view`.
@@ -9515,7 +9515,7 @@ function renderBlockBody(b) {
       return d;
     }
     case 'featured_item': {
-      const view = b.view || 'card';
+      const view = shapePhone(b, 'view', 'card');
       d.className = 'b-featured b-featured-' + view + cornerRadiusClass(b) + entranceAnimClass(b);
       // Outer block surface — null/empty = transparent.
       const bg = brandColorVar(b.bg_color);
@@ -9573,7 +9573,7 @@ function renderBlockBody(b) {
       return d;
     }
     case 'product_grid': {
-      const view = b.view || 'grid';
+      const view = shapePhone(b, 'view', 'grid');
       d.className = 'b-grid b-grid-' + view + cornerRadiusClass(b) + ' density-' + (b.density || 'normal');
       const gridBg = b.bg_color ? dcResolveHex(b.bg_color) : '';
       const gridSale = b.accent_color ? dcResolveHex(b.accent_color) : '';
@@ -9668,10 +9668,10 @@ function renderBlockBody(b) {
       return d;
     }
     case 'flash_sale_strip': {
-      const view = b.view || 'strip';
+      const view = shapePhone(b, 'view', 'strip');
       const isFsDesign = view === 'classic' || view === 'editorial' || view === 'urgency';
       // Card layout: 'grid' wraps cards two-per-row (no sideways swipe).
-      const fsGridCls = (b.card_layout === 'grid' && view !== 'banner') ? ' is-grid' : '';
+      const fsGridCls = (shapePhone(b, 'card_layout', 'carousel') === 'grid' && view !== 'banner') ? ' is-grid' : '';
       d.className = 'b-flash b-flash-' + view
         + (isFsDesign ? cornerRadiusClass(b) + entranceAnimClass(b) : '');
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-berry)';
@@ -9951,7 +9951,7 @@ function renderBlockBody(b) {
       return d;
     }
     case 'top_up': {
-      const layout = b.layout || 'a';
+      const layout = shapePhone(b, 'layout', 'a');
       d.className = 'b-topup b-topup--' + layout;
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
@@ -10021,7 +10021,7 @@ function renderBlockBody(b) {
       return d;
     }
     case 'review_card': {
-      const view = b.view || 'card';
+      const view = shapePhone(b, 'view', 'card');
       const isCardLayout = view === 'editorial' || view === 'riso' || view === 'spotlight';
       d.className = 'b-review b-review-' + view;
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
@@ -10224,12 +10224,12 @@ function renderBlockBody(b) {
       return d;
     }
     case 'voting_block': {
-      d.className = 'b-voting b-voting-' + (b.view || 'peek') + entranceAnimClass(b);
+      d.className = 'b-voting b-voting-' + (shapePhone(b, 'view', 'peek')) + entranceAnimClass(b);
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const accent = brandColorVar(b.accent_color) || 'var(--b-lime)';
       const statusCol = brandColorVar(b.status_color) || '#E96174';   // "● OPEN" indicator
-      const view = b.view || 'peek';
+      const view = shapePhone(b, 'view', 'peek');
       const src  = b.data_source || 'auto_pull';
       const cta  = pickLang(b.cta_label_en, b.cta_label_cn);
 
@@ -10399,7 +10399,7 @@ function renderBlockBody(b) {
       return d;
     }
     case 'affiliate_block': {
-      const view = b.view || 'card';
+      const view = shapePhone(b, 'view', 'card');
       const isStat    = view === 'stat';
       const isReceipt = view === 'receipt';
       const bgDefault    = isStat ? 'var(--b-ink)'  : isReceipt ? 'var(--b-oat)'  : 'var(--b-lime)';
@@ -10554,7 +10554,7 @@ function renderBlockBody(b) {
       return d;
     }
     case 'greeting': {
-      const view = b.view || 'card';
+      const view = shapePhone(b, 'view', 'card');
       d.className = 'b-greeting b-greeting-' + view;
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
@@ -11015,7 +11015,7 @@ function renderBlockBody(b) {
       const showQr = b.show_qr !== false;
       const qrUrl = b.qr_image_url;
 
-      if (b.view === 'strip') {
+      if (shapePhone(b, 'view') === 'strip') {
         d.className = 'b-wc b-wc-strip';
         d.style.background = bgVar;
         d.style.color = fgVar;
@@ -11158,7 +11158,7 @@ function renderBlockBody(b) {
       // CMS preview pulls from a generic sample so the author sees the
       // shape — at runtime the block sources from the customer's actual
       // saved products via /api/retail/favorites.
-      const view = b.view || 'scroll';
+      const view = shapePhone(b, 'view', 'scroll');
       d.className = 'b-fav b-fav-' + view + cornerRadiusClass(b);
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
@@ -11895,6 +11895,34 @@ function sel(value, options, onChange) {
   return el;
 }
 
+// §514 — every shape pick wears a phone twin: a second dropdown under the
+// base one, offering the base's own choices plus "Same as computer", which
+// is the unset state. The choices are read off the base control just added
+// to the same host (a section element or a field list), so the two can
+// never drift apart. The twin writes <key>_phone; phone surfaces read it
+// first, every other surface keeps reading the base field.
+function phoneShapeTwin(b, key, host, optsOverride) {
+  const wrap = Array.isArray(host) ? host[host.length - 1] : host.lastElementChild;
+  const base = wrap && wrap.querySelector('select');
+  const opts = optsOverride || (base ? Array.from(base.options).map(o => ({ value: o.value, label: o.textContent })) : []);
+  const cur = b[key + '_phone'];
+  return field(T('On phone', '手机上'),
+    T('The shape this block takes on a phone. Same as computer keeps one shape for both widths.', '本模块在手机上的排版形状。「与电脑相同」表示两种宽度同一种排版。'),
+    sel(cur === undefined || cur === null ? '' : String(cur),
+      [{ value: '', label: T('Same as computer', '与电脑相同') }].concat(opts),
+      v => updateBlock(b.id, { [key + '_phone']: v === '' ? undefined : v })));
+}
+
+// The phone DOM drawn inside this page reads the twin first, then the base
+// field, then the block type's old default — exactly what the mini app and
+// the site's phone width do.
+function shapePhone(b, key, def) {
+  const t = b[key + '_phone'];
+  if (t !== undefined && t !== null) return t;
+  const v = b[key];
+  return (v === undefined || v === null) ? def : v;
+}
+
 // Per-render registry of the colour controls in the inspector. Populated by
 // colorSelect() ONLY in the mobile preview embed (window.__fcPreviewEmbed), and
 // reset at the top of renderInspector(). The embed bridge turns this into
@@ -12182,6 +12210,10 @@ function buildHeroForm(m, b) {
   layoutShadowSel.tabIndex = -1;
   layoutShadowSel.setAttribute('aria-hidden', 'true');
   layoutWrap.appendChild(layoutShadowSel);
+  layoutWrap.appendChild(phoneShapeTwin(b, 'view', layoutWrap, [
+    { value: 'full',  label: T('Full — picture fills, buttons on top', '全幅 — 图片铺满,按钮在上面') },
+    { value: 'split', label: T('Split — picture left, text box right', '分栏 — 图片在左,文字框在右') },
+  ]));
   m.appendChild(layoutWrap);
 
   m.appendChild(field(
@@ -12496,6 +12528,7 @@ function buildNotificationBarForm(m, b) {
       { value: 'pill',   label: T('Pill — compact, centred', '胶囊 — 紧凑居中') },
       { value: 'banner', label: T('Banner — tall, big icon', '横幅 — 更高 + 大图标') },
     ], v => updateBlock(b.id, { view: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'view', secLayout));
 
   secColours.appendChild(field(T('Background', '背景颜色'), T('The colour behind the bar.', '通知条的背景色。'),
     sel(b.bg_color || 'ink', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
@@ -12597,6 +12630,7 @@ function buildCatTabsForm(m, b) {
         { value: 'tiles',  label: T('Tiles — 2 columns of rectangles', '色块 — 双列矩形') },
         { value: 'scroll', label: T('Scroll — single row, drag left/right', '横滑 — 单行,左右拖动') },
       ], v => updateBlock(b.id, { view: v }))));
+    secLayout.appendChild(phoneShapeTwin(b, 'view', secLayout));
   }
 
   if (isCircles) {
@@ -12752,6 +12786,7 @@ function buildFeaturedForm(m, b) {
       { value: 'banner', label: T('Banner — wide picture, text over it', '横幅 — 宽图,文字覆盖') },
       { value: 'split',  label: T('Split — picture left, text right', '分栏 — 图片在左,文字在右') },
     ], v => updateBlock(b.id, { view: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'view', secLayout));
   secLayout.appendChild(field(T('Price display', '价格显示'), T('How the price shows under the product name.', '价格在商品名称下方的显示方式。'),
     sel(b.price_mode || 'both', PRICE_MODE_OPTIONS,
         v => updateBlock(b.id, { price_mode: v }))));
@@ -12799,6 +12834,7 @@ function buildGridForm(m, b) {
       { value: 'scroll', label: T('Scroll — swipe sideways', '横滑 — 左右滑动') },
       { value: 'list',   label: T('List — single column, big images', '列表 — 单列大图') },
     ], v => updateBlock(b.id, { view: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'view', secLayout));
   if (view === 'grid') {
     secLayout.appendChild(field(T('Columns', '列数'), '', sel(b.columns, [
       { value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' },
@@ -13068,6 +13104,7 @@ function buildFlashStripForm(m, b) {
       { value: 'editorial', label: T('Editorial — left headline + timer bar', '编辑 — 左对齐标题 + 计时条') },
       { value: 'urgency',   label: T('Urgency — LIVE tag + popping tiles', '紧迫 — LIVE 标签 + 立体色块') },
     ], v => updateBlock(b.id, { view: v }))));
+  layoutWrap.appendChild(phoneShapeTwin(b, 'view', layoutWrap));
   m.appendChild(layoutWrap);
 
   m.appendChild(field(T('Title', '标题'), isDesign ? T('The big headline on the band (e.g. "What are you waiting for?").', '条幅上的大号标题(例如「What are you waiting for?」)。') : '',
@@ -13119,6 +13156,7 @@ function buildFlashStripForm(m, b) {
         { value: 'carousel', label: T('Carousel — swipe sideways', '轮播 — 左右滑动') },
         { value: 'grid',     label: T('Grid — 2 per row, no swiping', '网格 — 每行 2 个,无需滑动') },
       ], v => updateBlock(b.id, { card_layout: v }))));
+    layoutFields.push(phoneShapeTwin(b, 'card_layout', layoutFields));
   }
   if (isDesign) {
     layoutFields.push(field(T('Energy', '风格强度'), T('How big and bold it looks. Refined = smaller and neater. Bold = bigger headlines, thicker borders.', '整体的大小与醒目程度。精致 = 更小更紧凑。醒目 = 更大标题、更粗描边。'),
@@ -13379,6 +13417,7 @@ function buildTopUpForm(m, b) {
       { value: 'b', label: T('Receipt — stacked bands', '小票 — 堆叠条带') },
       { value: 'c', label: T('Hero — push one best-value pack', '主推 — 突出一个超值套餐') },
     ], v => updateBlock(b.id, { layout: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'layout', secLayout));
 
   secContent.appendChild(field(T('Small heading', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
@@ -13419,6 +13458,7 @@ function buildVotingForm(m, b) {
       { value: 'inline',      label: T('Inline — vote without leaving home', '内嵌 — 在首页直接投票') },
       { value: 'past_result', label: T('Past result — winner of last closed poll', '往期结果 — 上一场投票的获胜者') },
     ], v => updateBlock(b.id, { view: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'view', secLayout));
 
   // Inline view renders the full poll with options in one of three styles.
   if (view === 'inline') {
@@ -13601,6 +13641,7 @@ function buildAffiliateForm(m, b) {
       { value: 'stat',    label: T('Stat — big "¥ earned" number', '数据 — 大号已赚 ¥') },
       { value: 'receipt', label: T('Receipt — paper look, dashed edge', '收据 — 纸质 / 虚线') },
     ], v => updateBlock(b.id, { view: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'view', secLayout));
 
   secContent.appendChild(field(T('Small heading', '小标题'), T('A small line above the title.', '标题上方的一行小字。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
@@ -13656,6 +13697,7 @@ function buildGreetingForm(m, b) {
       { value: 'wallet',  label: T('Wallet — greeting + wallet/points strip', '钱包 — 问候语 + 钱包/积分条') },
       { value: 'coin',    label: T('Coin — playful greeting + accent coin', '金币 — 活泼问候 + 强调金币') },
     ], v => updateBlock(b.id, { view: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'view', secLayout));
 
   if (isDesign) {
     secLayout.appendChild(field(T('Energy', '风格强度'), T('How big and bold it looks — text size, borders, and the coin\'s shadow. Refined = smaller and neater. Playful = bigger, bolder, more shadow.', '整体的大小与醒目程度 — 字号、边框与金币阴影。精致 = 更小更紧凑。活泼 = 更大更粗、阴影更厚。'),
@@ -14217,6 +14259,7 @@ function buildReviewForm(m, b) {
       { value: 'riso',      label: T('Riso pop — sticker + verified stamp', '印刷波普 — 贴纸 + 认证印章') },
       { value: 'spotlight', label: T('Spotlight — dark main card + thumbnails', '聚焦 — 深色主卡 + 缩略图') },
     ], v => updateBlock(b.id, { view: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'view', secLayout));
 
   const isCardLayout = view === 'editorial' || view === 'riso' || view === 'spotlight';
 
@@ -14870,6 +14913,7 @@ function buildWecomContactForm(m, b) {
       { value: 'card',  label: T('Card — full, centred QR', '卡片 — 完整、居中二维码') },
       { value: 'strip', label: T('Strip — compact, side QR', '条带 — 紧凑、侧边二维码') },
     ], v => updateBlock(b.id, { view: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'view', secLayout));
 
   if ((b.view || 'card') === 'card') {
     secLayout.appendChild(field(T('Card style', '卡片风格'),
@@ -14981,6 +15025,7 @@ function buildFavoritesForm(m, b) {
       { value: 'scroll', label: T('Scroll — swipe sideways', '横滑 — 左右滑动') },
       { value: 'grid',   label: T('Grid — two columns', '网格 — 双列') },
     ], v => updateBlock(b.id, { view: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'view', secLayout));
   secLayout.appendChild(field(T('Limit (max products)', '数量上限(最多商品)'),
     T('How many saved items to show. The "See all" link opens the full Favorites page.', '显示多少件收藏商品。「查看全部」链接打开完整的收藏页。'),
     num(b.limit, v => updateBlock(b.id, { limit: v }), { min: 1, max: 12 })));
