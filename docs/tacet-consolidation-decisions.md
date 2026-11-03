@@ -33916,3 +33916,15 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 5. **The shop's count stays with the shop's name.** Ash, on the live list after v4.622 shipped: *"number of tianhe jump to the next line"*. Each `shop N` is one wrap unit.
 
 6. **The line sits under the whole row.** Ash, after rule 5 shipped: *"still the same"*. A wrap unit in the name column still dropped `Tianhe 5` below `Yuexiu 4`, because the +/− squeeze that column. The counts now sit under name and steppers together, one line, no wrap. The live pair stays.
+
+## §513 — THE WEBSITE PAGE GETS A PHONE STAGE: THE SAME SITE FRAME, AT PHONE WIDTH
+
+**2026-11-03 · DECIDED BY ASH.** Ash, on the editor's Website page, where the Phone button sat greyed out: *"i cant see /edit webpage in mobile view"*. §503 made the Website desktop-only on the strength of "it adapts to phones by itself" — but adapting is not the same as being seen, and the office composed the phone composition blind, with only See it live and a real phone to check it. This amends §503's desktop-only Website and v4.430's disabled Phone button.
+
+1. **The Phone button is live on the Website page.** The stage is the same site frame as Desktop — public/site.html at /site-preview, draft + stage — drawn at 390px and centred, in a phone shell: rounded, no browser chrome, because a phone is not a browser window. It is not a second rendering of the site: site.html's own phone rules are what draw, the same ones a visitor's phone gets.
+
+2. **Everything the desktop stage does, the phone stage does.** The draft posts per keystroke (cms:draft), a click on a block selects it (cms:select) and opens the inspector, and the bar above the frame carries the four actions. The mini-app phone DOM is not built on this page on either stage; `stageShowsFrame()` — the Website page, or the desktop stage — is the one predicate the draft push, the floating-toolbar hide and the inspector show key off, so the two stages cannot drift apart.
+
+3. **The preference persists as before** (cms_stage). A tenant who left the switch on Phone lands on the phone-width site when they open the Website page, and on the mini-app phone frame on every other page that allows it.
+
+4. **Words.** One composed pair (vocabulary v1.383): the Phone button's tooltip on this page, built in the desktop pair's own shape. The v1.361 pair that explained the disabled button — the website is edited on Desktop and adapts by itself — is retired with the button state it explained.
