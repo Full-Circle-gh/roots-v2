@@ -255,6 +255,10 @@ yes(/google\.com\/maps\/search/.test(SITE),
   'on a computer Get directions opens Google Maps in a new tab');
 yes(/sb-st-visit--hero/.test(SITE) && /sb-st-map-cap-hint/.test(SITE) && /SITE_VISIT_MAP_HINT/.test(SITE),
   'on a phone the map is a hero with a caption over the pin, not a cramped address band');
+yes(/sb-st-map-cap\{\s*position:absolute;left:18px;right:18px;bottom:18px;color:#fff;\s*font-size:14px;line-height:1\.5;/.test(SITE) &&
+    /sb-st-map-cap-title\{\s*display:block;font-family:var\(--f-bear\);font-size:17px;margin-bottom:6px;/.test(SITE) &&
+    /sb-st-map-cap-hint\{display:block;opacity:\.95;margin-bottom:6px;\}/.test(SITE),
+  'the phone caption keeps its breathing room from the map edges and between its lines (§518)');
 yes(/height:260px/.test(SITE),
   'on a phone the live map is taller for the hero layout');
 yes(/function shieldStoreMap\(/.test(SITE) && /sb-st-map-hit/.test(SITE) && /touch-action:pan-y/.test(SITE) && /sb-st-map-frame/.test(SITE),
