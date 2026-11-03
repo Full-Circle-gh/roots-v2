@@ -8200,6 +8200,7 @@ function makeBlock(type) {
       density: 'normal',         // compact | normal | spacious
       // Rank badge visibility — only relevant in top_selling mode.
       rank_badge: 'top_3',       // always | top_3 | never
+      link_target: '',         // SEE ALL destination — blank = category (if set) else shop
       kicker_en: 'NO. 02 · BROWSE', kicker_cn: '第二 · 浏览',
       title_en: 'Shop the garden', title_cn: '园丁好物',
     };
@@ -12866,6 +12867,9 @@ function buildGridForm(m, b) {
       onChange: (v) => updateBlockSilent(b.id, { product_ids: v }),
     })));
   }
+  secContent.appendChild(field(T('SEE ALL link', '「查看全部」跳转'),
+    T('Where the SEE ALL header link goes. Leave empty for the default — the category above when Source is By category, otherwise the Shop tab.', '「查看全部」链接的跳转位置。留空则使用此模块的默认跳转 — 来源为「按分类」时跳转上方所选分类,否则跳转「商品」标签页。'),
+    targetPicker({ value: b.link_target, onChange: v => updateBlockSilent(b.id, { link_target: v }), suggest: 'shop' })));
 
   // ── Colours ─────────────────────────────────────────────────────────
   secColours.appendChild(field(T('Background colour', '背景颜色'), T('A background colour behind the grid. Default = transparent (the page colour shows through).', '网格后面的背景色。默认 = 透明(显示页面底色)。'),

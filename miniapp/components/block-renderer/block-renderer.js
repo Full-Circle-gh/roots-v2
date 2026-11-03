@@ -539,9 +539,9 @@ Component({
           out.kicker = lang.pick(b.kicker_en ?? b.kicker, b.kicker_cn, L);
           out.title  = lang.pick(b.title_en ?? b.title, b.title_cn, L);
           out.seeAll = L === 'cn' ? '查看全部' : 'SEE ALL';
-          // Category-scoped grids deep-link to that category; everything else
-          // (top sellers, new arrivals, manual) opens the Shop tab.
-          out.seeAllTarget = b.category_id ? ('category:' + b.category_id) : 'shop';
+          // Explicit link_target wins; else category-scoped grids deep-link to
+          // that category; everything else opens the Shop tab.
+          out.seeAllTarget = b.link_target || (b.category_id ? ('category:' + b.category_id) : 'shop');
           out.cols   = b.columns || 2;
           out.gridView = b.view || 'grid';
           // 2026-05-20 enhancements: card corner radius + grid density +

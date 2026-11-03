@@ -142,7 +142,7 @@ section('1 · which fields, in the inspector\'s words');
     const { ctx } = mk();
     assert.ok(/<label>Image<\/label>/.test(draw(ctx, { id: 'b1', type: 'recipe_story' })[0].html));
     assert.ok(/<label>QR code image<\/label>/.test(draw(ctx, { id: 'b1', type: 'wecom_contact' })[0].html));
-    for (const [t, label] of [['announcement_bar', 'Link (optional)'], ['category_tabs', 'SEE ALL link'], ['flash_sale_strip', 'Button link'],
+    for (const [t, label] of [['announcement_bar', 'Link (optional)'], ['category_tabs', 'SEE ALL link'], ['product_grid', 'SEE ALL link'], ['flash_sale_strip', 'Button link'],
       ['coupon_block', 'Button link'], ['points_widget', 'Button link'], ['top_up', 'Tap target'], ['voting_block', 'Button link'],
       ['affiliate_block', 'Tap link (whole block)'], ['greeting', 'Button link'], ['kitchen_status', 'Button link'], ['countdown_timer', 'Button link']]) {
       const kids = draw(ctx, { id: 'b1', type: t });
