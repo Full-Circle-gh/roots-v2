@@ -7147,7 +7147,7 @@ function resolveVotingPoll(b) {
   }
   const open = polls.filter(p => p.status === 'open');
   const closed = polls.filter(p => p.status === 'closed');
-  if (b.view === 'past_result') {
+  if (shapePhone(b, 'view') === 'past_result') {
     return closed[0] || null;
   }
   // peek / inline want an open poll; featured first.
@@ -8825,7 +8825,7 @@ function loadTopProducts(channel, window, limit) {
         b.type === 'product_grid' && b.source_type === 'top_selling' &&
         (b.top_channel || 'combined') === channel &&
         (b.top_window || '7d') === window &&
-        (b.limit || 6) === limit
+        (shapePhone(b, 'limit', 6)) === limit
       );
       if (inUse) renderPreview();
     })
@@ -9132,7 +9132,7 @@ function renderBlockBody(b) {
 
       // 'full' (default) — image fills, CTAs floating
       const scrim = b.scrim || 'medium';
-      const heroFit = b.image_fit || (b.image_aspect ? 'contain' : 'cover');
+      const heroFit = shapePhone(b, 'image_fit', (b.image_aspect ? 'contain' : 'cover'));
       d.className = 'b-hero b-hero-' + view + ' fit-' + heroFit + ' scrim-' + scrim + entranceAnimClass(b);
       if (heroFit === 'contain' && b.image_aspect && b.image_url) {
         // Whole image — banner takes the picture's shape (no crop).
@@ -9140,7 +9140,7 @@ function renderBlockBody(b) {
         d.style.height = 'auto';
       } else {
         // Fill / stretch — fixed-height box the image is cropped/stretched into.
-        d.style.height = (b.height_px || 280) * 0.6 + 'px';
+        d.style.height = (shapePhone(b, 'height_px', 280)) * 0.6 + 'px';
       }
       if (b.video_url) d.innerHTML = `<video src="${escapeAttr(b.video_url)}"${b.image_url ? ` poster="${escapeAttr(b.image_url)}"` : ''} autoplay muted loop playsinline></video>`;
       else if (b.image_url) d.innerHTML = `<img src="${escapeAttr(b.image_url)}" alt="">`;
@@ -9189,7 +9189,7 @@ function renderBlockBody(b) {
         const ph = document.querySelector('.phone');
         d.style.height = (ph ? ph.clientHeight : 640) + 'px';
       } else {
-        d.style.height = (b.height_px || 420) * 0.6 + 'px';
+        d.style.height = (shapePhone(b, 'height_px', 420)) * 0.6 + 'px';
       }
       const media = b.video_url
         // Autoplay muted loop in the canvas too, so the author sees exactly
@@ -9474,7 +9474,7 @@ function renderBlockBody(b) {
       // ── Classic ── existing Layout views (icons / scroll / colour tiles). ──
       const circleStyle = (c, i) => { const hex = catHex(c, i); return ` style="background:${hex};color:${btnTextHex(hex)}"`; };
       if (view === 'icons') {
-        const cols = Math.max(3, Math.min(5, b.columns || 4));
+        const cols = Math.max(3, Math.min(5, shapePhone(b, 'columns', 4)));
         const icons = cats.map((c, i) => {
           const name = catLabel(c);
           const letter = (name.trim()[0] || '').toUpperCase();
@@ -9574,7 +9574,7 @@ function renderBlockBody(b) {
     }
     case 'product_grid': {
       const view = shapePhone(b, 'view', 'grid');
-      d.className = 'b-grid b-grid-' + view + cornerRadiusClass(b) + ' density-' + (b.density || 'normal');
+      d.className = 'b-grid b-grid-' + view + cornerRadiusClass(b) + ' density-' + (shapePhone(b, 'density', 'normal'));
       const gridBg = b.bg_color ? dcResolveHex(b.bg_color) : '';
       const gridSale = b.accent_color ? dcResolveHex(b.accent_color) : '';
       if (gridBg) { d.style.background = gridBg; d.style.paddingTop = '16px'; d.style.paddingBottom = '16px'; }
@@ -9584,15 +9584,15 @@ function renderBlockBody(b) {
       } else if (b.source_type === 'top_selling') {
         // Lazy-fetched + cached. Returns [] on the first render; rerenders
         // when the fetch resolves.
-        products = loadTopProducts(b.top_channel || 'combined', b.top_window || '7d', b.limit || 6);
+        products = loadTopProducts(b.top_channel || 'combined', b.top_window || '7d', shapePhone(b, 'limit', 6));
       } else if (b.source_type === 'new_arrivals') {
         products = state.products.slice().sort((a, c) =>
           String(c.created_at || '').localeCompare(String(a.created_at || '')));
       } else {
         products = state.products.filter(p => !b.category_id || p.category === categoryName(b.category_id));
       }
-      products = products.slice(0, b.limit || 6);
-      const cols = b.columns || 2;
+      products = products.slice(0, shapePhone(b, 'limit', 6));
+      const cols = shapePhone(b, 'columns', 2);
       const gk = getBi(b, 'kicker');
       const gt = getBi(b, 'title');
       const head = `<div class="head">
@@ -9657,7 +9657,7 @@ function renderBlockBody(b) {
       return d;
     }
     case 'spacer': {
-      const dStyle = b.divider_style || 'none';
+      const dStyle = shapePhone(b, 'divider_style', 'none');
       d.className = 'b-spacer divider-' + dStyle;
       d.style.height = shapePhone(b, 'height_px', 24) + 'px';
       if (dStyle !== 'none') {
@@ -10786,7 +10786,7 @@ function renderBlockBody(b) {
       return d;
     }
     case 'recipe_story': {
-      d.className = 'b-recipe b-recipe-' + (b.image_view || 'top') + cornerRadiusClass(b);
+      d.className = 'b-recipe b-recipe-' + (shapePhone(b, 'image_view', 'top')) + cornerRadiusClass(b);
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const k = getBi(b, 'kicker');
@@ -11164,7 +11164,7 @@ function renderBlockBody(b) {
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const fk = getBi(b, 'kicker');
       const ft = getBi(b, 'title');
-      const limit = Math.max(1, Math.min(12, b.limit || 6));
+      const limit = Math.max(1, Math.min(12, shapePhone(b, 'limit', 6)));
       const sample = state.products.slice(0, limit);
       const head = `<div class="head">
         <div>
@@ -11613,7 +11613,7 @@ function buildFrameSection(body, b) {
   row.style.cssText = 'display:flex;align-items:center;gap:8px;';
   const box = document.createElement('input');
   box.type = 'checkbox';
-  box.checked = b.full_bleed === true;
+  box.checked = shapeTick(b, 'full_bleed');
   box.addEventListener('change', () => updateBlock(b.id, { full_bleed: box.checked ? true : undefined }));
   const lbl = document.createElement('label');
   lbl.style.cssText = 'cursor:pointer;font-size:13px;font-weight:500;';
@@ -11621,6 +11621,7 @@ function buildFrameSection(body, b) {
   lbl.addEventListener('click', () => { box.checked = !box.checked; box.dispatchEvent(new Event('change')); });
   row.appendChild(box); row.appendChild(lbl);
   sec.appendChild(row);
+  sec.appendChild(phoneTickTwin(b, 'full_bleed', sec));
 }
 
 const FIELD_INFO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11.5v4.5"/><path d="M12 8h.01"/></svg>';
@@ -11921,6 +11922,29 @@ function shapePhone(b, key, def) {
   if (t !== undefined && t !== null) return t;
   const v = b[key];
   return (v === undefined || v === null) ? def : v;
+}
+
+// §516 — the same twin for number fields (heights, columns, counts): empty
+// means same as computer. `xf` is the base field's own clamp, reused so the
+// phone value can never land outside what the computer field allows.
+function phoneNumTwin(b, key, host, opts, xf) {
+  const f = xf || ((v) => v);
+  return field(T('On phone', '手机上'),
+    T('The value this block uses on a phone. Empty means same as computer.', '本模块在手机上使用的数值。留空表示与电脑相同。'),
+    num(b[key + '_phone'] ?? '', v => updateBlock(b.id, { [key + '_phone']: v > 0 ? f(v) : undefined }), opts));
+}
+
+// …and for ticks: a three-way pick, because "same as computer" has to stay
+// distinguishable from an explicit on or off.
+function phoneTickTwin(b, key, host) {
+  const cur = b[key + '_phone'];
+  return field(T('On phone', '手机上'),
+    T('Whether this is on for phones. Same as computer keeps one answer for both widths.', '手机上是否开启。「与电脑相同」表示两种宽度同一设置。'),
+    sel(cur === undefined || cur === null ? '' : (cur ? 'on' : 'off'),
+      [{ value: '', label: T('Same as computer', '与电脑相同') },
+        { value: 'on', label: T('On', '开') },
+        { value: 'off', label: T('Off', '关') }],
+      v => updateBlock(b.id, { [key + '_phone']: v === '' ? undefined : v === 'on' })));
 }
 
 // Per-render registry of the colour controls in the inspector. Populated by
@@ -12283,6 +12307,7 @@ function buildHeroForm(m, b) {
         { value: 'cover',   label: T('Fill banner — cut the edges', '填满横幅 — 裁掉边缘') },
         { value: 'contain', label: T('Whole picture — nothing cut', '完整显示 — 不裁剪') },
       ], v => updateBlock(b.id, { image_fit: v }))));
+    picFields.push(phoneShapeTwin(b, 'image_fit', picFields));
 
     // When filling the banner uses a fixed height (the picture is cropped
     // into it). Contain keeps auto-height from the image shape instead.
@@ -12290,6 +12315,7 @@ function buildHeroForm(m, b) {
       picFields.push(field(T('Banner height (px)', '横幅高度(像素)'),
         T('How tall the banner is. The picture is cut to fit.', '横幅的高度。图片会被裁剪以铺满。'),
         num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+      picFields.push(phoneNumTwin(b, 'height_px', picFields, { min: 200, max: 800, step: 10 }));
     }
   }
   // Same height_px field, relabelled — shown instead of "Banner height"
@@ -12297,6 +12323,7 @@ function buildHeroForm(m, b) {
   // never two height inputs on screen at once.
   if (!(view === 'full' && heroFit !== 'contain')) {
     picFields.push(field(T('Placeholder height (px)', '占位高度(像素)'), T('Only used before you add a picture.', '仅在你还没有添加图片时使用。'), num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+    picFields.push(phoneNumTwin(b, 'height_px', picFields, { min: 200, max: 800, step: 10 }));
   }
   picFields.push(field(
     T('Desktop picture (optional)', '电脑端图片(可选)'),
@@ -12388,6 +12415,7 @@ function buildVideoForm(m, b) {
     secLayout.appendChild(field(T('Height (px)', '高度(像素)'),
       T('How tall the banner is. The video is cropped to fill — not stretched.', '横幅的高度。视频会裁剪填满 — 不拉伸。'),
       num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+    secLayout.appendChild(phoneNumTwin(b, 'height_px', secLayout, { min: 200, max: 800, step: 10 }));
   }
 
   secContent.appendChild(field(T('Video clip', '视频短片'),
@@ -12636,6 +12664,7 @@ function buildCatTabsForm(m, b) {
   if (isCircles) {
     secLayout.appendChild(field(T('Columns', '列数'), T('3, 4, or 5 circles per row.', '每行 3、4 或 5 个圆形。'),
       num(b.columns, v => updateBlock(b.id, { columns: Math.max(3, Math.min(5, v)) }), { min: 3, max: 5 })));
+    secLayout.appendChild(phoneNumTwin(b, 'columns', secLayout, { min: 3, max: 5 }, v => Math.max(3, Math.min(5, v))));
   }
 
   secContent.appendChild(field(T('Small heading', '小标题'), '',
@@ -12839,12 +12868,15 @@ function buildGridForm(m, b) {
     secLayout.appendChild(field(T('Columns', '列数'), '', sel(b.columns, [
       { value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' },
     ], v => updateBlock(b.id, { columns: Number(v) }))));
+    secLayout.appendChild(phoneShapeTwin(b, 'columns', secLayout));
   }
   secLayout.appendChild(field(T('Limit (max products)', '数量上限(最多商品)'), view === 'scroll' ? T('How many to show. Extra ones scroll sideways.', '显示多少件。多出的可左右滑动。') : '',
     num(b.limit, v => updateBlock(b.id, { limit: v }), { min: 1, max: 24 })));
+  secLayout.appendChild(phoneNumTwin(b, 'limit', secLayout, { min: 1, max: 24 }));
   secLayout.appendChild(field(T('Density', '密度'), T('How much space between cards.', '卡片之间的间距。'),
     sel(b.density || 'normal', DENSITY_OPTIONS,
         v => updateBlock(b.id, { density: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'density', secLayout));
 
   // ── Content ─────────────────────────────────────────────────────────
   secContent.appendChild(field(T('Small heading', '小标题'), '',
@@ -12944,6 +12976,7 @@ function buildSpacerForm(m, b) {
   secLayout.appendChild(field(T('Divider', '分隔线'), T('An optional line in the middle that turns the gap into a section break.', '可选 — 中间的一条线,把留白变成区块分隔。'),
     sel(b.divider_style || 'none', DIVIDER_STYLE_OPTIONS,
         v => updateBlock(b.id, { divider_style: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'divider_style', secLayout));
   if ((b.divider_style || 'none') !== 'none') {
     secLayout.appendChild(field(T('Divider colour', '分隔线颜色'), '',
       sel(b.divider_color || 'olive-moss', BRAND_COLOR_OPTIONS,
@@ -13849,6 +13882,7 @@ function buildRecipeStoryForm(m, b) {
       { value: 'top',  label: T('Top — picture on top, text below', '顶部 — 图片在上,文字在下') },
       { value: 'side', label: T('Side — picture left, text right', '侧边 — 图片在左,文字在右') },
     ], v => updateBlock(b.id, { image_view: v }))));
+  secLayout.appendChild(phoneShapeTwin(b, 'image_view', secLayout));
 
   secLayout.appendChild(field(T('Image shape', '图片形状'),
     T('Auto = keep the photo\'s own shape (tall photos take more space). A fixed shape crops every photo the same, so all stories look even.', '自动 = 保持照片本身的形状(高图会占更多空间)。选择固定形状会把每张照片裁成一样,让所有故事看起来一致。'),
@@ -15035,6 +15069,7 @@ function buildFavoritesForm(m, b) {
   secLayout.appendChild(field(T('Limit (max products)', '数量上限(最多商品)'),
     T('How many saved items to show. The "See all" link opens the full Favorites page.', '显示多少件收藏商品。「查看全部」链接打开完整的收藏页。'),
     num(b.limit, v => updateBlock(b.id, { limit: v }), { min: 1, max: 12 })));
+  secLayout.appendChild(phoneNumTwin(b, 'limit', secLayout, { min: 1, max: 12 }));
   secLayout.appendChild(field(T('When the customer has nothing saved', '当顾客没有收藏时'),
     T('Hide — the block disappears completely (recommended; keeps the home page clean for new customers). Show empty message — a small hint appears pointing at the heart icon.', '隐藏 — 模块完全消失(推荐;为新顾客保持首页整洁)。显示空状态 — 出现一条指向心形图标的小提示。'),
     sel(b.hide_when_empty === false ? 'show' : 'hide', [

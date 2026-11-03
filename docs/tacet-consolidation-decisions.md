@@ -33952,3 +33952,15 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 2. **The same four readers.** The web engine reads it through §514's `shapeOn` at the viewport's width; the editor's phone DOM through `shapePhone`; the mini app and the editor's phone drawer twin-first. The divider inside the spacer is unchanged at both widths.
 
 3. **Words.** One composed hint (vocabulary v1.386); the label is §514's, reused. Nothing retired.
+
+## §516 — THE TWIN IS A RULE, NOT A LIST OF SITES: EVERY BLOCK, AND EVERY BLOCK TO COME
+
+**2026-11-03 · DECIDED BY ASH.** Ash, after §515 shipped for the Spacer alone: *"the idea to do it for every block not just the one im asking you to do. every block that exsist and every block that will be added."* §514 and §515 placed twins by hand where someone remembered; a mechanism nobody enforces is a mechanism the next block skips.
+
+1. **A frozen key table.** `SURFACE_KEYS` in scripts/test_per_surface_layout.js: `view, layout, card_layout, columns, density, limit, height_px, image_view, image_fit, divider_style, full_bleed` — the knobs that lay a block out or size its space. The knobs that dress it (cat_style, energy, mood, poll_style, coupon_style and friends) stay shared on purpose: a block's outfit is not its footprint. `image_ratio` and `image_position` stay shared because no live surface reads them yet; the day one does, they join the table.
+
+2. **Three twin builders, one shape.** `phoneShapeTwin` (selects), `phoneNumTwin` (numbers — reusing the base field's own clamp, so the phone value can never land outside what the computer allows), `phoneTickTwin` (ticks — a three-way pick, because "same as computer" must stay distinguishable from an explicit on or off). All three wear §514's `On phone · 手机上` label and its `Same as computer · 与电脑相同` unset state.
+
+3. **The gate is the mechanism.** The suite splits the inspector into its form functions and fails if any form writes a surface key without wearing the twin for it; and fails if any of the four renderers (web engine, editor phone DOM, phone drawer, mini app) reads a surface key bare. A block added tomorrow that uses a table key cannot ship without its twin, and a new layout-ish key joins the table before any form writes it.
+
+4. **Words.** Two composed hints (vocabulary v1.387), one per twin kind; the label is §514's, reused; `On · 开` and `Off · 关` are copied whole from the admin's own toggles. Nothing retired.
