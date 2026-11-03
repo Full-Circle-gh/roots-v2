@@ -21032,7 +21032,9 @@ function rqShelfNote(p){
     const map=r.shelf&&r.shelf[sid];
     if(!map||!Object.keys(map).length) continue;
     const q=map[p.id]==null?0:map[p.id];
-    bits.push(escAttr(rqStoreName(sid))+' '+q);
+    // Shop and count are one wrap unit. Ash, live: Tianhe's number sat
+    // alone on the next line because the space before it was a break.
+    bits.push(`<span style="white-space:nowrap">${escAttr(rqStoreName(sid))} ${q}</span>`);
   }
   if(!bits.length) return '';
   return `<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${

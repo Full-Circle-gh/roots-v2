@@ -27,6 +27,7 @@
  *  12. a new visit re-reads; the maps survive so a restored dest can paint
  *  13. a draft does not keep the counts
  *  14. the label is Add stock's live pair, not a composed one
+ *  15. shop name and count are one wrap unit, so Tianhe's number cannot sit alone
  */
 
 'use strict';
@@ -40,6 +41,8 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', 'public', 'm.html'), 'utf
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; console.log('  ✓ ' + msg); }
                             else { fail++; console.log('  ✗ ' + msg); } };
+const nowrap = (s) => `<span style="white-space:nowrap">${s}</span>`;
+const shelfLine = (label, ...pairs) => label + ' · ' + pairs.map(nowrap).join(' · ');
 
 function sliceFn(name) {
   const start = SRC.indexOf(`function ${name}(`);
@@ -146,15 +149,17 @@ console.log('\n══ what the row draws ══');
     shelf: { 2: { 7: 2, 8: 0 }, 1: { 7: 15, 8: 4 } },
   });
   const body = run('rqBodyHtml()');
-  ok(/On the shelf · Yuexiu 2 · Tianhe 15/.test(body),
+  ok(body.includes(shelfLine('On the shelf', 'Yuexiu 2', 'Tianhe 15')),
      'Hummus Asli: destination first, then the shop being asked');
-  ok(/On the shelf · Yuexiu 0 · Tianhe 4/.test(body),
+  ok(body.includes(shelfLine('On the shelf', 'Yuexiu 0', 'Tianhe 4')),
      'and a zero at the destination is drawn, not skipped');
-  ok(body.indexOf('1-10') < body.indexOf('On the shelf · Yuexiu 2'),
+  ok(body.indexOf('1-10') < body.indexOf(shelfLine('On the shelf', 'Yuexiu 2', 'Tianhe 15')),
      'the SKU stays on its own line above the counts');
   ok((body.match(/On the shelf/g) || []).length === 2, 'each row carries the label once');
+  ok(body.includes(nowrap('Tianhe 15')) && !/Tianhe\s+15/.test(body.replace(/<span style="white-space:nowrap">Tianhe 15<\/span>/g, '')),
+     'Tianhe and its number are one wrap unit, not a space the line can break on');
   sb.LANG = 'zh';
-  ok(/在架 · 越秀 2 · 天河 15/.test(run('rqBodyHtml()')),
+  ok(run('rqBodyHtml()').includes(shelfLine('在架', '越秀 2', '天河 15')),
      'Chinese uses the live 在架 and the shops\' own names');
 }
 
@@ -172,16 +177,16 @@ console.log('\n══ when the counts stay off ══');
 
   const failed = sandbox({ shelf: { 2: null, 1: { 7: 15, 8: 4 } } });
   const failedBody = failed.run('rqBodyHtml()');
-  ok(/On the shelf · Tianhe 15/.test(failedBody) && !/Yuexiu/.test(failedBody),
+  ok(failedBody.includes(shelfLine('On the shelf', 'Tianhe 15')) && !/Yuexiu/.test(failedBody),
      'a shop that failed to read is omitted; the other still shows');
 
   const empty = sandbox({ shelf: { 2: {}, 1: { 7: 15, 8: 4 } } });
-  ok(/On the shelf · Tianhe 15/.test(empty.run('rqBodyHtml()')) &&
+  ok(empty.run('rqBodyHtml()').includes(shelfLine('On the shelf', 'Tianhe 15')) &&
      !/Yuexiu/.test(empty.run('rqBodyHtml()')),
      'an empty map (add-mode, no quantities) is omitted rather than drawn as 0');
 
   const destOnly = sandbox({ from: null, to: 2, shelf: { 2: { 7: 2, 8: 0 } } });
-  ok(/On the shelf · Yuexiu 2/.test(destOnly.run('rqBodyHtml()')) &&
+  ok(destOnly.run('rqBodyHtml()').includes(shelfLine('On the shelf', 'Yuexiu 2')) &&
      !/Tianhe/.test(destOnly.run('rqBodyHtml()')),
      'destination alone, before a source is picked, still shows that shop');
 }
@@ -192,15 +197,15 @@ console.log('\n══ switching shops ══');
     to: 1, from: 2,
     shelf: { 1: { 7: 12, 8: 3 }, 2: { 7: 2, 8: 0 } },
   });
-  ok(/On the shelf · Tianhe 12 · Yuexiu 2/.test(run('rqBodyHtml()')),
+  ok(run('rqBodyHtml()').includes(shelfLine('On the shelf', 'Tianhe 12', 'Yuexiu 2')),
      'the order follows the chips, not the store ids');
   sb.state.rq.to = 2; sb.state.rq.from = 1;
-  ok(/On the shelf · Yuexiu 2 · Tianhe 12/.test(run('rqBodyHtml()')),
+  ok(run('rqBodyHtml()').includes(shelfLine('On the shelf', 'Yuexiu 2', 'Tianhe 12')),
      'and flipping the chips flips the numbers');
   sb.state.rq.from = 2;
   const same = run('rqBodyHtml()');
-  ok(/On the shelf · Yuexiu 2/.test(same) && !/Tianhe/.test(same) &&
-     (same.match(/On the shelf · Yuexiu /g) || []).length === 2,
+  ok(same.includes(shelfLine('On the shelf', 'Yuexiu 2')) && !/Tianhe/.test(same) &&
+     (same.match(/On the shelf · <span style="white-space:nowrap">Yuexiu /g) || []).length === 2,
      'asking the same shop as the destination names it once per row');
 }
 
@@ -208,7 +213,7 @@ console.log('\n══ a missing product on a populated shelf is 0 ══');
 {
   const { run } = sandbox({ shelf: { 2: { 8: 4 }, 1: { 7: 15, 8: 4 } } });
   const body = run('rqBodyHtml()');
-  ok(/On the shelf · Yuexiu 0 · Tianhe 15/.test(body),
+  ok(body.includes(shelfLine('On the shelf', 'Yuexiu 0', 'Tianhe 15')),
      'Hummus Asli, absent from Yuexiu\'s map, reads 0 — the LEFT JOIN\'s own answer');
 }
 
@@ -220,7 +225,7 @@ console.log('\n══ the search keeps the numbers ══');
   });
   const body = run('rqBodyHtml()');
   ok(/Hummus Asli/.test(body) && !/Tzatziki/.test(body), 'the query still filters the list');
-  ok(/On the shelf · Yuexiu 2 · Tianhe 15/.test(body), 'and the remaining row still has its counts');
+  ok(body.includes(shelfLine('On the shelf', 'Yuexiu 2', 'Tianhe 15')), 'and the remaining row still has its counts');
   sb.state.rq.q = 'zzz';
   ok(/No products match/.test(run('rqBodyHtml()')), 'no-match is still the empty list');
 }
@@ -291,6 +296,8 @@ async function asyncCases() {
     ok(sliceFn('qsMeta').includes(pair), 'and was already live on Add stock');
     ok(!/on hand/.test(note) && !/库存 /.test(note),
        'waste\'s on-hand pair is not reused here — that screen writes off, this one asks');
+    ok(note.includes('white-space:nowrap'),
+       'shop name and count cannot wrap apart — Ash, live: Tianhe\'s number jumped');
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
