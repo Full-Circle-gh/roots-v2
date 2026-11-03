@@ -11927,11 +11927,23 @@ function shapePhone(b, key, def) {
 // §516 — the same twin for number fields (heights, columns, counts): empty
 // means same as computer. `xf` is the base field's own clamp, reused so the
 // phone value can never land outside what the computer field allows.
-function phoneNumTwin(b, key, host, opts, xf) {
+// §517 — zero is a value, not "same as computer": num() reports an emptied
+// box as 0, so the write listens to the raw string and only a truly empty
+// box clears the override.
+function phoneNumTwin(b, key, host, opts, xf, hint) {
   const f = xf || ((v) => v);
+  const el = num(b[key + '_phone'] ?? '', () => {}, opts);
+  el.addEventListener('input', () => {
+    const raw = el.value;
+    if (raw === '') { updateBlock(b.id, { [key + '_phone']: undefined }); return; }
+    let n = Number(raw);
+    if (opts && opts.min != null && n < opts.min) n = opts.min;
+    if (opts && opts.max != null && n > opts.max) n = opts.max;
+    updateBlock(b.id, { [key + '_phone']: f(n) });
+  });
   return field(T('On phone', '手机上'),
-    T('The value this block uses on a phone. Empty means same as computer.', '本模块在手机上使用的数值。留空表示与电脑相同。'),
-    num(b[key + '_phone'] ?? '', v => updateBlock(b.id, { [key + '_phone']: v > 0 ? f(v) : undefined }), opts));
+    hint || T('The value this block uses on a phone. Empty means same as computer.', '本模块在手机上使用的数值。留空表示与电脑相同。'),
+    el);
 }
 
 // …and for ticks: a three-way pick, because "same as computer" has to stay
@@ -12966,13 +12978,12 @@ function buildGridForm(m, b) {
 }
 function buildSpacerForm(m, b) {
   const secLayout = inspectorSection(m, b.type, 'layout', T('Style & layout', '样式与版式'), { open: true });
-  secLayout.appendChild(field(T('Height (px)', '高度(像素)'), '', num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 4, max: 200 })));
+  secLayout.appendChild(field(T('Height (px)', '高度(像素)'), '', num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 0, max: 200 })));
   // §515 — the spacer's height wears the same phone twin as the shape picks:
   // empty means "same as computer", so one gap can serve both widths until
-  // the office gives the phone a gap of its own.
-  secLayout.appendChild(field(T('On phone', '手机上'),
-    T('The gap this spacer leaves on a phone. Empty means same as computer.', '手机上的留空高度。留空表示与电脑相同。'),
-    num(b.height_px_phone ?? '', v => updateBlock(b.id, { height_px_phone: v > 0 ? v : undefined }), { min: 4, max: 200 })));
+  // the office gives the phone a gap of its own. §517: 0 is a real gap.
+  secLayout.appendChild(phoneNumTwin(b, 'height_px', secLayout, { min: 0, max: 200 }, null,
+    T('The gap this spacer leaves on a phone. Empty means same as computer.', '手机上的留空高度。留空表示与电脑相同。')));
   secLayout.appendChild(field(T('Divider', '分隔线'), T('An optional line in the middle that turns the gap into a section break.', '可选 — 中间的一条线,把留白变成区块分隔。'),
     sel(b.divider_style || 'none', DIVIDER_STYLE_OPTIONS,
         v => updateBlock(b.id, { divider_style: v }))));

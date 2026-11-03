@@ -33964,3 +33964,11 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 3. **The gate is the mechanism.** The suite splits the inspector into its form functions and fails if any form writes a surface key without wearing the twin for it; and fails if any of the four renderers (web engine, editor phone DOM, phone drawer, mini app) reads a surface key bare. A block added tomorrow that uses a table key cannot ship without its twin, and a new layout-ish key joins the table before any form writes it.
 
 4. **Words.** Two composed hints (vocabulary v1.387), one per twin kind; the label is §514's, reused; `On · 开` and `Off · 关` are copied whole from the admin's own toggles. Nothing retired.
+
+## §517 — ZERO IS A VALUE, NOT "SAME AS COMPUTER"
+
+**2026-11-03 · DECIDED BY ASH, BY WAY OF A BUG REPORT.** Ash, live in the editor after §516 shipped: *"it doesnt work. i put 0 on phone , 50 on computer. phone still big gap"*. Two defects, one symptom. The number twin's writer treated 0 as an emptied box — `num()` reports both as 0 — so the override was silently cleared and the phone fell back to the computer's 50. And the mini app's and drawer's twin-first reads used `||`, which skips a stored 0 the same way. A gap of none is a choice the office makes on purpose; it is not the absence of a choice.
+
+1. **The writer listens to the raw string.** Only a truly empty box clears `<key>_phone`; a typed 0 stores 0. The field's own min/max still clamp, in the twin's listener, because the raw listener bypasses `num()`'s bounds.
+2. **The readers test for null, not truth.** The mini app and the drawer ask `!= null` before falling through; the web engine's `shapeOn` and the phone DOM's `shapePhone` already did.
+3. **The spacer allows 0 on both fields** (its floor was 4): no gap is a legitimate layout, on either width.

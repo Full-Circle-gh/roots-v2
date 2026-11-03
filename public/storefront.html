@@ -1753,7 +1753,7 @@ function renderBlock(b) {
       return `<div class="b-grid b-grid-grid">${head}<div class="grid c${cols}">${cards}</div></div>`;
     }
     case 'spacer': {
-      return `<div class="b-spacer" style="height: ${(b.height_px_phone || b.height_px) || 24}px"></div>`;
+      return `<div class="b-spacer" style="height: ${b.height_px_phone != null ? b.height_px_phone : (b.height_px != null ? b.height_px : 24)}px"></div>`;
     }
     case 'flash_sale_strip': {
       const view = (b.view_phone || b.view) || 'strip';
