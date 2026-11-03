@@ -33972,3 +33972,10 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 1. **The writer listens to the raw string.** Only a truly empty box clears `<key>_phone`; a typed 0 stores 0. The field's own min/max still clamp, in the twin's listener, because the raw listener bypasses `num()`'s bounds.
 2. **The readers test for null, not truth.** The mini app and the drawer ask `!= null` before falling through; the web engine's `shapeOn` and the phone DOM's `shapePhone` already did.
 3. **The spacer allows 0 on both fields** (its floor was 4): no gap is a legitimate layout, on either width.
+
+## §518 — THE PHONE MAP CAPTION BREATHES: SPACING IS A DESIGN CONSTANT, NOT A KNOB
+
+**2026-11-03 · DECIDED BY ASH, BY WAY OF A BUG REPORT.** Ash, on the live phone site's visit card: *"on mobile , text is too tight to the map, cant change it in editor"*. §503 rule 50 made the phone map a hero with the caption over the pin; the caption sat 14px off the map's bottom edge with 2px between its three lines at line-height 1.35, and the address read as pressed against the pin art.
+
+1. **The caption breathes.** 18px from the map's left, right and bottom edges; line-height 1.5; 6px between title, hint and address. The scrim gains a mid stop so the taller caption keeps its contrast over the map art.
+2. **No editor knob, on purpose.** The caption's spacing is a design constant of the phone hero, like the other §503 phone rules: one look across every store, not a per-block setting the office can drift. The caption's WORDS remain what they were — the store's own name and address, and the locked hint — editable where store details are edited. If a store ever needs a different caption rhythm, that is a new decision, not a field.
