@@ -9019,6 +9019,47 @@ try {
 } catch (e) { console.error('[migration website_facts_and_essay_editable_v1]', e); }
 
 
+// ── One-off: take-home product grid SEE ALL → Ramada QR menu (§503) ─────────
+//
+// The jars grid at the foot of the brand website is not "see everything in
+// the shop" — it is the take-home line beside the lobby menus above. SEE ALL
+// should open the same Ramada menu as the bar Menu button and the hero CTA.
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('website_product_grid_see_all_ramada_v1');
+  if (!ran) {
+    const RAMADA_MENU = 'https://shop.rootskitchenchina.com/s/TJ6YHDGN';
+    const MENU_PATH = /^\/s\/[A-HJ-NP-Z2-9]{8}(?:\/|$)/i;
+    const isMenuUrl = (u) => {
+      try {
+        const x = new URL(String(u || ''));
+        return x.protocol === 'https:' && MENU_PATH.test(x.pathname);
+      } catch { return false; }
+    };
+    db.transaction(() => {
+      for (const key of ['website.layout', 'cms.draft.website_layout']) {
+        const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+        if (!row) continue;
+        let layout;
+        try { layout = JSON.parse(row.value_json); } catch { continue; }
+        if (!Array.isArray(layout)) continue;
+        let changed = false;
+        for (const b of layout) {
+          if (!b || b.type !== 'product_grid') continue;
+          if (b.link_target && String(b.link_target).trim()) continue;
+          b.link_target = RAMADA_MENU;
+          changed = true;
+        }
+        if (changed) {
+          db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?').run(JSON.stringify(layout), key);
+          console.log('[migration] website_product_grid_see_all_ramada_v1: ' + key + ' product_grid SEE ALL → Ramada menu');
+        }
+      }
+      db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('website_product_grid_see_all_ramada_v1');
+    })();
+  }
+} catch (e) { console.error('[migration website_product_grid_see_all_ramada_v1]', e); }
+
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;

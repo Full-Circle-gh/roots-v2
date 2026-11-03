@@ -6570,6 +6570,7 @@ function ctaRoute(t){
   if(t.indexOf('copy:')===0){ const code=t.slice(5);
     try{ navigator.clipboard.writeText(code); }catch{}
     toast((state.lang==='cn'?'已复制 ':'Copied ')+code); return; }
+  if(/^https?:\/\//i.test(t)){ window.open(t,'_blank','noopener'); return; }
   // cart / wallet / coupons / voting / wecom / notifications / order:* → later phases
   toast(state.lang==='cn'?'此功能即将上线 🌱':'That feature is coming soon 🌱');
 }

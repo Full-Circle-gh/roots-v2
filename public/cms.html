@@ -1357,6 +1357,12 @@
   .ds-url { flex: 1; margin-left: 8px; height: 18px; border-radius: 6px; background: var(--bg-pane); font: 400 10.5px var(--f-sans); color: var(--text-3); padding: 0 10px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ds-view { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: #fff; }
   .ds-view iframe { position: absolute; top: 0; left: 0; width: 1280px; border: 0; background: #fff; transform-origin: 0 0; display: block; }
+  /* The Website page on the Phone stage (§513): the same site frame at phone
+     width, centred in a phone-shaped shell — no browser chrome, because a
+     phone is not a browser window. */
+  .desktop-stage.ds-phoneview .ds-chrome { display: none; }
+  .desktop-stage.ds-phoneview .ds-view { background: var(--bg-pane); }
+  .ds-view iframe.ds-phone { border-radius: 26px; box-shadow: 0 0 0 1px var(--line-soft), var(--sh-phone); }
   /* Focus-mode toggle — pill button matching .btn-phone-preview, with a
      small switch instead of a chevron so its on/off state reads at a glance. */
   .focus-toggle {
@@ -6149,13 +6155,14 @@ function initCanvasLayout() {
     if (!panel) return;
     const id = state.selectedId;
     const wrap = id && document.querySelector(`#phone-content .block-wrap[data-id="${id}"]`);
-    // On the desktop stage the phone DOM is not built; the selection lives in
-    // the stage frame, and the inspector must still show for it.
-    panel.hidden = !(id && (wrap || effectiveStage() === 'desktop'));
-    // On the desktop stage the page makes room for the open panel; the
+    // Where the site frame shows (desktop stage, and the Website page's phone
+    // stage, §513) the phone DOM is not built; the selection lives in the
+    // frame, and the inspector must still show for it.
+    panel.hidden = !(id && (wrap || stageShowsFrame()));
+    // Where the frame shows, the page makes room for the open panel; the
     // stage's ResizeObserver rescales the frame to the narrower width.
     const canvas = document.querySelector('.canvas');
-    if (canvas) canvas.classList.toggle('insp-open', !panel.hidden && effectiveStage() === 'desktop');
+    if (canvas) canvas.classList.toggle('insp-open', !panel.hidden && stageShowsFrame());
   };
 
   // ── dismiss the drawer on outside click / Esc ──
@@ -8839,7 +8846,7 @@ function renderPreview() {
   // The inspector still has to open or close for the selection made on the
   // stage, so positionFloatingToolbar (which runs its show/hide) is called
   // here too.
-  if (effectiveStage() === 'desktop') { _phoneStale = true; requestAnimationFrame(positionFloatingToolbar); return; }
+  if (stageShowsFrame()) { _phoneStale = true; requestAnimationFrame(positionFloatingToolbar); return; }
   _phoneStale = false;
   const mount = $('#phone-content');
   mount.innerHTML = '';
@@ -9044,11 +9051,11 @@ function positionFloatingToolbar() {
   const tb = ensureFloatingToolbar();
   const id = state.selectedId;
   // The inspector's show/hide runs on every path out of here. It used to run
-  // only at the end, after the phone-only work, so on the desktop stage a
-  // selected block never opened its settings — and the Website page (§503),
-  // which is desktop only, could not be edited at all.
+  // only at the end, after the phone-only work, so where the site frame shows
+  // a selected block never opened its settings — and the Website page (§503),
+  // which was desktop only, could not be edited at all.
   if (window.cfPositionInspector) window.cfPositionInspector();
-  if (!id || effectiveStage() === 'desktop') { tb.style.display = 'none'; return; }
+  if (!id || stageShowsFrame()) { tb.style.display = 'none'; return; }
   const wrap = document.querySelector(`#phone-content .block-wrap[data-id="${id}"]`);
   if (!wrap) { tb.style.display = 'none'; return; }
 
@@ -12867,9 +12874,14 @@ function buildGridForm(m, b) {
       onChange: (v) => updateBlockSilent(b.id, { product_ids: v }),
     })));
   }
-  secContent.appendChild(field(T('SEE ALL link', '「查看全部」跳转'),
-    T('Where the SEE ALL header link goes. Leave empty for the default — the category above when Source is By category, otherwise the Shop tab.', '「查看全部」链接的跳转位置。留空则使用此模块的默认跳转 — 来源为「按分类」时跳转上方所选分类,否则跳转「商品」标签页。'),
-    targetPicker({ value: b.link_target, onChange: v => updateBlockSilent(b.id, { link_target: v }), suggest: 'shop' })));
+  const seeAllSuggest = state.page === 'website'
+    ? 'https://shop.rootskitchenchina.com/s/TJ6YHDGN'
+    : 'shop';
+  const seeAllHint = state.page === 'website'
+    ? T('Where the SEE ALL header link goes. On the brand website the take-home grid usually opens the Ramada menu — paste that QR menu link, or leave empty for the category / Shop default.', '「查看全部」链接的跳转位置。品牌网站上,此网格通常打开 Ramada 餐单 — 粘贴该二维码菜单链接,或留空则使用分类 / 商品默认跳转。')
+    : T('Where the SEE ALL header link goes. Leave empty for the default — the category above when Source is By category, otherwise the Shop tab.', '「查看全部」链接的跳转位置。留空则使用此模块的默认跳转 — 来源为「按分类」时跳转上方所选分类,否则跳转「商品」标签页。');
+  secContent.appendChild(field(T('SEE ALL link', '「查看全部」跳转'), seeAllHint,
+    targetPicker({ value: b.link_target, onChange: v => updateBlockSilent(b.id, { link_target: v }), suggest: seeAllSuggest })));
 
   // ── Colours ─────────────────────────────────────────────────────────
   secColours.appendChild(field(T('Background colour', '背景颜色'), T('A background colour behind the grid. Default = transparent (the page colour shows through).', '网格后面的背景色。默认 = 透明(显示页面底色)。'),
@@ -16193,8 +16205,9 @@ function _lpClose() { const d = document.getElementById('live-preview-drawer'); 
 // page redraws as the office types, without waiting for the 800ms save.
 // Only Home reaches the web shop, so the mini app pages force the phone stage
 // and the Desktop button is disabled with the reason in its tooltip. The
-// Website page (§503) is the other way round: desktop only, drawn by
-// public/site.html at /site-preview, and the Phone button is the disabled one.
+// Website page (§503, amended by §513) draws in the same site frame on BOTH
+// stages: at desktop width on Desktop, and at phone width on Phone, where the
+// frame wears a phone shell instead of the browser chrome.
 // ═══════════════════════════════════════════════════════════════════════
 let _stageIframe = null;
 let _stageReady = false;
@@ -16217,17 +16230,26 @@ function effectiveStage() {
   // The phone editor shell (cms-mobile.html) embeds this page as its faithful
   // phone preview; there the stage is the phone, whatever the desktop chose.
   if (window.__fcPreviewEmbed) return 'phone';
-  if (state.page === 'website') return 'desktop';
   return (state.stage === 'desktop' && stageAllowed()) ? 'desktop' : 'phone';
+}
+
+// The site frame (shop.html or site.html in #desktop-stage) is what shows on
+// the desktop stage — and on the Website page's phone stage too, where the
+// same frame draws the brand site at phone width (§513). Everything that
+// feeds or reads the frame keys off this, not off the stage's name.
+function stageShowsFrame() {
+  return state.page === 'website' || effectiveStage() === 'desktop';
 }
 
 function applyStage() {
   const stage = effectiveStage();
+  const frame = stageShowsFrame();
   const canvas = document.querySelector('.canvas');
   const ds = document.getElementById('desktop-stage');
   if (!canvas || !ds) return;
-  canvas.classList.toggle('stage-desktop', stage === 'desktop');
-  ds.hidden = stage !== 'desktop';
+  canvas.classList.toggle('stage-desktop', frame);
+  ds.hidden = !frame;
+  ds.classList.toggle('ds-phoneview', frame && stage === 'phone');
   const seg = document.getElementById('stage-seg');
   if (seg) {
     seg.querySelectorAll('button').forEach(b => {
@@ -16243,12 +16265,13 @@ function applyStage() {
         }
         b.title = state.lang === 'cn' ? b.dataset.tiCn : b.dataset.tiEn;
       } else if (b.dataset.stage === 'phone') {
-        // Composed pair, declared in tacet-delivery-vocabulary v1.361 (§503).
-        b.disabled = state.page === 'website';
-        if (b.disabled) {
-          b.dataset.tiEn = 'The website is edited on Desktop — it adapts to phones by itself';
-          b.dataset.tiCn = '网站在电脑模式下编辑 — 在手机上会自动适配';
+        b.disabled = false;
+        if (state.page === 'website') {
+          // Composed pair, declared in tacet-delivery-vocabulary v1.383 (§513).
+          b.dataset.tiEn = 'Edit the website as customers see it on a phone';
+          b.dataset.tiCn = '按顾客在手机上看到的样子编辑网页版';
         } else {
+          // Composed pair, declared in tacet-delivery-vocabulary v1.361 (§503).
           b.dataset.tiEn = 'Edit the mini app as customers see it on a phone';
           b.dataset.tiCn = '按顾客在手机上看到的样子编辑小程序';
         }
@@ -16256,12 +16279,12 @@ function applyStage() {
       }
     });
   }
-  if (stage === 'desktop') {
+  if (frame) {
     mountDesktopStage();
     sizeDesktopStage();
     pushDraftToStage();
   } else if (_phoneStale) {
-    renderPreview();   // the phone DOM was skipped while the desktop stage showed
+    renderPreview();   // the phone DOM was skipped while the frame showed
   }
   renderStageBar();
   positionFloatingToolbar();
@@ -16297,19 +16320,26 @@ function mountDesktopStage() {
 }
 
 // 1280px is a real desktop; scale it down to whatever the canvas gives us
-// and let the frame scroll inside itself at the scaled height.
+// and let the frame scroll inside itself at the scaled height. On the
+// Website page's phone stage the frame is a real phone width instead,
+// centred, so site.html's own phone rules are what draw (§513).
 function sizeDesktopStage() {
   const view = document.getElementById('ds-view');
   if (!view || !_stageIframe) return;
   const w = view.clientWidth || 0, h = view.clientHeight || 0;
   if (!w || !h) return;
-  const scale = Math.min(1, w / 1280);
+  const phone = state.page === 'website' && effectiveStage() === 'phone';
+  const target = phone ? 390 : 1280;
+  const scale = Math.min(1, w / target);
+  _stageIframe.classList.toggle('ds-phone', phone);
+  _stageIframe.style.width = target + 'px';
   _stageIframe.style.transform = 'scale(' + scale + ')';
   _stageIframe.style.height = Math.round(h / scale) + 'px';
+  _stageIframe.style.left = Math.round(Math.max(0, (w - target * scale) / 2)) + 'px';
 }
 
 function pushDraftToStage() {
-  if (!_stageIframe || !_stageReady || effectiveStage() !== 'desktop') return;
+  if (!_stageIframe || !_stageReady || !stageShowsFrame()) return;
   if (!_stageIframe.contentWindow) return;
   _stageIframe.contentWindow.postMessage({
     type: 'cms:draft',
