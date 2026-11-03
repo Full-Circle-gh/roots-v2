@@ -115,6 +115,7 @@ function makeSandbox(state) {
     nothingYet: (a, b) => `[nothingYet:${a}|${b}]`,
     qsName: (p) => p.name_en || '',
     rqName: (p) => p.name_en || '',
+    rqStoreName: (id) => 'S' + id,
     batId: (p) => (p.product_id != null ? p.product_id : p.id),
     qsMode: () => 'add',
     asstCan: () => false,   // §495 rule 14: the shelf's mic is the assistant's, drawn only when it is open to the operator
@@ -211,11 +212,11 @@ console.log('\n══ rqPicker · Ask for stock / Ask the kitchen ══');
     if (!OLD_SRC) continue;
     const o = makeSandbox(mk(over)), n = makeSandbox(mk(over));
     load(o, OLD_SRC, ['rqPicker']);
-    load(n, NEW_SRC, ['rqPicker', 'rqCountCell', 'rqBodyHtml']);
+    load(n, NEW_SRC, ['rqPicker', 'rqCountCell', 'rqShelfNote', 'rqBodyHtml']);
     compare(label, o, n, sb => sb.rqPicker());
   }
   const n = makeSandbox(mk({}));
-  load(n, NEW_SRC, ['rqPicker', 'rqCountCell', 'rqBodyHtml']);
+  load(n, NEW_SRC, ['rqPicker', 'rqCountCell', 'rqShelfNote', 'rqBodyHtml']);
   ok(n.rqPicker().includes('id="mRqBody"'), 'and the new output carries the container the repaint needs');
 }
 

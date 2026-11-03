@@ -108,6 +108,7 @@ function sandbox(rqOver, withDom) {
     ic: (n) => `[icon:${n}]`,
     searchBox: (input) => input,
     rqName: (p) => p.name_en || '',
+    rqStoreName: (id) => 'S' + id,
     render: () => { calls.render++; },
     askDraftSync: () => { calls.sync++; },
     rqItems: () => [],
@@ -116,7 +117,7 @@ function sandbox(rqOver, withDom) {
   };
   vm.createContext(sb);
   for (const n of ['rcvSkuKey', 'rcvSkuCmp', 'rqKindOf', 'rqLines', 'rqChosen', 'rqUnits', 'rqTypeOk', 'rqTypeBad', 'rqCountCell',
-                   'rqBodyHtml', 'rqTypeOpen', 'rqTyped', 'rqTypeCommit', 'rqSync', 'rqBump',
+                   'rqShelfNote', 'rqBodyHtml', 'rqTypeOpen', 'rqTyped', 'rqTypeCommit', 'rqSync', 'rqBump',
                    'rqFootReady', 'rqFoot', 'rqSendStock', 'rqSendKitchen', 'rqReset', 'askDraftClear']) {
     vm.runInContext(sliceFn(n), sb, { filename: `slice#${n}` });
   }

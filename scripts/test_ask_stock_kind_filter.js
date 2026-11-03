@@ -73,11 +73,12 @@ function sandbox(over, products) {
     ic: (n) => `[icon:${n}]`,
     searchBox: (input) => input,
     rqName: (p) => p.name_en || '',
+    rqStoreName: (id) => 'S' + id,
     render: () => {},
     console, Number, String, Array, Object, JSON, Math,
   };
   vm.createContext(sb);
-  for (const n of ['rcvSkuKey', 'rcvSkuCmp', 'rqKindOf', 'rqLines', 'rqKindSeg', 'rqCountCell', 'rqBodyHtml', 'rqPicker', 'rqChosen', 'rqUnits']) {
+  for (const n of ['rcvSkuKey', 'rcvSkuCmp', 'rqKindOf', 'rqLines', 'rqKindSeg', 'rqCountCell', 'rqShelfNote', 'rqBodyHtml', 'rqPicker', 'rqChosen', 'rqUnits']) {
     vm.runInContext(sliceFn(n), sb, { filename: `slice#${n}` });
   }
   vm.runInContext(`var rqKindCmd = ${handler('rqKind')};`, sb, { filename: 'reg#rqKind' });

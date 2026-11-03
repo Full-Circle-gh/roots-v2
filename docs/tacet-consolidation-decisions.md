@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.621
+# Tacet shared-core consolidation — decisions record, v4.622
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-03 · v4.622 — **§512 · ASK FOR STOCK SHOWS WHAT IS ON THE SHELF AT THE SHOPS ALREADY CHOSEN — ASH.** Ash, on the product list: *"in this list need to see the current stock at the location I choose. this way it will be easier to fill up the form without actually looking at the physical stock"*. Each chosen shop's physical count now sits under the SKU, destination first then the shop being asked, labelled with Add stock's live `On the shelf · 在架`. Same `/stores/:id/stock` Add stock already reads. Ask the kitchen is unchanged. Nothing composed. No schema, no route, no change to `.gitignore` or CI. See §512.
 
 2026-11-02 · v4.621 — **§511 · THE FACTS STRIP AND THE FOUNDER ESSAY ARE BLOCKS ON THE WEBSITE PAGE — ASH.** Ash: *"in tacet editor I want to be able to edit every block of the location website"*. The black facts strip was filled from About at draw time, and the essay popup read About's founder quote, so the Website page could not change either. The strip is now an `about_stats` block. The story card keeps its short body and gains the essay and the sign-off. Boot copies today's words onto the published layout and the draft once. Two composed strings (vocabulary v1.379). No change to `.gitignore` or CI.
 
@@ -33894,3 +33896,15 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 3. **Until that boot has run, a card with no essay fields still opens About's quote**, so a layout that has not been copied does not go blank. Once the fields exist, empty means empty.
 
 4. **Words.** The block's name `Stat strip · 数据条` is copied from the About editor. `Title · 标题`, `Text · 正文`, `Card N · 卡片 N`, `+ Add card · + 添加卡片`, `Content · 内容` and `Sign-off · 结尾` are copied. `Founder's Story · 创始人故事` is the pair already on the card (vocabulary v1.376), reused for the field and the button target. Two strings are composed (vocabulary v1.379): the block's description, and the note under the essay field. The six bar links stay the fixed names from §503 rule 54. They are not blocks.
+
+## §512 — ASK FOR STOCK SHOWS WHAT IS ON THE SHELF AT THE SHOPS ALREADY CHOSEN
+
+**2026-11-03 · DECIDED BY ASH.** Ash, on the Ask for stock product list, with Yuexiu as the shop being filled and Tianhe as the shop being asked: *"in this list need to see the current stock at the location I choose. this way it will be easier to fill up the form without actually looking at the physical stock"*. The list named the product and the SKU. The quantities had to be walked.
+
+1. **Both shops that are already chosen.** "For which store?" is the shelf being filled; "Ask which location?" is the shelf that would send it. Each row shows the physical count at each of those, destination first. A shop not yet picked is omitted, so the list can still open after the first chip. Ask the kitchen shares the picker and has no location chips, so it is unchanged.
+
+2. **Physical, not sellable.** The number is `physical_qty` from `/stores/:id/stock`, the same endpoint Add stock already reads. Reservations and buffers are a selling concept; this screen is filling a request without walking the fridge. A shop whose answer has not landed, failed, or came back with no quantities is omitted rather than drawn as 0.
+
+3. **Names and numerals, one live pair.** The line is `On the shelf · 在架` (copied whole from Add stock) then the shop's own name and the count. Nothing composed. Vocabulary v1.380.
+
+4. **Re-read on the way in, not kept in the draft.** The draft is still the request: quantities and both shops. The counts are a fact about the shelf right now.

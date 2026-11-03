@@ -139,10 +139,11 @@ function painted(over) {
     escAttr: (s) => String(s == null ? '' : s),
     ic: (n) => `[icon:${n}]`,
     rqName: (p) => p.name_en || '',
+    rqStoreName: (id) => 'S' + id,
     console, Number, String, Array, Object, JSON, Math,
   };
   vm.createContext(sb);
-  for (const n of ['rcvSkuKey', 'rcvSkuCmp', 'rqKindOf', 'rqLines', 'rqKindSeg', 'searchBox', 'rqCountCell', 'rqBodyHtml', 'rqPicker']) {
+  for (const n of ['rcvSkuKey', 'rcvSkuCmp', 'rqKindOf', 'rqLines', 'rqKindSeg', 'searchBox', 'rqCountCell', 'rqShelfNote', 'rqBodyHtml', 'rqPicker']) {
     vm.runInContext(sliceFn(n), sb, { filename: `slice#${n}` });
   }
   return vm.runInContext('rqPicker()', sb);
