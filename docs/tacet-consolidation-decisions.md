@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.622
+# Tacet shared-core consolidation — decisions record, v4.623
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-03 · v4.623 — **§512 AMENDED · THE SHOP'S COUNT STAYS WITH THE SHOP'S NAME — ASH.** Ash, on the live list: *"number of tianhe jump to the next line"*. Each shop name and its count are one wrap unit, so a narrow name column can break between shops and not between `Tianhe` and `5`. No new words. No change to `.gitignore` or CI.
 
 2026-11-03 · v4.622 — **§512 · ASK FOR STOCK SHOWS WHAT IS ON THE SHELF AT THE SHOPS ALREADY CHOSEN — ASH.** Ash, on the product list: *"in this list need to see the current stock at the location I choose. this way it will be easier to fill up the form without actually looking at the physical stock"*. Each chosen shop's physical count now sits under the SKU, destination first then the shop being asked, labelled with Add stock's live `On the shelf · 在架`. Same `/stores/:id/stock` Add stock already reads. Ask the kitchen is unchanged. Nothing composed. No schema, no route, no change to `.gitignore` or CI. See §512.
 
@@ -33908,3 +33910,5 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 3. **Names and numerals, one live pair.** The line is `On the shelf · 在架` (copied whole from Add stock) then the shop's own name and the count. Nothing composed. Vocabulary v1.380.
 
 4. **Re-read on the way in, not kept in the draft.** The draft is still the request: quantities and both shops. The counts are a fact about the shelf right now.
+
+5. **The shop's count stays with the shop's name.** Ash, on the live list after v4.622 shipped: *"number of tianhe jump to the next line"*. The name column is narrower than the phone, so the line wraps. Each `shop N` is one wrap unit. A break may fall between shops, never between the name and its number.
