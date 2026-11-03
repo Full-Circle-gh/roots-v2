@@ -173,8 +173,8 @@
     var imageUrl = absUrl(b.image_url);
     var heroVideo = absUrl(b.video_url);
     var aspectRatio = (b.image_aspect && b.image_url) ? String(b.image_aspect) : '';
-    var heroFit = b.image_fit || (b.image_aspect ? 'contain' : 'cover');
-    var fillAspect = (650 / (b.height_px || 280)).toFixed(4);
+    var heroFit = shapeOn(b, 'image_fit', (b.image_aspect ? 'contain' : 'cover'));
+    var fillAspect = (650 / (shapeOn(b, 'height_px', 280))).toFixed(4);
     var heroScrim = b.scrim || 'medium';
     var heroEnter = b.entrance_anim || 'none';
     var heroBtnBg = color(b.btn_color || '');
@@ -237,7 +237,7 @@
     var boxStyle;
     if (heroFit === 'contain') {
       boxStyle = aspectRatio ? ('aspect-ratio:' + aspectRatio + ';height:auto')
-        : ('height:calc(' + (b.height_px || 280) * 2 + ' * var(--u))');
+        : ('height:calc(' + (shapeOn(b, 'height_px', 280)) * 2 + ' * var(--u))');
     } else {
       boxStyle = 'aspect-ratio:' + fillAspect + ';height:auto';
     }
@@ -393,7 +393,7 @@
   // spacer ------------------------------------------------------------------
   renderers.spacer = function (b) {
     var h = shapeOn(b, 'height_px', 24);
-    var ds = b.divider_style || 'none';
+    var ds = shapeOn(b, 'divider_style', 'none');
     var dc = color(b.divider_color || 'olive-moss');
     var divider = ds !== 'none'
       ? '<div class="sb-spacer-divider" style="border-color:' + attr(dc) + ';background:' + (ds === 'line' ? attr(dc) : 'transparent') + '"></div>'
@@ -536,7 +536,7 @@
     var catView = shapeOn(b, 'view', 'tiles');
     var catStyle = ['index', 'bento', 'sticker'].indexOf(b.cat_style) !== -1 ? b.cat_style : 'classic';
     var bentoBadge = b.bento_badge !== 0;
-    var catCols = Math.max(3, Math.min(5, b.columns || 4));
+    var catCols = Math.max(3, Math.min(5, shapeOn(b, 'columns', 4)));
     var catBg = color(b.bg_color || '');
     var corner = b.corner_radius || 'sharp';
     var vars = '--cat-text:' + color(b.fg_color || 'ink') + ';--cat-accent:' + color(b.accent_color || 'olive-moss') +
@@ -642,10 +642,10 @@
     var title = pick(b.title_en != null ? b.title_en : b.title, b.title_cn);
     var seeAll = CN() ? '查看全部' : 'SEE ALL';
     var seeAllTarget = b.link_target || (b.category_id ? ('category:' + b.category_id) : 'shop');
-    var cols = b.columns || 2;
+    var cols = shapeOn(b, 'columns', 2);
     var gridView = shapeOn(b, 'view', 'grid');
     var corner = b.corner_radius || 'subtle';
-    var density = b.density || 'normal';
+    var density = shapeOn(b, 'density', 'normal');
     var rankMode = b.rank_badge || 'top_3';
     var gridBg = b.bg_color ? color(b.bg_color) : '';
     var gridSaleColor = b.accent_color ? color(b.accent_color) : '';
@@ -655,13 +655,13 @@
     if (b.source_type === 'manual') {
       list = (b.product_ids || []).map(findProductById).filter(Boolean);
     } else if (b.source_type === 'top_selling') {
-      var key = (b.top_channel || 'combined') + '|' + (b.top_window || '7d') + '|' + (b.limit || 6);
+      var key = (b.top_channel || 'combined') + '|' + (b.top_window || '7d') + '|' + (shapeOn(b, 'limit', 6));
       list = Array.isArray(caches.top[key]) ? caches.top[key] : [];
     } else if (b.source_type === 'new_arrivals') {
-      var nk = String(b.limit || 6);
+      var nk = String(shapeOn(b, 'limit', 6));
       list = Array.isArray(caches.newA[nk]) ? caches.newA[nk] : [];
     } else {
-      var cgKey = (b.category_id || 'all') + '|' + (b.limit || 6);
+      var cgKey = (b.category_id || 'all') + '|' + (shapeOn(b, 'limit', 6));
       if (Array.isArray(caches.catGrid[cgKey])) {
         list = caches.catGrid[cgKey];
       } else {
@@ -670,7 +670,7 @@
       }
     }
     var isTopSelling = b.source_type === 'top_selling';
-    var products = list.slice(0, b.limit || 6).map(function (p, idx) {
+    var products = list.slice(0, shapeOn(b, 'limit', 6)).map(function (p, idx) {
       var m = moneyEff(p);
       var tagline = pick(p.tagline_en, p.tagline_cn) || stripRichText(pick(p.description_en, p.description_cn)) || '';
       var rank = isTopSelling ? (idx + 1) : 0;
@@ -770,7 +770,7 @@
   // recipe_story ------------------------------------------------------------
   renderers.recipe_story = function (b) {
     var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
-    var imageView = b.image_view || 'top';
+    var imageView = shapeOn(b, 'image_view', 'top');
     var corner = b.corner_radius || 'subtle';
     var linked = b.product_id ? findProductById(b.product_id) : null;
     var linkedCard = null;
@@ -1511,7 +1511,7 @@
     var url = absUrl(b.video_url);
     if (!url) return '';
     var poster = absUrl(b.poster_url);
-    var h = b.height_px || 420;
+    var h = shapeOn(b, 'height_px', 420);
     // 'fullscreen' is a device splash on the mini-app; on the web home it
     // becomes a tall in-page band instead of hijacking the viewport.
     var style = b.display === 'fullscreen' ? 'height:70vh' : 'height:calc(' + (h * 2) + ' * var(--u))';
@@ -1879,7 +1879,7 @@
     if (!favs.length && hideEmpty) return '';
     var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
     var view = shapeOn(b, 'view', 'scroll');
-    var limit = Math.max(1, Math.min(12, b.limit || 6));
+    var limit = Math.max(1, Math.min(12, shapeOn(b, 'limit', 6)));
     var corner = b.corner_radius || 'subtle';
     var kicker = pick(b.kicker_en, b.kicker_cn) || (CN() ? '你的收藏' : 'YOUR SAVED');
     var title = pick(b.title_en, b.title_cn) || (CN() ? '继续看看' : 'Pick up where you left off.');
@@ -2083,7 +2083,7 @@
     if (!inner) return '';
     var frameOn = !!b.frame_color;
     var frameColor = b.frame_color ? brandColorVar(b.frame_color) : '';
-    var fullBleed = b.full_bleed === true;
+    var fullBleed = tickOn(b, 'full_bleed') === true;
     var corner = b.corner_radius || 'subtle';
     var fill = !!FULL_BG_TYPES[b.type];
     var cls = 'sb-blk-outer sb-corner-' + corner +
@@ -2175,6 +2175,13 @@
     var v = (_phoneMQ && _phoneMQ.matches) && b[key + '_phone'] != null ? b[key + '_phone'] : b[key];
     return v == null ? def : v;
   }
+  // The tick twin stores an explicit true/false, or nothing for "same as
+  // computer" — so the phone read can never fall through to ||.
+  function tickOn(b, key) {
+    if (!b) return false;
+    if (_phoneMQ && _phoneMQ.matches && b[key + '_phone'] != null) return b[key + '_phone'] === true;
+    return b[key] === true;
+  }
 
   // The layout last drawn, so startTimers warms the page actually showing —
   // the brand website (§503) draws `website.layout`, not Home's.
@@ -2206,7 +2213,7 @@
     blocks.forEach(function (b) {
       if (!b || b.type !== 'product_grid') return;
       if (b.source_type === 'top_selling') {
-        var ch = b.top_channel || 'combined', win = b.top_window || '7d', lim = b.limit || 6;
+        var ch = b.top_channel || 'combined', win = b.top_window || '7d', lim = shapeOn(b, 'limit', 6);
         var key = ch + '|' + win + '|' + lim;
         if (caches.top[key]) return;
         caches.top[key] = [];   // mark in-flight
@@ -2214,7 +2221,7 @@
           .then(function (d) { caches.top[key] = listOf(d); fireRerender(); })
           .catch(function () {});
       } else if (b.source_type === 'new_arrivals') {
-        var nl = String(b.limit || 6);
+        var nl = String(shapeOn(b, 'limit', 6));
         if (caches.newA[nl]) return;
         caches.newA[nl] = [];
         fetchJson('/api/retail/products?sort=newest&limit=' + nl)

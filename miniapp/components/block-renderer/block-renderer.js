@@ -339,7 +339,7 @@ Component({
       // existing blocks render unchanged.
       out.frameOn = !!b.frame_color;
       out.frameColor = b.frame_color ? color(b.frame_color) : '';
-      out.fullBleed = b.full_bleed === true;
+      out.fullBleed = (b.full_bleed_phone == null ? b.full_bleed : b.full_bleed_phone) === true;
       // Corner radius — rounds the frame; card-style blocks also read
       // corner_radius for their own card corners (see *Corner vars below).
       out.blockCorner = b.corner_radius || 'subtle';
@@ -371,14 +371,14 @@ Component({
           out.imageUrl = absUrl(b.image_url);
           out.heroVideo = absUrl(b.video_url);
           if (b.image_aspect && b.image_url) out.aspectRatio = String(b.image_aspect);
-          out.placeholderH = b.height_px || 280;
+          out.placeholderH = (b.height_px_phone || b.height_px) || 280;
           // Image fit: how the picture fills the banner box.
           //   cover   — fill the banner, crop overflow (banner uses height_px)
           //   contain — show the whole image (banner matches the image ratio)
           //   stretch — stretch to fill exactly (may distort)
           // Legacy blocks (image_aspect set, no image_fit) default to
           // 'contain' so they look exactly as before; otherwise 'cover'.
-          out.heroFit = b.image_fit || (b.image_aspect ? 'contain' : 'cover');
+          out.heroFit = (b.image_fit_phone || b.image_fit) || (b.image_aspect ? 'contain' : 'cover');
           out.heroImgMode = out.heroFit === 'contain' ? 'aspectFit'
             : out.heroFit === 'stretch' ? 'scaleToFill' : 'aspectFill';
           // Fill/stretch use a fixed-proportion box (the image is cropped into
@@ -388,7 +388,7 @@ Component({
           // banner matches the editor preview exactly on any screen width.
           // (A plain rpx height diverged: 520px read as a short landscape band
           // in the editor but a tall portrait band on the phone.)
-          out.fillAspect = (650 / (b.height_px || 280)).toFixed(4);
+          out.fillAspect = (650 / ((b.height_px_phone || b.height_px) || 280)).toFixed(4);
           const ctas = Array.isArray(b.ctas) ? b.ctas : (b.cta_label ? [{ label_en: b.cta_label, label_cn: '', target: b.cta_target, style: 'primary' }] : []);
           const heroBtnBg = color(b.btn_color || '');
           out.ctas = ctas.map(c => {
@@ -428,7 +428,7 @@ Component({
           out.catStyle = ['index', 'bento', 'sticker'].includes(b.cat_style) ? b.cat_style : 'classic';
           // Bento number badge ("NN · count") on each tile; on unless turned off.
           out.bentoBadge = b.bento_badge !== 0;
-          out.catCols = Math.max(3, Math.min(5, b.columns || 4));
+          out.catCols = Math.max(3, Math.min(5, (b.columns_phone || b.columns) || 4));
           out.catBg   = color(b.bg_color || '');
           // Standard cross-block options.
           out.catCorner = b.corner_radius || 'sharp';
@@ -542,12 +542,12 @@ Component({
           // Explicit link_target wins; else category-scoped grids deep-link to
           // that category; everything else opens the Shop tab.
           out.seeAllTarget = b.link_target || (b.category_id ? ('category:' + b.category_id) : 'shop');
-          out.cols   = b.columns || 2;
+          out.cols   = (b.columns_phone || b.columns) || 2;
           out.gridView = (b.view_phone || b.view) || 'grid';
           // 2026-05-20 enhancements: card corner radius + grid density +
           // rank badge gating (only relevant for top_selling source).
           out.gridCorner  = b.corner_radius || 'subtle';
-          out.gridDensity = b.density       || 'normal';
+          out.gridDensity = (b.density_phone || b.density) || 'normal';
           out.gridRankMode = b.rank_badge || 'top_3';
           // Optional surface panel + sale/accent colour. Both blank by
           // default so unset grids render byte-identically (transparent
@@ -564,14 +564,14 @@ Component({
             // Host page pre-fetches top sellers per (channel|window|limit)
             // key; we just look up the result here. Empty array until data
             // arrives — host triggers a re-render once cache is warm.
-            const key = `${b.top_channel || 'combined'}|${b.top_window || '7d'}|${b.limit || 6}`;
+            const key = `${b.top_channel || 'combined'}|${b.top_window || '7d'}|${(b.limit_phone || b.limit) || 6}`;
             const top = this.properties.topProducts || {};
             list = Array.isArray(top[key]) ? top[key] : [];
           } else if (b.source_type === 'new_arrivals') {
             // Host page pre-fetches the newest products per limit (server sorts
             // by created_at DESC). Same lazy lookup as top_selling.
             const na = this.properties.newArrivals || {};
-            const key = String(b.limit || 6);
+            const key = String((b.limit_phone || b.limit) || 6);
             list = Array.isArray(na[key]) ? na[key] : [];
           } else {
             // Category-scoped (or source=all) grid. The host page fetches this
@@ -579,7 +579,7 @@ Component({
             // so it isn't capped by whatever sorted into the home's first-100
             // products pull. Until that lands — or on an older host page that
             // doesn't pass catGrids — fall back to filtering the shared array.
-            const cgKey = `${b.category_id || 'all'}|${b.limit || 6}`;
+            const cgKey = `${b.category_id || 'all'}|${(b.limit_phone || b.limit) || 6}`;
             const cg = this.properties.catGrids || {};
             if (Array.isArray(cg[cgKey])) {
               list = cg[cgKey];
@@ -594,7 +594,7 @@ Component({
           // for-medalists behaviour; 'always' shows ranks 4+ too; 'never'
           // suppresses the whole ribbon. Non-top_selling source ignores this.
           const rankMode = out.gridRankMode;
-          out.gridProducts = list.slice(0, b.limit || 6).map((p, idx) => {
+          out.gridProducts = list.slice(0, (b.limit_phone || b.limit) || 6).map((p, idx) => {
             const regular = Number(p.sell_price ?? p.price) || 0;
             const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
             const isFlash = !!p.is_on_flash && eff < regular;
@@ -834,7 +834,7 @@ Component({
           // 2026-05-20 — optional decorative divider centred in the spacer.
           // 'none' is the legacy blank gap; line/dashes/dots draw a coloured
           // rule. dividerColor is resolved via the brand-color picker.
-          out.dividerStyle = b.divider_style || 'none';
+          out.dividerStyle = (b.divider_style_phone || b.divider_style) || 'none';
           out.dividerColor = color(b.divider_color || 'olive-moss');
           break;
         }
@@ -1208,7 +1208,7 @@ Component({
           out.bg = color(b.bg_color || 'oat-milk');
           out.fg = color(b.fg_color || 'ink');
           const view = (b.view_phone || b.view) || 'scroll';            // 'scroll' | 'grid'
-          const limit = Math.max(1, Math.min(12, b.limit || 6));
+          const limit = Math.max(1, Math.min(12, (b.limit_phone || b.limit) || 6));
           const favs = Array.isArray(this.properties.favorites) ? this.properties.favorites : [];
           const hideEmpty = b.hide_when_empty !== false;
           if (!favs.length && hideEmpty) {
@@ -1611,7 +1611,7 @@ Component({
           const paragraphs = bodyText.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
           out.recipe = {
             imageUrl: absUrl(b.image_url),
-            imageView: b.image_view || 'top',  // 'top' | 'side'
+            imageView: (b.image_view_phone || b.image_view) || 'top',  // 'top' | 'side'
             kicker:   lang.pick(b.kicker_en, b.kicker_cn, L),
             headline: lang.pick(b.headline_en, b.headline_cn, L),
             byline:   lang.pick(b.byline_en, b.byline_cn, L),
@@ -2005,7 +2005,7 @@ Component({
           // starts when it scrolls into view.
           out.videoUrl    = absUrl(b.video_url);
           out.videoPoster = absUrl(b.poster_url);
-          out.videoHeight = b.height_px || 420;
+          out.videoHeight = (b.height_px_phone || b.height_px) || 420;
           out.videoLink   = b.link_target || '';
           // 'fullscreen' covers the whole device (onboarding splash); 'banner'
           // is the fixed-height in-page band.

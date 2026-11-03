@@ -133,5 +133,56 @@ yes(onPhone({ height_px: 40, height_px_phone: 12 }, 'height_px', 24) === 12 &&
     onPhone({ height_px: 40 }, 'height_px', 24) === 40,
   'a phone gap of its own when set; one shared gap while unset');
 
+// ─────────────────────────────────────────────────────────────────────────
+section('6 · every block, and every block to come (§516)');
+
+// The frozen table of layout/spacing/size keys. A block control whose key is
+// here MUST wear a phone twin in the same form function; adding a layout-ish
+// key to a future block means adding it here, and the gate below then demands
+// its twin. Style families and aesthetic variants (cat_style, energy, mood,
+// poll_style…) are deliberately out: they dress the block, they do not lay it out.
+const SURFACE_KEYS = ['view', 'layout', 'card_layout', 'columns', 'density', 'limit',
+  'height_px', 'image_view', 'image_fit', 'divider_style', 'full_bleed'];
+yes(/function phoneNumTwin\(b, key, host, opts, xf\) \{/.test(CMS) && /function phoneTickTwin\(b, key, host\) \{/.test(CMS),
+  'number and tick controls have twin builders beside the select one');
+yes(/function tickOn\(b, key\) \{/.test(BLOCKS), 'the web engine reads tick twins through tickOn');
+
+const chunks = CMS.split(/\nfunction /);
+const missing = [];
+for (const ch of chunks) {
+  for (const key of SURFACE_KEYS) {
+    const writes = new RegExp("updateBlock(?:Silent)?\\(b\\.id, \\{[^}]*\\b" + key + ":");
+    if (!writes.test(ch)) continue;
+    const twinned = new RegExp("phone(?:Shape|Num|Tick)Twin\\(b, '" + key + "'|b\\." + key + "_phone").test(ch);
+    if (!twinned) missing.push((ch.match(/^([A-Za-z0-9_]+)/) || ['?'])[1] + ':' + key);
+  }
+}
+yes(missing.length === 0, 'every form that writes a surface key wears the twin for it', missing.join(', '));
+
+const BARE = new RegExp('b\\.(' + SURFACE_KEYS.join('|') + ')\\b(?!_phone)');
+const readsClean = (src, cap) => {
+  const lines = src.split('\n');
+  const c = cap ? lines.findIndex(l => l.startsWith(cap)) : lines.length;
+  for (let i = 0; i < c; i++) {
+    const l = lines[i].replace(/\/\/.*$/, '');
+    if (!BARE.test(l)) continue;
+    if (/shapeOn|shapePhone|tickOn|_phone/.test(l)) continue;
+    return 'line ' + (i + 1) + ': ' + l.trim().slice(0, 80);
+  }
+  return null;
+};
+yes(!readsClean(BLOCKS), 'the web engine reads no bare surface key', readsClean(BLOCKS) || '');
+yes(!readsClean(MINI), 'the mini app reads no bare surface key', readsClean(MINI) || '');
+yes(!readsClean(STORE), 'the phone drawer reads no bare surface key', readsClean(STORE) || '');
+yes(!readsClean(CMS, 'function field(label'), 'the editor\'s phone DOM reads no bare surface key', (readsClean(CMS, 'function field(label') || ''));
+
+const tickSrc = slice(BLOCKS, 'function tickOn(b, key) {', '\n  }') + '\n  }';
+const tctx = { window: { matchMedia: () => ({ matches: true, addEventListener() {}, addListener() {} }) } };
+vm.createContext(tctx);
+vm.runInContext('var _phoneMQ = window.matchMedia("(max-width:767px)");\n' + tickSrc + '\nthis.tickOn = tickOn;', tctx);
+yes(tctx.tickOn({ full_bleed: true, full_bleed_phone: false }, 'full_bleed') === false &&
+    tctx.tickOn({ full_bleed: true }, 'full_bleed') === true,
+  'a tick twin overrides on a phone; unset, the computer\'s answer stands');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
