@@ -641,7 +641,7 @@
     var kicker = pick(b.kicker_en != null ? b.kicker_en : b.kicker, b.kicker_cn);
     var title = pick(b.title_en != null ? b.title_en : b.title, b.title_cn);
     var seeAll = CN() ? '查看全部' : 'SEE ALL';
-    var seeAllTarget = b.category_id ? ('category:' + b.category_id) : 'shop';
+    var seeAllTarget = b.link_target || (b.category_id ? ('category:' + b.category_id) : 'shop');
     var cols = b.columns || 2;
     var gridView = b.view || 'grid';
     var corner = b.corner_radius || 'subtle';
