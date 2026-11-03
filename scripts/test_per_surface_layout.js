@@ -122,16 +122,21 @@ yes(/ALLOWED_BLOCK_TYPES/.test(read('routes/retail.js')), 'the server still whit
 // ─────────────────────────────────────────────────────────────────────────
 section('5 · the spacer\'s gap wears the twin too (§515)');
 
-yes(/num\(b\.height_px_phone \?\? '', v => updateBlock\(b\.id, \{ height_px_phone: v > 0 \? v : undefined \}\)/.test(CMS),
-  'the spacer form carries an On phone height, and clearing it returns to same-as-computer');
+yes(/phoneNumTwin\(b, 'height_px', secLayout, \{ min: 0, max: 200 \}, null,/.test(CMS) &&
+    /num\(b\.height_px, v => updateBlock\(b\.id, \{ height_px: v \}\), \{ min: 0, max: 200 \}\)/.test(CMS),
+  'the spacer form carries an On phone height, and zero is allowed on both fields (§517)');
+yes(/const raw = el\.value;\n    if \(raw === ''\) \{ updateBlock\(b\.id, \{ \[key \+ '_phone'\]: undefined \}\); return; \}/.test(CMS) &&
+    /if \(opts && opts\.min != null && n < opts\.min\) n = opts\.min;/.test(CMS),
+  'only a truly empty box clears the override — num()\'s 0-for-empty would eat a zero gap; the clamp still applies');
 yes(/d\.style\.height = shapePhone\(b, 'height_px', 24\) \+ 'px';/.test(CMS), 'the editor\'s phone DOM reads the twin gap');
 yes(/var h = shapeOn\(b, 'height_px', 24\);/.test(BLOCKS), 'the web engine reads the twin gap at the viewport\'s width');
-yes(/style="height: \$\{\(b\.height_px_phone \|\| b\.height_px\) \|\| 24\}px"/.test(STORE), 'the phone drawer reads the twin gap');
-yes(/out\.height = \(b\.height_px_phone \|\| b\.height_px\) \|\| 24;/.test(MINI), 'the mini app reads the twin gap');
+yes(/style="height: \$\{b\.height_px_phone != null \? b\.height_px_phone : \(b\.height_px != null \? b\.height_px : 24\)}px"/.test(STORE), 'the phone drawer reads the twin gap, zero included');
+yes(/out\.height = b\.height_px_phone != null \? b\.height_px_phone : \(b\.height_px != null \? b\.height_px : 24\);/.test(MINI), 'the mini app reads the twin gap, zero included');
 yes(onPhone({ height_px: 40, height_px_phone: 12 }, 'height_px', 24) === 12 &&
     onDesk({ height_px: 40, height_px_phone: 12 }, 'height_px', 24) === 40 &&
-    onPhone({ height_px: 40 }, 'height_px', 24) === 40,
-  'a phone gap of its own when set; one shared gap while unset');
+    onPhone({ height_px: 40 }, 'height_px', 24) === 40 &&
+    onPhone({ height_px: 50, height_px_phone: 0 }, 'height_px', 24) === 0,
+  'a phone gap of its own when set — including no gap at all — and one shared gap while unset');
 
 // ─────────────────────────────────────────────────────────────────────────
 section('6 · every block, and every block to come (§516)');
@@ -143,7 +148,7 @@ section('6 · every block, and every block to come (§516)');
 // poll_style…) are deliberately out: they dress the block, they do not lay it out.
 const SURFACE_KEYS = ['view', 'layout', 'card_layout', 'columns', 'density', 'limit',
   'height_px', 'image_view', 'image_fit', 'divider_style', 'full_bleed'];
-yes(/function phoneNumTwin\(b, key, host, opts, xf\) \{/.test(CMS) && /function phoneTickTwin\(b, key, host\) \{/.test(CMS),
+yes(/function phoneNumTwin\(b, key, host, opts, xf, hint\) \{/.test(CMS) && /function phoneTickTwin\(b, key, host\) \{/.test(CMS),
   'number and tick controls have twin builders beside the select one');
 yes(/function tickOn\(b, key\) \{/.test(BLOCKS), 'the web engine reads tick twins through tickOn');
 

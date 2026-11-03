@@ -830,7 +830,7 @@ Component({
           break;
         }
         case 'spacer': {
-          out.height = (b.height_px_phone || b.height_px) || 24;
+          out.height = b.height_px_phone != null ? b.height_px_phone : (b.height_px != null ? b.height_px : 24);
           // 2026-05-20 — optional decorative divider centred in the spacer.
           // 'none' is the legacy blank gap; line/dashes/dots draw a coloured
           // rule. dividerColor is resolved via the brand-color picker.
