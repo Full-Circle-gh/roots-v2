@@ -711,6 +711,7 @@ function shopMenuUrlInBlocks(layout){
   for(const b of layout){
     if(!b||typeof b!=='object') continue;
     const targets=[];
+    if(b.link_target) targets.push(b.link_target);
     if(b.cta_target) targets.push(b.cta_target);
     for(const c of (Array.isArray(b.ctas)?b.ctas:[])) if(c&&c.target) targets.push(c.target);
     for(const t of targets) if(isShopMenuUrl(t)) return t;

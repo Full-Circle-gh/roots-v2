@@ -23,7 +23,9 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
+// Assertions match on \n. A Windows checkout hands some of these files over
+// as CRLF, which failed regexes that never meant to ask about line endings.
+const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
 const ROUTE = read('routes/integrations-admin.js');
 const SHOP = read('public/shop.html');
 const SITE = read('public/site.html');
@@ -120,30 +122,35 @@ section('3 · the editor stage: Desktop first, the phone second');
 
 yes(/stage: 'desktop',/.test(CMS), 'the stage preference defaults to desktop');
 yes(/state\.stage = localStorage\.getItem\(STAGE_KEY\) \|\| 'desktop'/.test(CMS), '…and is read back as desktop when nothing was chosen');
-// §503: the Website page is the second page on a desktop stage, and the only
-// one where the phone stage is not offered.
+// §503: the Website page is the second page on a desktop stage. §513 amended
+// it: the Website is on the site frame on BOTH stages, at phone width on the
+// phone one, so the Phone button is live there too.
 yes(/function stageAllowed\(\) \{ return state\.page === 'home' \|\| state\.page === 'website'; \}/.test(CMS), 'only Home and the Website may use the desktop stage');
-yes(/if \(state\.page === 'website'\) return 'desktop';/.test(CMS), 'the Website is always on the desktop stage');
+yes(/function stageShowsFrame\(\) \{\n  return state\.page === 'website' \|\| effectiveStage\(\) === 'desktop';\n\}/.test(CMS), 'the Website page draws in the site frame on both stages (§513)');
 yes(/return \(state\.stage === 'desktop' && stageAllowed\(\)\) \? 'desktop' : 'phone';/.test(CMS), 'off Home the phone stage is what shows');
 yes(/b\.disabled = !stageAllowed\(\);/.test(CMS), 'the Desktop button is disabled off Home');
+yes(/b\.disabled = false;\n        if \(state\.page === 'website'\) \{/.test(CMS), 'the Phone button is live on the Website page (§513)');
 yes(/ifr\.src = stageSrc\(\);/.test(CMS) && /\(state\.page === 'website' \? '\/site-preview' : '\/shop-preview'\) \+ '\?draft=1&stage=1'/.test(CMS),
   'the desktop stage is the real web shop (Home) or the brand website (Website), in draft + stage mode');
-yes(/width: 1280px;/.test(CMS) && /const scale = Math\.min\(1, w \/ 1280\);/.test(CMS), 'rendered 1280px wide and scaled to the canvas');
+yes(/width: 1280px;/.test(CMS) && /const scale = Math\.min\(1, w \/ target\);/.test(CMS), 'rendered 1280px wide and scaled to the canvas');
+yes(/const target = phone \? 390 : 1280;/.test(CMS), '…and at phone width on the Website phone stage, so the site\'s own phone rules are what draw');
+yes(/ds\.classList\.toggle\('ds-phoneview', frame && stage === 'phone'\);/.test(CMS) && /\n  \.desktop-stage\.ds-phoneview \.ds-chrome \{ display: none; \}/.test(CMS),
+  'the phone-width frame wears a phone shell, not the browser chrome');
 yes(/type: 'cms:draft',/.test(CMS) && /layout: state\.draft\.map\(b => \(\{ \.\.\.b, show_on: showOnFor\(b\) \}\)\)/.test(CMS),
   'every preview render posts the draft with show_on made explicit');
 yes(/pushDraftToStage\(\);\n  renderStageBar\(\);/.test(slice(CMS, 'function renderPreview() {', "const mount = $('#phone-content');")), 'renderPreview() feeds the stage first');
-yes(/if \(effectiveStage\(\) === 'desktop'\) \{ _phoneStale = true; requestAnimationFrame\(positionFloatingToolbar\); return; \}/.test(CMS) && /else if \(_phoneStale\) \{\n    renderPreview\(\);/.test(CMS),
-  'the hidden phone DOM is not rebuilt per keystroke on the desktop stage, and is rebuilt when the phone stage returns');
-// The inspector's show/hide must run before the desktop early return, or a
-// block selected on the desktop stage never opens its settings (found on the
-// Website page, §503, which has no phone stage to fall back to).
-yes(/const id = state\.selectedId;\n(?:  \/\/[^\n]*\n)*  if \(window\.cfPositionInspector\) window\.cfPositionInspector\(\);\n  if \(!id \|\| effectiveStage\(\) === 'desktop'\)/.test(slice(CMS, 'function positionFloatingToolbar() {', "const wrap = document.querySelector")),
-  'a block selected on the desktop stage opens its settings');
-yes(/panel\.hidden = !\(id && \(wrap \|\| effectiveStage\(\) === 'desktop'\)\);/.test(CMS), 'the floating inspector still shows for a block selected on the desktop stage');
+yes(/if \(stageShowsFrame\(\)\) \{ _phoneStale = true; requestAnimationFrame\(positionFloatingToolbar\); return; \}/.test(CMS) && /else if \(_phoneStale\) \{\n    renderPreview\(\);/.test(CMS),
+  'the hidden phone DOM is not rebuilt per keystroke where the frame shows, and is rebuilt when the phone stage returns');
+// The inspector's show/hide must run before the frame early return, or a
+// block selected on the frame never opens its settings (found on the
+// Website page, §503, whose two stages are both the site frame).
+yes(/const id = state\.selectedId;\n(?:  \/\/[^\n]*\n)*  if \(window\.cfPositionInspector\) window\.cfPositionInspector\(\);\n  if \(!id \|\| stageShowsFrame\(\)\)/.test(slice(CMS, 'function positionFloatingToolbar() {', "const wrap = document.querySelector")),
+  'a block selected on the frame opens its settings');
+yes(/panel\.hidden = !\(id && \(wrap \|\| stageShowsFrame\(\)\)\);/.test(CMS), 'the floating inspector still shows for a block selected on the frame');
 yes(/ev\.data\.type === 'cms:select'/.test(CMS) && /selectBlock\(ev\.data\.id\)/.test(CMS), 'a click in the frame selects the block in the editor');
 yes(/ev\.source !== _stageIframe\.contentWindow\) return;/.test(CMS), '…and only the stage frame is listened to');
-yes(/if \(!id \|\| effectiveStage\(\) === 'desktop'\) \{ tb\.style\.display = 'none'; return; \}/.test(CMS),
-  'the phone\'s floating toolbar hides on the desktop stage and shows on the phone stage — the EFFECTIVE stage, so it is there off Home');
+yes(/if \(!id \|\| stageShowsFrame\(\)\) \{ tb\.style\.display = 'none'; return; \}/.test(CMS),
+  'the phone\'s floating toolbar hides wherever the site frame shows — the desktop stage and the Website phone stage — and shows on the phone stage elsewhere');
 yes(/id="ds-sel"/.test(CMS) && /data-action="up"/.test(slice(CMS, 'id="ds-sel"', '</div>')), 'the stage bar carries the block actions instead');
 yes(/applyStage\(\);\n  \/\/ Keep the live-mirror iframe in sync/.test(CMS) && /applyStage\(\);   \/\/ Desktop first/.test(CMS),
   'the stage is applied on first load and on every page switch');
@@ -266,6 +273,8 @@ yes(/Slogan line edge to edge/.test(SITE) && /font-size:24px/.test(SITE),
   'the slogan line is edge to edge and large on a computer');
 yes(/website_ramada_menus_v1/.test(read('database.js')),
   'a one-time migration puts the Ramada menus on the published website');
+yes(/website_product_grid_see_all_ramada_v1/.test(read('database.js')),
+  'the take-home product grid SEE ALL defaults to the Ramada QR menu on the website');
 yes(/website_hero_fresh_food_sorted_v1/.test(read('database.js')),
   'a one-off migration rewrites the website hero from lunch to fresh food');
 

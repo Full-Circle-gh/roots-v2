@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.382 · 2026-11-03 · WEBSITE PRODUCT GRID SEE ALL → RAMADA MENU — 1 STRING COMPOSED BY CLAUDE.** The brand website's take-home product grid SEE ALL link field gets a website-specific hint when the editor is on the Website page. **COMPOSED:** `Where the SEE ALL header link goes. On the brand website the take-home grid usually opens the Ramada menu — paste that QR menu link, or leave empty for the category / Shop default. · 「查看全部」链接的跳转位置。品牌网站上,此网格通常打开 Ramada 餐单 — 粘贴该二维码菜单链接,或留空则使用分类 / 商品默认跳转。` `Ramada` and `餐单` are live (bar Menu, mockups); `二维码菜单` is live on the phone editor. Rejected bare `菜单`, which is the site nav word. A one-off migration sets empty `link_target` on website product grids to the Yuexiu QR menu URL. Nothing is retired. Rules 1 to 7 unchanged.
+
 **v1.381 · 2026-11-03 · PRODUCT GRID SEE ALL LINK IN THE EDITOR — 1 STRING COMPOSED BY CLAUDE; THE FIELD LABEL COPIED WHOLE.** The Product grid block gains a **SEE ALL link** picker (desktop inspector and phone sheet), matching Category tabs' label **`SEE ALL link · 「查看全部」跳转`** (copied whole). **COMPOSED, the hint only:** `Where the SEE ALL header link goes. Leave empty for the default — the category above when Source is By category, otherwise the Shop tab. · 「查看全部」链接的跳转位置。留空则使用此模块的默认跳转 — 来源为「按分类」时跳转上方所选分类,否则跳转「商品」标签页。` `查看全部`, `按分类`, `商品` and the phone picker's `未选择链接 — 使用此模块的默认跳转。` are live; `上方所选分类` names the category field above without minting a new field label. Rejected reusing Category tabs' hint (`留空则跳转「商品」标签页`), which would be wrong when the grid is category-based. Nothing is retired. Rules 1 to 7 unchanged.
 
 **v1.380 · 2026-11-03 · ASK FOR STOCK SHOWS THE SHELF COUNT — NOTHING COMPOSED; `On the shelf · 在架` COPIED WHOLE FROM ADD STOCK.** §512. Each product row on Ask for stock now carries the physical count at the shops already chosen. **COPIED:** `On the shelf · 在架`, Add stock's own line for the same number (`qsMeta` in `public/m.html`). The shop names are the shops' own names; the counts are numerals. **Rejected, not minted:** waste's `N on hand · 库存 N`, which is the write-off screen's pair and would have named a different job; a composed `here / there`. Nothing is retired. Rules 1 to 7 unchanged.
@@ -14655,3 +14657,16 @@ An order in `awaiting_restock` is PAID and held. It reaches that state two ways:
 | Order timeline step (after Paid) | Waiting for stock | 等待补货 |
 
 `{items}` is the held lines only, names from `waiting_items` on `GET /api/retail/orders/:id` and `GET /api/retail/payment/status/:id`. It is empty, and nothing here shows, for any order that is not parked right now. Locked by `scripts/test_parked_order_says_why.js`.
+
+## The Website page's Phone stage tooltip (editor)
+
+**v1.382 · 2026-11-03 · §513 ONE COMPOSED PAIR, IN THE LIVE DESKTOP PAIR'S OWN SHAPE.** §503's disabled Phone button carried *The website is edited on Desktop — it adapts to phones by itself* · *网站在电脑模式下编辑 — 在手机上会自动适配* (v1.361). §513 makes the button live on the Website page, so the tooltip says what the stage now does. The v1.361 pair is **retired**: the button state it explained is gone, and the sentence is now false.
+
+| where | EN | CN | built from |
+|---|---|---|---|
+| the Phone stage button's tooltip, on the Website page | Edit the website as customers see it on a phone | 按顾客在手机上看到的样子编辑网页版 | COMPOSED (Qwen Code), by analogy from the live desktop pair *Edit the website as customers see it on a computer* · *按顾客在电脑上看到的样子编辑网页版* (v1.361): 电脑 → 手机, computer → phone. |
+
+### Rejected
+
+- **The mini app pair, *Edit the mini app as customers see it on a phone* · *按顾客在手机上看到的样子编辑小程序*.** Live and the right shape, but it names the mini app; on this page the stage draws the website.
+- **Keeping the v1.361 pair as the tooltip.** It tells the tenant the website adapts by itself and is edited on Desktop — the reason the button used to be disabled, and false now that it is not.
