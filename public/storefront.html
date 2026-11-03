@@ -1577,7 +1577,7 @@ function renderBlock(b) {
       return `<div class="b-announce anim-${anim} speed-${speed}${linked ? ' linked' : ''}"${targetAttr} style="background: ${bg}; color: ${fg}">${inner}</div>`;
     }
     case 'hero_banner': {
-      const view = b.view || 'full';
+      const view = (b.view_phone || b.view) || 'full';
       const ctas = getCtas(b);
       if (view === 'split') {
         const hl = getBi(b, 'headline');
@@ -1618,7 +1618,7 @@ function renderBlock(b) {
       return `<div class="b-hero b-hero-full" style="${style}">${inner}</div>`;
     }
     case 'category_tabs': {
-      const view = b.view || 'tiles';
+      const view = (b.view_phone || b.view) || 'tiles';
       const cats = (b.category_ids || []).map(id => state.categories.find(c => c.id === id)).filter(Boolean);
       const ck = getBi(b, 'kicker'); const ct = getBi(b, 'title');
       const seeAll = state.lang === 'cn' ? '查看全部' : 'SEE ALL';
@@ -1678,7 +1678,7 @@ function renderBlock(b) {
       </div>`;
     }
     case 'product_grid': {
-      const view = b.view || 'grid';
+      const view = (b.view_phone || b.view) || 'grid';
       let products = [];
       if (b.source_type === 'manual') {
         products = (b.product_ids || []).map(id => state.products.find(p => p.id === id)).filter(Boolean);
@@ -1756,14 +1756,14 @@ function renderBlock(b) {
       return `<div class="b-spacer" style="height: ${b.height_px || 24}px"></div>`;
     }
     case 'flash_sale_strip': {
-      const view = b.view || 'strip';
+      const view = (b.view_phone || b.view) || 'strip';
       const bg = brandColorVar(b.bg_color) || 'var(--berry)';
       const fg = brandColorVar(b.fg_color) || 'var(--oat)';
       const active = (state.flashSales || []).filter(p => p.flash?.state === 'active');
       const limit = view === 'banner' ? 0 : Math.max(1, Math.min(8, b.product_limit || 3));
       const products = limit > 0 ? active.slice(0, limit) : [];
       // Card layout: 'grid' wraps cards two-per-row (no sideways swipe).
-      const fsGridCls = (b.card_layout === 'grid' && view !== 'banner') ? ' is-grid' : '';
+      const fsGridCls = ((b.card_layout_phone || b.card_layout) === 'grid' && view !== 'banner') ? ' is-grid' : '';
       const k = getBi(b, 'kicker');
       const t = getBi(b, 'title');
       const haveSomething = products.length > 0 || (view === 'banner' && active.length > 0);
@@ -2010,7 +2010,7 @@ function renderBlock(b) {
       </div>`;
     }
     case 'review_card': {
-      const view = b.view || 'card';
+      const view = (b.view_phone || b.view) || 'card';
       const bg = brandColorVar(b.bg_color) || 'var(--oat)';
       const fg = brandColorVar(b.fg_color) || 'var(--ink)';
       const k = getBi(b, 'kicker');

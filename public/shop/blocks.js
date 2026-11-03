@@ -169,7 +169,7 @@
 
   // hero_banner -------------------------------------------------------------
   renderers.hero_banner = function (b) {
-    var heroView = b.view || 'full';
+    var heroView = shapeOn(b, 'view', 'full');
     var imageUrl = absUrl(b.image_url);
     var heroVideo = absUrl(b.video_url);
     var aspectRatio = (b.image_aspect && b.image_url) ? String(b.image_aspect) : '';
@@ -270,7 +270,7 @@
     var showPts = b.show_points !== false && pts > 0;
     var ptVal = Number(c.point_value_yuan) > 0 ? Number(c.point_value_yuan) : 0.01;
     var ptsValue = (pts * ptVal).toFixed(2);
-    var view = b.view || 'card';
+    var view = shapeOn(b, 'view', 'card');
     var accent = color(b.accent_color || 'lime-leaf');
     var kicker = pick(b.kicker_en, b.kicker_cn);
     var ctaLabel = pick(b.cta_label_en, b.cta_label_cn);
@@ -372,7 +372,7 @@
     var showOrder = b.show_order_status !== false;
     var cnt = showOrder ? (cfg.notifUnread || 0) : (cfg.notifNoOrderUnread || 0);
     if (!(cnt > 0)) return '';   // collapse when nothing unread (matches app)
-    var view = b.view || 'bar';
+    var view = shapeOn(b, 'view', 'bar');
     var bg = color(b.bg_color || 'ink'), fg = color(b.fg_color || 'white');
     var btnBg = b.btn_color ? color(b.btn_color) : '';
     var btnFg = b.btn_color ? btnText(b.btn_color) : '';
@@ -533,7 +533,7 @@
     var seeAll = CN() ? '查看全部' : 'SEE ALL';
     var seeAllTarget = b.link_target || 'shop';
     var catWord = CN() ? '分类' : 'CATEGORY';
-    var catView = b.view || 'tiles';
+    var catView = shapeOn(b, 'view', 'tiles');
     var catStyle = ['index', 'bento', 'sticker'].indexOf(b.cat_style) !== -1 ? b.cat_style : 'classic';
     var bentoBadge = b.bento_badge !== 0;
     var catCols = Math.max(3, Math.min(5, b.columns || 4));
@@ -643,7 +643,7 @@
     var seeAll = CN() ? '查看全部' : 'SEE ALL';
     var seeAllTarget = b.link_target || (b.category_id ? ('category:' + b.category_id) : 'shop');
     var cols = b.columns || 2;
-    var gridView = b.view || 'grid';
+    var gridView = shapeOn(b, 'view', 'grid');
     var corner = b.corner_radius || 'subtle';
     var density = b.density || 'normal';
     var rankMode = b.rank_badge || 'top_3';
@@ -993,8 +993,8 @@
   renderers.flash_sale_strip = function (b) {
     var bg = color(b.bg_color || 'berry-punch'), fg = color(b.fg_color || 'oat-milk');
     var flashAccent = b.accent_color ? color(b.accent_color) : '';
-    var view = b.view || 'strip';
-    var flashGrid = b.card_layout === 'grid' && view !== 'banner';
+    var view = shapeOn(b, 'view', 'strip');
+    var flashGrid = shapeOn(b, 'card_layout', 'carousel') === 'grid' && view !== 'banner';
     var all = ctx.flashSales || [];
     var activeP = all.filter(function (p) { return p.flash && p.flash.state === 'active'; });
     var max = view === 'banner' ? 0 : Math.max(1, Math.min(8, b.product_limit || 3));
@@ -1128,7 +1128,7 @@
     var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
     var accent = color(b.accent_color || 'lime-leaf');
     var statusColor = color(b.status_color || 'berry-punch');
-    var view = b.view || ((b.title_en || b.title_cn) ? 'teaser' : 'peek');
+    var view = shapeOn(b, 'view', (b.title_en || b.title_cn) ? 'teaser' : 'peek');
     var src = b.data_source || 'auto_pull';
     var kicker = pick(b.kicker_en, b.kicker_cn);
     var title = pick(b.title_en, b.title_cn);
@@ -1234,7 +1234,7 @@
   renderers.review_card = function (b) {
     var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
     var starColor = b.star_color ? color(b.star_color) : '';
-    var view = b.view || 'card';
+    var view = shapeOn(b, 'view', 'card');
     var reviews = (Array.isArray(b.reviews) && b.reviews.length) ? b.reviews : null;
     if (!reviews && (b.quote_en || b.quote_cn || b.author_name)) {
       reviews = [{ rating: b.rating || 5, quote_en: b.quote_en || '', quote_cn: b.quote_cn || '',
@@ -1330,7 +1330,7 @@
   // wecom_contact -----------------------------------------------------------
   renderers.wecom_contact = function (b) {
     var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
-    var view = b.view === 'strip' ? 'strip' : 'card';
+    var view = shapeOn(b, 'view', 'card') === 'strip' ? 'strip' : 'card';
     var cardStyle = ['warm', 'coupon', 'poster', 'compact'].indexOf(b.card_style) !== -1 ? b.card_style : 'warm';
     var accent = color(b.accent_color || 'forest-kale');
     var btnFg = btnText(b.accent_color || 'forest-kale');
@@ -1433,7 +1433,7 @@
   // featured_item ------------------------------------------------------------
   renderers.featured_item = function (b) {
     var p = findProductById(b.product_id);
-    var view = b.view || 'card';
+    var view = shapeOn(b, 'view', 'card');
     var bg = b.bg_color ? color(b.bg_color) : 'transparent';
     var cardBg = color(b.card_bg_color || 'ink'), cardFg = color(b.card_fg_color || 'oat-milk');
     var corner = b.corner_radius || 'subtle';
@@ -1563,7 +1563,7 @@
   // storefront endpoint warmed lazily below — signed-out visitors see them too.
   renderers.top_up = function (b) {
     var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
-    var layout = b.layout || 'a';
+    var layout = shapeOn(b, 'layout', 'a');
     var accent = b.accent_color ? color(b.accent_color) : '#CCD900';
     var kicker = pick(b.kicker_en, b.kicker_cn), title = pick(b.title_en, b.title_cn);
     var titleHl = pick(b.title_hl_en, b.title_hl_cn);
@@ -1878,7 +1878,7 @@
     var hideEmpty = b.hide_when_empty !== false;
     if (!favs.length && hideEmpty) return '';
     var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
-    var view = b.view || 'scroll';
+    var view = shapeOn(b, 'view', 'scroll');
     var limit = Math.max(1, Math.min(12, b.limit || 6));
     var corner = b.corner_radius || 'subtle';
     var kicker = pick(b.kicker_en, b.kicker_cn) || (CN() ? '你的收藏' : 'YOUR SAVED');
@@ -1918,7 +1918,7 @@
   // Live data (code / stats) comes from the host via ctx.config.affiliate;
   // signed-out visitors get the sign-in hint variant, same as the mini-app.
   renderers.affiliate_block = function (b) {
-    var view = b.view || 'card';
+    var view = shapeOn(b, 'view', 'card');
     var bgDefault = view === 'stat' ? 'ink' : view === 'receipt' ? 'oat-milk' : 'lime-leaf';
     var fgDefault = view === 'stat' ? 'lime-leaf' : 'ink';
     var bg = color(b.bg_color || bgDefault), fg = color(b.fg_color || fgDefault);
@@ -2156,6 +2156,24 @@
   function showsOnWeb(b) { return !!b && b.show_on !== 'miniapp'; }
   function forSurface(blocks) {
     return Array.isArray(blocks) ? blocks.filter(showsOnWeb) : [];
+  }
+
+  // §514 — a shape field may carry a phone twin (<key>_phone). This engine
+  // draws both widths, so it asks the viewport which one applies; when the
+  // viewport crosses the breakpoint the hosts' onRerender callbacks redraw,
+  // so a browser dragged across it shows the other shape without a reload.
+  var _phoneMQ = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(max-width:767px)') : null;
+  if (_phoneMQ) {
+    // Crossing the breakpoint changes which shape every twin resolves to;
+    // the hosts' onRerender callbacks redraw the page (§514).
+    var _cross = function () { fireRerender(); };
+    if (_phoneMQ.addEventListener) _phoneMQ.addEventListener('change', _cross);
+    else if (_phoneMQ.addListener) _phoneMQ.addListener(_cross);
+  }
+  function shapeOn(b, key, def) {
+    if (!b) return def;
+    var v = (_phoneMQ && _phoneMQ.matches) && b[key + '_phone'] != null ? b[key + '_phone'] : b[key];
+    return v == null ? def : v;
   }
 
   // The layout last drawn, so startTimers warms the page actually showing —

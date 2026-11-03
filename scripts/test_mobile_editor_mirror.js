@@ -205,8 +205,15 @@ section('1 · the snapshot of a real form (the review card)');
     const body2 = snap(d, (body) => { d.ctx.buildReviewForm(body, REV); d.ctx.state.designVariants = [{ el: body.querySelector('.insp-sec-body').querySelector('select') }]; });
     assert.ok(body2);
     const nodes = d.ctx.state.formNodes;
-    assert.deepStrictEqual(plain(nodes.map((n) => n.k + ':' + n.title)), ['sec:Content'], 'Style & layout holds only the layout choice; Colours only colours');
-    const content = nodes[0].items;
+    assert.deepStrictEqual(plain(nodes.map((n) => n.k + ':' + n.title)), ['sec:Style & layout', 'sec:Content'], 'Style & layout now carries the phone twin; Colours only colours');
+    // §514: the twin mirrors to the phone sheet like any other control; the
+    // base layout choice stays a Design-sheet variant and is left out.
+    const layoutSec = nodes[0].items;
+    assert.deepStrictEqual(plain(layoutSec.map((n) => n.k + ':' + (n.label || ''))), ['field:On phone']);
+    assert.deepStrictEqual(plain(layoutSec[0].items.map((n) => n.k)), ['select']);
+    assert.deepStrictEqual(plain(layoutSec[0].items[0].options.map((o) => o.value)), ['', 'card', 'carousel', 'editorial', 'riso', 'spotlight']);
+    assert.strictEqual(layoutSec[0].items[0].value, '', 'an unset twin reads as Same as computer');
+    const content = nodes[1].items;
     assert.deepStrictEqual(plain(content.map((n) => n.k + ':' + (n.label || ''))), ['field:Small heading', 'field:Reviews (2)']);
     assert.deepStrictEqual(plain(kinds(content[0].items)), ['input', 'input']);
     assert.deepStrictEqual(plain(content[0].items.map((n) => [n.tag, n.value, n.placeholder])), [['EN', 'Loved by', 'English'], ['中', '好评', '中文']]);
