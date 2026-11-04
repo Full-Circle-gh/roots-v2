@@ -259,6 +259,8 @@ yes(/sb-st-map-cap\{\s*position:absolute;left:18px;right:18px;bottom:18px;color:
     /sb-st-map-cap-title\{\s*display:block;font-family:var\(--f-bear\);font-size:17px;margin-bottom:6px;/.test(SITE) &&
     /sb-st-map-cap-hint\{display:block;opacity:\.95;margin-bottom:6px;\}/.test(SITE),
   'the phone caption keeps its breathing room from the map edges and between its lines (§518)');
+yes(/\.shop-blocks \.sb-st-kicker \{[^}]*margin-bottom: calc\(36 \* var\(--u\)\);/.test(read('public/shop/blocks.css')),
+  'the visit heading keeps its distance from the map on a phone too (§518 r.3)');
 yes(/height:260px/.test(SITE),
   'on a phone the live map is taller for the hero layout');
 yes(/function shieldStoreMap\(/.test(SITE) && /sb-st-map-hit/.test(SITE) && /touch-action:pan-y/.test(SITE) && /sb-st-map-frame/.test(SITE),

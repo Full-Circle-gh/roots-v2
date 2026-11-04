@@ -1668,6 +1668,9 @@
   font-size: calc(calc(18 * var(--u)) * var(--font-scale));
   letter-spacing: 0.14em;
   opacity: 0.8;
+  /* §518 r.3 — the heading keeps its distance from the map under it on a
+     phone too; the desktop band sets its own 20px below. */
+  margin-bottom: calc(36 * var(--u));
 }
 .shop-blocks .sb-st-title {
   font-family: var(--f-bear);
