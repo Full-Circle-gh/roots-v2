@@ -1679,6 +1679,9 @@ window.salesOpenConfig = function (renderFn, opts) {
 };
 // Locations "Add location" — same overlay, store icon + its own title.
 window.salesAddLocation = function () {
+  // A store-scoped login cannot add a shop. The button is hidden; this is
+  // the same refusal if something still calls it.
+  if (Array.isArray(window.RA_SCOPE_STORES)) return;
   salesOpenConfig(function () { if (window.igAddLocation) igAddLocation(); },
     { icon: SALES_STORE_ICON, title: cuT('Add location', '新增门店') });
 };
@@ -1927,8 +1930,10 @@ function csRenderLocations() {
       + menuLink
       + '</div>';
   }).join('');
+  const addLoc = Array.isArray(window.RA_SCOPE_STORES) ? ''
+    : '<button class="btn btn-sm" type="button" onclick="salesAddLocation()">' + plusIcon + cuT('Add location', '新增门店') + '</button>';
   box.innerHTML = '<div class="td-kicker sales-loc-kicker"><span>' + cuT('Locations', '门店') + '</span>'
-    + '<button class="btn btn-sm" type="button" onclick="salesAddLocation()">' + plusIcon + cuT('Add location', '新增门店') + '</button></div>'
+    + addLoc + '</div>'
     + '<div class="sales-grid sales-loc-grid">' + cards + '</div>';
 }
 

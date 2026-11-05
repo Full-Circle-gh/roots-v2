@@ -39,6 +39,7 @@ const inventory = require('../lib/inventory');
 const productOptions = require('../lib/product-options');
 const optionSwitch = require('../lib/option-switch');
 const { requireRetailAdmin } = require('./retail');
+const operatorCaps = require('../lib/operator-caps');
 // §289 — which rows have a photo, the same test the shop lists use.
 const { hasImageFallbackSql } = require('../lib/product-image-sql');
 const { getCategoryTree } = require('../lib/category-tree');
@@ -175,7 +176,10 @@ router.get('/api/retail-admin/shops', requireRetailAdmin, (req, res) => {
       LEFT JOIN shops s ON s.location_id = l.id
      ORDER BY l.sort_order ASC, l.id ASC
   `).all();
-  ok(res, rows.map(r => ({
+  // §519 — a store-scoped operator only sees their own shops on this list,
+  // which is the door the Sales location cards use. Unscoped is unchanged.
+  const ids = operatorCaps.storeIdsOf(req);
+  const mapped = rows.map(r => ({
     location: {
       id: r.location_id, code: r.location_code, name_en: r.location_name_en,
       name_cn: r.location_name_cn, is_active: r.location_is_active,
@@ -185,7 +189,8 @@ router.get('/api/retail-admin/shops', requireRetailAdmin, (req, res) => {
       display_name_cn: r.display_name_cn, is_active: r.shop_is_active,
       listing_count: r.listing_count, available_count: r.available_count,
     } : null,
-  })));
+  })).filter(r => ids === null || ids.indexOf(r.location.id) !== -1);
+  ok(res, mapped);
 });
 
 // Create the shop on a location. The code is minted here and only here.

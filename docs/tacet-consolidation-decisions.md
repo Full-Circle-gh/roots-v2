@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.624
+# Tacet shared-core consolidation — decisions record, v4.625
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-05 · v4.625 — **§519 · SALES HONOURS THE STORE PIN — ASH.** Ash, from the Yuexiu shop-floor till, after pinning that login to Yuexiu: the Discount question first, then *"shop floor permission can go to sales section and see all sales in each location. how to disable it? yuexiu account is disabled only to yuexiu store. this account should be able to see only information that directed to yuexiu"*, then *"build it"*. The pin was already on. Sales ignored it. `/sales/summary`, `/channel-status` (read and write) and the shops list the location cards use now hold a pinned login to their shops, the same way the dashboard has since §325. Add location is hidden. No new words. No change to `.gitignore` or CI. See §519.
 
 2026-11-03 · v4.624 — **§512 AMENDED · THE SHELF LINE SITS UNDER THE WHOLE ROW — ASH.** Ash, after v4.623 shipped: *"still the same"*. Wrapping `Tianhe 5` as one unit still put that unit on the next line, because the name column is squeezed by the steppers. The counts now sit under name and steppers together, one line, no wrap. No new words. No change to `.gitignore` or CI.
 
@@ -33980,3 +33982,13 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 1. **The caption breathes.** 18px from the map's left, right and bottom edges; line-height 1.5; 6px between title, hint and address. The scrim gains a mid stop so the taller caption keeps its contrast over the map art.
 2. **No editor knob, on purpose.** The caption's spacing is a design constant of the phone hero, like the other §503 phone rules: one look across every store, not a per-block setting the office can drift. The caption's WORDS remain what they were — the store's own name and address, and the locked hint — editable where store details are edited. If a store ever needs a different caption rhythm, that is a new decision, not a field.
 3. **The heading keeps its distance from the map too.** Ash, on the shipped rule 1: *"youll find us in yuexiu .. - this text is too tight to the map"* — the tight text he meant was the block's own kicker above the map, not only the caption. The kicker's base rule carried no bottom margin; the 20px it wore on a computer lived in the desktop band alone, so the phone laid the heading right onto the map. The base now carries `calc(36 * var(--u))` (≈19px at phone width), in the family's own scaled units, and the desktop band still sets its own 20px. Being a base rule, it fixes the brand site and the web shop's phone widths alike.
+
+## §519 — SALES HONOURS THE STORE PIN THE DASHBOARD ALREADY HONOURS
+
+**2026-11-05 · DECIDED BY ASH.** Ash pinned the Yuexiu shop-floor account to Yuexiu and still saw every location on Sales. The pin already limited the dashboard. Sales did not read it.
+
+1. **`/sales/summary` is held to `req.scopeStores`.** Today's per-channel figures and the folded total are that login's shops only. Wallet top-up cash and the gzgrocery drift fold have no store and stay out of a pinned answer, as on the dashboard. A pin to no store sees zeros. Unscoped is the answer this route has always given.
+2. **`/channel-status` lists and writes only those shops.** Location cards, the where-line on each channel, and a channel-wide open/close all stop at the pin. A cell or shop switch aimed at another shop is 403 `forbidden_store`.
+3. **The shops list the location cards use follows the same pin.** A Yuexiu login opening Shop menu from Sales does not see Tianhe.
+4. **Add location is not offered.** The button is hidden, and the call no-ops, when `RA_SCOPE_STORES` is set.
+5. **The phone follows for free.** It paints the same two reads. No new words.

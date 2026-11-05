@@ -79,7 +79,7 @@ db.exec(`
 console.log('\n1 · the gzgrocery card is an order-record read');
 
 it('it uses storeAgg on the channel, like every other card here', () => {
-  assert.match(SALES, /const gy = storeAgg\("channel='gzgrocery'"\)/,
+  assert.match(SALES, /const gy = storeAgg\(scopedP\("channel='gzgrocery'"\)/,
     'the card is not reading the order rows');
 });
 
@@ -93,7 +93,7 @@ it('the figures are the mirror rows, cancellations excluded', () => {
 it("the 4th metric is UNITS now, not a count of ledger rows", () => {
   // It was `gy.lines` — ledger ROWS — under the heading the mini app, web and
   // POS cards all fill with units sold.
-  assert.match(SALES, /const gyItems = storeItems\("o\.channel='gzgrocery'"\)/,
+  assert.match(SALES, /const gyItems = storeItems\(scopedPO\("o\.channel='gzgrocery'"\)/,
     'the units read is missing');
   assert.ok(!/extra: gy\.lines/.test(SALES), 'the card still reports ledger rows as its 4th metric');
 });

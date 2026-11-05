@@ -556,6 +556,7 @@ const recycle = require('../lib/recycle');
 const tax = require('../lib/tax');
 const tillDiscount = require('../lib/till-discount');
 const tillPin = require('../lib/till-pin');
+const operatorCaps = require('../lib/operator-caps');
 // §230 — the QR menu's per-type allow-list, so the editor's eye and the
 // live counter menu resolve a block from the same list.
 const qrBlockDefaults = require('../lib/qr-menu-block-defaults');
@@ -13721,20 +13722,42 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     const PAID  = financeWindow.PAID;
     const PDATE = `date(COALESCE(paid_at, placed_at), '${TZ}')`;
 
+    /* §519 — THE SAME STORE PIN THE DASHBOARD ALREADY HONOURS. This page
+       summed every shop and /channel-status listed every location, so a
+       Yuexiu-only login still read Tianhe's takings. Unscoped is the answer
+       this route has always given. A pin to no store sees zeros. */
+    const salesStores = operatorCaps.storeIdsOf(req);
+    const SCOPED = salesStores !== null;
+    const STORE_IN  = SCOPED ? (salesStores.length ? `store_id IN (${salesStores.join(',')})` : '0') : '1';
+    const STORE_INO = SCOPED ? (salesStores.length ? `o.store_id IN (${salesStores.join(',')})` : '0') : '1';
+    const scopedP  = (w) => (SCOPED ? `(${w}) AND ${STORE_IN}` : w);
+    const scopedPO = (w) => (SCOPED ? `(${w}) AND ${STORE_INO}` : w);
+
     // Meituan — storefront orders the daemon mirrors in with channel='meituan'.
     const mt = tdb().prepare(`
       SELECT COUNT(*) AS orders, COALESCE(SUM(total),0) AS revenue, COALESCE(AVG(total),0) AS aov
         FROM retail_orders
-       WHERE channel='meituan' AND ${PAID} AND ${PDATE} = ?
+       WHERE ${scopedP("channel='meituan'")} AND ${PAID} AND ${PDATE} = ?
     `).get(today) || { orders: 0, revenue: 0, aov: 0 };
     // Successful stock pushes today (the card's 4th metric).
     let mtPushes = 0;
     try {
-      mtPushes = tdb().prepare(`
+      const salesCodes = operatorCaps.storeCodesOf(tdb(), req);
+      let pushSql = `
         SELECT COUNT(*) AS n FROM meituan_sync_log
          WHERE event_type='stock_push' AND status='success'
-           AND date(created_at, '${TZ}') = ?
-      `).get(today)?.n || 0;
+           AND date(created_at, '${TZ}') = ?`;
+      const pushArgs = [today];
+      if (salesCodes !== null) {
+        if (!salesCodes.length) {
+          mtPushes = 0;
+        } else {
+          pushSql += ` AND store_code IN (${salesCodes.map(() => '?').join(',')})`;
+          mtPushes = tdb().prepare(pushSql).get(...pushArgs, ...salesCodes)?.n || 0;
+        }
+      } else {
+        mtPushes = tdb().prepare(pushSql).get(today)?.n || 0;
+      }
     } catch (e) { /* no sync-log table for this tenant */ }
 
     // Owned storefronts — the mini app and the web shop sell straight from
@@ -13766,10 +13789,10 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     // true partition of the day's paid orders for the residual below to work.
     const NOT_COUNTER  = "COALESCE(fulfillment_type,'') <> 'counter'";
     const NOT_COUNTERO = "COALESCE(o.fulfillment_type,'') <> 'counter'";
-    const wc = storeAgg(`COALESCE(NULLIF(channel,''),'wechat')='wechat' AND ${NOT_COUNTER}`);
-    const wb = storeAgg(`channel='web' AND ${NOT_COUNTER}`);
-    const wcItems = storeItems(`COALESCE(NULLIF(o.channel,''),'wechat')='wechat' AND ${NOT_COUNTERO}`);
-    const wbItems = storeItems(`o.channel='web' AND ${NOT_COUNTERO}`);
+    const wc = storeAgg(scopedP(`COALESCE(NULLIF(channel,''),'wechat')='wechat' AND ${NOT_COUNTER}`));
+    const wb = storeAgg(scopedP(`channel='web' AND ${NOT_COUNTER}`));
+    const wcItems = storeItems(scopedPO(`COALESCE(NULLIF(o.channel,''),'wechat')='wechat' AND ${NOT_COUNTERO}`));
+    const wbItems = storeItems(scopedPO(`o.channel='web' AND ${NOT_COUNTERO}`));
 
     // ── gzgrocery — the ORDER RECORD, like every other card here (§186) ──────
     // This card read the now-deleted `guanyiPickupSales()` until now, which valued
@@ -13788,8 +13811,8 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     // THE RESIDUAL IS UNAFFECTED. `claimedBy` below already names
     // `channel='gzgrocery'`, so these rows were excluded from Direct before this
     // change and still are — the six buckets stay a true partition.
-    const gy = storeAgg("channel='gzgrocery'");
-    const gyItems = storeItems("o.channel='gzgrocery'");
+    const gy = storeAgg(scopedP("channel='gzgrocery'"));
+    const gyItems = storeItems(scopedPO("o.channel='gzgrocery'"));
     // The drift half, which has no order behind it to read (§184). It is NOT
     // dead history: `scripts/guanyi-daemon.js` still writes `guanyi_pickup_log`,
     // and only `GUANYI_PICKUP_MODE` — which defaults to `off` — decides whether
@@ -13797,7 +13820,9 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     // dropped it would start under-reporting the day that switch is turned on
     // rather than failing loudly. Revenue only: a drift row is an inferred
     // pickup, not an order, so it must not move the order count or the AOV.
-    const gyDrift = guanyiLegacyPickupSales(tdb(), today, today);
+    // Drift pickups have no store. Left out of a pinned answer, the same way
+    // the dashboard leaves shop-wide money out of a store's revenue.
+    const gyDrift = SCOPED ? { revenue: 0 } : guanyiLegacyPickupSales(tdb(), today, today);
     const gyRevenue = +(Number(gy.revenue || 0) + Number(gyDrift.revenue || 0)).toFixed(2);
     const gyAov = +Number(gy.aov || 0).toFixed(2);
 
@@ -13814,8 +13839,8 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     // 'meituan', so every counter sale was missing from the Sales page while
     // sitting in the orders list. The row is new revenue on the page, not
     // double-counted revenue.
-    const ps = storeAgg("fulfillment_type='counter' AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')");
-    const psItems = storeItems("o.fulfillment_type='counter' AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')");
+    const ps = storeAgg(scopedP("fulfillment_type='counter' AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')"));
+    const psItems = storeItems(scopedPO("o.fulfillment_type='counter' AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')"));
 
     // Direct — every paid order none of the five cards above claims: the staff-
     // keyed orders from the New order form (channel = the operator's "order came
@@ -13841,8 +13866,8 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
       OR ${p}fulfillment_type='counter'
       OR COALESCE(NULLIF(${p}channel,''),'wechat') IN ('wechat','web')
     )`;
-    const dr = storeAgg(`NOT ${claimedBy('')}`);
-    const drItems = storeItems(`NOT ${claimedBy('o.')}`);
+    const dr = storeAgg(scopedP(`NOT ${claimedBy('')}`));
+    const drItems = storeItems(scopedPO(`NOT ${claimedBy('o.')}`));
 
     const channels = {
       wechat:    { connected: true,  revenue: +Number(wc.revenue || 0).toFixed(2), orders: wc.orders || 0, aov: +Number(wc.aov || 0).toFixed(2), extra: wcItems },
@@ -13868,13 +13893,23 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     // top-ups aren't orders — so it's computed before the fold. Store credit
     // spent on orders is a memo line, never re-added (see topupCashReceived).
     const aov = orders ? +(revenue / orders).toFixed(2) : 0;
-    const tu = topupCashReceived(tdb(), today, today);
-    const creditRedeemed = storeCreditRedeemed(tdb(), today, today);
+    // Wallet top-up cash has no store. Left out of a pinned answer, as on
+    // the dashboard; store credit spent is the orders' own figure, so it
+    // follows the pin.
+    const tu = SCOPED ? { received: 0 } : topupCashReceived(tdb(), today, today);
+    const creditRedeemed = storeCreditRedeemed(tdb(), today, today, SCOPED ? STORE_IN : null);
     revenue = +(revenue + tu.received).toFixed(2);
-    res.json({ success: true, channels, summary: {
+    const body = { success: true, channels, summary: {
       revenue, orders, aov, active, total: connectable,
       topups_received: tu.received, store_credit_redeemed: creditRedeemed,
-    } });
+    } };
+    if (SCOPED) {
+      body.store_scope = {
+        store_ids: salesStores,
+        left_out: ['topups_received', 'gy_drift'],
+      };
+    }
+    res.json(body);
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
