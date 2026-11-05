@@ -598,4 +598,33 @@ run('add stock', [
       ['push refuses it', "state.stack.length===0"],
       ['and the home does not offer it', `${body}.indexOf('Add stock')===-1`],
     ]],
+
+  ['re-opening the screen lifts the shelf latch', SHELF + `
+    state.qs.itemsTried=true; state.qs.addedTried=true;
+    const _render=render; render=function(){};
+    push('stockadd'); render=_render;`, [
+    ['so the list is read again', "!state.qs.itemsTried && !state.qs.addedTried"],
+  ]],
+
+  ['a poll merges shelf figures the operator is not editing', COUNTING + `
+    state.qs.items[0].physical_qty=11;
+    qsMergeShelf([{product_id:7,physical_qty:14},{product_id:8,physical_qty:0}]);`, [
+    ['the quiet row moves', "state.qs.items[0].physical_qty===14"],
+    ['the other row is unchanged', "state.qs.items[1].physical_qty===0"],
+  ]],
+
+  ['a poll leaves a row alone while taps are pending', SHELF + `
+    APP.cmd('qsBump',7,1);
+    qsMergeShelf([{product_id:7,physical_qty:99}]);`, [
+    ['the shelf figure on the card is untouched', "state.qs.items[0].physical_qty===11"],
+    ['and the pending amount is kept', "state.qs.add[7]===1"],
+  ]],
+
+  ['log batch counts as a live shelf screen', KITCHEN + `
+    state.qs.ctx={enabled:true,mode:'add',stores:[{id:1,name_en:'Tianhe',name_cn:'天河'}]};
+    state.qs.ctxTried=true; state.qs.storeId=1; state.qs.itemsTried=true;
+    state.qs.items=[{product_id:7,name_en:'Hummus',sku:'1-10',physical_qty:5}];
+    state.stack=[{route:'logbatch',title:SUBS.logbatch.title}];`, [
+    ['for the poll guard', "qsShelfLiveOnScreen()===true"],
+  ]],
 ]);
