@@ -2870,7 +2870,7 @@ check('the channel name reuses the locked Counter sale pair',
 // the dashboard's (scripts/test_sales_summary_partition.js). fulfillment_type
 // is still what SELECTS the till's sales; the exclusion only fences the edges.
 check('POS revenue is keyed on fulfillment_type, not on channel',
-  /const ps = storeAgg\("fulfillment_type='counter'/.test(POS_RT), true);
+  /const ps = storeAgg\(scopedP\("fulfillment_type='counter'/.test(POS_RT), true);
 check('POS appears in the sales summary payload', /^\s*pos:\s*\{ connected: true/m.test(POS_RT), true);
 
 // ── The till respects it before the cashier builds a basket ──────────────

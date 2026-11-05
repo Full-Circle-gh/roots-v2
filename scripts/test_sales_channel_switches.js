@@ -410,7 +410,15 @@ function assertBlank(page, label) {
     check(/#tab-sales \.sales-cs-err\s*\{/.test(css), '.sales-cs-err is styled');
   }
 
-  section('10 · 🔴 No two admin scripts claim the same global name');
+  section('10 · a store-scoped login cannot add a location');
+  {
+    check(/if \(Array\.isArray\(window\.RA_SCOPE_STORES\)\) return;/.test(src),
+      'salesAddLocation returns when the login is pinned');
+    check(/const addLoc = Array\.isArray\(window\.RA_SCOPE_STORES\) \? ''/.test(src),
+      'csRenderLocations draws no Add location button for a pinned login');
+  }
+
+  section('11 · 🔴 No two admin scripts claim the same global name');
   {
     // Who claims what: a top-level function declaration, or a window.x
     // function assignment. The same name claimed from two FILES is a clash —

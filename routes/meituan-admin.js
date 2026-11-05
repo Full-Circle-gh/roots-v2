@@ -16,6 +16,7 @@ const router  = express.Router();
 const { tdb } = require('../lib/tenant-db');
 const { isStoreTradingOnChannel } = require('../lib/store-trading');
 const { requireRetailAdmin } = require('./retail');
+const operatorCaps = require('../lib/operator-caps');
 const bundleLib = require('../lib/meituan-bundles');
 const bundleStock = require('../lib/bundle-stock');
 // §85 — the number a channel should be holding right now, allowance included.
@@ -1116,6 +1117,19 @@ function csStores(db, channel) {
   const all = db.prepare("SELECT code, name_en, name_cn, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
   return channel === 'gzgrocery' ? all.filter(s => s.code === 'tianhe') : all;
 }
+// §519 — a store-scoped operator only sees (and can switch) their own shops
+// on the Sales board. null codes = unscoped, every store as before.
+function csStoresInScope(db, channel, req) {
+  const all = csStores(db, channel);
+  const codes = operatorCaps.storeCodesOf(db, req);
+  if (codes === null) return all;
+  return all.filter((s) => codes.indexOf(s.code) !== -1);
+}
+function csRefuseStore(db, req, storeCode, res) {
+  if (operatorCaps.storeCodeAllowed(db, req, storeCode)) return false;
+  res.status(403).json({ success: false, error: 'forbidden_store', store: storeCode });
+  return true;
+}
 // Every channel that serves one store — the set a location master moves.
 function csChannelsAt(storeCode) {
   return GRID_CHANNELS.filter((ch) => ch !== 'gzgrocery' || storeCode === 'tianhe');
@@ -1154,7 +1168,9 @@ function csBy(req) { return (req.backendUser && (req.backendUser.username || req
 router.get('/api/retail-admin/channel-status', requireRetailAdmin, (req, res) => {
   const db = tdb();
   try {
-    const stores = db.prepare("SELECT code, name_en, name_cn, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
+    const scopeCodes = operatorCaps.storeCodesOf(db, req);
+    const stores = db.prepare("SELECT code, name_en, name_cn, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all()
+      .filter((s) => scopeCodes === null || scopeCodes.indexOf(s.code) !== -1);
     const mt = {}; for (const r of db.prepare('SELECT * FROM store_business_status').all()) mt[r.store_code] = r;
     // The shop-wide switch, reported as its own fact rather than only folded
     // into every cell. csCellOpen returns false for EVERY channel at a store
@@ -1166,7 +1182,7 @@ router.get('/api/retail-admin/channel-status', requireRetailAdmin, (req, res) =>
     // change, and nothing on screen said why.
     const shopOpen = (code) => !(mt[code] && mt[code].fulfillment_open === 0);
     const channels = GRID_CHANNELS.map((ch) => {
-      const cells = csStores(db, ch).map((s) => {
+      const cells = csStoresInScope(db, ch, req).map((s) => {
         const cell = { storeCode: s.code, name: s.name, nameEn: s.name_en || s.name, nameCn: s.name_cn || s.name,
                        open: csCellOpen(db, ch, s.code), shopOpen: shopOpen(s.code) };
         if (ch === 'meituan') { const r = mt[s.code] || {}; cell.readOk = r.read_ok === 1; cell.pending = r.target_open != null; cell.statusDesc = r.status_desc || null; }
@@ -1204,6 +1220,7 @@ router.get('/api/retail-admin/channel-status/reopen-preview', requireRetailAdmin
   if (!GRID_CHANNELS.includes(channel) || !storeCode) {
     return res.status(400).json({ success: false, error: 'channel, storeCode required' });
   }
+  if (csRefuseStore(tdb(), req, storeCode, res)) return;
   try {
     if (channel !== 'meituan') return res.json({ success: true, count: 0, items: [] });
     const rows = db.prepare(`
@@ -1232,6 +1249,7 @@ router.post('/api/retail-admin/channel-status/cell', requireRetailAdmin, express
   const { channel, storeCode, open } = req.body || {};
   if (!GRID_CHANNELS.includes(channel) || !storeCode || typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'channel, storeCode, open (boolean) required' });
   if (channel === 'gzgrocery' && storeCode !== 'tianhe') return res.status(400).json({ success: false, error: 'gzgrocery is tianhe-only' });
+  if (csRefuseStore(tdb(), req, storeCode, res)) return;
   // Opening a channel at a shop that is not trading opens the shop with ONLY
   // that channel (§253, reversing §181's 409 shop_closed for this case). §181
   // refused because the write landed under fulfillment_open = 0 and the next
@@ -1255,7 +1273,7 @@ router.post('/api/retail-admin/channel-status/channel', requireRetailAdmin, expr
   const { channel, open } = req.body || {};
   if (!GRID_CHANNELS.includes(channel) || typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'channel, open (boolean) required' });
   try {
-    const by = csBy(req); const all = csStores(db, channel);
+    const by = csBy(req); const all = csStoresInScope(db, channel, req);
     // Opening everywhere never reopens a closed shop (§253): one tap on a
     // channel must not bring back a location that is shut until further
     // notice. Those are skipped and named so the screen can say so.
@@ -1275,6 +1293,7 @@ router.post('/api/retail-admin/channel-status/location', requireRetailAdmin, exp
   const db = tdb();
   const { storeCode, open } = req.body || {};
   if (!storeCode || typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'storeCode, open (boolean) required' });
+  if (csRefuseStore(tdb(), req, storeCode, res)) return;
   try {
     const st = db.prepare('SELECT code FROM retail_stores WHERE code=? AND is_active=1').get(storeCode);
     if (!st) return res.status(404).json({ success: false, error: 'unknown store' });
