@@ -4268,9 +4268,9 @@ function renderShipmentCard(o, s) {
   // Carrier tracking for a dispatched/delivered parcel is NOT rendered here —
   // it's hoisted to the top of the drawer (hoistedTracking) so the operator can
   // add a waybill + watch status the moment the order ships, no scrolling.
-  // Local same-city parcels do the same once dispatched: their ETA card hoists
-  // to the top (it's the rider's arrival time the operator watches). Before
-  // dispatch (paid/preparing) it stays inline here so the time can be set early.
+  // Local same-city parcels hoist once dispatched (rider ETA) or once the order
+  // is preparing (compare couriers). While still paid the card stays inline so
+  // an early arrival time can be set without jumping the layout.
 }
 
 /* §189 — THE BOX THAT WAS ALREADY OUT WHEN THE ORDER WAS CANCELLED.
@@ -4356,7 +4356,9 @@ async function closeParcelRecovery(orderId, shipmentId, outcome, ev) {
 // staff haven't marked the parcel dispatched yet. In that state the courier card
 // (rider, map, ETA) hoists to the top of the drawer instead of sitting buried
 // under the items table, and the inline copy inside the shipment card is dropped
-// so it isn't rendered twice.
+// so it isn't rendered twice. The same hoist applies once the order is
+// preparing: compare couriers should sit under the action row, not below the
+// pick list.
 // All three in-flight stages hoist, heading_to_pickup ("Rider coming") included:
 // a rider riding to the store is the moment staff most need the card — that's
 // when the parcel has to be ready and the rider's phone number reachable. Leaving
@@ -4367,7 +4369,11 @@ async function closeParcelRecovery(orderId, shipmentId, outcome, ev) {
 function courierCardHoisted(o, s) {
   if ((s.mode || 'local') !== 'local') return false;
   if (['dispatched', 'delivered'].includes(s.state || 'pending')) return false;
-  if (!['awaiting_dispatch', 'heading_to_pickup', 'in_transit'].includes(o.courier?.stage)) return false;
+  const riderLive = ['awaiting_dispatch', 'heading_to_pickup', 'in_transit'].includes(o.courier?.stage);
+  // Once staff press Start preparing, compare couriers is the natural next step —
+  // lift the card to the drawer top so it is not buried under the pick list.
+  // Paid stays inline: the operator may still be picking before they commit.
+  if (!riderLive && o.status !== 'preparing') return false;
   const all = o.shipments || [];
   return all.findIndex(x => (x.mode || 'local') === 'local') === all.indexOf(s);
 }
@@ -7918,7 +7924,7 @@ async function transition(id, status, ev) {
   try {
     await api(`/api/retail-admin/orders/${id}/status`, { method: 'PATCH', body: { status, reason, pay_method } });
     toast(`Order → ${humanStatus(status, _OPEN_ORDER?.fulfillment_type)} · 订单 → ${humanStatus(status, _OPEN_ORDER?.fulfillment_type)}`);
-    openOrder(id, { instant: true });
+    openOrder(id, { instant: true, ...(status === 'preparing' ? { scrollTop: 0 } : {}) });
     loadOrders();
   } catch (e) {
     toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
