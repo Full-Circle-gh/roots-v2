@@ -5198,4 +5198,8 @@
       list.style.display = 'none';
     }
   });
+
+  if (typeof retailLiveOn === 'function') {
+    retailLiveOn('stock', () => { Object.keys(_prodCache).forEach(k => delete _prodCache[k]); });
+  }
 })();

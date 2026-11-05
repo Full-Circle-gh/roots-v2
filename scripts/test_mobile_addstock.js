@@ -619,4 +619,12 @@ run('add stock', [
     ['the shelf figure on the card is untouched', "state.qs.items[0].physical_qty===11"],
     ['and the pending amount is kept', "state.qs.add[7]===1"],
   ]],
+
+  ['log batch counts as a live shelf screen', KITCHEN + `
+    state.qs.ctx={enabled:true,mode:'add',stores:[{id:1,name_en:'Tianhe',name_cn:'天河'}]};
+    state.qs.ctxTried=true; state.qs.storeId=1; state.qs.itemsTried=true;
+    state.qs.items=[{product_id:7,name_en:'Hummus',sku:'1-10',physical_qty:5}];
+    state.stack=[{route:'logbatch',title:SUBS.logbatch.title}];`, [
+    ['for the poll guard', "qsShelfLiveOnScreen()===true"],
+  ]],
 ]);

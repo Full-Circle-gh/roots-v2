@@ -1745,7 +1745,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      minute, and a list carried over from the last visit may already have been
      changed on another phone. Pending taps on a card are kept; only the latch
      is lifted so loadQsItems runs again. */
-  if(route==='stockadd'){ state.qs.itemsTried=false; state.qs.addedTried=false; }
+  if(route==='stockadd'||route==='logbatch'){ state.qs.itemsTried=false; state.qs.addedTried=false; }
   /* Log a batch opens with nothing counted. A basket left over from a batch
      that was already recorded would add it a second time. */
   if(route==='logbatch'){ state.bat.qty={}; state.bat.q=''; }
@@ -23172,11 +23172,11 @@ function loadQsAdded(){
 
    fetch, NOT api(), for the reason pollKitchenQueue states: a 401 out of a
    heartbeat would navigate a phone sitting on a counter to the login screen. */
-const QS_POLL_MS=20000;
+const QS_POLL_MS=5000;
 let _qsPollBusy=false;
-function qsShowing(){
+function qsShelfLiveOnScreen(){
   const top=state.stack[state.stack.length-1];
-  return !!top&&top.route==='stockadd';
+  return !!top&&(['stockadd','logbatch','whatmade'].indexOf(top.route)>=0);
 }
 function qsItemId(p){ return p.product_id!=null?p.product_id:p.id; }
 function qsRowBusy(id){
@@ -23222,18 +23222,18 @@ function qsMergeAdded(d){
   return changed;
 }
 function pollQuickStock(){
-  if(!qsShowing()||_qsPollBusy) return;
+  if(!qsShelfLiveOnScreen()||_qsPollBusy) return;
   const forStore=state.qs.storeId;
   if(forStore==null||!Array.isArray(state.qs.items)) return;
   _qsPollBusy=true;
-  const shelfP=fetch('/api/stores/'+forStore+'/stock',{credentials:'same-origin',headers:{accept:'application/json'}})
+  const shelfP=fetch('/api/retail-admin/stores/'+forStore+'/stock',{credentials:'same-origin',headers:{accept:'application/json'}})
     .then(r=>r.ok?r.json():null).catch(()=>null);
   const addedP=qsMode()!=='add'?Promise.resolve(null):
-    fetch('/api/stores/'+forStore+'/stock/added-today',{credentials:'same-origin',headers:{accept:'application/json'}})
+    fetch('/api/retail-admin/stores/'+forStore+'/stock/added-today',{credentials:'same-origin',headers:{accept:'application/json'}})
       .then(r=>r.ok?r.json():null).catch(()=>null);
   return Promise.all([shelfP,addedP]).then(([rows,added])=>{
     _qsPollBusy=false;
-    if(!qsShowing()||state.qs.storeId!==forStore) return;
+    if(!qsShelfLiveOnScreen()||state.qs.storeId!==forStore) return;
     const rowsArr=Array.isArray(rows)?rows:((rows&&rows.rows)||null);
     let changed=false;
     if(rowsArr) changed=qsMergeShelf(rowsArr)||changed;
@@ -23241,10 +23241,74 @@ function pollQuickStock(){
     if(changed) render();
   }).catch(()=>{ _qsPollBusy=false; });
 }
-(function startQuickStockPoll(){
-  setInterval(pollQuickStock,QS_POLL_MS);
-  window.addEventListener('focus',pollQuickStock);
-  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollQuickStock(); });
+/* THE REST OF STOCK CONTROL ON THE PHONE — products, the ledger, ask-for-stock
+   hints, purchasing — wired to the same server nudge the desktop catalogue
+   uses (`event: live`, entity `stock` from lib/inventory.js). Poll every five
+   seconds is the backstop when the stream misses a frame. */
+const ACT_LIVE_POLL_MS=15000;
+let _actLiveBusy=false;
+function actLiveOnScreen(){
+  const top=state.stack[state.stack.length-1];
+  return !!top&&top.route==='activity';
+}
+function pollActivityLedger(){
+  if(!actLiveOnScreen()||_actLiveBusy||state.actMore||String(state.actQ||'').trim()) return;
+  if(!state.actTried||!state.act) return;
+  const {from,to}=actWindow();
+  _actLiveBusy=true;
+  const q=new URLSearchParams({from,to,limit:'60',offset:'0'});
+  if(state.actSource) q.set('source',state.actSource);
+  fetch('/api/retail-admin/activity?'+q,{credentials:'same-origin',headers:{accept:'application/json'}})
+    .then(r=>r.ok?r.json():null)
+    .then(j=>{
+      _actLiveBusy=false;
+      if(!actLiveOnScreen()||!j) return;
+      state.act=Object.assign({},j,{rows:(j&&j.rows)||[]});
+      state.actErr=null; render();
+    }).catch(()=>{ _actLiveBusy=false; });
+}
+function rqShelfLiveRefresh(){
+  const top=state.stack[state.stack.length-1];
+  if(!top||top.route!=='askstock') return;
+  const r=state.rq;
+  r.shelfTried={};
+  if(r.to) loadRqShelf(r.to);
+  if(r.from&&r.from!==r.to) loadRqShelf(r.from);
+}
+function pwcStockLiveInvalidate(){
+  const c=state.pwc;
+  Object.keys(c.tried||{}).forEach(k=>{ if(k.indexOf('stock')===0) delete c.tried[k]; });
+  c.stock={};
+  if(state.pw) pwLoadStock(state.pw.store_id);
+}
+function prodStockLiveRefresh(){
+  if(state.tab!=='products'||flatNav()) return;
+  if(state.prodGrid.tried) loadProdGrid(true);
+  if(state.productSku&&!state.prodBusy){
+    const p=(DB.products||[]).find(x=>x.sku===state.productSku);
+    if(p&&p._id!=null){ delete state.prodStock[p._id]; loadProductStock(p._id); }
+  }
+}
+let _mStockLiveDebounce=null;
+function mStockLiveRefresh(fromStream){
+  if(document.visibilityState!=='visible') return;
+  pollQuickStock();
+  pollActivityLedger();
+  prodStockLiveRefresh();
+  if(fromStream){
+    rqShelfLiveRefresh();
+    if(state.pw) pwcStockLiveInvalidate();
+  }
+}
+function mStockLiveNudge(){
+  clearTimeout(_mStockLiveDebounce);
+  _mStockLiveDebounce=setTimeout(()=>mStockLiveRefresh(true),400);
+}
+(function startStockLiveRefresh(){
+  setInterval(()=>mStockLiveRefresh(false),QS_POLL_MS);
+  window.addEventListener('focus',()=>mStockLiveRefresh(true));
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) mStockLiveRefresh(true); });
+  setInterval(pollActivityLedger,ACT_LIVE_POLL_MS);
 })();
 /* WHICH JOB THIS SCREEN IS DOING (§48). The server decides and says so, the
    same answer it gives the old app: a kitchen operator logs what they made, a
@@ -25049,6 +25113,7 @@ function screenWhatMade(){
 }
 function screenLogBatch(){
   loadQsCtx();
+  if(state.qs.ctx&&!state.qs.ctxErr&&state.qs.storeId!=null&&!state.qs.itemsTried) loadQsItems();
   const search=`<div class="stick-top" style="padding:12px 16px">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     ${searchBox(`<input id="mBatQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.bat.q)}" style="padding-left:42px"
@@ -50357,6 +50422,10 @@ function mLiveConnect(){
   let es; try{ es=new EventSource(apiURL('/stream')); }catch(e){ return; }
   _mLive.es=es;
   es.addEventListener('activity',mLiveNudge);
+  es.addEventListener('live',e=>{
+    let d; try{ d=JSON.parse(e.data); }catch(_){ return; }
+    if(d&&d.entity==='stock') mStockLiveNudge();
+  });
   // CLOSED, not "errored": EventSource retries by itself and reports each
   // attempt here. Only a stream it has given up on is worth letting go of.
   es.onerror=()=>{ if(es.readyState===2&&_mLive.es===es) _mLive.es=null; };
