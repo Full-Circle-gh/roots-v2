@@ -71,6 +71,10 @@ const ORD = read('public/retail-admin/04-orders.js');
 const WSTUI = read('public/retail-admin/20-waste.js');
 const PURUI = read('public/retail-admin/16-purchasing.js');
 const TILL = read('public/till.html');
+const OPSUI = read('public/retail-admin/02-settings-ops.js');
+const PRODUI = read('public/retail-admin/09-products.js');
+const IG = read('public/retail-admin/15-integrations.js');
+const SU = read('public/retail-admin/17-setup-guide.js');
 
 let pass = 0, fail = 0;
 const ok = (c, m, extra) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.log('  ✗ ' + m + (extra ? '\n      ' + extra : '')); } };
@@ -193,6 +197,17 @@ operator('nowhere', { stores: [] });
     ok((PURUI.match(/§520 — one store means no picker: the name stands, the select/g) || []).length >= 3,
       'the three purchasing pickers become the name at one store');
     ok(TILL.includes('var canSwitch = S.stores.length > 1'), 'the till switcher hides at one store');
+    ok(M.includes('function tmStores(){ const sc=state.scopeStores;'),
+      'the phone Team pickers offer the caller\'s own stores only');
+    ok(OPSUI.includes('!Array.isArray(window.RA_SCOPE_STORES) || window.RA_SCOPE_STORES.includes(Number(s.id))'),
+      'the desktop Team pickers offer the caller\'s own stores only');
+    ok(PRODUI.includes('if (PA_STORE !== \'all\' && !PA_STORES.some(s => Number(s.id) === Number(PA_STORE)))'),
+      'a persisted product-store pick outside the scope falls back');
+    ok(IG.includes('window.igAddLocation = function () {\n    // §520: opening a location is a whole-business act.')
+      && IG.includes('if (Array.isArray(window.RA_SCOPE_STORES)) return;'),
+      'the integrations Add-location wizard no-ops for a pinned login');
+    ok(SU.includes('if (Array.isArray(window.RA_SCOPE_STORES)) return;\n  suStoreWizOpen();'),
+      'the setup guide\'s store wizard no-ops for a pinned login');
   }
 
   const express = require('express');

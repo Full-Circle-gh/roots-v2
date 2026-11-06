@@ -174,6 +174,9 @@ function suGoStore() {
   // Instead we run a focused, one-question-at-a-time wizard. It creates/updates
   // the tenant's store from plain answers; the guide's `store` step then ticks
   // itself off from real data (a store row with an address).
+  // §520: a pinned login cannot open a new location — the server refuses the
+  // create, so the wizard never opens for one.
+  if (Array.isArray(window.RA_SCOPE_STORES)) return;
   suStoreWizOpen();
 }
 

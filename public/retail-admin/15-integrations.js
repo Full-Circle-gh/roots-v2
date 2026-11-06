@@ -220,6 +220,10 @@
   // pickup). Step 2 (after save): "wire into your channels" — which connected
   // integrations got a link-this-store to-do, plus quota/zone pointers.
   window.igAddLocation = function () {
+    // §520: opening a location is a whole-business act. A pinned login gets
+    // the same answer here as on the Sales board — hidden where drawn, and
+    // the call no-ops; the server refuses the create regardless.
+    if (Array.isArray(window.RA_SCOPE_STORES)) return;
     const box = igHostEl();
     if (!box) return;
     box.style.display = '';

@@ -46147,7 +46147,10 @@ function tmStoreName(id){
   if(!s) return '#'+id;
   return LANG==='en'?(s.name_en||s.name_cn||('#'+id)):(s.name_cn||s.name_en||('#'+id));
 }
-function tmStores(){ return (state.stores||[]); }
+/* §520 — the Team pickers offer the caller's own stores only. The server
+   intersects what is saved anyway; offering a store this login cannot see
+   would be a promise the save silently breaks. */
+function tmStores(){ const sc=state.scopeStores; if(!Array.isArray(sc)) return (state.stores||[]); const ok=new Set(sc.map(Number)); return (state.stores||[]).filter(s=>ok.has(Number(s.id))); }
 /* An error bar in the shop's brick, the shape every screen in this file uses
    for a failure that has to stay on the glass until it is acted on. */
 function tmErrBar(msg){
