@@ -251,8 +251,12 @@ async function call(method, p, body) {
   const stray = src.map((l, i) => ({ n: i + 1, l }))
                    .filter(o => /(^|[^t])\bdb\.(prepare|transaction|exec)\b/.test(o.l));
   const stmtAt = (n) => src.slice(n - 1, n + 3).join(' ');
-  ok(stray.length > 0 && stray.every(o => /\busers\b/.test(stmtAt(o.n))),
-     'every remaining shared-handle call in routes/restock.js is a control-plane `users` query');
+  // §520's restockStoreGate resolves the caller's pin on the shared handle —
+  // tenant_users and tenants are control-plane tables, the same reads
+  // requireRetailAdmin makes. The rule this enforces is "control-plane only",
+  // and since 2026-11-06 that is three tables, not one.
+  ok(stray.length > 0 && stray.every(o => /\b(users|tenant_users|tenants)\b/.test(stmtAt(o.n))),
+     'every remaining shared-handle call in routes/restock.js is a control-plane query');
   console.log('    remaining shared-handle lines: ' + stray.map(o => o.n).join(', '));
 
   server.close();

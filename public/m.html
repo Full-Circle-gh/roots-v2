@@ -15055,6 +15055,7 @@ const ONW_WHERE={
   shipping_fee_not_allowed_for_pickup:'how', shipping_fee_not_allowed_for_counter:'how',
   bad_store_id:'how', store_not_found:'how', bad_fulfillment_type:'how',
   fulfillment_type_required:'how', store_required_for_counter:'how',
+  forbidden_store:'how',   // §520 — the lock's refusal; the store control lives in 'how'.
   payment_method_required_for_counter:'how', pos_closed_for_store:'how',
   address_required_for_delivery:'how', address_not_allowed_for_pickup:'how',
   address_not_allowed_for_counter:'how',
@@ -15133,6 +15134,9 @@ function onwErrText(code,msg,pid){
     channel_note_required:E('Write where this order came from.','请填写具体来源。'),
     bad_store_id:E('Pick a store.','请选择门店。'),
     store_not_found:E('That store no longer exists. Pick another.','该门店已不存在,请另选。'),
+    /* §520 — the lock's refusal in the desktop's own words (04-orders.js,
+       vocabulary v1.389): one refusal, one sentence, both surfaces. */
+    forbidden_store:E('That store is not one of this login\'s stores. Whoever manages your team can change which stores it holds.','该门店不在本账号的门店范围内。可请团队管理员调整所属门店。'),
     address_required_for_delivery:E('A delivery order needs a full address.','配送订单需要完整地址。'),
     address_not_allowed_for_pickup:E('A pickup order cannot carry a delivery address.','自提订单不能填写收货地址。'),
     shipping_fee_not_allowed_for_pickup:E('A pickup order cannot carry a shipping fee. Clear it or set it to 0.','自提订单不能收取运费,请清空或设为 0。'),
