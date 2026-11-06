@@ -64,7 +64,11 @@ function harness() {
   fs.mkdirSync(SCRATCH, { recursive: true });
   fs.copyFileSync(path.join(REPO, 'database.js'), path.join(SCRATCH, 'database.js'));
   fs.copyFileSync(path.join(REPO, 'schema.sql'),  path.join(SCRATCH, 'schema.sql'));
-  try { fs.symlinkSync(path.join(REPO, 'lib'), path.join(SCRATCH, 'lib'), 'dir'); } catch { /* already linked */ }
+  // A dir symlink needs Developer Mode on Windows; a junction does not. Without
+  // the fallback the catch below hid a missing lib/ and every migration that
+  // requires one died with MODULE_NOT_FOUND on Windows boxes without it.
+  try { fs.symlinkSync(path.join(REPO, 'lib'), path.join(SCRATCH, 'lib'), 'dir'); }
+  catch { try { fs.symlinkSync(path.join(REPO, 'lib'), path.join(SCRATCH, 'lib'), 'junction'); } catch { /* already linked */ } }
 
   const tenantFiles = [];
   const cleanup = () => {

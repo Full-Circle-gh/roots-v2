@@ -121,7 +121,9 @@ router.get('/api/retail-admin/guanyi/stores', requireRetailAdmin, (req, res) => 
       SELECT id, code, COALESCE(name_cn, name_en, code) AS name
         FROM retail_stores ORDER BY sort_order, id
     `).all();
-    res.json({ success: true, data: stores, guanyiStoreCode: GUANYI_STORE_CODE });
+    // §520: the board lists the caller's stores only.
+    const gScope = require('../lib/operator-caps').storeIdsOf(req);
+    res.json({ success: true, data: Array.isArray(gScope) ? stores.filter(s => gScope.includes(Number(s.id))) : stores, guanyiStoreCode: GUANYI_STORE_CODE });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

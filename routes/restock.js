@@ -12,7 +12,10 @@ const inventory = require('../lib/inventory');
 // is a seam wrapper (lib/db-seam.js) over the SAME connection as `db`, so this
 // is a behavioural no-op today; it closes the cross-tenant split before data
 // isolation is switched on.
-const { tdb, currentTenantId } = require('../lib/tenant-db');
+const { tdb, currentTenantId, getTenantDb } = require('../lib/tenant-db');
+// §520's lock: a transfer touches both its ends, and a scoped caller acts
+// only on one that touches their own stores.
+const { storeAllowed, storeIdsOf } = require('../lib/operator-caps');
 // The shop's own day (decisions §82). This file took "today" as the UTC day
 // and numbered requests off the host's clock, so between midnight and 08:00 in
 // Guangzhou a request was dated, and numbered, the day before.
@@ -1152,6 +1155,17 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
   // legacy default) so nothing breaks while UI catches up.
   if (to_role)   { q += " AND COALESCE(r.to_role,'warehouse') = ?";   params.push(to_role); }
   if (from_role) { q += " AND COALESCE(r.from_role,'store') = ?";     params.push(from_role); }
+  // §520: a scoped caller sees the requests that touch their stores — as
+  // sender or receiver — and nothing else.
+  const rsScope = storeIdsOf(req);
+  if (Array.isArray(rsScope)) {
+    if (!rsScope.length) q += ' AND 0=1';
+    else {
+      const ph = rsScope.map(() => '?').join(',');
+      q += ` AND (r.from_store_id IN (${ph}) OR r.to_store_id IN (${ph}))`;
+      params.push(...rsScope, ...rsScope);
+    }
+  }
   /* URGENT FIRST, AND THAT IS THE WHOLE OF WHAT 'urgent' MEANS (§65). Newest
      -first was this list's only sort, so a request raised at 09:00 and marked
      urgent sat BELOW a routine one raised at 09:05 and the kitchen found it
@@ -1651,6 +1665,38 @@ router.get('/api/restock/mine', requireRestockAccess, tacetOnly, (req, res) => {
   res.json({ success: true, data: rows });
 });
 
+/* §520 — ONE GATE FOR THE TRANSFER FAMILY. Every /api/restock/:id action
+   touches a row with two ends; holding a dozen routes to the pin by hand is
+   a dozen chances to miss one. A scoped caller may act on a transfer that
+   touches one of their stores, as sender or receiver; a kitchen request
+   carries no store pair and stays kitchenScopedOrder's. Fail-open on any
+   hiccup, matching the RBAC layer's contract. */
+function restockStoreGate(req, res, next) {
+  try {
+    // Inside a mounted router.use, req.path is RELATIVE to the mount — the
+    // whole path is baseUrl plus path, and the regex needs the whole path.
+    const m = /^\/api\/restock\/(\d+)/.exec((req.baseUrl || '') + (req.path || ''));
+    if (!m) return next();
+    const uid = req.session && req.session.backendUserId;
+    if (!uid) return next();
+    const u = db.prepare('SELECT id, tenant_id, role, retail_store_id, scope_all FROM tenant_users WHERE id = ? AND is_active = 1').get(uid);
+    if (!u || u.role === 'owner') return next();
+    const tenant = db.prepare('SELECT id, features_json, roles_version FROM tenants WHERE id = ?').get(u.tenant_id);
+    const { scopeStores } = require('../lib/operator-caps').resolveOperator(db, u, tenant || null);
+    if (!Array.isArray(scopeStores)) return next();
+    const conn = getTenantDb(u.tenant_id);
+    const o = conn.prepare('SELECT from_store_id, to_store_id FROM restock_orders WHERE id = ?').get(Number(m[1]));
+    if (!o) return next();
+    const ids = scopeStores.map(Number);
+    const ends = [o.from_store_id, o.to_store_id].filter(n => n != null).map(Number);
+    if (ends.length && !ends.some(n => ids.indexOf(n) !== -1)) {
+      return res.status(403).json({ error: 'forbidden_store' });
+    }
+    return next();
+  } catch (e) { return next(); }
+}
+router.use('/api/restock', restockStoreGate);
+
 router.get('/api/restock/:id', requireRestockAccess, kitchenScopedOrder, (req, res) => {
   const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
@@ -1730,6 +1776,9 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
       error: 'A transfer cannot leave from and arrive at the same location · 调拨的发出与接收地点不能相同',
     });
   }
+  // §520: naming an end outside the caller's pin is refused, not rerouted.
+  if (fromStoreId != null && !storeAllowed(req, fromStoreId)) return res.status(403).json({ error: 'forbidden_store' });
+  if (toStoreId != null && !storeAllowed(req, toStoreId)) return res.status(403).json({ error: 'forbidden_store' });
 
   // One handle for both statements and the transaction they run in.
   const conn = tdb();
@@ -2406,6 +2455,8 @@ router.put('/api/restock/:id/ends', requireRestockAccess, tacetOnly, (req, res) 
   }
   const known = conn.prepare('SELECT id FROM retail_stores WHERE id IN (?, ?)').all(from, to);
   if (known.length !== 2) return res.status(400).json({ error: 'unknown_shop', message: 'Unknown shop' });
+  // §520: moving a transfer's ends is an act on both new ends as well.
+  if (!storeAllowed(req, from) || !storeAllowed(req, to)) return res.status(403).json({ error: 'forbidden_store' });
   if (from === order.from_store_id && to === order.to_store_id) return res.json({ success: true, unchanged: true });
 
   // The free-text names describe the OLD destination; clear them so the slip

@@ -31,6 +31,8 @@ const { isRiskyText, refuseContent, submitImageSecCheck } = require('../../lib/w
 const { sweepExpiredPoints, pointsRedeemRate } = require('../../lib/loyalty');
 const { counterGivable, counterVouchersFor, counterVoucherTerms } = require('../../lib/vouchers');
 const { ADDRESS_PUBLIC_COLS, normalizeChinaAddress, geocodeAddressAsync } = require('../../lib/addresses');
+// §520's lock: a voucher read or grant naming a store stops at the caller's pin.
+const { storeAllowed } = require('../../lib/operator-caps');
 const { notifyCustomer } = require('../../lib/customer-notify');
 const { reconcileSignupVouchers, claimMigrationCredit } = require('../../lib/signup-rewards');
 const { affiliateSettings, ensureReferralCode } = require('../../lib/referrals');
@@ -59,6 +61,7 @@ router.get('/api/retail-admin/customers/:id/counter-vouchers', requireRetailAdmi
   const id = parseInt(req.params.id, 10);
   const storeId = parseInt(req.query.store_id, 10);
   if (!(id > 0) || !(storeId > 0)) return res.status(400).json({ success: false, error: 'bad_request' });
+  if (!storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
   res.set('Cache-Control', 'no-store');
   // §428 — `givable`: this location's own vouchers the customer does not hold
   // yet, which the till offers to give. Beside `data`, not inside it, so a till
@@ -80,6 +83,7 @@ router.post('/api/retail-admin/customers/:id/counter-vouchers', requireRetailAdm
   const storeId = parseInt(req.body && req.body.store_id, 10);
   const voucherId = parseInt(req.body && req.body.voucher_id, 10);
   if (!(id > 0) || !(storeId > 0) || !(voucherId > 0)) return res.status(400).json({ success: false, error: 'bad_request' });
+  if (!storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
   const c = tdb().prepare('SELECT id, is_blocked FROM retail_customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ success: false, error: 'customer_not_found' });
   if (c.is_blocked) return res.status(409).json({ success: false, error: 'customer_blocked' });

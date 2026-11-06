@@ -52,6 +52,8 @@ const recycle = require('../lib/recycle');
 const { nextRetailPONumber: nextRetailPO } = require('../lib/po-number');
 const { logActivity } = require('../middleware/auth');
 const { requireRetailAdmin } = require('./retail');
+// §520's lock: a purchase order is an act on the store it was raised for.
+const { storeAllowed, storeIdsOf } = require('../lib/operator-caps');
 // Materials Phase 1b (§28 addendum item 2): a retail PO line can carry
 // ingredient_id instead of store_product_id. Price history + the ±5% alert
 // for that line reuse routes/purchases.js's write-back verbatim — server.js
@@ -116,6 +118,15 @@ function getRetailPO(id) {
   return tdb().prepare(
     "SELECT * FROM purchase_orders WHERE id = ? AND COALESCE(scope,'kitchen') = 'retail' AND COALESCE(tenant_id,1) = ?"
   ).get(id, currentTenantId());
+}
+
+// §520 — a PO carries the store it was raised for, and a caller whose pin
+// excludes that store is refused exactly as at a store they never had. An
+// order with no store (raised business-wide) belongs to no one store, so it
+// stays readable by every scoped caller.
+function poInScope(req, po) {
+  if (!po || po.store_id == null) return true;
+  return storeAllowed(req, po.store_id);
 }
 
 function actorLabel(req) {
@@ -939,7 +950,19 @@ router.get('/api/retail-admin/purchases', requireRetailAdmin, (req, res) => {
      WHERE COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ?`;
   const params = [currentTenantId()];
   if (status)   { q += ' AND po.status = ?'; params.push(status); }
-  if (store_id) { q += ' AND po.store_id = ?'; params.push(parseInt(store_id, 10)); }
+  if (store_id) {
+    // §520: the filter names a store like any other store id — outside the
+    // pin it is refused rather than silently emptied.
+    const sid = parseInt(store_id, 10);
+    if (!storeAllowed(req, sid)) return res.status(403).json({ success: false, error: 'forbidden_store', store: sid });
+    q += ' AND po.store_id = ?'; params.push(sid);
+  } else if (Array.isArray(storeIdsOf(req))) {
+    // No filter means the caller's own stores plus the orders raised for no
+    // store in particular — never everybody's.
+    const scope = storeIdsOf(req);
+    if (!scope.length) q += ' AND po.store_id IS NULL';
+    else { q += ` AND (po.store_id IS NULL OR po.store_id IN (${scope.map(() => '?').join(',')}))`; params.push(...scope); }
+  }
   if (month)    { q += ' AND substr(po.date, 1, 7) = ?'; params.push(String(month).slice(0, 7)); }
   if (search) {
     q += ` AND (po.po_number LIKE ? OR po.supplier LIKE ? OR po.id IN (
@@ -1160,6 +1183,7 @@ router.get('/api/retail-admin/receiving/deliveries/:id', requireRetailAdmin, (re
 router.get('/api/retail-admin/purchases/:id/receipts', requireRetailAdmin, (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!poInScope(req, po)) return res.status(403).json({ success: false, error: 'forbidden_store', store: po.store_id });
   const rows = tdb().prepare(DELIVERY_SQL + ' AND r.po_id = ? ORDER BY r.received_at, r.id')
     .all(currentTenantId(), po.id)
     .filter(isJournalRow)
@@ -1250,6 +1274,7 @@ router.post('/api/retail-admin/purchases/copy-from-kitchen', requireRetailAdmin,
   if (!storeId || !inventory.getStore(storeId)) {
     return res.status(400).json({ success: false, error: 'store_required' });
   }
+  if (!storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
   const marks = ids.map(() => '?').join(',');
   const sources = tdb().prepare(
     `SELECT * FROM purchase_orders
@@ -1345,6 +1370,7 @@ router.post('/api/retail-admin/purchases/from-material-requests', requireRetailA
   if (!storeId || !inventory.getStore(storeId)) {
     return res.status(400).json({ success: false, error: 'store_required' });
   }
+  if (!storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
   const marks = ids.map(() => '?').join(',');
   const lines = tdb().prepare(`
     SELECT i.*, r.mr_number, r.status AS request_status, r.archived_at
@@ -1451,6 +1477,7 @@ function rollUpMaterialRequest(requestId) {
 router.get('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!poInScope(req, po)) return res.status(403).json({ success: false, error: 'forbidden_store', store: po.store_id });
   const items = tdb().prepare('SELECT * FROM po_line_items WHERE po_id = ? ORDER BY sort_order, id').all(po.id);
   // Current shelf qty at the PO's store for context next to each line.
   if (po.store_id) {
@@ -1518,6 +1545,7 @@ router.get('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => 
 router.get('/api/retail-admin/purchases/:id/history', requireRetailAdmin, (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!poInScope(req, po)) return res.status(403).json({ success: false, error: 'forbidden_store', store: po.store_id });
   const items = tdb().prepare('SELECT id, store_product_id FROM po_line_items WHERE po_id = ?').all(po.id);
   const tid = Number(currentTenantId()) || 1;
   const prevStmt = tdb().prepare(`
@@ -2016,8 +2044,9 @@ function recordedOffChase(tid) {
 function rematchTarget(req, res) {
   const tid = Number(currentTenantId()) || 1;
   const po = tdb().prepare(
-    'SELECT id FROM purchase_orders WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
+    'SELECT id, store_id FROM purchase_orders WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
   if (!po) { res.status(404).json({ success: false, error: 'not_found' }); return null; }
+  if (!poInScope(req, po)) { res.status(403).json({ success: false, error: 'forbidden_store', store: po.store_id }); return null; }
   return po;
 }
 
@@ -2317,6 +2346,10 @@ router.post('/api/retail-admin/purchasing/invoices', requireRetailAdmin, express
   const supplier = invSupplierOrUnspecified(req.body && req.body.supplier);
   if (!(parseFloat(amount) > 0)) return res.status(400).json({ success: false, error: 'amount_required' });
   if (!date) return res.status(400).json({ success: false, error: 'date_required' });
+  // §520: an invoice filed under a store outside the caller's pin is refused.
+  if (store_id && !storeAllowed(req, parseInt(store_id, 10))) {
+    return res.status(403).json({ success: false, error: 'forbidden_store', store: parseInt(store_id, 10) });
+  }
   const tid = Number(currentTenantId()) || 1;
   try {
     let id;
@@ -2350,6 +2383,14 @@ router.put('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, expr
   const supplier = invSupplierOrUnspecified(req.body && req.body.supplier);
   if (!(parseFloat(amount) > 0)) return res.status(400).json({ success: false, error: 'amount_required' });
   if (!date) return res.status(400).json({ success: false, error: 'date_required' });
+  // §520: neither the invoice's current store nor the one it is moved to may
+  // sit outside the caller's pin.
+  if (inv.store_id != null && !storeAllowed(req, inv.store_id)) {
+    return res.status(403).json({ success: false, error: 'forbidden_store', store: inv.store_id });
+  }
+  if (store_id && !storeAllowed(req, parseInt(store_id, 10))) {
+    return res.status(403).json({ success: false, error: 'forbidden_store', store: parseInt(store_id, 10) });
+  }
   try {
     tdb().transaction(() => {
       tdb().prepare(`UPDATE invoices SET supplier=?, invoice_number=?, amount=?, date=?, due_date=?, store_id=?, notes=?,
@@ -2388,8 +2429,9 @@ router.delete('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, (
 // carry one cash line among invoiced ones. A toggle, never destructive.
 router.put('/api/retail-admin/purchasing/po/:id/no-invoice', requireRetailAdmin, express.json(), (req, res) => {
   const tid = Number(currentTenantId()) || 1;
-  const po = tdb().prepare('SELECT id FROM purchase_orders WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
+  const po = tdb().prepare('SELECT id, store_id FROM purchase_orders WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!poInScope(req, po)) return res.status(403).json({ success: false, error: 'forbidden_store', store: po.store_id });
   const flag = !!(req.body && req.body.no_invoice_expected);
   // The order's own column, and nothing else — lib/invoice-mark.js holds the
   // reason. One order's lines are attributed line by line, so this order can be
@@ -2560,6 +2602,7 @@ router.get('/api/retail-admin/reorder', requireRetailAdmin, (req, res) => {
 router.post('/api/retail-admin/purchases/:id/backorder', requireRetailAdmin, (req, res) => {
   const src = getRetailPO(req.params.id);
   if (!src) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!poInScope(req, src)) return res.status(403).json({ success: false, error: 'forbidden_store', store: src.store_id });
   const lines = tdb().prepare(`
     SELECT * FROM po_line_items WHERE po_id = ? AND (COALESCE(qty_received, qty) < qty) ORDER BY sort_order, id
   `).all(src.id);
@@ -2599,6 +2642,7 @@ router.post('/api/retail-admin/purchases/:id/backorder', requireRetailAdmin, (re
 router.put('/api/retail-admin/purchases/:id/landed', requireRetailAdmin, express.json(), (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!poInScope(req, po)) return res.status(403).json({ success: false, error: 'forbidden_store', store: po.store_id });
   const num = v => Math.max(0, parseFloat(v) || 0);
   const { freight, tax, handling } = req.body || {};
   tdb().prepare('UPDATE purchase_orders SET extra_freight=?, extra_tax=?, extra_handling=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
@@ -2750,6 +2794,7 @@ router.post('/api/retail-admin/purchases', requireRetailAdmin, express.json(), (
   if (!storeId || !inventory.getStore(storeId)) {
     return res.status(400).json({ success: false, error: 'store_required' });
   }
+  if (!storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
   if (lineConflict(items)) return res.status(400).json({ success: false, error: 'line_conflict' });
   if (lineUnnamed(items)) return res.status(400).json({ success: false, error: 'name_required' });
   try {
@@ -2775,6 +2820,7 @@ router.post('/api/retail-admin/purchases', requireRetailAdmin, express.json(), (
 router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json(), (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!poInScope(req, po)) return res.status(403).json({ success: false, error: 'forbidden_store', store: po.store_id });
   const { date, delivery_date, supplier, store_id, notes, items } = req.body || {};
   // Once receiving has touched stock, the store + lines are frozen — a moved
   // PO would strand its applied quantities at the old store.
@@ -2788,6 +2834,7 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
   if (!storeId || !inventory.getStore(storeId)) {
     return res.status(400).json({ success: false, error: 'store_required' });
   }
+  if (!storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
   if (lineConflict(items)) return res.status(400).json({ success: false, error: 'line_conflict' });
   if (lineUnnamed(items)) return res.status(400).json({ success: false, error: 'name_required' });
   let lineDiff = null;
@@ -2822,6 +2869,7 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
 router.delete('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!poInScope(req, po)) return res.status(403).json({ success: false, error: 'forbidden_store', store: po.store_id });
   if (po.status !== 'Requested') return res.status(409).json({ success: false, error: 'not_draft' });
   /* Kept for sixty days, header and lines together, so a draft deleted by
      mistake can be put back (audit E-07). Safe HERE and nowhere else in this
@@ -2860,6 +2908,7 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
   }
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!poInScope(req, po)) return res.status(403).json({ success: false, error: 'forbidden_store', store: po.store_id });
   // §325 — ASKED AGAIN NOW THE ORDER IS READ: a receive-only account may mark
   // Delivered only an order already placed (Ordered). A draft, a cancelled
   // order and one already Delivered are the buyer's. Same shape as above, and
@@ -2981,6 +3030,7 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
 router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, express.json(), (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!poInScope(req, po)) return res.status(403).json({ success: false, error: 'forbidden_store', store: po.store_id });
   if (po.status !== 'Delivered') return res.status(409).json({ success: false, error: 'not_delivered' });
   // Reverse off the shelf the goods actually landed on. Identical to
   // po.store_id for every order received before receipts existed.
@@ -3022,6 +3072,7 @@ router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, e
 router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, express.json(), (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!poInScope(req, po)) return res.status(403).json({ success: false, error: 'forbidden_store', store: po.store_id });
   const { receipts } = req.body || {};
   if (!Array.isArray(receipts)) return res.status(400).json({ success: false, error: 'receipts_required' });
   // Reasons are resolved and refused BEFORE the transaction opens, so a bad

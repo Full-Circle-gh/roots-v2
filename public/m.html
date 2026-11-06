@@ -17229,9 +17229,14 @@ function pwStep1(){
   return pwField(T('Supplier','供应商'),`<button class="card" style="display:flex;align-items:center;gap:10px;padding:12px 14px;width:100%;text-align:left;font-size:15px;cursor:pointer" onclick="APP.cmd('pwSup','order')">
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sup}</span><span style="display:flex;color:var(--text-secondary)">${ic('chevron-down',18)}</span></button>`,
       T('Optional — leave empty for a mixed or one-off buy.','可选 —— 混合或一次性采购可留空。'))
-    +pwField(T('Deliver to','收货门店'),stores.length
+    +pwField(T('Deliver to','收货门店'),stores.length>1
       ?`<select onchange="APP.cmd('pwHead','store_id',this.value)" style="width:100%">${stores.map(s=>`<option value="${escAttr(s.id)}"${Number(s.id)===Number(w.store_id)?' selected':''}>${escAttr(pwStoreName(s.id))}</option>`).join('')}</select>`
-      :`<span style="font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
+      :stores.length===1
+        /* §520 — a picker that can pick one thing is not a choice: the store's
+           own name stands where the select was. The select stays in the DOM,
+           undrawn, so the value it carries keeps working. */
+        ?`<select onchange="APP.cmd('pwHead','store_id',this.value)" style="display:none">${stores.map(s=>`<option value="${escAttr(s.id)}"${Number(s.id)===Number(w.store_id)?' selected':''}>${escAttr(pwStoreName(s.id))}</option>`).join('')}</select><span style="font-size:15px">${escAttr(pwStoreName(stores[0].id))}</span>`
+        :`<span style="font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
     +pwField(T('Order date','下单日期'),`<input type="date" value="${escAttr(w.date)}" onchange="APP.cmd('pwHead','date',this.value)">`,
       T('Items can arrive on different days.','每件商品的到货时间可能不同。'))
     +pwField(T('Note','备注'),`<input id="mPwNote" value="${escAttr(w.notes)}" placeholder="${T('Anything the receiver should know','收货人需要知道的信息')}" oninput="APP.cmd('pwHead','notes',this.value)">`);
@@ -17530,9 +17535,12 @@ function pkFootHtml(){
   return `${k.err?`<div style="font-size:14px;color:var(--brick-ink);line-height:1.5">${k.err}</div>`:''}
     <div style="display:flex;gap:10px">
       <label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:500;color:var(--text-secondary)">${T('File under store','归属门店')}</span>
-        <select onchange="APP.cmd('pkField','store',this.value)" style="width:100%">${stores.length
-          ?stores.map(s=>`<option value="${escAttr(s.id)}"${Number(s.id)===Number(k.store)?' selected':''}>${escAttr(pwStoreName(s.id))}</option>`).join('')
-          :`<option value="">${T('No stores','暂无门店')}</option>`}</select></label>
+        ${stores.length>1
+          ?`<select onchange="APP.cmd('pkField','store',this.value)" style="width:100%">${stores.map(s=>`<option value="${escAttr(s.id)}"${Number(s.id)===Number(k.store)?' selected':''}>${escAttr(pwStoreName(s.id))}</option>`).join('')}</select>`
+          :stores.length===1
+            /* §520 — one store means no picker; the name stands instead. */
+            ?`<select onchange="APP.cmd('pkField','store',this.value)" style="display:none">${stores.map(s=>`<option value="${escAttr(s.id)}"${Number(s.id)===Number(k.store)?' selected':''}>${escAttr(pwStoreName(s.id))}</option>`).join('')}</select><span style="font-size:15px">${escAttr(pwStoreName(stores[0].id))}</span>`
+            :`<select style="width:100%"><option value="">${T('No stores','暂无门店')}</option></select>`}</label>
       <label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:500;color:var(--text-secondary)">${T('Supplier','供应商')}</span>
         <input value="${escAttr(k.supplier)}" placeholder="${T('Optional — set it later','可稍后填写')}" oninput="APP.cmd('pkField','supplier',this.value)"></label></div>
     <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${n
@@ -21766,8 +21774,8 @@ function rqsActions(r){
       font-size:14px;width:auto;display:inline-flex" onclick="APP.cmd('${cmd}',${id})">${escAttr(rqStoreName(id))}</button>`;
     const ok=m.ef&&m.et&&m.ef!==m.et&&!m.busy;
     return `<div style="margin-top:10px">
-      <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${T('For which store?','送到哪家门店？')}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${stores.map(st=>chip(st.id,m.et===st.id,'rqsTo')).join('')}</div>
+      ${stores.length>1?`<div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${T('For which store?','送到哪家门店？')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${stores.map(st=>chip(st.id,m.et===st.id,'rqsTo')).join('')}</div>`:''}
       <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${T('Ask which location?','向哪个地点申请？')}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${stores.filter(st=>st.id!==m.et).map(st=>chip(st.id,m.ef===st.id,'rqsFrom')).join('')}</div>
       <div style="display:flex;gap:8px">

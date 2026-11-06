@@ -65,6 +65,10 @@ router.get('/api/retail-admin/shop-events', (req, res, next) => {
   if (tenantId == null) return res.status(409).end();
 
   const storeId = parseInt(req.query.store_id, 10);
+  // §520: subscribing to another store's live events is reading that store.
+  if (Number.isFinite(storeId) && !require('../lib/operator-caps').storeAllowed(req, storeId)) {
+    return res.status(403).end();
+  }
   const sub = { id: ++_sid, res, tenantId, storeId: Number.isFinite(storeId) ? storeId : null };
 
   res.set({

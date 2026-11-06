@@ -191,7 +191,10 @@ section('1 · where a voucher applies');
     // The WeChat rail is not configured in this fixture, so the line above
     // would pass without the rule. The rule itself is read off the source: an
     // order carrying a typed-phone voucher is never handed the in-page rail.
-    ok(/const payInPage = wantsWechat && !cv;/.test(require('fs').readFileSync(path.join(ROOT, 'routes', 'shop-menu.js'), 'utf8'))
+    // The rule grew a second rail (Alipay) after this suite was written; the
+    // guard it asserts is unchanged — a typed-phone voucher never gets an
+    // in-page payment page, whichever rail the shop offers.
+    ok(/const payInPage = \(wantsWechat \|\| wantsAlipay\) && !cv;/.test(require('fs').readFileSync(path.join(ROOT, 'routes', 'shop-menu.js'), 'utf8'))
        && /\.\.\.\(payInPage \? \{ pay_url:/.test(require('fs').readFileSync(path.join(ROOT, 'routes', 'shop-menu.js'), 'utf8')),
        'the in-page rail is refused for a typed-phone discount, whatever the customer picked');
     const qo = db.prepare('SELECT * FROM retail_orders WHERE order_no = ?').get(q1.j.data.order_no);

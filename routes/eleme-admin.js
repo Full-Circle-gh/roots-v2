@@ -20,6 +20,8 @@ const { requireRetailAdmin } = require('./retail');
 const eleme = require('../lib/eleme-client');
 const elemeSync = require('../lib/eleme-sync');
 const { channelBlock } = require('../lib/channel-block');
+// §520's lock: connecting a channel is an act ON a store, so it stops at the pin.
+const { storeAllowed, storeIdsOf } = require('../lib/operator-caps');
 
 // ── Token persistence (shared shape with the daemon) ───────────────────────────
 function saveToken(db, account, tok) {
@@ -144,7 +146,9 @@ router.get('/api/retail-admin/eleme/stores', requireRetailAdmin, (req, res) => {
     `).all();
     const sessionDir = path.join(__dirname, '..', 'data', 'eleme-sessions');
     for (const s of stores) s.sessionActive = fs.existsSync(path.join(sessionDir, `${s.code}-session.json`));
-    res.json({ success: true, data: stores });
+    // §520: the board lists the caller's stores only.
+    const eScope = storeIdsOf(req);
+    res.json({ success: true, data: Array.isArray(eScope) ? stores.filter(s => eScope.includes(Number(s.id))) : stores });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -153,6 +157,8 @@ router.post('/api/retail-admin/eleme/shop', requireRetailAdmin, express.json(), 
   const db = tdb();
   const { storeId, storeCode, shopId, shopName } = req.body || {};
   if (!storeId || !storeCode) return res.status(400).json({ success: false, error: 'storeId and storeCode required' });
+  // §520: linking a shop id is an act on that store's channel.
+  if (!storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
   try {
     db.prepare(`
       INSERT INTO eleme_shops (retail_store_id, store_code, shop_id, shop_name, updated_at)
@@ -597,6 +603,7 @@ router.get('/api/retail-admin/eleme/oauth/start', requireRetailAdmin, (req, res)
     const storeId   = parseInt(req.query.storeId, 10);
     const storeCode = String(req.query.storeCode || '');
     if (!storeId || !storeCode) return res.status(400).json({ success: false, error: 'storeId and storeCode required' });
+    if (!storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
     if (!process.env.ELEME_REDIRECT_URI) return res.status(400).json({ success: false, error: 'ELEME_REDIRECT_URI not set on the server.' });
     const url = eleme.authorizeUrl(makeState(storeId, storeCode));
     res.json({ success: true, url });
