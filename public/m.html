@@ -18704,7 +18704,8 @@ function sheetSupOwed(){
   const edit=mCan('purchasing:edit');
   const w=supOwedWords(a.owed);
   const name=LANG==='en'?a.name:(a.name_cn||a.name);
-  const live=(a.entries||[]).filter(e=>!e.voided_at);
+  const acctInPeriod=e=>!a.opening||e.kind==='opening'||String(e.date)>String(a.opening.date);
+  const live=(a.entries||[]).filter(e=>!e.voided_at&&acctInPeriod(e));
   const signed=(e)=>e.kind==='payment'?'− '+supMoney(e.amount)
     :e.kind==='adjustment'?(Number(e.amount)<0?'− ':'+ ')+supMoney(e.amount):supMoney(e.amount);
   const entryRow=e=>`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">

@@ -5,7 +5,8 @@
 // WHAT THIS HOLDS. A few suppliers deliver now and are paid later, and the shop
 // tracked what it owed them on a spreadsheet. The account replaces the sheet:
 //
-//   owed = starting balance + goods DELIVERED after its date − payments + corrections
+//   owed = starting balance + goods DELIVERED after its date − payments after its
+//   date + corrections after its date
 //
 // and the rules §286 records around that figure:
 //   * goods come from purchase orders, valued the invoice screen's way
@@ -212,7 +213,7 @@ try {
   ok('owed = 300 + RPO-5 30 − 120 − 10 = 200', a.owed === 200, a.owed);
 
   // ── Voiding ─────────────────────────────────────────────────────────────
-  const payId = a.entries.find(e => e.kind === 'payment').id;
+  const payId = a.entries.find(e => e.kind === 'payment' && !e.voided_at).id;
   r = await send('POST', `/suppliers/1/account/entries/${payId}/void`);
   ok('a wrong payment is voided and stops counting: 200 + 120 = 320', r.status === 200 && r.json.data.owed === 320, r.json.data);
   ok('the voided row is kept with who voided it',
@@ -222,18 +223,27 @@ try {
   r = await send('POST', '/suppliers/2/account/entries/' + payId + '/void');
   ok('an entry cannot be voided through another supplier', r.status === 404, r);
 
+  // ── A new month does not inherit the last month's payments ───────────────
+  r = await send('POST', '/suppliers/1/account/entries', { kind: 'opening', amount: 3255, date: '2026-10-31', note: '10月' });
+  a = r.json.data;
+  ok('a later starting balance ignores payments dated on or before it',
+     a.opening.date === '2026-10-31' && a.paid === 0 && a.owed === 3255, { paid: a.paid, owed: a.owed, goods: a.goods });
+  r = await send('POST', '/suppliers/1/account/entries', { kind: 'payment', amount: 500, date: '2026-11-05', note: '10月付' });
+  ok('payments after the starting balance count in the new period: 3255 − 500 = 2755',
+     r.status === 200 && r.json.data.owed === 2755, r.json.data);
+
   // ── The list ────────────────────────────────────────────────────────────
   r = await send('GET', '/supplier-accounts');
   const row = r.json.data.suppliers[0] || {};
   ok('the list carries each credit supplier with what we owe',
-     r.json.data.suppliers.length === 1 && row.name === 'Tofu Co' && row.owed === 320 && r.json.data.total_owed === 320, r.json.data);
+     r.json.data.suppliers.length === 1 && row.name === 'Tofu Co' && row.owed === 2755 && r.json.data.total_owed === 2755, r.json.data);
 
   // ── Switching off keeps the account ─────────────────────────────────────
   await send('PUT', '/suppliers/1/account', { on_credit: false });
   r = await send('GET', '/supplier-accounts');
   ok('switched off, the supplier leaves the list', r.json.data.suppliers.length === 0, r.json.data);
   await send('PUT', '/suppliers/1/account', { on_credit: true });
-  ok('switched back on, the account is exactly as it was', (await acct()).owed === 320);
+  ok('switched back on, the account is exactly as it was', (await acct()).owed === 2755);
 
   r = await send('GET', '/suppliers/999/account');
   ok('an unknown supplier is a 404', r.status === 404, r);
