@@ -5895,9 +5895,15 @@ function toast(msg, kind = 'ok') {
   const t = $('#toast');
   t.textContent = msg;
   t.className = 'toast ' + kind;
-  requestAnimationFrame(() => t.classList.add('show'));
   clearTimeout(toast._h);
-  toast._h = setTimeout(() => t.classList.remove('show'), 2600);
+  // Show and arm the hide in the same frame callback: rAF is paused while the
+  // tab is hidden but timers are not, so a hide armed out here fires first and
+  // the late show sticks the toast on screen once the tab comes back.
+  requestAnimationFrame(() => {
+    t.classList.add('show');
+    clearTimeout(toast._h);
+    toast._h = setTimeout(() => t.classList.remove('show'), 2600);
+  });
 }
 function uid() { return 'b' + Math.random().toString(36).slice(2, 9); }
 

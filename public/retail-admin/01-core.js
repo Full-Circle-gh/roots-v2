@@ -111,12 +111,20 @@ function toast(msg, kind = 'ok', opts) {
             : (kind === 'success' || kind === 'ok') ? 'ok'
             : kind;
   t.className = 'toast ' + cls;
-  requestAnimationFrame(() => t.classList.add('show'));
   clearTimeout(toast._h);
   // Errors linger longer so the operator can read what went wrong before it
   // fades; callers can override with an explicit duration.
   const dur = ms != null ? ms : (cls === 'err' ? 6000 : 2600);
-  toast._h = setTimeout(() => t.classList.remove('show'), dur);
+  // Show and arm the hide in the SAME frame callback. rAF is paused while the
+  // tab is hidden or the window fully occluded, but timers are not: with the
+  // hide armed out here it fired first, and the show — delivered late, when
+  // the operator came back — stuck the toast on screen with nothing left to
+  // remove it (the "Courier dispatched" pill that would not leave Orders).
+  requestAnimationFrame(() => {
+    t.classList.add('show');
+    clearTimeout(toast._h);
+    toast._h = setTimeout(() => t.classList.remove('show'), dur);
+  });
 }
 /* ══════════════════════════════════════════════════════════════════════════
    ERROR CODES, IN WORDS (audit A-09 / G-01)
