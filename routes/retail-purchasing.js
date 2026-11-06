@@ -1794,7 +1794,9 @@ function awaitingForSupplier(tid, name) {
 // spreadsheet until this existed.
 //
 // WHAT WE OWE IS COMPUTED, NEVER TYPED:
-//   starting balance + goods DELIVERED after its date − payments + corrections
+//   starting balance + goods DELIVERED after its date − payments after its date
+//   + corrections after its date. A new starting balance closes the prior period:
+//   lump payments recorded for an earlier month must not reduce the next one.
 // The goods are the invoice screen's own amount per line — billableQty × unit
 // cost, the supplier resolved by SUPPLIER_EXPR, tenant-scoped and never
 // scope-scoped, superseded originals stood down — so this account, the
@@ -1808,6 +1810,12 @@ function awaitingForSupplier(tid, name) {
 // same goods twice. scripts/test_supplier_account.js holds that.
 const ACCT_KINDS = new Set(['opening', 'payment', 'adjustment']);
 const ACCT_DELIVERED = new Set(['Delivered', 'Confirmed']);
+
+// Payments and corrections follow the same cutoff as delivered POs: only after
+// the live starting balance's date count toward what we owe now.
+function acctAfterOpening(e, opening) {
+  return !opening || String(e.date) > String(opening.date);
+}
 
 function supplierAccount(tid, sup) {
   const entries = tdb().prepare(`
@@ -1841,10 +1849,10 @@ function supplierAccount(tid, sup) {
   const sum = (arr) => round2(arr.reduce((a, x) => a + (Number(x.amount) || 0), 0));
   const goods      = sum(orders.filter(o => o.delivered));
   const on_the_way = sum(orders.filter(o => !o.delivered));
-  const paid       = sum(live.filter(e => e.kind === 'payment'));
-  const adjusted   = sum(live.filter(e => e.kind === 'adjustment'));
+  const paid       = sum(live.filter(e => e.kind === 'payment' && acctAfterOpening(e, opening)));
+  const adjusted   = sum(live.filter(e => e.kind === 'adjustment' && acctAfterOpening(e, opening)));
   const start      = opening ? round2(opening.amount) : 0;
-  const lastPay    = live.find(e => e.kind === 'payment') || null;
+  const lastPay    = live.find(e => e.kind === 'payment' && acctAfterOpening(e, opening)) || null;
   return {
     supplier_id: sup.id, name: sup.name, name_cn: sup.name_cn || null,
     payment_method: sup.payment_method || null, on_credit: !!sup.on_credit,

@@ -4677,7 +4677,8 @@
       a.paid ? `− ${esc(T('Paid', '已付'))} ${money(a.paid)}` : '',
       a.adjusted ? `${sign(a.adjusted).slice(0, 2)}${esc(T('Correction', '调整'))} ${money(Math.abs(a.adjusted))}` : '',
     ].filter(Boolean).join(' &nbsp; ');
-    const live = (a.entries || []).filter(e => !e.voided_at);
+    const acctInPeriod = (e) => !a.opening || e.kind === 'opening' || String(e.date) > String(a.opening.date);
+    const live = (a.entries || []).filter(e => !e.voided_at && acctInPeriod(e));
     const entryRow = (e) => `<tr>
         <td class="pu2-num">${esc(e.date)}</td>
         <td>${esc(ACCT_KIND[e.kind] ? ACCT_KIND[e.kind]() : e.kind)}</td>
