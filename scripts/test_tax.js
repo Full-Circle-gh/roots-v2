@@ -253,6 +253,10 @@ function handlerFor(db) {
     // through. No case here sends a held_bill_id, so neither is reached.
     TILL_BILL_ID: new Function(`${(RETAIL_SRC.match(/\nconst TILL_BILL_ID = [^\n]*/) || [''])[0]}\nreturn TILL_BILL_ID;`)(),
     inventory: require(path.join(ROOT, 'lib', 'inventory')),
+    // §520 — the create route's lock guard reads the pin off this module. The
+    // sandbox has no session, so unscoped (every store allowed) is the honest
+    // stub: these cases are about tax, not scope.
+    operatorCaps: { storeAllowed: () => true, storeIdsOf: () => null },
   };
   const keys = Object.keys(scope);
   return new Function(...keys, `return async (req, res) => {${BODY}};`)(...keys.map((k) => scope[k]));
