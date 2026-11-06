@@ -12193,6 +12193,11 @@ const ONW_ERR_WHERE = {
   manual_discount_till_only: 'money',
   bad_store_id: 'route', store_not_found: 'route',
   store_required_for_counter: 'route',
+  // §520 — the lock's refusal: the pin on this login does not hold the store
+  // the order was rung at. Unreachable from this form once the store list is
+  // scoped (the picker never offers another store), mapped for the same
+  // reason §44's three doors are: the endpoint can send it to any caller.
+  forbidden_store: 'route',
   bad_fulfillment_type: 'route', fulfillment_type_required: 'route',
   payment_method_required_for_counter: 'route',
   pos_closed_for_store: 'route',
@@ -12296,6 +12301,10 @@ function ordNewErrText(code, detail, productId) {
     // operator to pick from a list with nothing in it.
     store_required_for_counter: cuT('A counter sale needs a store — it is the till it was rung up at. No store is set up yet.',
                                     '前台销售必须选择门店(即收银所在门店)。目前还没有设置门店。'),
+    // §520 — the lock's refusal, in the same 'route' slot the store control
+    // sits in. Pair composed under vocabulary Rule 4 (v1.389).
+    forbidden_store: cuT('That store is not one of this login\'s stores. Whoever manages your team can change which stores it holds.',
+                         '该门店不在本账号的门店范围内。可请团队管理员调整所属门店。'),
     fulfillment_type_required: cuT('Pick how this order is fulfilled.', '请选择履约方式。'),
     bad_fulfillment_type: cuT('Pick how this order is fulfilled.', '请选择履约方式。'),
     // A counter sale must name the wallet that took the money, or the sale
