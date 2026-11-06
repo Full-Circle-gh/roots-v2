@@ -351,6 +351,11 @@ router.put('/api/backend/team/:id', requireCap('team:manage'), express.json(), (
   if (isStorePinned(req.session.tenantId, newRole)) {
     let storeId = body.retail_store_id !== undefined ? parseInt(body.retail_store_id, 10) : u.retail_store_id;
     if (!storeId) return res.status(400).json({ error: 'Pick a store for this member · 请为该成员选择门店' });
+    // §520: pinning a clerk to a store the caller cannot see is refused.
+    const pinCaller = loadCaller(req);
+    if (pinCaller && Array.isArray(pinCaller.scopeStores) && !pinCaller.scopeStores.map(Number).includes(Number(storeId))) {
+      return res.status(403).json({ error: 'You can assign only your own stores · 你只能分配自己门店', code: 'store_out_of_scope' });
+    }
     sets.push('retail_store_id = ?'); args.push(storeId);
   } else if (body.role !== undefined && u.retail_store_id != null) {
     sets.push('retail_store_id = ?'); args.push(null);
@@ -521,6 +526,13 @@ router.put('/api/backend/team/:id/permissions', requireCap('team:permissions'), 
       const valid = new Set(conn.prepare('SELECT id FROM retail_stores').all().map(s => s.id));
       storeIds = storeIds.filter(id => valid.has(id));
     } catch (e) { /* connection/table not available — keep parsed ids */ }
+    // §520: a scoped manager pins people to their own stores only — handing
+    // out a store they cannot see would be a lock they cannot open.
+    const callerScope = loadCaller(req);
+    if (callerScope && Array.isArray(callerScope.scopeStores)) {
+      const mine = new Set(callerScope.scopeStores.map(Number));
+      storeIds = storeIds.filter(id => mine.has(id));
+    }
   }
 
   const write = db.transaction(() => {
@@ -956,11 +968,12 @@ router.delete('/api/backend/roles/:key', requireCap('team:permissions'), express
    no gate of its own, and stores:edit or team:manage, the phone's. Through
    requireCap, like every other write in this file, so it holds whether or not
    the shop has switched enforcement on — the Team page's writes do the same.
-   The list is a read and stays open, as GET /api/backend/team (the whole
-   roster) is: what a screen SHOWS is the client's job. */
+   The per-store staff list below wears requireOwnStore too (§520): a read
+   carrying a store id is held to the pin exactly like a write. The whole
+   roster GET /api/backend/team stays open — it carries no store id. */
 
 // List the stock clerks for one store.
-router.get('/api/backend/stores/:storeId/staff', requireBackend, (req, res) => {
+router.get('/api/backend/stores/:storeId/staff', requireBackend, requireOwnStore, (req, res) => {
   const storeId = parseInt(req.params.storeId, 10);
   if (!storeId) return res.status(400).json({ error: 'Bad store · 门店无效' });
   const rows = db.prepare(

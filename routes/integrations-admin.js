@@ -330,6 +330,9 @@ router.get('/api/retail-admin/channel-hub/meituan/stores', requireRetailAdmin, (
         'SELECT code, name_en AS name, name_cn AS nameCn FROM retail_stores WHERE is_active = 1 ORDER BY sort_order, id'
       ).all();
     } catch (_) {}
+    // §520: the hub reports the caller's stores only.
+    const hubScope = require('../lib/operator-caps').storeCodesOf(db, req);
+    if (Array.isArray(hubScope)) stores = stores.filter(s => hubScope.indexOf(s.code) !== -1);
     let mtCreds = {};
     try { mtCreds = (getTenantCreds(id).integrations || {}).meituan || {}; } catch (_) {}
     const sessions = {};

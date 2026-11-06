@@ -208,7 +208,9 @@ const row = (id) => db.prepare('SELECT is_active, password FROM tenant_users WHE
     r6 = await atStore(OTHER)('scopedOwner', 'DELETE', '/' + o);
     is(r6.status, 200, 'the owner, even pinned to one store: unchanged');
     r6 = await atStore(OTHER)('scoped', 'GET', '');
-    is(r6.status, 200, 'the list stays a read');
+    is(r6.status, 403, '§520: the list is held to the pin like a write');
+    r6 = await atStore(STORE)('scoped', 'GET', '');
+    is(r6.status, 200, '…and stays open at their own store');
   } finally {
     server.close();
   }

@@ -557,6 +557,40 @@ const tax = require('../lib/tax');
 const tillDiscount = require('../lib/till-discount');
 const tillPin = require('../lib/till-pin');
 const operatorCaps = require('../lib/operator-caps');
+/* §520 — ONE GATE FOR THE WHOLE ORDERS FAMILY. Fifty-odd actions hang off
+   /api/retail-admin/orders/:id and each loads its order separately; holding
+   every one of them to the pin by hand is fifty chances to miss one. This
+   runs before them all: resolve the caller's pin the same way
+   requireRetailAdmin does, read the order's store, refuse what lies outside.
+   Fail-open on any hiccup, matching the RBAC layer's contract — a gate that
+   throws must not take the orders screen down for everybody. */
+function orderStoreGate(req, res, next) {
+  try {
+    // Inside a mounted router.use, req.path is RELATIVE to the mount — the
+    // whole path is baseUrl plus path, and the regex needs the whole path.
+    const m = /^\/api\/retail-admin\/orders\/(\d+)/.exec((req.baseUrl || '') + (req.path || ''));
+    if (!m) return next();
+    const uid = req.session && req.session.backendUserId;
+    if (!uid) return next();
+    const u = db.prepare('SELECT id, tenant_id, role, retail_store_id, scope_all FROM tenant_users WHERE id = ? AND is_active = 1').get(uid);
+    if (!u || u.role === 'owner') return next();
+    const tenant = db.prepare('SELECT id, features_json, roles_version FROM tenants WHERE id = ?').get(u.tenant_id);
+    const { scopeStores } = operatorCaps.resolveOperator(db, u, tenant || null);
+    if (!Array.isArray(scopeStores)) return next();
+    // The seam connection the routes themselves read, so the gate and the
+    // handler can never disagree about which database an order lives in;
+    // outside a tenant context (or once data isolation is on) fall back to
+    // the tenant's own connection.
+    let conn = null;
+    try { conn = require('../lib/tenant-db').tdb(); } catch (e) { conn = getTenantDb(u.tenant_id); }
+    const o = conn.prepare('SELECT store_id FROM retail_orders WHERE id = ?').get(Number(m[1]));
+    if (o && o.store_id != null && !scopeStores.map(Number).includes(Number(o.store_id))) {
+      return res.status(403).json({ success: false, error: 'forbidden_store', store: o.store_id });
+    }
+    return next();
+  } catch (e) { return next(); }
+}
+router.use('/api/retail-admin/orders', orderStoreGate);
 // §230 — the QR menu's per-type allow-list, so the editor's eye and the
 // live counter menu resolve a block from the same list.
 const qrBlockDefaults = require('../lib/qr-menu-block-defaults');
@@ -16257,6 +16291,16 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // row only); with no store_id we sum sellable stock across all active stores,
   // matching the storefront's `stock` column.
   const storeId = (req.query.store_id || '').trim();
+  // §520: the tile's store param is a store id like any other — outside the
+  // pin, refused. A scoped caller with no param gets their own stores summed,
+  // never everybody's.
+  if (storeId && !operatorCaps.storeAllowed(req, Number(storeId))) {
+    return res.status(403).json({ success: false, error: 'forbidden_store', store: Number(storeId) });
+  }
+  const opsScope = !storeId ? operatorCaps.storeIdsOf(req) : null;
+  const opsPh = opsScope && opsScope.length ? opsScope.map((n, i) => `@ops_scope_${i}`).join(',') : '';
+  const opsBind = {};
+  if (opsScope) opsScope.forEach((n, i) => { opsBind[`ops_scope_${i}`] = n; });
   const REAL_STOCK = storeId
     ? `COALESCE(
         (SELECT rss.physical_qty
@@ -16267,14 +16311,14 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         (SELECT SUM(rss.physical_qty)
            FROM retail_store_stock rss
            JOIN retail_stores      rs ON rs.id = rss.store_id
-          WHERE rss.product_id = p.id AND rs.is_active = 1),
+          WHERE rss.product_id = p.id AND rs.is_active = 1${opsPh ? ` AND rss.store_id IN (${opsPh})` : ''}),
         p.stock_qty, 0)`;
   // When scoped to a store, only surface products actually carried there.
   const STORE_SCOPE = storeId
     ? `AND EXISTS (SELECT 1 FROM retail_store_stock rss
                     WHERE rss.product_id = p.id AND rss.store_id = @store_id)`
     : '';
-  const storeBind = storeId ? { store_id: storeId } : {};
+  const storeBind = storeId ? { store_id: storeId } : { ...opsBind };
   // Per-store low-stock default. When scoped to one store, that store's own
   // low_stock_threshold (if set) sits between the product override and the
   // tenant-wide default: product override → this store's default → global.
@@ -16295,7 +16339,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
                   'qty', COALESCE(rss.physical_qty, 0)))
            FROM retail_store_stock rss
            JOIN retail_stores rs ON rs.id = rss.store_id
-          WHERE rss.product_id = p.id AND rs.is_active = 1) AS stores` : '';
+          WHERE rss.product_id = p.id AND rs.is_active = 1${opsPh ? ` AND rss.store_id IN (${opsPh})` : ''}) AS stores` : '';
   // json_group_array arrives as a string — parse it so clients get an array.
   const parseStores = (it) => {
     if (typeof it.stores === 'string') {
@@ -19999,6 +20043,11 @@ const trimField = v => (v == null ? '' : String(v)).trim().slice(0, 4000);
 // the three chapter notes.
 router.post('/api/retail-admin/reports/read', requireRetailAdmin, express.json({ limit: '64kb' }), async (req, res) => {
   if (!modelGateway.isConfigured()) return res.json({ success: true, data: { available: false } });
+  // §520: a report about a store outside the caller's pin is refused, not summed.
+  const readStore = Number.parseInt(req.body && req.body.store_id, 10);
+  if (Number.isFinite(readStore) && !operatorCaps.storeAllowed(req, readStore)) {
+    return res.status(403).json({ success: false, error: 'forbidden_store', store: readStore });
+  }
   const key = reportWindowKey(req.body);
   const digestStr = reportDigestString(req.body);
   if (!key || !digestStr) return res.status(400).json({ success: false, error: 'bad_digest' });
@@ -22493,6 +22542,8 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   // location-scoped. `options` is absent on a product with no questions.
   if (req.query.with_options === '1' && rows.length) {
     const optStore = parseInt(req.query.store_id, 10) || null;
+    // §520: the sold-out mark is another store's shelf; outside the pin it is refused.
+    if (optStore && !operatorCaps.storeAllowed(req, optStore)) return res.status(403).json({ success: false, error: 'forbidden_store', store: optStore });
     // §492 — and an answer that store's shop has switched off is `out` too,
     // because the create route refuses it for that store.
     const byProduct = productOptions.questionsForProducts(
@@ -23201,6 +23252,8 @@ router.put('/api/retail-admin/orders/till-held/:billId', requireRetailAdmin, exp
   if (!storeId || !tdb().prepare('SELECT id FROM retail_stores WHERE id = ?').get(storeId)) {
     return res.status(404).json({ success: false, error: 'store_not_found' });
   }
+  // §520: holding a bill is an act on that counter's store.
+  if (!operatorCaps.storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
   if (!Array.isArray(b.lines)) return res.status(400).json({ success: false, error: 'no_lines' });
   let expanded = [];
   if (b.lines.length) {
@@ -23540,6 +23593,8 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     if (!storeId) return res.status(400).json({ success: false, error: 'bad_store_id' });
     const store = tdb().prepare('SELECT id FROM retail_stores WHERE id = ?').get(storeId);
     if (!store) return res.status(404).json({ success: false, error: 'store_not_found', store_id: storeId });
+    // §520: ringing a sale at a store outside the caller's pin is refused.
+    if (!operatorCaps.storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
   }
 
   // fulfillment_type is REQUIRED. The seam that let it be absent — declaredFt,
@@ -24149,7 +24204,7 @@ router.delete('/api/retail-admin/order-drafts/:id', requireRetailAdmin, (req, re
 // the list. Anything appended here must be expressible against
 // `retail_orders o LEFT JOIN retail_customers c` alone — that pair is all the
 // COUNT and the export join.
-function buildOrderFilter(query) {
+function buildOrderFilter(query, scope) {
   const { status, q, from, to, store_id, customer_id } = query;
   // Combined-channel view: an explicit ?channel filters to one channel; absent
   // (or 'all') returns every channel, including the read-only Meituan mirror
@@ -24235,6 +24290,12 @@ function buildOrderFilter(query) {
     filterSql += ' AND o.status = ?'; params.push(status);
   }
   if (store_id) { filterSql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10)); }
+  else if (Array.isArray(scope)) {
+    // §520: with no store filter the list is the caller's own stores. An
+    // order belongs to exactly one store, so there is no store-less row to keep.
+    if (!scope.length) filterSql += ' AND 0=1';
+    else { filterSql += ` AND o.store_id IN (${scope.map(() => '?').join(',')})`; params.push(...scope); }
+  }
   // Which DOOR the order came in by, within a shop — 'qr' or 'till' (§44's
   // 2026-09-07 amendment named this column as the distinction, and channel is
   // NOT it: splitting a shop's revenue across two channel lines is the thing
@@ -24286,7 +24347,10 @@ function buildOrderFilter(query) {
 // without a second file.
 router.get('/api/retail-admin/orders/export.csv', requireRetailAdmin, (req, res) => {
   try {
-    const { filterSql, params } = buildOrderFilter(req.query);
+    if (req.query.store_id && !operatorCaps.storeAllowed(req, Number(req.query.store_id))) {
+      return res.status(403).json({ success: false, error: 'forbidden_store', store: Number(req.query.store_id) });
+    }
+    const { filterSql, params } = buildOrderFilter(req.query, operatorCaps.storeIdsOf(req));
     const rows = tdb().prepare(
       `SELECT o.id, o.order_no, o.status, o.channel, o.fulfillment_type,
               o.payment_method, o.subtotal, o.shipping_fee, o.same_day_surcharge_fee, o.total,
@@ -24491,7 +24555,10 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
               `;
   // Built by buildOrderFilter so the page, the pager COUNT and the CSV export
   // are answering the same question.
-  let { filterSql, params } = buildOrderFilter(req.query);
+  if (req.query.store_id && !operatorCaps.storeAllowed(req, Number(req.query.store_id))) {
+    return res.status(403).json({ success: false, error: 'forbidden_store', store: Number(req.query.store_id) });
+  }
+  let { filterSql, params } = buildOrderFilter(req.query, operatorCaps.storeIdsOf(req));
 
   // How many orders match, ignoring the page window. Without this the list
   // silently truncated at `limit` with nothing on screen saying so — orders
@@ -24597,12 +24664,20 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
 // refund pipeline (refund_status), distinct from order.status.
 router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, res) => {
   const { store_id } = req.query;
+  if (store_id && !operatorCaps.storeAllowed(req, Number(store_id))) {
+    return res.status(403).json({ success: false, error: 'forbidden_store', store: Number(store_id) });
+  }
   const sid = store_id ? parseInt(store_id, 10) : null;
+  // §520: no filter means the caller's own stores, never everybody's.
+  const cntScope = sid == null ? operatorCaps.storeIdsOf(req) : null;
   // Mirror the list filter: read-only channel orders (Meituan mirror + Eleme
   // mirror + gzgrocery wholesale mirror) are a stock/ledger record, not
   // operator worklist items, so they never feed the open-work count badges.
-  const where = " AND COALESCE(channel,'') NOT IN ('meituan','eleme','gzgrocery')" + (sid ? ' AND store_id = ?' : '');
-  const args  = sid ? [sid] : [];
+  const where = " AND COALESCE(channel,'') NOT IN ('meituan','eleme','gzgrocery')"
+    + (sid ? ' AND store_id = ?' : '')
+    + (cntScope && cntScope.length ? ` AND store_id IN (${cntScope.map(() => '?').join(',')})` : '')
+    + (cntScope && !cntScope.length ? ' AND 0=1' : '');
+  const args  = sid ? [sid] : (cntScope ? [...cntScope] : []);
 
   const out = { pending_payment: 0, paid: 0, preparing: 0, rider_pickup: 0, dispatched: 0, awaiting_restock: 0, refunds_open: 0 };
   const rows = tdb().prepare(
@@ -24615,10 +24690,16 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
   // "Rider coming" is a Meituan-only bucket (a rider is en route to the store to
   // collect — genuine "have it ready NOW" work), so unlike the other badges it
   // must count PAST the read-only-channel exclusion above. Store filter only.
+  // …with its OWN bind list: the pin clamp rides here too, but the clause
+  // above carries the read-only-channel exclusion this bucket must not have.
+  const riderWhere = (sid ? ' AND store_id = ?' : '')
+    + (cntScope && cntScope.length ? ` AND store_id IN (${cntScope.map(() => '?').join(',')})` : '')
+    + (cntScope && !cntScope.length ? ' AND 0=1' : '');
+  const riderArgs = sid ? [sid] : (cntScope ? [...cntScope] : []);
   out.rider_pickup = tdb().prepare(
     `SELECT COUNT(*) AS n FROM retail_orders
-      WHERE status = 'rider_pickup'${sid ? ' AND store_id = ?' : ''}`
-  ).get(...args).n;
+      WHERE status = 'rider_pickup'${riderWhere}`
+  ).get(...riderArgs).n;
 
   // Mirror the list filter: the Paid/to-ship tab also holds partially-shipped
   // 'dispatched' orders that still owe an unshipped parcel, so the badge must
@@ -24681,7 +24762,15 @@ router.get('/api/retail-admin/order-channel-counts', requireRetailAdmin, (req, r
           LEFT JOIN retail_customers c ON c.id = o.customer_id
               WHERE 1=1`;
   const params = [];
-  if (store_id) { sql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10)); }
+  if (store_id) {
+    if (!operatorCaps.storeAllowed(req, Number(store_id))) return res.status(403).json({ success: false, error: 'forbidden_store', store: Number(store_id) });
+    sql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10));
+  } else if (Array.isArray(operatorCaps.storeIdsOf(req))) {
+    // §520: the channel chips count the caller's own stores, never everybody's.
+    const chScope = operatorCaps.storeIdsOf(req);
+    if (!chScope.length) sql += ' AND 0=1';
+    else { sql += ` AND o.store_id IN (${chScope.map(() => '?').join(',')})`; params.push(...chScope); }
+  }
   if (q) {
     sql += ' AND (o.order_no LIKE ? OR o.recipient_name LIKE ? OR o.recipient_phone LIKE ? OR c.nickname LIKE ?)';
     const s = `%${q}%`; params.push(s, s, s, s);
@@ -29738,6 +29827,10 @@ function _sampleOrderForPreview() {
 router.get('/api/retail-admin/printer/preview', requireRetailAdmin, (req, res) => {
   const prefs = loadPrinterPrefs();
   const storeId = parseInt(req.query.store_id, 10);
+  // §520: the preview pulls that store's last real order — outside the pin, refused.
+  if (Number.isFinite(storeId) && !operatorCaps.storeAllowed(req, storeId)) {
+    return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
+  }
   let tpl = String(req.query.template || 'receipt');
   if (!_feie.TEMPLATE_IDS.includes(tpl)) tpl = 'receipt';
 

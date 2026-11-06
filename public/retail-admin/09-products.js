@@ -609,6 +609,10 @@ async function paLoadStoreStock() {
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');
     PA_STORES = (j.data && j.data.stores) || [];
+    // §520: a pick persisted on another device, or before a pin landed, can
+    // name a store this login no longer sees — fall back rather than count a
+    // shelf the server will refuse.
+    if (PA_STORE !== 'all' && !PA_STORES.some(s => Number(s.id) === Number(PA_STORE))) PA_STORE = PA_STORES.length === 1 ? PA_STORES[0].id : 'all';
     PA_STOCK = {};
     ((j.data && j.data.products) || []).forEach(p => {
       const m = {};

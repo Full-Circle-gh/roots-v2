@@ -29,8 +29,11 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const M = fs.readFileSync(path.join(ROOT, 'public/m.html'), 'utf8');
-const OPS = fs.readFileSync(path.join(ROOT, 'public/retail-admin/02-settings-ops.js'), 'utf8');
+// This PC checks text-auto files out as CRLF while CI reads LF; the slices
+// below match across line breaks, so normalise in the reader (the pattern
+// test_web_site_settings.js and test_mobile_editor_door.js already follow).
+const M = fs.readFileSync(path.join(ROOT, 'public/m.html'), 'utf8').replace(/\r\n/g, '\n');
+const OPS = fs.readFileSync(path.join(ROOT, 'public/retail-admin/02-settings-ops.js'), 'utf8').replace(/\r\n/g, '\n');
 const TacetAutosave = require('../public/tacet-autosave.js');
 
 let passed = 0, failed = 0;

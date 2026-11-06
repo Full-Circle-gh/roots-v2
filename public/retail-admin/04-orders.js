@@ -3637,11 +3637,14 @@ async function ensureOrdersStoreFilter() {
   try {
     const r = await api('/api/retail-admin/stores');
     const stores = r.data || [];
-    if (stores.length <= 1) return;     // No filter UI value with one store.
+    // §520: one store means no picker — the whole screen answers for it.
+    if (stores.length <= 1) { sel.style.display = 'none'; return; }
     const prev = sel.value;
     sel.innerHTML = '<option value="">All stores · 全部门店</option>' +
       stores.map(s => `<option value="${s.id}">${escapeHtml(s.name_en || s.code)}</option>`).join('');
     if (prev) sel.value = prev;
+    // §520: a pinned login lands on its pin, the way the dashboard does.
+    else if (window.RA_STORE_LOCK) sel.value = String(window.RA_STORE_LOCK);
     // Change handler is an inline onchange="ordFilterChanged()" on the element.
     ORDERS_STORE_FILTER_LOADED = true;
   } catch (e) { /* silent — filter just stays minimal */ }

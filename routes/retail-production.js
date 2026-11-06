@@ -120,6 +120,10 @@ router.post('/api/retail-admin/production', requireRetailAdmin, express.json(), 
   if (!storeId || !inventory.getStore(storeId)) {
     return res.status(404).json({ success: false, error: 'store_not_found' });
   }
+  // §520: logging production is an act on that store's shelf.
+  if (!require('../lib/operator-caps').storeAllowed(req, storeId)) {
+    return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
+  }
   if (qtyMade == null) {
     return res.status(400).json({
       success: false, error: 'qty_made_required',

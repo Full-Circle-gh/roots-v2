@@ -2829,7 +2829,10 @@ function tmFillStoreSelect(sel) {
 async function tmLoadStores() {
   try {
     const j = await api('/api/retail-admin/stores');
-    TM_STORES = (j.data || []).filter(s => s.is_active !== 0);
+    // §520 — same rule as the phone: the Team pickers offer the caller's own
+    // stores only; the server intersects what is saved anyway.
+    TM_STORES = (j.data || []).filter(s => s.is_active !== 0)
+      .filter(s => !Array.isArray(window.RA_SCOPE_STORES) || window.RA_SCOPE_STORES.includes(Number(s.id)));
   } catch (e) { TM_STORES = []; }
   tmFillStoreSelect($('#tmIStore'));
   tmFillStoreSelect($('#tmEStore'));

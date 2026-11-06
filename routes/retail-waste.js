@@ -41,6 +41,8 @@ const { recordProductWaste, resolveCostCents, linkLedgerToWaste, wasteUnitCostYu
 const { businessDateForLocation } = require('../lib/business-date');
 const { requireRetailAdmin } = require('./retail');
 const { logActivity } = require('../middleware/auth');
+// §520's lock: waste is recorded AT a store, so every location_id stops at the pin.
+const { storeAllowed, storeIdsOf } = require('../lib/operator-caps');
 
 const router = express.Router();
 
@@ -241,6 +243,7 @@ router.get('/api/retail-admin/waste/products', requireRetailAdmin, requireWasteE
   const db = tdb();
   const locationId = Number(req.query.location_id);
   if (!locationId) return res.status(400).json({ error: 'location_required' });
+  if (!storeAllowed(req, locationId)) return res.status(403).json({ error: 'forbidden_store', store: locationId });
 
   const search = (req.query.search || '').trim();
   const params = [locationId];
@@ -322,12 +325,18 @@ router.get('/api/retail-admin/waste/preview', requireRetailAdmin, requireWasteEn
 // The list's filter — dates, store, reason — as SQL on `w`. One function, so
 // the list and the recalculation (§465) cannot disagree about which entries a
 // filter covers: the recalculation acts on exactly what the screen is showing.
-function listFilter(q) {
+function listFilter(q, scope) {
   const parts = [];
   const params = [];
   if (q.from)        { parts.push('w.business_date >= ?'); params.push(q.from); }
   if (q.to)          { parts.push('w.business_date <= ?'); params.push(q.to); }
   if (q.location_id) { parts.push('w.location_id = ?');    params.push(Number(q.location_id)); }
+  else if (Array.isArray(scope)) {
+    // §520: no store filter means the caller's OWN stores, never everybody's.
+    // An empty pin is a real pin to nothing, hence 0=1 rather than IN ().
+    if (!scope.length) parts.push('0=1');
+    else { parts.push(`w.location_id IN (${scope.map(() => '?').join(',')})`); params.push(...scope); }
+  }
   if (q.reason)      { parts.push('w.reason_code = ?');    params.push(q.reason); }
   return { filter: parts.length ? parts.join(' AND ') : '1=1', params };
 }
@@ -357,7 +366,10 @@ const LIVE_W = LIVE_ONLY.replace(/(reverses_waste_id|voided_by_waste_id)/g, 'w.$
 router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (req, res) => {
   const db = tdb();
   const { include_voided } = req.query;
-  const { filter, params } = listFilter(req.query);
+  if (req.query.location_id && !storeAllowed(req, Number(req.query.location_id))) {
+    return res.status(403).json({ error: 'forbidden_store', store: Number(req.query.location_id) });
+  }
+  const { filter, params } = listFilter(req.query, storeIdsOf(req));
   const live = LIVE_W;
   const listWhere = (include_voided === '1' || include_voided === 'true') ? filter : `${filter} AND ${live}`;
 
@@ -455,8 +467,8 @@ function canRecalculate(req) {
 // What each live entry in the filter would cost today, for the ones that
 // differ. A (product, reason) pair is priced once: a build list's cost walks
 // its materials, and thirty days of one salad is thirty identical walks.
-function recalcChanges(db, q) {
-  const { filter, params } = listFilter(q);
+function recalcChanges(db, q, scope) {
+  const { filter, params } = listFilter(q, scope);
   const rows = db.prepare(`
     SELECT w.id, w.store_product_id, w.qty, w.reason_code, w.business_date,
            w.cost_total_cents, w.is_uncosted,
@@ -487,7 +499,10 @@ function recalcChanges(db, q) {
 
 router.get('/api/retail-admin/waste/recalculate', requireRetailAdmin, requireWasteEnabled, (req, res) => {
   if (!canRecalculate(req)) return res.status(403).json({ error: 'not_allowed' });
-  const changes = recalcChanges(tdb(), req.query);
+  if (req.query.location_id && !storeAllowed(req, Number(req.query.location_id))) {
+    return res.status(403).json({ error: 'forbidden_store', store: Number(req.query.location_id) });
+  }
+  const changes = recalcChanges(tdb(), req.query, storeIdsOf(req));
   res.json({
     success: true,
     data: changes,
@@ -596,6 +611,7 @@ router.post('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, 
   const note       = b.note == null ? null : String(b.note).trim() || null;
 
   if (!locationId) return res.status(400).json({ error: 'location_required' });
+  if (!storeAllowed(req, locationId)) return res.status(403).json({ error: 'forbidden_store', store: locationId });
   if (!productId)  return res.status(400).json({ error: 'store_product_id_required' });
   const lineRefusal = refuseLine(qty, reason, note);
   if (lineRefusal) return res.status(400).json(lineRefusal);
@@ -680,6 +696,7 @@ router.post('/api/retail-admin/waste/bulk', requireRetailAdmin, requireWasteEnab
 
   const locationId = Number(b.location_id);
   if (!locationId) return res.status(400).json({ error: 'location_required' });
+  if (!storeAllowed(req, locationId)) return res.status(403).json({ error: 'forbidden_store', store: locationId });
   const location = db.prepare('SELECT id FROM retail_stores WHERE id = ?').get(locationId);
   if (!location) return res.status(404).json({ error: 'location_not_found' });
 

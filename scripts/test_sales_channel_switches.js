@@ -41,8 +41,11 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const src = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '01-core.js'), 'utf8');
-const css = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.css'), 'utf8');
+// This PC checks text-auto files out as CRLF while CI reads LF; the column-0
+// slice below matches '\n}\n', so normalise in the reader rather than chase a
+// phantom regression (the pattern test_web_site_settings.js already follows).
+const src = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '01-core.js'), 'utf8').replace(/\r\n/g, '\n');
+const css = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.css'), 'utf8').replace(/\r\n/g, '\n');
 
 let pass = 0, fail = 0;
 function ok(m) { pass++; console.log('  ✓ ' + m); }

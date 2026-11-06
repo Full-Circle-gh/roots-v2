@@ -71,6 +71,8 @@ const router = express.Router();
 // 401 (from the orders store-filter on load) bounced retail-admin.html into a
 // /backend/login → /retail-admin redirect loop.
 const { requireRetailAdmin } = require('./retail');
+// §520's shared lock: the one guard every store-keyed route below refuses through.
+const { storeAllowed } = require('../lib/operator-caps');
 // The row ceiling for the cross-store grid (audit J-01) — every product times
 // every location, the fastest-growing read in the admin.
 const { listWindow, windowMeta } = require('../lib/list-window');
@@ -112,6 +114,12 @@ function quickStockStores(req) {
     stores = s && s.is_active !== 0 ? [s] : [];
   } else if (fullAccess) {
     stores = inventory.listStores({ activeOnly: true });
+    // §520: full access still stops at the pin — a scoped operator's quick
+    // stock writes reach their stores only.
+    if (Array.isArray(req.scopeStores)) {
+      const ok = new Set(req.scopeStores.map(Number));
+      stores = stores.filter(s => ok.has(Number(s.id)));
+    }
   } else {
     const u = db.prepare('SELECT retail_store_id FROM users WHERE id = ?').get(req.user.id);
     const assigned = u?.retail_store_id ? inventory.getStore(u.retail_store_id) : null;
@@ -162,11 +170,23 @@ function coerceSyncStartTime(raw) {
 
 // ─── Stores ─────────────────────────────────────────────────────────────
 router.get('/api/retail-admin/stores', requireInventoryRead, (req, res) => {
-  const stores = inventory.listStores({ activeOnly: false });
+  let stores = inventory.listStores({ activeOnly: false });
+  // §520: the lock rides the pin. A scoped login is never OFFERED a store
+  // outside it, so every picker built on this list hides them for free.
+  if (Array.isArray(req.scopeStores)) {
+    const ok = new Set(req.scopeStores.map(Number));
+    stores = stores.filter(s => ok.has(Number(s.id)));
+  }
   res.json({ success: true, data: stores });
 });
 
 router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req, res) => {
+  // §520: opening a new location is a whole-business act. A pinned login —
+  // whose every other screen stops at their own stores — is refused here too,
+  // so the hidden Add-location buttons are not the only thing saying no.
+  if (Array.isArray(req.scopeStores)) {
+    return res.status(403).json({ success: false, error: 'forbidden_store', store: null });
+  }
   const b = req.body || {};
   if (!b.code || typeof b.code !== 'string') return res.status(400).json({ success: false, error: 'code_required' });
   const existing = tdb().prepare('SELECT id FROM retail_stores WHERE code = ?').get(b.code);
@@ -212,6 +232,7 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
 
 router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (!storeAllowed(req, id)) return res.status(403).json({ success: false, error: 'forbidden_store', store: id });
   const existing = inventory.getStore(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','pickup_enabled','sort_order','open_time','close_time','timezone','sync_start_time','low_stock_threshold'];
@@ -269,6 +290,7 @@ function storeSnapshot(s) {
 function storeHistoryTid() { try { return currentTenantId() || ROOTS_TENANT_ID; } catch (e) { return ROOTS_TENANT_ID; } }
 router.get('/api/retail-admin/stores/:id/history', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (!storeAllowed(req, id)) return res.status(403).json({ success: false, error: 'forbidden_store', store: id });
   if (!inventory.getStore(id)) return res.status(404).json({ success: false, error: 'not_found' });
   let rows = [];
   try { rows = editHistory.list(tdb(), storeHistoryTid(), 'store', id); } catch (e) { rows = []; }
@@ -291,6 +313,7 @@ router.post('/api/retail-admin/geocode', requireRetailAdmin, express.json(), asy
 
 router.delete('/api/retail-admin/stores/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (!storeAllowed(req, id)) return res.status(403).json({ success: false, error: 'forbidden_store', store: id });
   // Soft-delete via is_active=0 so historical orders keep the reference.
   const r = tdb().prepare("UPDATE retail_stores SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
@@ -308,7 +331,12 @@ router.get('/api/retail-admin/inventory/grid', requireInventoryRead, (req, res) 
   const publishedOnly = req.query.published === '1';
   const extraWhere = publishedOnly ? ' AND p.is_published = 1' : '';
 
-  const stores = inventory.listStores({ activeOnly: true });
+  let stores = inventory.listStores({ activeOnly: true });
+  // §520: a scoped login's grid carries their stores only.
+  if (Array.isArray(req.scopeStores)) {
+    const ok = new Set(req.scopeStores.map(Number));
+    stores = stores.filter(s => ok.has(Number(s.id)));
+  }
   // Row ceiling (audit J-01). This grid is every product × every location, so
   // it is the fastest-growing read in the admin — an 800-product catalogue
   // across four shops is 3,200 cells. `total` is the real product count, so the
@@ -384,6 +412,7 @@ router.get('/api/retail-admin/inventory/grid', requireInventoryRead, (req, res) 
 // Optional ?published=1 narrows to retail-published only.
 router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (!storeAllowed(req, id)) return res.status(403).json({ success: false, error: 'forbidden_store', store: id });
   if (!inventory.getStore(id)) return res.status(404).json({ success: false, error: 'store_not_found' });
 
   // A kitchen operator may only read their own store's product list. Whether
@@ -477,6 +506,7 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
    added is not derivable from the shelf figure — sales move it too. */
 router.get('/api/retail-admin/stores/:id/stock/added-today', requireInventoryRead, (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (!storeAllowed(req, id)) return res.status(403).json({ success: false, error: 'forbidden_store', store: id });
   if (!inventory.getStore(id)) return res.status(404).json({ success: false, error: 'store_not_found' });
 
   const kitchenOp = !!req.backendUser && req.backendUser.role === 'kitchen';
@@ -528,6 +558,7 @@ router.get('/api/retail-admin/stores/:id/stock/added-today', requireInventoryRea
 router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInventoryRead, express.json(), (req, res) => {
   const storeId   = parseInt(req.params.storeId, 10);
   const productId = parseInt(req.params.productId, 10);
+  if (!storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
   if (!inventory.getStore(storeId)) return res.status(404).json({ success: false, error: 'store_not_found' });
   const product = tdb().prepare('SELECT id FROM store_products WHERE id = ?').get(productId);
   if (!product) return res.status(404).json({ success: false, error: 'product_not_found' });
@@ -740,6 +771,7 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
 // ─── Reservations + ledger (read-only) ──────────────────────────────────
 router.get('/api/retail-admin/stores/:id/reservations', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (!storeAllowed(req, id)) return res.status(403).json({ success: false, error: 'forbidden_store', store: id });
   const status = req.query.status || 'active';
   const rows = tdb().prepare(`
     SELECT r.id, r.product_id, p.name_en, p.name_cn, r.order_id, r.qty, r.channel, r.status,
@@ -754,6 +786,7 @@ router.get('/api/retail-admin/stores/:id/reservations', requireRetailAdmin, (req
 
 router.get('/api/retail-admin/stores/:id/ledger', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (!storeAllowed(req, id)) return res.status(403).json({ success: false, error: 'forbidden_store', store: id });
   const productId = req.query.product_id ? parseInt(req.query.product_id, 10) : null;
   const where = ['store_id = ?'];
   const params = [id];

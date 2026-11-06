@@ -873,6 +873,10 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
   if (!locationId) return bad(res, 404, 'store_not_found');
   const loc = tdb().prepare('SELECT id FROM retail_stores WHERE id = ?').get(locationId);
   if (!loc) return bad(res, 404, 'store_not_found');
+  // §520: the counter catalogue is that store's shelf in selling form.
+  if (!require('../lib/operator-caps').storeAllowed(req, locationId)) {
+    return res.status(403).json({ success: false, error: 'forbidden_store', store: locationId });
+  }
 
   const shop = tdb().prepare('SELECT id FROM shops WHERE location_id = ?').get(locationId) || null;
   const listings = shop

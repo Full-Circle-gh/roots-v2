@@ -797,7 +797,11 @@
     foot.innerHTML = `
       <label class="pu2-f" style="margin:0">
         <span class="lbl">${esc(T('File under store', '归属门店'))}</span>
-        <select class="pu2-input" onchange="puKitchenStore(this.value)">${_stores.length ? storeOpts : `<option value="">${esc(T('No stores', '暂无门店'))}</option>`}</select>
+        ${_stores.length > 1 ? `<select class="pu2-input" onchange="puKitchenStore(this.value)">${storeOpts}</select>`
+          /* §520 — one store means no picker: the name stands, the select
+             stays undrawn so the value it carries keeps working. */
+          : _stores.length === 1 ? `<select class="pu2-input" style="display:none" onchange="puKitchenStore(this.value)">${storeOpts}</select><span class="pu2-input" style="display:inline-flex;align-items:center">${esc([_stores[0].name_en, _stores[0].name_cn].filter(Boolean).join(' · '))}</span>`
+          : `<select class="pu2-input"><option value="">${esc(T('No stores', '暂无门店'))}</option></select>`}
       </label>
       <span class="pu2-mut" style="max-width:340px;line-height:1.4">${esc(n
         ? T('The kitchen keeps its originals. A copy is the same purchase, not a second one — mark it Ordered and it takes over the books and the 发票 chase from the kitchen order it came from.',
@@ -1057,7 +1061,11 @@
     foot.innerHTML = `
       <label class="pu2-f" style="margin:0">
         <span class="lbl">${esc(T('File under store', '归属门店'))}</span>
-        <select class="pu2-input" onchange="puMrStore(this.value)">${_stores.length ? storeOpts : `<option value="">${esc(T('No stores', '暂无门店'))}</option>`}</select>
+        ${_stores.length > 1 ? `<select class="pu2-input" onchange="puMrStore(this.value)">${storeOpts}</select>`
+          /* §520 — one store means no picker: the name stands, the select
+             stays undrawn so the value it carries keeps working. */
+          : _stores.length === 1 ? `<select class="pu2-input" style="display:none" onchange="puMrStore(this.value)">${storeOpts}</select><span class="pu2-input" style="display:inline-flex;align-items:center">${esc([_stores[0].name_en, _stores[0].name_cn].filter(Boolean).join(' · '))}</span>`
+          : `<select class="pu2-input"><option value="">${esc(T('No stores', '暂无门店'))}</option></select>`}
       </label>
       <label class="pu2-f" style="margin:0">
         <span class="lbl">${esc(T('Supplier', '供应商'))}</span>
@@ -1202,7 +1210,10 @@
           </label>
           <label class="pu2-f">
             <span class="lbl">${esc(T('Deliver to', '收货门店'))}</span>
-            <select class="pu2-input" id="pu2-w-store">${storeOptions(e.store_id)}</select>
+            ${_stores.length > 1 ? `<select class="pu2-input" id="pu2-w-store">${storeOptions(e.store_id)}</select>`
+              /* §520 — one store means no picker: the name stands, the select
+                 stays undrawn so the value it carries keeps working. */
+              : `<select class="pu2-input" id="pu2-w-store" style="display:none">${storeOptions(e.store_id)}</select><span class="pu2-input" style="display:inline-flex;align-items:center">${esc([(_stores[0] || {}).name_en, (_stores[0] || {}).name_cn].filter(Boolean).join(' · '))}</span>`}
           </label>
           <label class="pu2-f">
             <span class="lbl">${esc(T('Order date', '下单日期'))}</span>

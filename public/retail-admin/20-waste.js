@@ -475,7 +475,10 @@
       <div class="wst-form">
         <label class="wst-f">
           <span class="wst-f-l">${esc(T('Store', '门店'))}</span>
-          <select id="wst-r-loc" class="wst-sel">${stores}</select>
+          ${_stores.length > 1 ? `<select id="wst-r-loc" class="wst-sel">${stores}</select>`
+            /* §520 — one store means no picker: the name stands, the select
+               stays undrawn so every read of its value keeps working. */
+            : `<select id="wst-r-loc" class="wst-sel" style="display:none">${stores}</select><span class="wst-sel" style="display:inline-flex;align-items:center">${esc(T((_stores[0] || {}).name_en || (_stores[0] || {}).code || '', (_stores[0] || {}).name_cn || (_stores[0] || {}).code || ''))}</span>`}
         </label>
         <label class="wst-f wst-f-wide">
           <span class="wst-f-l">${esc(T('Product', '产品'))}</span>

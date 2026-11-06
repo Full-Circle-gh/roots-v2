@@ -169,7 +169,9 @@ router.get('/api/retail-admin/meituan/stores', requireRetailAdmin, (req, res) =>
         FROM retail_stores
        ORDER BY sort_order, id
     `).all();
-    res.json({ success: true, data: stores });
+    // §520: the board lists the caller's stores only.
+    const mScope = operatorCaps.storeIdsOf(req);
+    res.json({ success: true, data: Array.isArray(mScope) ? stores.filter(s => mScope.includes(Number(s.id))) : stores });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -191,6 +193,8 @@ router.post('/api/retail-admin/meituan/products/:id/map', requireRetailAdmin, ex
   const productId = parseInt(req.params.id);
   const { storeId, storeCode, meituanName, syncEnabled, source } = req.body || {};
   if (!storeId || !storeCode) return res.status(400).json({ success: false, error: 'storeId and storeCode required' });
+  // §520: mapping a product is an act on that store's channel.
+  if (!operatorCaps.storeAllowed(req, storeId)) return res.status(403).json({ success: false, error: 'forbidden_store', store: storeId });
 
   try {
     const r = mapWrite.applyMapName(db, {
