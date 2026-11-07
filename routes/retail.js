@@ -229,6 +229,7 @@ const {
   zoneEnglishName, zoneProvince,
 } = require('../lib/delivery-zones');
 const { computeDeliveryAndPacking, freeShippingTargetFor } = require('../lib/delivery-fees');
+const sameDayBands = require('../lib/same-day-bands');
 // The delivery calendar (batch settings, the tenant's clock, today's batch, the
 // time slots and their check at order time), moved to lib/ (decisions §477).
 const {
@@ -11088,7 +11089,27 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
 
   // Same-day surcharge is added to the shipping line so totals reconcile
   // without a new fee column on retail_orders.
-  shippingFee += sameDaySurcharge;
+  // Distance bands, when switched on, replace that line for a Guangzhou
+  // same-day rider. The shop that sends the order is the start of the
+  // kilometres. A move after payment does not come through here.
+  {
+    const bandKm = sameDayBands.addressPinKm(fulfillingStore, address);
+    const band = sameDayBands.riderCharge({
+      config: cfgValue('delivery.sameDayBands', null),
+      zone, km: bandKm, subtotal,
+      globalFree: cfgValue('fees.freeShippingThreshold', db.FREE_SHIPPING_THRESHOLD_DEFAULT),
+      sameDay: pickedSameDay && !isPickup && !isWaitFlow && !isPreorderPark,
+    });
+    if (band && band.offered === false) {
+      return res.status(400).json({ success: false, error: 'same_day_too_far' });
+    }
+    if (band && band.offered) {
+      shippingFee = band.fee;
+      sameDaySurcharge = 0;
+    } else {
+      shippingFee += sameDaySurcharge;
+    }
+  }
 
   // ── Voucher resolution ───────────────────────────────────────────────
   // Customer sends voucher_code; server re-validates + computes discount. Then
@@ -19648,6 +19669,9 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async
       }
     } else if (k === 'tax.enabled' || k === 'tax.shippingTaxable') {
       if (typeof v !== 'boolean') return res.status(400).json({ success: false, error: 'bad_tax_switch', key: k });
+    } else if (k === 'delivery.sameDayBands') {
+      const parsed = sameDayBands.parseSameDayBands(v);
+      if (parsed.error) return res.status(400).json({ success: false, error: parsed.error });
     }
   }
 
@@ -34690,12 +34714,12 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // what the customer is shown, so a shop that charges tax must show it here or
   // the pay button says one number and the bill is another.
   const quoteTaxCfg = taxSettings();
-  const quoteTax = tax.taxOn({
+  let quoteTax = tax.taxOn({
     subtotalMinor: money.toMinor(priced.subtotal) || 0,
     shippingMinor: money.toMinor(fees.deliveryFee) || 0,
     packingMinor: money.toMinor(fees.packingFee) || 0,
   }, quoteTaxCfg);
-  const grossTotal = Math.max(0, priced.subtotal + fees.deliveryFee + fees.packingFee)
+  let grossTotal = Math.max(0, priced.subtotal + fees.deliveryFee + fees.packingFee)
     + money.fromMinor(quoteTax.addedMinor);
 
   // Points preview — two modes the client uses:
@@ -34714,11 +34738,11 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // When the store excludes shipping from points coverage, the redeemable
   // base is subtotal + packing only; the customer always pays shipping in
   // cash (so residual = shipping when the points side is "full").
-  const redeemBase       = pointsRedeemableBase(priced.subtotal, fees.deliveryFee, fees.packingFee, 0,
+  let redeemBase       = pointsRedeemableBase(priced.subtotal, fees.deliveryFee, fees.packingFee, 0,
     money.fromMinor(quoteTax.addedMinor));
-  const pointsRequired   = pointsRequiredFor(redeemBase);
-  const pointsAffordable = pointsBalance >= pointsRequired;
-  const pointsMaxUsable  = Math.min(pointsBalance, pointsRequired);
+  let pointsRequired   = pointsRequiredFor(redeemBase);
+  let pointsAffordable = pointsBalance >= pointsRequired;
+  let pointsMaxUsable  = Math.min(pointsBalance, pointsRequired);
 
   let pointsToUseApplied = 0;
   let pointsDiscount     = 0;
@@ -34742,11 +34766,11 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // vouchers; the order endpoint re-prices with the real voucher discount.)
   const _wallet = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(req.customer.id);
   const balanceBalance   = Math.max(0, Number(_wallet?.balance) || 0);
-  const balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount,
+  let balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount,
     money.fromMinor(quoteTax.addedMinor));
-  const balanceMaxUsable = Math.round(Math.min(balanceBalance, balanceSpendable) * 100) / 100;
+  let balanceMaxUsable = Math.round(Math.min(balanceBalance, balanceSpendable) * 100) / 100;
   const useBalance       = !!body.use_balance && paymentMethodPreview !== 'points';
-  const balanceApplied   = useBalance ? balanceMaxUsable : 0;
+  let balanceApplied   = useBalance ? balanceMaxUsable : 0;
   if (balanceApplied > 0) total = Math.max(0, total - balanceApplied);
 
   // Routing preview — runs the rich shortage analysis used by the new
@@ -34776,6 +34800,8 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // `quoteStore` would have left it permanently null and silent. The local run
   // takes no pin, so nearest/resolved is the right shelf for it.
   let quoteShelfStore = null;
+  let quoteNearestStore = null;
+  let quoteFallbackStore = null;
   // Hoisted alongside it for the same reason: the notice must discount this
   // customer's own unpaid holds exactly as the shortage analysis does, or their
   // own pending order reads back to them as "sold out, wait for the next batch".
@@ -34824,6 +34850,8 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     });
     quoteShelfStore = (analysis.resolved && !analysis.resolved.error && analysis.resolved.store)
       || (analysis.nearest && analysis.nearest.store) || null;
+    quoteNearestStore = (analysis.nearest && analysis.nearest.store) || null;
+    quoteFallbackStore = (analysis.fallback && analysis.fallback.store) || null;
     // Bundle carts can't use the per-item 5-option modal (checkout refuses it).
     // Collapse any shortage to a plain no_stock so the mini-app just shows
     // "out of stock for same-day" and the customer adjusts the cart.
@@ -34945,6 +34973,83 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     channel: 'wechat',
   });
 
+  // Distance bands for a Guangzhou same-day rider. Off, or no customer pin,
+  // leaves the district fee already computed above.
+  let sameDayBand = null;
+  const slotKind = body.slot_kind || '';
+  const slotId = body.delivery_slot_id || '';
+  const optInZone = !!(zone && (Number(zone.day_only) === 1 || Number(zone.same_day_surcharge) > 0));
+  const quoteSameDay = slotKind !== 'schedule' && !!(zone && zone.zone_type === 'gz_district') && (
+    slotKind === 'today' || slotId === 'right_away'
+    || inventory.isSameDayDelivery(slotId, quoteNow, deliveryTz())
+    || (!optInZone && slotKind === '' && slotId === '')
+  );
+  if (quoteSameDay && quoteNearestStore) {
+    const band = sameDayBands.riderCharge({
+      config: cfgValue('delivery.sameDayBands', null),
+      zone,
+      km: sameDayBands.addressPinKm(quoteNearestStore, address),
+      subtotal: priced.subtotal,
+      globalFree: cfgValue('fees.freeShippingThreshold', db.FREE_SHIPPING_THRESHOLD_DEFAULT),
+      sameDay: true,
+    });
+    if (band && band.offered) {
+      fees.deliveryFee = band.fee;
+      fees.freeShipping = band.fee === 0 && !(zone.zone_type === 'gz_district' && deliveryMode === 'max');
+      quoteTax = tax.taxOn({
+        subtotalMinor: money.toMinor(priced.subtotal) || 0,
+        shippingMinor: money.toMinor(fees.deliveryFee) || 0,
+        packingMinor: money.toMinor(fees.packingFee) || 0,
+      }, quoteTaxCfg);
+      grossTotal = Math.max(0, priced.subtotal + fees.deliveryFee + fees.packingFee)
+        + money.fromMinor(quoteTax.addedMinor);
+      redeemBase = pointsRedeemableBase(priced.subtotal, fees.deliveryFee, fees.packingFee, 0,
+        money.fromMinor(quoteTax.addedMinor));
+      pointsRequired = pointsRequiredFor(redeemBase);
+      pointsAffordable = pointsBalance >= pointsRequired;
+      pointsMaxUsable = Math.min(pointsBalance, pointsRequired);
+      if (paymentMethodPreview === 'points') {
+        total = pointsAffordable ? Math.max(0, grossTotal - redeemBase) : grossTotal;
+        pointsToUseApplied = 0;
+        pointsDiscount = 0;
+      } else {
+        const reqPts = Math.max(0, Math.floor(Number(body.points_to_use) || 0));
+        pointsToUseApplied = Math.min(reqPts, pointsMaxUsable);
+        pointsDiscount = pointsCashValue(pointsToUseApplied);
+        total = Math.max(0, grossTotal - pointsDiscount);
+      }
+      balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount,
+        money.fromMinor(quoteTax.addedMinor));
+      balanceMaxUsable = Math.round(Math.min(balanceBalance, balanceSpendable) * 100) / 100;
+      balanceApplied = useBalance ? balanceMaxUsable : 0;
+      if (balanceApplied > 0) total = Math.max(0, total - balanceApplied);
+      sameDayBand = { applied: true, fee: band.fee, free: !!band.free };
+    } else if (band && band.offered === false) {
+      sameDayBand = { applied: false, offered: false };
+    }
+    if (quoteFallbackStore && routingPreview && routingPreview.fallback) {
+      const fb = sameDayBands.riderCharge({
+        config: cfgValue('delivery.sameDayBands', null),
+        zone,
+        km: sameDayBands.addressPinKm(quoteFallbackStore, address),
+        subtotal: priced.subtotal,
+        globalFree: cfgValue('fees.freeShippingThreshold', db.FREE_SHIPPING_THRESHOLD_DEFAULT),
+        sameDay: true,
+      });
+      if (fb && fb.offered) routingPreview.fallback.band_fee = fb.fee;
+    }
+  }
+
+  const quoteScheduling = computeDeliverySlots(zone, quoteNow, {
+    batch: quoteBatchDecision, localFreshFloor: quoteLocalFreshFloor,
+    storeHours: deliveryStoreHours((quoteStore || quoteShelfStore)?.id ?? null),
+  });
+  if (sameDayBand && sameDayBand.applied && Array.isArray(quoteScheduling && quoteScheduling.slots)) {
+    for (const slot of quoteScheduling.slots) {
+      if (slot && (slot.is_same_day || slot.requires_surcharge)) slot.surcharge = 0;
+    }
+  }
+
   res.json({
     success: true,
     data: {
@@ -35000,12 +35105,8 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
         max_fee: zone.max_fee,
         free_threshold: zone.free_threshold,
       },
-      scheduling: computeDeliverySlots(zone, quoteNow, {
-        batch: quoteBatchDecision, localFreshFloor: quoteLocalFreshFloor,
-        // §480 — the hours of the store that would cook it: the settled store
-        // (pin applied) on the happy path, else the shelves it is served off.
-        storeHours: deliveryStoreHours((quoteStore || quoteShelfStore)?.id ?? null),
-      }),
+      scheduling: quoteScheduling,
+      same_day_band: sameDayBand,
       batch_notice: computeBatchNotice(
         zone, (items || []).map((i) => i.product_id), quoteNow, body.delivery_slot_id, body.slot_kind,
         { decision: quoteBatchDecision },

@@ -172,6 +172,7 @@ async function loadDeliveryZones() {
     // wizard's own keys (enabled/coverage/pricingMode/speed) — these live under
     // delivery.* alongside the legacy holiday/batch settings.
     window._deliveryCfg = dlv;
+    fillSameDayBands(dlv.sameDayBands);
     if ($('#dlv-kitchen-address')) $('#dlv-kitchen-address').value = dlv.kitchenAddress ?? '';
     const hMode = !!dlv.holidayMode;
     const hMsg = dlv.holidayMessage || {};
@@ -1439,6 +1440,74 @@ async function deleteZone(id, label) {
 // Delivery & pickup fees — moved here from Settings → Checkout & fees (2026-06-02).
 // Writes the same fees.* / pickup.window keys the server already reads for pricing,
 // so this is purely where the operator edits them, not a change to how prices compute.
+function addSameDayBandRow(row) {
+  const body = document.getElementById('sdb-rows');
+  if (!body) return;
+  const tr = document.createElement('tr');
+  const cell = (key, val) => {
+    const td = document.createElement('td');
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.step = key === 'fee' ? '1' : '0.1';
+    input.dataset.k = key;
+    input.value = val == null ? '' : val;
+    input.style.width = '100%';
+    td.appendChild(input);
+    return td;
+  };
+  tr.appendChild(cell('from', row && row.from));
+  tr.appendChild(cell('to', row && row.to));
+  tr.appendChild(cell('fee', row && row.fee));
+  const del = document.createElement('td');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn';
+  btn.textContent = '×';
+  btn.addEventListener('click', () => tr.remove());
+  del.appendChild(btn);
+  tr.appendChild(del);
+  body.appendChild(tr);
+}
+
+function fillSameDayBands(raw) {
+  const body = document.getElementById('sdb-rows');
+  if (!body) return;
+  const cfg = raw && typeof raw === 'object' ? raw : {};
+  const on = document.getElementById('sdb-on');
+  const ceiling = document.getElementById('sdb-ceiling');
+  if (on) on.checked = cfg.enabled === true;
+  if (ceiling) ceiling.value = cfg.ceiling != null ? cfg.ceiling : 10;
+  body.innerHTML = '';
+  const bands = Array.isArray(cfg.bands) ? cfg.bands : [];
+  if (!bands.length) addSameDayBandRow();
+  else bands.forEach(b => addSameDayBandRow(b));
+}
+
+async function saveSameDayBands() {
+  const rows = [...document.querySelectorAll('#sdb-rows tr')].map(tr => ({
+    from: tr.querySelector('[data-k="from"]').value,
+    to: tr.querySelector('[data-k="to"]').value,
+    fee: tr.querySelector('[data-k="fee"]').value,
+  })).filter(r => r.from !== '' || r.to !== '' || r.fee !== '');
+  const body = {
+    'delivery.sameDayBands': {
+      enabled: !!(document.getElementById('sdb-on') && document.getElementById('sdb-on').checked),
+      ceiling: Number(document.getElementById('sdb-ceiling') && document.getElementById('sdb-ceiling').value) || 0,
+      bands: rows.map(r => ({ from: Number(r.from), to: Number(r.to), fee: Number(r.fee) })),
+    },
+  };
+  const status = document.getElementById('sdb-status');
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    if (status) { status.textContent = 'Saved · 已保存'; setTimeout(() => { if (status) status.textContent = ''; }, 2500); }
+    toast('Saved · 已保存');
+  } catch (e) {
+    if (status) status.textContent = '';
+    toast('Save failed · 保存失败: ' + e.message, 'err');
+  }
+}
+
 async function saveDeliveryFees() {
   const body = {
     'fees.freeShippingThreshold':  Number($('#cfg-fees-freeShippingThreshold').value) || 0,

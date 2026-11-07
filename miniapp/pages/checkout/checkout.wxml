@@ -817,7 +817,7 @@
             <view class="fb-opt__sub">
               <text wx:if="{{fallbackExtraKm !== null}}">+{{fallbackExtraKm}} km</text>
               <text wx:if="{{fallbackExtraMin}}"> · ~{{fallbackExtraMin}} {{lang === 'cn' ? '分钟更慢' : 'min slower'}}</text>
-              <text> · </text><text style="color:#3a5a30;font-weight:700">{{ lang === 'cn' ? '无额外费用' : 'no extra charge' }}</text>
+              <text> · </text><text style="color:#3a5a30;font-weight:700">{{ fallbackBandFee != null ? ((lang === 'cn' ? '配送费 ¥' : 'Delivery ¥') + fallbackBandFee) : (lang === 'cn' ? '无额外费用' : 'no extra charge') }}</text>
             </view>
           </view>
         </view>

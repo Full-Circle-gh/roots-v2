@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.626
+# Tacet shared-core consolidation — decisions record, v4.627
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-07 · v4.627 — **§521 · GUANGZHOU SAME-DAY RIDER FEE IS A DISTANCE BAND FROM THE SENDING SHOP, AND IT STAYS OFF UNTIL SAVED — ASH.** See §521.
 
 2026-11-06 · v4.626 — **§520 · A PINNED LOGIN SEES ITS OWN STORES AND NOTHING ELSE, EVERYWHERE — ASH.** Ash, with a phone screenshot of the Add stock pills still offering Tianhe to a login pinned to Yuexiu: *"if the user is limited to one store only , anywhere in the app he shouldnt be able to select any other store , if its waste, restock , etc. other store shouldnt even be shown for this user, or grey it out"*, and, shown the sweep's shape, *"build all"*. The pin of §325, §412.5 and §519 becomes a lock: every store picker lists only the stores in the caller's scope and disappears altogether when there is exactly one, the store's own name standing as plain text instead; every route that carries a store id refuses one outside the caller's scope through ONE shared guard rather than a copy per route; the kitchen and stock pins fold into the same answer; and a fast-shard gate fails any picker or route added later that skips the lock. No new words. No change to `.gitignore` or CI. See §520.
 
@@ -34005,3 +34007,13 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 4. **KITCHEN AND STOCK PINS FOLD INTO THE SAME LOCK.** Their pinned store already resolves into `scopeStores` when `scope_all` is off, which the role editors force for store-pinned roles; routes that key on the legacy kitchen binding read the same resolved scope rather than a second source. Nothing gains a new column and nothing gains a second meaning of "my store".
 5. **THE GATE.** A fast-shard suite holds the lock the way §516's gate holds the phone twins: a frozen table of the pickers and store-keyed route families covered, an assertion that each renders from the scoped list or carries the guard, and a failure for any new picker or route family that arrives without joining it. Coverage that lives only in someone's memory is coverage the next screen skips.
 6. **WHAT THIS IS NOT.** Not the consolidation of `markets` into `retail_stores` (the locations survey stays the map for that journey). Not turning `tenants.rbac_enforce` on for anyone — the lock rides the pin that is already always on, while the capability layer's shadow mode stays PERMISSIONS_PLAN's road. Not the customer-facing mini app, where choosing a store is shopping, not access. And not a change to what an unscoped login or the owner sees: every list stays whole for them.
+
+## §521 — GUANGZHOU SAME-DAY RIDER FEE IS A DISTANCE BAND FROM THE SENDING SHOP, AND IT STAYS OFF UNTIL SAVED
+
+**2026-11-07 · DECIDED BY ASH.** Same-day Guangzhou orders that go out with one rider are priced by kilometres from the shop that sends them, in bands the operator types. The switch ships off, so today's district fees stay until those bands are saved and turned on.
+
+1. **THE SHOP IS THE START.** The kilometres are from that shop's pin to the customer's pin. A district centre is not a pin, and a missing pin keeps today's fee.
+2. **BEFORE PAYMENT, A SHORT SHOP IS REMEASURED.** If the nearer shop cannot fill the order and the customer takes the other shop, the fee is the other shop's distance, shown before they pay.
+3. **AFTER PAYMENT, THE CUSTOMER ADDS NOTHING.** An employee moving the pickup to the other shop does not change the delivery fee already paid.
+4. **FREE OVER ¥199 STAYS ON THE SIX INNER DISTRICTS** and wipes the whole same-day rider fee. The outer districts do not get that waiver. Next-day courier and every other city are unchanged.
+5. **THE DEDICATED-RIDER PRICE IS NOT KNOWN BEFORE PAYMENT.** Qingyun prices an order that already exists. Until a price can be read before they pay, the customer pays the band. The ceiling is saved for that gap and is not added after payment.
