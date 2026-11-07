@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guangzhou same-day rider — distance bands — mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111A2B; --paper:#FBF9F4; --pane:#FFFFFF; --graphite:#58606E;
+    --cream:#F6F3EC; --elev1:#F4F1E9; --elev2:#EFEBE1;
+    --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E;
+    --sage:#A3B49F; --sage-tint:#EDF1EC; --sage-ink:#4A6249;
+    --amber-tint:#F8F1E4; --amber-ink:#7A5B28;
+    --r-sm:6px; --r-md:8px; --r-lg:12px;
+    --f:'Inter',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--text-1);
+    font-family:var(--f); font-size:14.5px; line-height:1.45;
+    -webkit-font-smoothing:antialiased; padding:28px 20px 64px;
+  }
+  .wrap{max-width:760px; margin:0 auto;}
+  h1{font-size:22px; font-weight:600; letter-spacing:-.02em; margin:0 0 6px;}
+  .lede{margin:0 0 22px; color:var(--text-2); font-size:13.5px; max-width:62ch;}
+  .panel{
+    background:var(--pane); border:1px solid var(--line); border-radius:16px;
+    padding:20px 22px 18px; margin-bottom:14px;
+  }
+  .kicker{
+    font-size:11px; font-weight:600; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--graphite); margin:0 0 4px;
+  }
+  h2{font-size:16px; font-weight:600; margin:0 0 4px; letter-spacing:-.01em;}
+  .sub{margin:0 0 14px; color:var(--text-2); font-size:13px;}
+  .sub b{color:var(--text-1); font-weight:600;}
+
+  table{width:100%; border-collapse:collapse;}
+  th{
+    text-align:left; font-size:11px; font-weight:600; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--text-3); padding:0 8px 8px;
+  }
+  td{padding:4px 8px 4px 0; vertical-align:center;}
+  td:last-child{width:36px; text-align:right;}
+  input[type="number"], select{
+    font-family:var(--mono); font-size:14px; font-weight:500;
+    color:var(--text-1); background:var(--paper);
+    border:1px solid var(--line-strong); border-radius:var(--r-md);
+    padding:8px 10px; width:100%;
+  }
+  input[type="number"]{font-variant-numeric:tabular-nums;}
+  input:focus, select:focus{outline:2px solid var(--ink); outline-offset:1px;}
+  .unit{font-size:12px; color:var(--text-3); margin-left:6px;}
+
+  .textbtn{
+    border:0; background:transparent; color:var(--text-3); font-family:var(--f);
+    font-size:13px; font-weight:500; cursor:pointer; padding:6px 0;
+  }
+  .textbtn:hover{color:var(--text-1);}
+  .iconbtn{
+    width:28px; height:28px; border-radius:8px; border:1px solid transparent;
+    background:transparent; color:var(--text-3); cursor:pointer; font-size:16px; line-height:1;
+  }
+  .iconbtn:hover{border-color:var(--line); color:var(--text-1); background:var(--cream);}
+
+  .ceiling{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  }
+  .ceiling input{width:96px;}
+  .ceiling .hint{color:var(--text-2); font-size:13px; flex:1; min-width:220px;}
+
+  .shops{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;}
+  .shop{
+    border:1px solid var(--line); border-radius:var(--r-lg); padding:12px 14px; background:var(--paper);
+  }
+  .shop.head{display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:10px;}
+  .shop .name{font-weight:600; font-size:14px;}
+  .shop .role{font-size:12px; color:var(--text-3);}
+  .pair{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .pair label{display:block; font-size:11px; color:var(--text-3); margin-bottom:4px;}
+
+  .outcomes{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .out{
+    border-radius:var(--r-lg); padding:14px; border:1px solid var(--line);
+    background:var(--pane);
+  }
+  .out.on{border-color:var(--ink); background:#FCFBF7;}
+  .out .tag{
+    display:inline-block; font-size:11px; font-weight:600; letter-spacing:.04em;
+    text-transform:uppercase; border-radius:999px; padding:3px 8px; margin-bottom:8px;
+  }
+  .tag.ok{background:var(--sage-tint); color:var(--sage-ink);}
+  .tag.move{background:var(--amber-tint); color:var(--amber-ink);}
+  .out h3{margin:0 0 2px; font-size:14px; font-weight:600;}
+  .out .from{font-size:12.5px; color:var(--text-2); margin-bottom:10px;}
+  .money{font-family:var(--mono); font-weight:600; font-size:22px; letter-spacing:-.02em; font-variant-numeric:tabular-nums;}
+  .money small{font-size:13px; font-weight:500; color:var(--text-2); margin-left:6px;}
+  .lines{margin:8px 0 0; padding:0; list-style:none; font-size:12.5px; color:var(--text-2);}
+  .lines li{margin-top:3px;}
+  .lines b{color:var(--text-1); font-weight:600;}
+
+  .controls{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;}
+  .controls .field{flex:1; min-width:140px;}
+  .controls label{display:block; font-size:11px; color:var(--text-3); margin-bottom:4px;}
+
+  .note{
+    background:var(--elev1); border-radius:var(--r-lg); padding:12px 14px;
+    font-size:13px; color:var(--text-2);
+  }
+  .note b{color:var(--text-1); font-weight:600;}
+  .fixed{margin:0; padding-left:18px; color:var(--text-2); font-size:13px;}
+  .fixed li{margin:4px 0;}
+
+  .foot{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:6px;}
+  .btn{
+    font-family:var(--f); font-size:14px; font-weight:500;
+    background:var(--ink); color:var(--paper); border:1px solid var(--ink);
+    border-radius:var(--r-md); padding:10px 18px; cursor:pointer;
+  }
+  .mock{font-size:12px; color:var(--text-3);}
+  #toast{
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--paper); font-size:13px;
+    padding:10px 14px; border-radius:999px; display:none;
+  }
+  @media (max-width:680px){
+    .shops, .outcomes{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Same-day rider, by distance</h1>
+  <p class="lede">Guangzhou only, same day, one rider for that order. Next-day courier and other cities stay on their own fees. Sample numbers below are a shape, not a rate card.</p>
+
+  <section class="panel">
+    <div class="kicker">Price</div>
+    <h2>Distance bands</h2>
+    <p class="sub">Kilometres from the shop that sends the rider. The first band is a flat stretch. Past the last band, same-day is not offered.</p>
+    <table>
+      <thead>
+        <tr><th>From km</th><th>Up to km</th><th>Band ¥</th><th></th></tr>
+      </thead>
+      <tbody id="bands"></tbody>
+    </table>
+    <button type="button" class="textbtn" id="add-band">Add a band</button>
+  </section>
+
+  <section class="panel">
+    <div class="kicker">Weather and riders</div>
+    <h2>When the dedicated-rider price is higher</h2>
+    <p class="sub">Qingyun does not send a weather flag or a rider count. Rain and a shortage of riders show up as a higher price on the one-to-one service. The customer pays that extra, up to this ceiling. You cover anything above it.</p>
+    <div class="ceiling">
+      <input id="ceiling" type="number" min="0" step="1" value="10" aria-label="Ceiling on the extra, yuan">
+      <span class="unit">¥ ceiling</span>
+      <span class="hint">A light gap adds a little. A bad hour adds more, and stops at this amount.</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="kicker">Origin</div>
+    <h2>Which shop the kilometres start from</h2>
+    <p class="sub">按距离收费，从发货的店铺起算。The closer shop is used when it has the items. <b>一旦缺货改派，距离按新店铺重算</b>，and the new price is shown again before they pay.</p>
+
+    <div class="controls">
+      <div class="field">
+        <label for="district">District</label>
+        <select id="district">
+          <option value="inner">Tianhe · one of the six</option>
+          <option value="outer">Panyu · outer district</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="cart">Cart ¥</label>
+        <input id="cart" type="number" min="0" step="1" value="80">
+      </div>
+    </div>
+
+    <div class="shops" id="shops"></div>
+    <div class="outcomes" id="outcomes"></div>
+  </section>
+
+  <section class="panel">
+    <div class="kicker">Already decided</div>
+    <h2>Left as they are</h2>
+    <ul class="fixed">
+      <li>Yuexiu, Tianhe, Haizhu, Liwan, Baiyun and Huangpu: a cart of ¥199 or more is free, including the extra for rain or a scarce rider.</li>
+      <li>Panyu, Huadu, Nansha, Conghua and Zengcheng: ¥199 does not wipe the same-day rider fee. Their next-day courier fee is unchanged.</li>
+      <li>If Qingyun does not answer, the customer pays the band. You cover the difference.</li>
+      <li>The customer sees one figure. It does not say estimated, and it does not split out the weather.</li>
+    </ul>
+  </section>
+
+  <div class="foot">
+    <span class="mock">Mockup. Nothing here is saved.</span>
+    <button type="button" class="btn" id="save">Save</button>
+  </div>
+</div>
+<div id="toast">This page is a mockup. Nothing was saved.</div>
+
+<script>
+const yuan = n => '¥' + (Math.round(n * 100) / 100).toString();
+
+const state = {
+  bands: [
+    { from: 0, to: 4, fee: 15 },
+    { from: 4, to: 8, fee: 25 },
+    { from: 8, to: 12, fee: 35 },
+  ],
+  ceiling: 10,
+  district: 'inner',
+  cart: 80,
+  shops: {
+    tianhe: { name: 'Tianhe', cn: '天河仓', role: 'Warehouse', km: 2.4, quote: 22 },
+    yuexiu: { name: 'Yuexiu', cn: '越秀店', role: 'Shop', km: 7.1, quote: 41 },
+  },
+};
+
+function bandFor(km) {
+  const rows = [...state.bands].sort((a, b) => a.from - b.from);
+  return rows.find(b => km >= b.from && km < b.to) || null;
+}
+
+function priceOf(km, quote) {
+  const band = bandFor(km);
+  if (!band) return { offered: false };
+  const inner = state.district === 'inner';
+  const free = inner && state.cart >= 199;
+  const q = Number(quote);
+  const hasQuote = Number.isFinite(q) && q > 0;
+  if (free) {
+    return { offered: true, free: true, customer: 0, band: band.fee, covered: hasQuote ? q : null, hasQuote };
+  }
+  if (!hasQuote) {
+    return { offered: true, free: false, customer: band.fee, band: band.fee, extra: 0, covered: null, hasQuote: false };
+  }
+  if (q > band.fee) {
+    const gap = q - band.fee;
+    const extra = Math.min(gap, state.ceiling);
+    return {
+      offered: true, free: false, hasQuote: true,
+      customer: Math.round((band.fee + extra) * 100) / 100,
+      band: band.fee,
+      extra: Math.round(extra * 100) / 100,
+      covered: Math.round((gap - extra) * 100) / 100,
+    };
+  }
+  return { offered: true, free: false, hasQuote: true, customer: band.fee, band: band.fee, extra: 0, covered: 0 };
+}
+
+function renderBands() {
+  const body = document.getElementById('bands');
+  body.innerHTML = state.bands.map((b, i) => `
+    <tr>
+      <td><input type="number" min="0" step="0.1" value="${b.from}" data-i="${i}" data-k="from" aria-label="Band ${i + 1} from kilometres"></td>
+      <td><input type="number" min="0" step="0.1" value="${b.to}" data-i="${i}" data-k="to" aria-label="Band ${i + 1} up to kilometres"></td>
+      <td><input type="number" min="0" step="1" value="${b.fee}" data-i="${i}" data-k="fee" aria-label="Band ${i + 1} fee yuan"></td>
+      <td>${state.bands.length > 1 ? `<button type="button" class="iconbtn" data-del="${i}" aria-label="Remove band ${i + 1}">×</button>` : ''}</td>
+    </tr>
+  `).join('');
+}
+
+function shopCard(key) {
+  const s = state.shops[key];
+  return `
+    <div class="shop">
+      <div class="head">
+        <span class="name">${s.name} · ${s.cn}</span>
+        <span class="role">${s.role}</span>
+      </div>
+      <div class="pair">
+        <div>
+          <label for="km-${key}">Kilometres</label>
+          <input id="km-${key}" type="number" min="0" step="0.1" value="${s.km}" data-shop="${key}" data-k="km">
+        </div>
+        <div>
+          <label for="q-${key}">One-to-one price ¥</label>
+          <input id="q-${key}" type="number" min="0" step="1" value="${s.quote}" data-shop="${key}" data-k="quote">
+        </div>
+      </div>
+    </div>`;
+}
+
+function outcomeHtml(kind, shopKey, title, blurb) {
+  const s = state.shops[shopKey];
+  const p = priceOf(s.km, s.quote);
+  const tag = kind === 'move'
+    ? '<span class="tag move">Shop changed</span>'
+    : '<span class="tag ok">Closer shop</span>';
+  if (!p.offered) {
+    return `<div class="out ${kind === 'stay' ? 'on' : ''}">
+      ${tag}<h3>${title}</h3>
+      <div class="from">${blurb}</div>
+      <div class="money">Not offered</div>
+      <ul class="lines"><li>${s.km} km is past the last band. Same-day rider is unavailable. Next-day courier stays as it is.</li></ul>
+    </div>`;
+  }
+  const lines = [];
+  lines.push(`<li>From <b>${s.name}</b> · ${s.km} km · band ${yuan(p.band)}</li>`);
+  if (p.free) {
+    lines.push(`<li>Cart is ${yuan(state.cart)}. On the six districts that wipes the fee, rain included.</li>`);
+    lines.push(`<li>You still pay the rider${p.covered != null ? ' · ' + yuan(p.covered) : ''}.</li>`);
+  } else if (!p.hasQuote) {
+    lines.push(`<li>Qingyun did not answer. Customer pays the band. You cover the difference.</li>`);
+  } else if (p.extra > 0) {
+    lines.push(`<li>One-to-one price ${yuan(s.quote)}. Extra ${yuan(p.extra)}${p.covered > 0 ? ' · you cover ' + yuan(p.covered) : ''}.</li>`);
+  } else {
+    lines.push(`<li>One-to-one price ${yuan(s.quote)} is inside the band.</li>`);
+  }
+  const customerLine = p.free ? 'Free' : yuan(p.customer);
+  return `<div class="out ${kind === 'stay' ? 'on' : ''}">
+    ${tag}
+    <h3>${title}</h3>
+    <div class="from">${blurb}</div>
+    <div class="money">${customerLine}<small>customer pays</small></div>
+    <ul class="lines">${lines.join('')}</ul>
+  </div>`;
+}
+
+function renderShops() {
+  const shops = document.getElementById('shops');
+  shops.innerHTML = state.district === 'outer'
+    ? shopCard('tianhe')
+    : shopCard('tianhe') + shopCard('yuexiu');
+}
+
+function renderOutcomes() {
+  const out = document.getElementById('outcomes');
+  if (state.district === 'outer') {
+    out.innerHTML = outcomeHtml('stay', 'tianhe', 'Leaves Tianhe',
+      'Outer districts are sent from the warehouse. There is no second shop to move to, so the kilometres stay Tianhe’s.');
+    return;
+  }
+  const nearer = state.shops.tianhe.km <= state.shops.yuexiu.km ? 'tianhe' : 'yuexiu';
+  const other = nearer === 'tianhe' ? 'yuexiu' : 'tianhe';
+  const n = state.shops[nearer];
+  const o = state.shops[other];
+  out.innerHTML =
+    outcomeHtml('stay', nearer, 'Item is in stock', `${n.name} is closer, and it has the item. Distance starts there.`) +
+    outcomeHtml('move', other, 'Closer shop is short', `${n.name} is out. The order moves to ${o.name}. Distance is measured again from ${o.name}, and this is the price shown before they pay.`);
+}
+
+function render() {
+  renderBands();
+  renderShops();
+  renderOutcomes();
+}
+
+document.getElementById('bands').addEventListener('input', e => {
+  const el = e.target;
+  if (!el.dataset.k) return;
+  state.bands[Number(el.dataset.i)][el.dataset.k] = Number(el.value);
+  renderOutcomes();
+});
+document.getElementById('bands').addEventListener('click', e => {
+  const btn = e.target.closest('[data-del]');
+  if (!btn) return;
+  state.bands.splice(Number(btn.dataset.del), 1);
+  render();
+});
+document.getElementById('add-band').addEventListener('click', () => {
+  const last = state.bands[state.bands.length - 1];
+  const from = last ? last.to : 0;
+  state.bands.push({ from, to: from + 4, fee: (last ? last.fee : 15) + 10 });
+  render();
+});
+document.getElementById('ceiling').addEventListener('input', e => {
+  state.ceiling = Math.max(0, Number(e.target.value) || 0);
+  renderOutcomes();
+});
+document.getElementById('district').addEventListener('change', e => {
+  state.district = e.target.value;
+  renderShops();
+  renderOutcomes();
+});
+document.getElementById('cart').addEventListener('input', e => {
+  state.cart = Math.max(0, Number(e.target.value) || 0);
+  renderOutcomes();
+});
+document.getElementById('shops').addEventListener('input', e => {
+  const el = e.target;
+  if (!el.dataset.shop) return;
+  state.shops[el.dataset.shop][el.dataset.k] = Number(el.value);
+  renderOutcomes();
+});
+document.getElementById('save').addEventListener('click', () => {
+  const t = document.getElementById('toast');
+  t.style.display = 'block';
+  clearTimeout(t._t);
+  t._t = setTimeout(() => { t.style.display = 'none'; }, 2200);
+});
+
+render();
+</script>
+</body>
+</html>
