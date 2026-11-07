@@ -275,6 +275,43 @@ await itAsync('SAME-CITY WRONG-DISTRICT: a strong name match in a different dist
     (e) => { assert.strictEqual(e.pickPlace, true, 'must park for a person, not auto-ship the wrong district'); return true; });
 });
 
+await itAsync('a perfect name with no district on the hit is not taken when the pin is in another district', async () => {
+  // The address text is only a road, so the district regex has nothing to
+  // read. The name is exact. The coordinate is the other side of the city.
+  const HANXI = M(22.993, 113.331);
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ province: '广东省', city: '广州市', district: '海珠区', address: '广州贝赛思中国华西项目部' }),
+      SHOP,
+      poiList([{ ...HANXI, name: '广州贝赛思中国华西项目部', address: '石基路205号', provider: 'qingyun' }]),
+      { geocode: {
+          ...blindGeo,
+          districtMatches: geocode.districtMatches,
+          reverseGeocode: async () => ({ district: '番禺区' }),
+          geocodeAddress: async () => ({
+            lat: 22.993, lng: 113.331, precision: 'rooftop', provider: 'amap',
+            cityMatch: true, districtMatch: false, level: '兴趣点',
+          }),
+        } }),
+    (e) => {
+      assert.strictEqual(e.pickPlace, true, 'ask a person, do not ship the other district');
+      return true;
+    });
+});
+
+await itAsync('a perfect name with no district on the hit is still taken when the pin is in the right district', async () => {
+  const p = await buildCreatePayload(
+    ORDER({ province: '广东省', city: '广州市', district: '海珠区', address: '广州贝赛思中国华西项目部' }),
+    SHOP,
+    poiList([{ ...NEAR, name: '广州贝赛思中国华西项目部', address: '石基路205号', provider: 'qingyun' }]),
+    { geocode: {
+        ...blindGeo,
+        districtMatches: geocode.districtMatches,
+        reverseGeocode: async () => ({ district: '海珠区' }),
+      } });
+  assert.strictEqual(p._geo.source, 'poi_auto');
+});
+
 await itAsync('same district name in the address text still auto-takes', async () => {
   const p = await buildCreatePayload(
     ORDER({ province: '广东省', city: '广州市', district: '越秀区', address: '富力新天地' }),

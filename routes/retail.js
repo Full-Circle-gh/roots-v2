@@ -8761,7 +8761,7 @@ function geocodeOrderSnapshotAsync(orderId, addr) {
         province: addr.province, city: addr.city, district: addr.district,
         address: [addr.address, addr.detail].filter(Boolean).join(' '),
       });
-      if (!c || c.lat == null) return;
+      if (!c || c.lat == null || geocode.rejectedRegion(c)) return;
       const row = tdb().prepare('SELECT address_json FROM retail_orders WHERE id = ?').get(orderId);
       if (!row) return;
       let cur = {}; try { cur = JSON.parse(row.address_json || '{}') || {}; } catch { return; }

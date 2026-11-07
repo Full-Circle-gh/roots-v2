@@ -853,7 +853,7 @@ router.post('/api/retail-admin/inventory/geocode-backfill', requireRetailAdmin, 
 
   for (const s of stores) {
     const c = await geocode.geocodeAddress({ city: s.city, district: s.district, address: s.address });
-    if (c) {
+    if (c && !geocode.rejectedRegion(c)) {
       tdb().prepare('UPDATE retail_stores SET lat = ?, lng = ? WHERE id = ?').run(c.lat, c.lng, s.id);
       storesDone++;
     } else if (geocode.isQuotaError(geocode.lastError())) { aborted = true; break; }
@@ -863,7 +863,7 @@ router.post('/api/retail-admin/inventory/geocode-backfill', requireRetailAdmin, 
       province: a.province, city: a.city, district: a.district,
       address: [a.address, a.detail].filter(Boolean).join(' '),
     });
-    if (c) {
+    if (c && !geocode.rejectedRegion(c)) {
       // Record WHERE the pin came from and how exact the provider said it was.
       // Without this the backfill minted coordinates with no provenance, which
       // the courier push cannot take on trust — it has to re-resolve the address

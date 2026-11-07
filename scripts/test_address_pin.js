@@ -131,6 +131,25 @@ it('unknown side is undecidable, not a mismatch', () => {
   assert.strictEqual(geocode.cityMatches('广州市', ''), null);
 });
 
+console.log('\napplyPointDistrict — the coordinate\'s district, not the one the geocoder claimed');
+it('a precise hit whose point is in another district is condemned', () => {
+  const out = { lat: 22.99, lng: 113.33, precision: 'rooftop', districtMatch: true };
+  geocode.applyPointDistrict(out, '番禺区', '海珠区');
+  assert.strictEqual(out.districtMatch, false);
+  assert.strictEqual(geocode.rejectedRegion(out), true);
+});
+it('a point in the named district leaves the hit alone', () => {
+  const out = { lat: 23.10, lng: 113.37, precision: 'rooftop', districtMatch: true };
+  geocode.applyPointDistrict(out, '海珠区', '海珠区');
+  assert.strictEqual(out.districtMatch, true);
+  assert.strictEqual(geocode.rejectedRegion(out), false);
+});
+it('no district on the point is not a mismatch', () => {
+  const out = { lat: 23.10, lng: 113.37, precision: 'rooftop', districtMatch: null };
+  geocode.applyPointDistrict(out, '', '海珠区');
+  assert.strictEqual(out.districtMatch, null);
+});
+
 console.log('\ndistrictMatches — same idea one level down');
 it('天河区 == 天河', () => assert.strictEqual(geocode.districtMatches('天河区', '天河'), true));
 it('天河区 != 越秀区', () => assert.strictEqual(geocode.districtMatches('天河区', '越秀区'), false));
@@ -379,6 +398,56 @@ async function extraSuites() {
     assert.strictEqual(p._geo.source, 'geocode:amap');
   });
 
+  await itAsync('a rooftop geocode whose point sits in another district is not sent', async () => {
+    // 海珠区琶洲, matched to a named place whose coordinate is by 汉溪 in 番禺.
+    // The grade says rooftop, the distance is an ordinary same-city trip, and
+    // both of those used to be enough to dispatch.
+    let resolved = false;
+    await assert.rejects(
+      buildCreatePayload(
+        ORDER({
+          province: '广东省', city: '广州市', district: '海珠区',
+          address: '琶洲街道广州贝赛思中国华西项目部公寓楼(1008)房',
+          lat: 22.993, lng: 113.331,
+          geo_source: 'geocode:amap', geo_precision: 'rooftop',
+        }),
+        SHOP, noPoi,
+        { geocode: {
+            configured: () => true,
+            isDeliverablePin: geocode.isDeliverablePin,
+            districtMatches: geocode.districtMatches,
+            reverseGeocode: async () => ({ district: '番禺区', city: '广州市', province: '广东省' }),
+            geocodeAddress: async () => {
+              resolved = true;
+              return {
+                lat: 22.993, lng: 113.331, precision: 'rooftop', provider: 'amap',
+                cityMatch: true, districtMatch: false,
+              };
+            },
+          } }),
+      (e) => {
+        assert.strictEqual(e.needsPoint, true, 'parked for a person');
+        assert.strictEqual(resolved, true, 'the stored rooftop pin was not trusted');
+        return true;
+      });
+  });
+
+  await itAsync('a rooftop geocode whose point is in the named district is still trusted', async () => {
+    let resolved = false;
+    const p = await buildCreatePayload(
+      ORDER({ ...LEGACY, lat: 23.135, lng: 113.335, geo_source: 'geocode:amap', geo_precision: 'rooftop' }),
+      SHOP, noPoi,
+      { geocode: {
+          configured: () => true,
+          isDeliverablePin: geocode.isDeliverablePin,
+          districtMatches: geocode.districtMatches,
+          reverseGeocode: async () => ({ district: '白云区' }),
+          geocodeAddress: async () => { resolved = true; return null; },
+        } });
+    assert.strictEqual(resolved, false);
+    assert.strictEqual(p._geo.source, 'geocode:amap');
+  });
+
   await itAsync('with no geocoder at all an unverified pin ships, loudly', async () => {
     const warns = [];
     const p = await buildCreatePayload(
@@ -484,6 +553,10 @@ async function extraSuites() {
   it('a wrong-city translation is never adopted', () => {
     assert.strictEqual(addressCn.shouldAdoptTranslation({
       first: street('coarse'), retry: street('rooftop', { cityMatch: false }), mergedAddress: '珠江西路15号' }), false);
+  });
+  it('a wrong-district translation is never adopted', () => {
+    assert.strictEqual(addressCn.shouldAdoptTranslation({
+      first: street('coarse'), retry: street('rooftop', { districtMatch: false }), mergedAddress: '珠江西路15号' }), false);
   });
   it('a half-translated street is never adopted', () => {
     assert.strictEqual(addressCn.shouldAdoptTranslation({
