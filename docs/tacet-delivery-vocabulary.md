@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.394 · 2026-11-07 · THE SUGGESTED BAND ROWS — COMPOSED BY THE SESSION.** **COMPOSED:** `Suggested rows. Nothing changes until you turn this on and save. · 建议分段。打开并保存前,价格不变。` `建议` and `保存` and `价格` are live. The sentence sits under the shop line so the prefilled 0–4 ¥15, 4–8 ¥25, 8–12 ¥39 rows are not read as already charging. Nothing retired. Rules 1 to 7 unchanged.
+
 **v1.393 · 2026-11-07 · THE SHOP NAMES ARE A SENTENCE, NOT BUTTONS — COMPOSED BY THE SESSION.** The chips looked like a choice and did nothing. **COMPOSED:** `Counted from Tianhe and Yuexiu. · 从天河和越秀起算。` The shop names are the live store names, joined with ` and ` / `和`. `起算` is the same verb as v1.392. The chip label `Counted from · 从这些门店起算` is retired with the chips. Rules 1 to 7 unchanged.
 
 **v1.392 · 2026-11-07 · THE BAND CARD NAMES THE SHOPS THE KILOMETRES START FROM — COMPOSED BY THE SESSION.** The distance-band card was saying "the shop" and never which one. **COMPOSED:** `Counted from · 从这些门店起算`, the label above the shop chips, and `Km from that shop · 距该门店（公里）`, the first column, replacing `From km · 起（公里）`. `门店` is the live word for a shop. `距该门店` says the number is kilometres from the shop named above, not a place name. The lead now says the same prices apply from every shop listed. Nothing retired except the old column pair, which this replaces. Rules 1 to 7 unchanged.
