@@ -199,7 +199,7 @@ const rec = (name) => (id) => { seen[name] = statusNow(id); };
 const STUBS = {
   tdb, isTerminalOnPaid,
   prepareCommitUnreservedOrder: rec('prepareCommitUnreservedOrder'),
-  inventory: { commitOrderReservations: () => {} },
+  inventory: { commitOrderReservations: () => {}, claimCoveredFreshForOrder: () => {} },
   expressEarliestIso: () => '2026-10-08',
   awardOrderPoints: rec('awardOrderPoints'),
   creditReferralReward: rec('creditReferralReward'),
