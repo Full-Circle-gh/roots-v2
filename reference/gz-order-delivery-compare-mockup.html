@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guangzhou order — delivery comparison — mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111A2B; --paper:#FBF9F4; --pane:#FFFFFF;
+    --elev1:#F4F1E9; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E;
+    --sage-tint:#EDF1EC; --sage-ink:#4A6249;
+    --amber-tint:#F8F1E4; --amber-ink:#7A5B28;
+    --f:'Inter',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--text-1);
+    font-family:var(--f); font-size:14.5px; line-height:1.45;
+    padding:28px 20px 48px;
+  }
+  .wrap{max-width:440px; margin:0 auto;}
+  h1{font-size:20px; font-weight:600; letter-spacing:-.02em; margin:0 0 6px;}
+  .lede{margin:0 0 18px; color:var(--text-2); font-size:13px;}
+  .order{
+    background:var(--pane); border:1px solid var(--line); border-radius:16px;
+    padding:16px 16px 14px; margin-bottom:12px;
+  }
+  .top{display:flex; justify-content:space-between; gap:12px; margin-bottom:12px;}
+  .no{font-weight:600; font-size:14px;}
+  .meta{font-size:12px; color:var(--text-3); margin-top:2px;}
+  .pill{
+    font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+    border-radius:999px; padding:4px 8px; height:fit-content; white-space:nowrap;
+  }
+  .pill.rider{background:var(--sage-tint); color:var(--sage-ink);}
+  .pill.wait{background:var(--elev1); color:var(--text-2);}
+  .cmp{border-top:1px solid var(--line); padding-top:12px;}
+  .kicker{
+    font-size:11px; font-weight:600; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--text-3); margin:0 0 8px;
+  }
+  .pair{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .cell{
+    background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:10px 12px;
+  }
+  .cell .lbl{font-size:12px; color:var(--text-2);}
+  .cell .num{
+    font-family:var(--mono); font-weight:600; font-size:22px; letter-spacing:-.02em;
+    margin-top:2px; font-variant-numeric:tabular-nums;
+  }
+  .cell .num.muted{color:var(--text-3);}
+  .diff{
+    margin-top:8px; border-radius:10px; padding:8px 12px;
+    font-size:13px; font-weight:600;
+  }
+  .diff.cover{background:var(--amber-tint); color:var(--amber-ink);}
+  .diff.keep{background:var(--sage-tint); color:var(--sage-ink);}
+  .diff.wait{background:var(--elev1); color:var(--text-2); font-weight:500;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>On the order</h1>
+  <p class="lede">Guangzhou orders only. Two delivery numbers, and the gap between them.</p>
+
+  <article class="order">
+    <div class="top">
+      <div>
+        <div class="no">TC000812</div>
+        <div class="meta">Tianhe · same-day rider · 闪送一对一</div>
+      </div>
+      <span class="pill rider">Sent</span>
+    </div>
+    <div class="cmp">
+      <div class="kicker">Delivery</div>
+      <div class="pair">
+        <div class="cell">
+          <div class="lbl">Customer paid</div>
+          <div class="num">¥15</div>
+        </div>
+        <div class="cell">
+          <div class="lbl">We paid</div>
+          <div class="num">¥28</div>
+        </div>
+      </div>
+      <div class="diff cover">We covered ¥13</div>
+    </div>
+  </article>
+
+  <article class="order">
+    <div class="top">
+      <div>
+        <div class="no">TC000813</div>
+        <div class="meta">Yuexiu · same-day rider · free over ¥199</div>
+      </div>
+      <span class="pill rider">Sent</span>
+    </div>
+    <div class="cmp">
+      <div class="kicker">Delivery</div>
+      <div class="pair">
+        <div class="cell">
+          <div class="lbl">Customer paid</div>
+          <div class="num">¥0</div>
+        </div>
+        <div class="cell">
+          <div class="lbl">We paid</div>
+          <div class="num">¥22</div>
+        </div>
+      </div>
+      <div class="diff cover">We covered ¥22</div>
+    </div>
+  </article>
+
+  <article class="order">
+    <div class="top">
+      <div>
+        <div class="no">TC000814</div>
+        <div class="meta">Panyu · same-day rider</div>
+      </div>
+      <span class="pill rider">Sent</span>
+    </div>
+    <div class="cmp">
+      <div class="kicker">Delivery</div>
+      <div class="pair">
+        <div class="cell">
+          <div class="lbl">Customer paid</div>
+          <div class="num">¥35</div>
+        </div>
+        <div class="cell">
+          <div class="lbl">We paid</div>
+          <div class="num">¥22</div>
+        </div>
+      </div>
+      <div class="diff keep">Customer paid ¥13 more</div>
+    </div>
+  </article>
+
+  <article class="order">
+    <div class="top">
+      <div>
+        <div class="no">TC000815</div>
+        <div class="meta">Haizhu · same-day rider</div>
+      </div>
+      <span class="pill wait">Not sent</span>
+    </div>
+    <div class="cmp">
+      <div class="kicker">Delivery</div>
+      <div class="pair">
+        <div class="cell">
+          <div class="lbl">Customer paid</div>
+          <div class="num">¥15</div>
+        </div>
+        <div class="cell">
+          <div class="lbl">We paid</div>
+          <div class="num muted">—</div>
+        </div>
+      </div>
+      <div class="diff wait">Rider not sent yet</div>
+    </div>
+  </article>
+</div>
+</body>
+</html>
