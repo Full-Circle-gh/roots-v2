@@ -1497,8 +1497,15 @@ function fillSameDayBands(raw) {
   if (ceiling) ceiling.value = cfg.ceiling != null ? cfg.ceiling : 10;
   body.innerHTML = '';
   const bands = Array.isArray(cfg.bands) ? cfg.bands : [];
-  if (!bands.length) addSameDayBandRow();
-  else bands.forEach(b => addSameDayBandRow(b));
+  // Suggested rows, not a live price. A one-to-one rider in Guangzhou is
+  // published around ¥19 for the first 3 km and ¥29 by 5 km. The short band
+  // stays at today's ¥15. The longer bands step toward that cost.
+  const suggested = bands.length ? bands : [
+    { from: 0, to: 4, fee: 15 },
+    { from: 4, to: 8, fee: 25 },
+    { from: 8, to: 12, fee: 39 },
+  ];
+  suggested.forEach(b => addSameDayBandRow(b));
 }
 
 async function saveSameDayBands() {
