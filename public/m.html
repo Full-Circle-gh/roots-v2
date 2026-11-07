@@ -41112,6 +41112,7 @@ function sheetOrderDetail(){
            ${o.tax?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${o.tax.mode==='inclusive'?T('incl. tax','含税'):T('Tax','税费')}</span><span class="num">${money(CUR,o.tax.amount)}</span></div>`:''}
            ${o.voucher?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Voucher','优惠券')}${o.voucher.code?' · '+escAttr(o.voucher.code):''}</span><span class="num">−${money(CUR,o.voucher.amount)}</span></div>`:''}
            ${o.tillDisc?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Till discount','收银台折扣')} · ${escAttr(tillDiscReason(o.tillDisc.reason))}${o.tillDisc.note?' · '+escAttr(o.tillDisc.note):''}${o.tillDisc.by?' · '+escAttr(o.tillDisc.by):''}</span><span class="num">−${money(CUR,o.tillDisc.amount)}</span></div>`:''}
+           ${deliveryCompareHtml(o)}
          </div>`:''}</div>
        ${moneyGapBand(o)}
        ${settlePanel(o)}
@@ -51967,6 +51968,7 @@ function mapOrderRow(r){
        "Delivery". The pairs are live ones: Subtotal · 小计 and Shipping · 运费,
        the desktop's own word for this fee (orderTotalSubline). */
     items:[], breakdown:orderBreakdown(r),
+    deliveryCompare:deliveryCompareOf(r),
   };
 }
 /* The choices the CUSTOMER made on this line — "Heat up?: Yes", a size, a
@@ -52074,6 +52076,28 @@ function chanMoneyOf(o){
    → ¥581.60). Pairs are the desktop's own (orderTotalSubline, 04-orders.js):
    Subtotal · 小计, Shipping · 运费, Packing · 打包费. One builder for the list
    row and the detail read so they cannot drift apart again. */
+function deliveryCompareOf(raw){
+  if(!raw||raw.fulfillment_type==='pickup'||raw.fulfillment_type==='counter') return null;
+  const blob=[raw.address_full, raw.address&&raw.address.city, raw.city].filter(Boolean).join(' ');
+  if(raw.zone_type!=='gz_district'&&!/广州/.test(blob)&&!/guangzhou/i.test(blob)) return null;
+  const customer=Math.round((Number(raw.shipping_fee)||0)*100)/100;
+  const cost=raw.rider_delivery_cost;
+  const we=(cost==null||cost===''||!Number.isFinite(Number(cost)))?null:Math.round(Number(cost)*100)/100;
+  return {customer, we, gap:we==null?null:Math.round((we-customer)*100)/100};
+}
+function deliveryCompareHtml(o){
+  const c=o&&o.deliveryCompare; if(!c) return '';
+  let note, bg, color;
+  if(c.gap==null){ note=T('Rider not sent yet','骑手尚未派出'); bg='var(--bg-sunken, #F4F1E9)'; color='var(--text-secondary)'; }
+  else if(c.gap>0){ note=T('We covered '+money(CUR,c.gap),'我们承担 '+money(CUR,c.gap)); bg='#FBF0DC'; color='#8A6516'; }
+  else if(c.gap<0){ note=T('Customer paid '+money(CUR,-c.gap)+' more','顾客多付 '+money(CUR,-c.gap)); bg='#EDF1EC'; color='#4A6249'; }
+  else { note=T('Same amount','金额相同'); bg='#EDF1EC'; color='#4A6249'; }
+  return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default)">
+    <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Customer paid','顾客支付')}</span><span class="num">${money(CUR,c.customer)}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:6px"><span style="color:var(--text-secondary)">${T('We paid','我们支付')}</span><span class="num">${c.we==null?'—':money(CUR,c.we)}</span></div>
+    <div style="margin-top:8px;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600;background:${bg};color:${color}">${note}</div>
+  </div>`;
+}
 function orderBreakdown(o){
   const rows=[[['Subtotal','小计'],money(CUR,o.subtotal!=null?o.subtotal:o.total)]];
   if(Number(o.shipping_fee)>0) rows.push([['Shipping','运费'],money(CUR,o.shipping_fee)]);

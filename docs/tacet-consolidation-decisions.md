@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.627
+# Tacet shared-core consolidation — decisions record, v4.628
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-07 · v4.628 — **§522 · A GUANGZHOU ORDER SHOWS WHAT THE CUSTOMER PAID FOR DELIVERY BESIDE WHAT WE PAID THE RIDER — ASH.** See §522.
 
 2026-11-07 · v4.627 — **§521 · GUANGZHOU SAME-DAY RIDER FEE IS A DISTANCE BAND FROM THE SENDING SHOP, AND IT STAYS OFF UNTIL SAVED — ASH.** See §521.
 
@@ -34017,3 +34019,11 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 3. **AFTER PAYMENT, THE CUSTOMER ADDS NOTHING.** An employee moving the pickup to the other shop does not change the delivery fee already paid.
 4. **FREE OVER ¥199 STAYS ON THE SIX INNER DISTRICTS** and wipes the whole same-day rider fee. The outer districts do not get that waiver. Next-day courier and every other city are unchanged.
 5. **THE DEDICATED-RIDER PRICE IS NOT KNOWN BEFORE PAYMENT.** Qingyun prices an order that already exists. Until a price can be read before they pay, the customer pays the band. The ceiling is saved for that gap and is not added after payment.
+
+## §522 — A GUANGZHOU ORDER SHOWS WHAT THE CUSTOMER PAID FOR DELIVERY BESIDE WHAT WE PAID THE RIDER
+
+**2026-11-07 · DECIDED BY ASH.** On a Guangzhou delivery, the order shows the delivery fee the customer paid and the price of the one rider we sent, and the gap between them. Before that rider is sent, our side is blank.
+
+1. **THE CUSTOMER'S NUMBER IS THE DELIVERY FEE ON THE ORDER**, including ¥0 when delivery was free.
+2. **OUR NUMBER IS WRITTEN WHEN ONE COURIER IS DISPATCHED**, the price Qingyun quoted for that courier. Calling several at once does not write a price, because only the one who accepts is billed and that is not known here.
+3. **IT IS NOT A COST IN THE BOOKS.** The figure is not part of the order total and is not deducted from revenue. Courier spend stays in the expense book.

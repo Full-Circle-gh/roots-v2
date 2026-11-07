@@ -27463,6 +27463,14 @@ router.post('/api/retail-admin/orders/:id/qingyun/dispatch', requireRetailAdmin,
     }
     if (!chosen.length) return res.status(409).json({ success: false, error: 'carrier_unavailable' });
     const r = await br.dispatch(ref.qyOrderId, chosen);
+    if (r.ok && chosen.length === 1 && Number.isFinite(Number(chosen[0].feeYuan))) {
+      // The price of the one rider we sent. Several at once bill only whoever
+      // accepts first, and that price is not this number, so it stays blank.
+      try {
+        tdb().prepare('UPDATE retail_orders SET rider_delivery_cost = ? WHERE id = ?')
+          .run(Math.round(Number(chosen[0].feeYuan) * 100) / 100, id);
+      } catch (e) { console.error('[qingyun dispatch] cost', e.message); }
+    }
     if (!r.ok) {
       const insufficient = /余额|余额不足|balance|充值/i.test(String(r.msg || ''));
       // Qingyun's refusal text is the ONLY thing that explains a failed dispatch, and
