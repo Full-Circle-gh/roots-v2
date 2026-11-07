@@ -8761,7 +8761,7 @@ function geocodeOrderSnapshotAsync(orderId, addr) {
         province: addr.province, city: addr.city, district: addr.district,
         address: [addr.address, addr.detail].filter(Boolean).join(' '),
       });
-      if (!c || c.lat == null) return;
+      if (!c || c.lat == null || geocode.rejectedRegion(c)) return;
       const row = tdb().prepare('SELECT address_json FROM retail_orders WHERE id = ?').get(orderId);
       if (!row) return;
       let cur = {}; try { cur = JSON.parse(row.address_json || '{}') || {}; } catch { return; }
@@ -10523,7 +10523,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         province: address.province, city: address.city, district: address.district,
         address: [address.address, address.detail].filter(Boolean).join(' '),
       });
-      if (coords && coords.lat != null && coords.lng != null) {
+      // A pin in another district must not become the order's coordinates.
+      // Checkout copies this straight onto the snapshot, and a rooftop grade
+      // there is trusted at dispatch.
+      if (coords && coords.lat != null && coords.lng != null && !geocode.rejectedRegion(coords)) {
         address.lat = coords.lat;
         address.lng = coords.lng;
         address.geo_source = `geocode:${coords.provider || 'maps'}`;

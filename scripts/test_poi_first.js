@@ -275,6 +275,69 @@ await itAsync('SAME-CITY WRONG-DISTRICT: a strong name match in a different dist
     (e) => { assert.strictEqual(e.pickPlace, true, 'must park for a person, not auto-ship the wrong district'); return true; });
 });
 
+await itAsync('a 小区 in the hit address is not treated as a different district', async () => {
+  const p = await buildCreatePayload(
+    ORDER({ province: '广东省', city: '广州市', district: '番禺区', address: '祈福新村倚湖湾' }),
+    SHOP,
+    poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '祈福新村倚湖湾小区', provider: 'qingyun' }]),
+    { geocode: blindGeo });
+  assert.strictEqual(p._geo.source, 'poi_auto');
+});
+
+await itAsync('PAZHOU BASIS: the same name pinned in another district is not taken', async () => {
+  // The apartment is 海珠区琶洲. The index's 贝赛思 is a different campus.
+  // The name matches exactly and the hit's address names 番禺, so this used
+  // to clear the score gate and ship — 17km is under the distance cap.
+  const text = '琶洲街道广州贝赛思中国华西项目部公寓楼(1008)房';
+  const { findable } = splitFindable(text, { district: '海珠区' });
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ province: '广东省', city: '广州市', district: '海珠区', address: text }),
+      SHOP,
+      poiList([{ ...M(23.00, 113.33), name: findable, address: '广东省广州市番禺区汉溪大道东', provider: 'qingyun' }]),
+      { geocode: blindGeo }),
+    (e) => {
+      assert.notStrictEqual(e._geo && e._geo.source, 'poi_auto');
+      assert.strictEqual(e.pickPlace, true, 'ask a person, do not ship the other campus');
+      return true;
+    });
+});
+
+await itAsync('PAZHOU BASIS: a nameless coordinate in another district is not taken', async () => {
+  // Qingyun often returns no 区 at all, only a road. The name still matches.
+  // The coordinate's own district, read back by a reverse lookup, is what
+  // has to stop the auto-take.
+  const text = '琶洲街道广州贝赛思中国华西项目部公寓楼(1008)房';
+  const { findable } = splitFindable(text, { district: '海珠区' });
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ province: '广东省', city: '广州市', district: '海珠区', address: text }),
+      SHOP,
+      poiList([{ ...M(23.00, 113.33), name: findable, address: '汉溪大道东', provider: 'qingyun' }]),
+      { geocode: stubGeo(null, {
+          districtMatches: geocode.districtMatches,
+          reverseGeocode: async () => ({ district: '番禺区', city: '广州市' }),
+        }) }),
+    (e) => {
+      assert.notStrictEqual(e._geo && e._geo.source, 'poi_auto');
+      assert.strictEqual(e.pickPlace, true);
+      assert.strictEqual(e.point, null, 'the map must not open on the other district');
+      return true;
+    });
+});
+
+await itAsync('a perfect name with no district on the hit is still taken when the pin is in the right district', async () => {
+  const p = await buildCreatePayload(
+    ORDER({ province: '广东省', city: '广州市', district: '海珠区', address: '广州贝赛思中国华西项目部' }),
+    SHOP,
+    poiList([{ ...NEAR, name: '广州贝赛思中国华西项目部', address: '石基路205号', provider: 'qingyun' }]),
+    { geocode: {
+        ...blindGeo,
+        districtMatches: geocode.districtMatches,
+        reverseGeocode: async () => ({ district: '海珠区' }),
+      } });
+  assert.strictEqual(p._geo.source, 'poi_auto');
+});
 await itAsync('same district name in the address text still auto-takes', async () => {
   const p = await buildCreatePayload(
     ORDER({ province: '广东省', city: '广州市', district: '越秀区', address: '富力新天地' }),

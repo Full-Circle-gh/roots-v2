@@ -57,7 +57,7 @@ function geocodeStoreAsync(storeId, conn) {
       const coords = await geocode.geocodeAddress({
         city: s.city, district: s.district, address: s.address,
       });
-      if (!coords) return;
+      if (!coords || geocode.rejectedRegion(coords)) return;
       conn.prepare('UPDATE retail_stores SET lat = ?, lng = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .run(coords.lat, coords.lng, storeId);
     } catch (e) { console.warn('[geocodeStoreAsync]', e.message); }
@@ -306,7 +306,9 @@ router.post('/api/retail-admin/geocode', requireRetailAdmin, express.json(), asy
   const b = req.body || {};
   try {
     const c = await geocode.geocodeAddress({ city: b.city, district: b.district, address: b.address });
-    if (c && c.lat != null && c.lng != null) return res.json({ success: true, data: { lat: c.lat, lng: c.lng } });
+    if (c && c.lat != null && c.lng != null && !geocode.rejectedRegion(c)) {
+      return res.json({ success: true, data: { lat: c.lat, lng: c.lng } });
+    }
     return res.json({ success: false, error: 'not_found' });
   } catch (e) { return res.json({ success: false, error: 'geocode_failed' }); }
 });
@@ -853,7 +855,7 @@ router.post('/api/retail-admin/inventory/geocode-backfill', requireRetailAdmin, 
 
   for (const s of stores) {
     const c = await geocode.geocodeAddress({ city: s.city, district: s.district, address: s.address });
-    if (c) {
+    if (c && !geocode.rejectedRegion(c)) {
       tdb().prepare('UPDATE retail_stores SET lat = ?, lng = ? WHERE id = ?').run(c.lat, c.lng, s.id);
       storesDone++;
     } else if (geocode.isQuotaError(geocode.lastError())) { aborted = true; break; }
@@ -863,7 +865,7 @@ router.post('/api/retail-admin/inventory/geocode-backfill', requireRetailAdmin, 
       province: a.province, city: a.city, district: a.district,
       address: [a.address, a.detail].filter(Boolean).join(' '),
     });
-    if (c) {
+    if (c && !geocode.rejectedRegion(c)) {
       // Record WHERE the pin came from and how exact the provider said it was.
       // Without this the backfill minted coordinates with no provenance, which
       // the courier push cannot take on trust — it has to re-resolve the address
