@@ -1479,15 +1479,12 @@ async function fillSameDayBandShops() {
     const j = await api('/api/retail-admin/stores');
     stores = (j.data || []).filter(s => s.is_active !== 0 && s.is_active !== false);
   } catch (_) { stores = []; }
-  el.replaceChildren();
-  stores.forEach(s => {
-    const chip = document.createElement('span');
-    chip.style.cssText = 'display:inline-flex;align-items:center;padding:6px 10px;border:1px solid var(--line);border-radius:999px;font-size:13px;font-weight:600;background:var(--bg-pane,#fff);';
-    const en = s.name_en || s.code || '';
-    const cn = s.name_cn || s.name_en || s.code || '';
-    chip.textContent = cn && cn !== en ? (en + ' · ' + cn) : (en || cn);
-    el.appendChild(chip);
-  });
+  const join = (parts, and) => parts.length < 2 ? (parts[0] || '') : parts.slice(0, -1).join(', ') + and + parts[parts.length - 1];
+  const en = stores.map(s => s.name_en || s.code).filter(Boolean);
+  const cn = stores.map(s => s.name_cn || s.name_en || s.code).filter(Boolean);
+  el.textContent = en.length
+    ? ('Counted from ' + join(en, ' and ') + '. · 从' + join(cn, '和') + '起算。')
+    : '';
 }
 
 function fillSameDayBands(raw) {
