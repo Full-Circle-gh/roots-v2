@@ -10578,15 +10578,17 @@
             <div class="group-card">
               <div class="group-card-head">
                 <div class="gch-row"><h3>Distance bands · 按距离分段</h3></div>
-                <div class="muted card-lead">Guangzhou same-day rider only. Off until you turn it on — today's district fees stay. Kilometres start at the shop that sends the order. If the nearer shop is short, the price is measured again from the other shop before they pay. A move after they have paid does not add anything. · 仅广州当日骑手。关闭时仍按现在的区费。公里数从发货门店起算。近店缺货时,改从另一门店重算,结账前看到新价格。付款后改派不再加价。</div>
+                <div class="muted card-lead">Guangzhou same-day rider only. Off until you turn it on — today's district fees stay. The same prices apply from every shop below. Kilometres are counted from the shop that sends the rider. If that shop is short, they are counted again from the other shop before the customer pays. · 仅广州当日骑手。关闭时仍按现在的区费。下面每家门店用同一套价格。公里数从发货的那家门店起算。那家缺货时,改从另一家重算,顾客付款前看到新价格。</div>
               </div>
+              <div class="muted" style="font-size: 12px; margin: 0 0 8px;">Counted from · 从这些门店起算</div>
+              <div id="sdb-shops" style="display:flex; flex-wrap:wrap; gap:8px; margin: 0 0 14px;"></div>
               <label class="dz-check-row" style="margin: 0 0 12px;">
                 <input type="checkbox" id="sdb-on"> Use distance bands · 按距离计费
               </label>
               <table>
                 <thead>
                   <tr>
-                    <th style="text-align:left;font-size:11px;color:var(--text-3);">From km · 起（公里）</th>
+                    <th style="text-align:left;font-size:11px;color:var(--text-3);">Km from that shop · 距该门店（公里）</th>
                     <th style="text-align:left;font-size:11px;color:var(--text-3);">Up to km · 至（公里）</th>
                     <th style="text-align:left;font-size:11px;color:var(--text-3);">Band ¥ · 费用</th>
                     <th></th>

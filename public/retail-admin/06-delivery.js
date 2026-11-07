@@ -173,6 +173,7 @@ async function loadDeliveryZones() {
     // delivery.* alongside the legacy holiday/batch settings.
     window._deliveryCfg = dlv;
     fillSameDayBands(dlv.sameDayBands);
+    fillSameDayBandShops();
     if ($('#dlv-kitchen-address')) $('#dlv-kitchen-address').value = dlv.kitchenAddress ?? '';
     const hMode = !!dlv.holidayMode;
     const hMsg = dlv.holidayMessage || {};
@@ -1468,6 +1469,25 @@ function addSameDayBandRow(row) {
   del.appendChild(btn);
   tr.appendChild(del);
   body.appendChild(tr);
+}
+
+async function fillSameDayBandShops() {
+  const el = document.getElementById('sdb-shops');
+  if (!el) return;
+  let stores = [];
+  try {
+    const j = await api('/api/retail-admin/stores');
+    stores = (j.data || []).filter(s => s.is_active !== 0 && s.is_active !== false);
+  } catch (_) { stores = []; }
+  el.replaceChildren();
+  stores.forEach(s => {
+    const chip = document.createElement('span');
+    chip.style.cssText = 'display:inline-flex;align-items:center;padding:6px 10px;border:1px solid var(--line);border-radius:999px;font-size:13px;font-weight:600;background:var(--bg-pane,#fff);';
+    const en = s.name_en || s.code || '';
+    const cn = s.name_cn || s.name_en || s.code || '';
+    chip.textContent = cn && cn !== en ? (en + ' · ' + cn) : (en || cn);
+    el.appendChild(chip);
+  });
 }
 
 function fillSameDayBands(raw) {
