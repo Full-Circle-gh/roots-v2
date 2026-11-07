@@ -138,6 +138,43 @@ it('unknown side is undecidable, not a mismatch', () => {
   assert.strictEqual(geocode.districtMatches('天河区', ''), null);
 });
 
+console.log('\ndistrictAgrees — 小区 is not a district, a named 区 is');
+it('海珠区 disagrees with a 番禺区 address', () => {
+  assert.strictEqual(geocode.districtAgrees('海珠区', '', '广东省广州市番禺区汉溪大道东'), false);
+});
+it('海珠区 agrees with a 海珠区 address', () => {
+  assert.strictEqual(geocode.districtAgrees('海珠区', '', '广东省广州市海珠区琶洲街道新港东路'), true);
+});
+it('a 小区 on the line is not a district, so the check stays undecided', () => {
+  assert.strictEqual(geocode.districtAgrees('番禺区', '', '祈福新村倚湖湾小区'), null);
+});
+it('a structured district is used when the text has none', () => {
+  assert.strictEqual(geocode.districtAgrees('海珠区', '番禺区', ''), false);
+  assert.strictEqual(geocode.districtAgrees('海珠区', '海珠区', ''), true);
+});
+
+console.log('\nconfirmDistrict — the coordinate beats an echoed label');
+it('a label that repeats 海珠区 still fails when the point is in 番禺区', () => {
+  // The geocoder's district field copies the query. The pin is the other campus.
+  const result = {
+    lat: 23.00, lng: 113.33, precision: 'rooftop',
+    matched: { district: '海珠区', formatted: '广东省广州市海珠区琶洲街道广州贝赛思' },
+  };
+  geocode.confirmDistrict(result, { district: '海珠区' }, '番禺区');
+  assert.strictEqual(result.districtMatch, false);
+  assert.strictEqual(geocode.rejectedRegion(result), true);
+  assert.strictEqual(geocode.isDeliverablePin(result).reason, 'district_mismatch');
+});
+it('a point that really is in 海珠区 is kept', () => {
+  const result = {
+    lat: 23.10, lng: 113.37, precision: 'rooftop',
+    matched: { district: '海珠区', formatted: '广东省广州市海珠区琶洲街道' },
+  };
+  geocode.confirmDistrict(result, { district: '海珠区' }, '海珠区');
+  assert.strictEqual(result.districtMatch, true);
+  assert.strictEqual(geocode.rejectedRegion(result), false);
+});
+
 // ── buildCreatePayload ────────────────────────────────────────────────────
 // Guangzhou Tianhe-ish shop; distances below are real enough for the gate.
 const SHOP = { shopId: 'S1', cityId: 20, name: '测试门店', lat: 23.13, lng: 113.33 };
@@ -368,15 +405,40 @@ async function extraSuites() {
       });
   });
 
-  await itAsync('a geocoded pin already graded rooftop is trusted without re-resolving', async () => {
+  await itAsync('a stored rooftop is kept when a fresh resolve does not contradict the district', async () => {
+    // Re-asked, because a rooftop grade used to be stored for a hit in the
+    // wrong district. An empty answer is not a contradiction, so the pin stays.
     let called = false;
     const p = await buildCreatePayload(
       ORDER({ ...LEGACY, lat: 23.135, lng: 113.335, geo_source: 'geocode:amap', geo_precision: 'rooftop' }),
       SHOP, noPoi,
       { geocode: { configured: () => true, isDeliverablePin: geocode.isDeliverablePin,
                    geocodeAddress: async () => { called = true; return null; } } });
-    assert.strictEqual(called, false);
+    assert.strictEqual(called, true);
     assert.strictEqual(p._geo.source, 'geocode:amap');
+    assert.strictEqual(p.recipientLat, 23135000);
+  });
+
+  await itAsync('a stored rooftop in another district is not sent to a rider', async () => {
+    // 海珠区琶洲 typed, the indexed 贝赛思 pinned in 番禺. 14km, inside the
+    // distance cap, rooftop grade — the combination that used to dispatch.
+    const wrong = {
+      lat: 23.00, lng: 113.33, precision: 'rooftop', provider: 'amap',
+      cityMatch: true, districtMatch: false,
+      matched: { district: '番禺区', formatted: '广东省广州市番禺区汉溪大道' },
+    };
+    await assert.rejects(
+      buildCreatePayload(
+        ORDER({ province: '广东省', city: '广州市', district: '海珠区',
+                address: '琶洲街道广州贝赛思中国华西项目部公寓楼',
+                lat: 23.00, lng: 113.33, geo_source: 'geocode:amap', geo_precision: 'rooftop' }),
+        SHOP, noPoi,
+        { geocode: stubGeo(wrong) }),
+      (e) => {
+        assert.strictEqual(e._geo && e._geo.refused, true, 'refused, not dispatched');
+        assert.notStrictEqual(e._geo.source, 'poi_auto');
+        return true;
+      });
   });
 
   await itAsync('with no geocoder at all an unverified pin ships, loudly', async () => {
@@ -484,6 +546,10 @@ async function extraSuites() {
   it('a wrong-city translation is never adopted', () => {
     assert.strictEqual(addressCn.shouldAdoptTranslation({
       first: street('coarse'), retry: street('rooftop', { cityMatch: false }), mergedAddress: '珠江西路15号' }), false);
+  });
+  it('a wrong-district translation is never adopted', () => {
+    assert.strictEqual(addressCn.shouldAdoptTranslation({
+      first: street('coarse'), retry: street('rooftop', { districtMatch: false }), mergedAddress: '珠江西路15号' }), false);
   });
   it('a half-translated street is never adopted', () => {
     assert.strictEqual(addressCn.shouldAdoptTranslation({
