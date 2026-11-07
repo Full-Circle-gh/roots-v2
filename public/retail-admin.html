@@ -10574,6 +10574,37 @@
               <button class="btn" onclick="saveDeliveryFees()">Save fees · 保存费用</button>
               <span id="dlv-fees-status" style="font-size: 12px; align-self: center;"></span>
             </div>
+
+            <div class="group-card">
+              <div class="group-card-head">
+                <div class="gch-row"><h3>Distance bands · 按距离分段</h3></div>
+                <div class="muted card-lead">Guangzhou same-day rider only. Off until you turn it on — today's district fees stay. Kilometres start at the shop that sends the order. If the nearer shop is short, the price is measured again from the other shop before they pay. A move after they have paid does not add anything. · 仅广州当日骑手。关闭时仍按现在的区费。公里数从发货门店起算。近店缺货时,改从另一门店重算,结账前看到新价格。付款后改派不再加价。</div>
+              </div>
+              <label class="dz-check-row" style="margin: 0 0 12px;">
+                <input type="checkbox" id="sdb-on"> Use distance bands · 按距离计费
+              </label>
+              <table>
+                <thead>
+                  <tr>
+                    <th style="text-align:left;font-size:11px;color:var(--text-3);">From km · 起（公里）</th>
+                    <th style="text-align:left;font-size:11px;color:var(--text-3);">Up to km · 至（公里）</th>
+                    <th style="text-align:left;font-size:11px;color:var(--text-3);">Band ¥ · 费用</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="sdb-rows"></tbody>
+              </table>
+              <button type="button" class="btn" onclick="addSameDayBandRow()" style="margin-top: 8px;">Add a band · 加一段</button>
+              <div class="field" style="max-width: 220px; margin-top: 14px;">
+                <label class="stacked" for="sdb-ceiling">Ceiling on the extra · 加价上限</label>
+                <span class="yen-input"><input type="number" id="sdb-ceiling" min="0" step="1" value="10"></span>
+              </div>
+              <p class="muted" style="font-size: 12px; line-height: 1.5;">The dedicated-rider price is known only after payment, and a shop change after payment does not add to the customer's fee. Until that price can be read before they pay, they pay the band. · 一对一的价格要等付款后才知道,付款后改派不再向顾客加价。在能于付款前读到该价格之前,顾客只付分段费用。</p>
+              <div class="row" style="gap: 12px;">
+                <button class="btn" onclick="saveSameDayBands()">Save bands · 保存分段</button>
+                <span id="sdb-status" style="font-size: 12px; align-self: center;"></span>
+              </div>
+            </div>
           </div>
 
           <!-- ══ STORE PICKUP VIEW ══ (same saveDeliveryFees writer — pickup fields

@@ -207,6 +207,7 @@ Page({
     nearestStoreName: '',        // display name of the (out-of-stock) nearest store (localized)
     fallbackExtraKm: null,       // km the fallback adds vs nearest (for option 3 messaging)
     fallbackExtraMin: null,      // estimated extra minutes
+    fallbackBandFee: null,       // same-day rider price from the other shop, when bands are on
     missingItems: [],            // [{ product_id, name_en, name_cn, qty, available, image_data }]
     acceptedFallback: false,     // user clicked "Yes, ship from farther store" — sent as accept_fallback:true on /orders
     showFallbackModal: false,    // toggles the in-page 5-option modal
@@ -1681,6 +1682,9 @@ Page({
         let nextSlotId    = stillValid ? this.data.deliverySlotId    : '';
         let nextSlotLabel = stillValid ? this.data.deliverySlotLabel : '';
         let nextSlotSurcharge = stillValid ? this.data.deliverySurcharge : 0;
+        // The band is the whole same-day rider price. The flat district
+        // surcharge must not be added on top of it.
+        if (data.same_day_band && data.same_day_band.applied) nextSlotSurcharge = 0;
         // Default to "Right away" when the kitchen is open and the
         // customer hasn't picked something else. Customer can switch to
         // a later time-slot or scheduled day if they prefer.
@@ -1713,6 +1717,7 @@ Page({
         const keepAccepted = this.data.acceptedFallback && needsFallback
           && this.data.routing?.fallback?.store_id === routing?.fallback?.store_id;
         const fallbackExtraKm  = routing?.fallback?.extra_km ?? null;
+        const fallbackBandFee  = routing?.fallback?.band_fee != null ? routing.fallback.band_fee : null;
         const fallbackExtraMin = routing?.fallback?.extra_min_estimate ?? null;
         const missingItems     = Array.isArray(routing?.missing_items) ? routing.missing_items : [];
         // "You saved" total — flash + bundle savings + voucher + points + waived
@@ -1775,6 +1780,7 @@ Page({
           nearestStoreName,
           fallbackExtraKm,
           fallbackExtraMin,
+          fallbackBandFee,
           missingItems,
           acceptedFallback: keepAccepted,
         });
@@ -3484,6 +3490,17 @@ Page({
     } catch (e) {
       console.error('[checkout] place order failed:', e);
       // Store closed between opening checkout and submitting — server rejected it.
+      if (e?.message === 'same_day_too_far') {
+        this.setData({ placing: false });
+        const cn = this.data.lang === 'cn';
+        wx.showModal({
+          title: cn ? '超出当日配送' : 'Too far for today',
+          content: cn ? '这个地址超出当日骑手配送范围。请改选之后的日期。' : 'This address is too far for a same-day rider. Pick a later day.',
+          showCancel: false,
+          confirmText: cn ? '我知道了' : 'OK',
+        });
+        return;
+      }
       if (e?.message === 'store_closed') {
         this.setData({ placing: false });
         const cn = this.data.lang === 'cn';

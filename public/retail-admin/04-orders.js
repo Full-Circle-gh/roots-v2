@@ -6136,6 +6136,7 @@ async function qyDispatch(orderId, btn) {
         ? `${done.map(c => escapeHtml(c.name || '')).join(', ')} — ${cuT('first to accept wins', '谁先接单谁配送')}`
         : `${escapeHtml(done[0]?.name || '')} ${acWrap(done[0]?.fee_yuan ?? '')}`;
       if (box) box.innerHTML = `<div style="font-size:12px;color:var(--brand)">✓ ${cuT('Dispatched', '已发单')}: ${names}</div>`;
+      openOrder(orderId, { instant: true });
       loadOrders();
     } else {
       if (btn) { btn.disabled = false; btn.textContent = cuT('Dispatch courier', '发起配送'); }
@@ -6773,7 +6774,38 @@ function renderOrderTotalBanner(o) {
       <div class="otb-amount">${acMoney(o.total)}</div>
     </div>
     ${orderMoneyGapBand(o)}
+    ${renderDeliveryCompare(o)}
     ${renderChannelMoneyPanel(o)}`;
+}
+
+// Guangzhou delivery only. Customer paid is the delivery fee on the order,
+// including ¥0. We paid is the rider price recorded when one courier was sent.
+function orderIsGuangzhouDelivery(o) {
+  if (!o || o.fulfillment_type === 'pickup' || o.fulfillment_type === 'counter') return false;
+  if (o.zone_type === 'gz_district') return true;
+  const blob = [o.address_full, o.address && o.address.city, o.city].filter(Boolean).join(' ');
+  return /广州/.test(blob) || /guangzhou/i.test(blob);
+}
+function renderDeliveryCompare(o) {
+  if (!orderIsGuangzhouDelivery(o)) return '';
+  const customer = Math.round((Number(o.shipping_fee) || 0) * 100) / 100;
+  const raw = o.rider_delivery_cost;
+  const we = (raw == null || raw === '' || !Number.isFinite(Number(raw))) ? null : Math.round(Number(raw) * 100) / 100;
+  const gap = we == null ? null : Math.round((we - customer) * 100) / 100;
+  let note;
+  if (gap == null) note = cuT('Rider not sent yet', '骑手尚未派出');
+  else if (gap > 0) note = cuT(`We covered ${acMoney(gap)}`, `我们承担 ${acMoney(gap)}`);
+  else if (gap < 0) note = cuT(`Customer paid ${acMoney(-gap)} more`, `顾客多付 ${acMoney(-gap)}`);
+  else note = cuT('Same amount', '金额相同');
+  const tone = gap == null ? '#58606E' : (gap > 0 ? '#8A6516' : '#4A6249');
+  const wash = gap == null ? 'var(--bg-elev-1, #F4F1E9)' : (gap > 0 ? '#FBF0DC' : '#EDF1EC');
+  return `
+    <div class="cmp">
+      <h3 class="cmp-h">${cuT('Delivery', '配送')}</h3>
+      <div class="cmp-row"><span>${cuT('Customer paid', '顾客支付')}</span><span class="cmp-v">${acMoney(customer)}</span></div>
+      <div class="cmp-row"><span>${cuT('We paid', '我们支付')}</span><span class="cmp-v">${we == null ? '—' : acMoney(we)}</span></div>
+      <div class="cmp-note" style="font-weight:600;color:${tone};background:${wash};border-radius:8px;padding:8px 10px;">${note}</div>
+    </div>`;
 }
 
 // Channel money breakdown — Meituan and Eleme both take a commission on what

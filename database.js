@@ -3634,6 +3634,10 @@ addColumn('retail_orders', 'tax_mode',      'TEXT');       // 'exclusive' | 'inc
 addColumn('retail_orders', 'scheduled_for',         'DATETIME');
 addColumn('retail_orders', 'delivery_slot_label',   'TEXT');
 addColumn('retail_orders', 'same_day_surcharge_fee', 'REAL DEFAULT 0');
+// What we paid the rider we sent for this order. NULL until a single courier
+// is dispatched. Not part of the customer's total, and not a cost deducted
+// from revenue — the expense book stays the only place courier spend is counted.
+addColumn('retail_orders', 'rider_delivery_cost', 'REAL');
 
 // Per-zone delivery scheduling config. same_day_allowed=0 forces the
 // customer to pick a future slot (min_lead_days kicks in). same_day_surcharge
