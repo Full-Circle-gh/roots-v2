@@ -281,6 +281,32 @@ operator('nowhere', { stores: [] });
       is(counts.j && counts.j.data && counts.j.data.paid, 1, 'the open-work chips count their store only');
     }
 
+    section('3b · a fapiao at the other store is not this login\'s alert');
+    {
+      // Both orders asked for a fapiao. Home used to count every unissued one,
+      // so a warehouse login pinned to Tianhe saw Yuexiu's "Invoices to issue".
+      db.prepare(`UPDATE retail_orders SET needs_invoice = 1, invoice_status = 'requested' WHERE id IN (?, ?)`)
+        .run(ORD_T, ORD_Y);
+      const own = await get('yuexiu', '/api/retail-admin/dashboard/ops');
+      const ownInv = own.j && own.j.data && own.j.data.invoices;
+      is(own.status, 200, 'a pinned login reads the dashboard');
+      is(ownInv && ownInv.count, 1, 'Home counts their store\'s unissued fapiao only');
+      is((ownInv && ownInv.items || []).map(r => r.id), [ORD_Y], '…and the row is theirs, not the other store\'s');
+      const picked = await get('yuexiu', `/api/retail-admin/dashboard/ops?store_id=${YUEXIU}`);
+      is(picked.j && picked.j.data && picked.j.data.invoices && picked.j.data.invoices.count, 1,
+        'passing their own store keeps that one');
+      const other = await get('yuexiu', `/api/retail-admin/dashboard/ops?store_id=${TIANHE}`);
+      is(other.status, 403, 'asking for the other store\'s dashboard is refused');
+      const all = await get('owner', '/api/retail-admin/dashboard/ops');
+      is(all.j && all.j.data && all.j.data.invoices && all.j.data.invoices.count, 2,
+        'an unscoped login still sees both stores');
+      const list = await get('yuexiu', '/api/retail-admin/invoices?status=requested');
+      is((list.j && list.j.data || []).map(r => r.id), [ORD_Y], 'the invoices list is the same set');
+      is(list.j && list.j.counts && list.j.counts.requested, 1, 'and its pending chip agrees');
+      const dot = await get('yuexiu', '/api/retail-admin/invoices/unseen-count');
+      is(dot.j && dot.j.data && dot.j.data.count, 1, 'the unseen dot does not count the other store');
+    }
+
     section('4 · waste, purchases and transfers clamp the same way');
     {
       const w = await get('yuexiu', '/api/retail-admin/waste');

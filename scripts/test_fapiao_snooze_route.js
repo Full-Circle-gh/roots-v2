@@ -98,7 +98,12 @@ stub('../lib/tenant-db', {
 // Whoever is signed in decides their own caps — the suite flips this between
 // requests to exercise the gate rather than asserting it from source.
 let CAPS = ['invoices:manage', 'invoices:view'];
-stub('../lib/operator-caps', { resolveOperator: () => ({ caps: CAPS, scopeStores: null }) });
+// storeIdsOf is the real one: the fapiao list, the unseen dot and snooze all
+// pin to the caller's stores through it. This suite's operators are unscoped
+// (scopeStores null), so the pin adds no clause and the assertions stay about
+// the deferral, not about stores.
+const { storeIdsOf } = require('../lib/operator-caps');
+stub('../lib/operator-caps', { resolveOperator: () => ({ caps: CAPS, scopeStores: null }), storeIdsOf });
 // lib/inventory and lib/category-text are NOT stubbed: retail.js calls a wide
 // surface of both at load, a hand-written fake of that surface rots the moment
 // either grows a function, and neither is on this route's path. They read

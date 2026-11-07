@@ -16205,6 +16205,19 @@ function retailLiveBump(tenantId, entity, meta) {
   }
 }
 
+// An orders query held to the caller's store pin (§520). null = unscoped: the
+// owner, and anyone whose scope_all is still on, keep seeing every store.
+// An empty pin matches nothing — a login pinned to no store is not handed
+// every store's rows by accident.
+function pinnedOrderStoreSql(alias, scope) {
+  if (!Array.isArray(scope)) return { sql: '', params: [] };
+  if (!scope.length) return { sql: ' AND 0=1', params: [] };
+  return {
+    sql: ` AND ${alias}.store_id IN (${scope.map(() => '?').join(',')})`,
+    params: scope.slice(),
+  };
+}
+
 // ── Dashboard: operational snapshot (low stock + refunds queue) ────────────
 // Feeds the bento "Low stock" and "Refunds queue" tiles. Counts + small
 // preview lists in one round-trip. Cheap; polled every ~60s alongside today's
@@ -16699,10 +16712,22 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // Fapiao worklist — un-issued invoice requests, oldest debt first. Feeds
     // the "Invoices to issue" attention card; its deep link lands on the
     // Orders list pre-filtered to the same `needs_invoice` pseudo-status.
-    const INV_WHERE = fapiaoQueue.pendingSql('o');
+    //
+    // THE SAME STORE AS THE ORDERS LIST IT OPENS. This block used to read
+    // pendingSql and stop. Unhandled, restock and the payment fires all
+    // honour the dashboard's store, and with no store sent the caller's pin
+    // (§520). A warehouse login pinned to Tianhe was therefore shown a
+    // Yuexiu fapiao — "Invoices to issue · 1" — for an order the Orders list,
+    // which is already pinned, would not show them. The card and the list
+    // now answer the same question: this store's unissued fapiao, or, with
+    // no store picked, the stores this login is allowed to see.
+    const invPin = storeId
+      ? { sql: ' AND o.store_id = ?', params: [Number(storeId)] }
+      : pinnedOrderStoreSql('o', opsScope);
+    const INV_WHERE = fapiaoQueue.pendingSql('o') + invPin.sql;
     const invCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM retail_orders o WHERE ${INV_WHERE}
-    `).get().n;
+    `).get(...invPin.params).n;
     const invItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.total, o.placed_at,
              o.invoice_type, o.invoice_title,
@@ -16711,7 +16736,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE ${INV_WHERE}
        ORDER BY o.placed_at ASC LIMIT ?
-    `).all(previewLimit);
+    `).all(...invPin.params, previewLimit);
     invoices = {
       count: invCount,
       items: invItems.map(r => ({
@@ -22887,12 +22912,15 @@ router.get('/api/retail-admin/orders/unseen-count', requireRetailAdmin, (req, re
 router.get('/api/retail-admin/invoices/unseen-count', requireRetailAdmin, (req, res) => {
   const since = String(req.query.since || '').trim();
   const sinceSql = since || '1970-01-01T00:00:00.000Z';
+  // The dot agrees with Home. A Tianhe-pinned login's dashboard no longer
+  // counts a Yuexiu fapiao; this count must not keep ringing for it.
+  const pin = pinnedOrderStoreSql('o', operatorCaps.storeIdsOf(req));
   const row = tdb().prepare(
     `SELECT COUNT(*) AS n, MAX(placed_at) AS latest
        FROM retail_orders o
       WHERE ${fapiaoQueue.pendingSql('o')}
-        AND datetime(o.placed_at) > datetime(?)`
-  ).get(sinceSql);
+        AND datetime(o.placed_at) > datetime(?)${pin.sql}`
+  ).get(sinceSql, ...pin.params);
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
 });
 
@@ -25520,6 +25548,10 @@ router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
   // o.status rides along so the client can label the rows it must not count —
   // a request on a cancelled order stays visible under All wearing the order's
   // own status word rather than a "Pending" it can never leave.
+  // Same pin as Home's "Invoices to issue" row. The phone's invoices screen
+  // reads this list and sends no store of its own, so the lock has to live
+  // here: a Tianhe warehouse login was reading Yuexiu's fapiao off it.
+  const pin = pinnedOrderStoreSql('o', operatorCaps.storeIdsOf(req));
   const orders = tdb().prepare(
     `SELECT o.id, o.order_no, o.total, o.shipping_fee, o.placed_at, o.status,
             o.invoice_type, o.invoice_title, o.invoice_tax_id, o.invoice_email,
@@ -25528,10 +25560,10 @@ router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
             c.nickname
        FROM retail_orders o
        LEFT JOIN retail_customers c ON c.id = o.customer_id
-      WHERE ${where}
+      WHERE ${where}${pin.sql}
       ORDER BY (CASE WHEN o.invoice_status = 'issued' THEN 1 ELSE 0 END) ASC, o.placed_at DESC
       LIMIT 200`
-  ).all();
+  ).all(...pin.params);
   const itemStmt = tdb().prepare(
     'SELECT product_id, name_en, name_cn, qty, line_total FROM retail_order_items WHERE order_id = ? ORDER BY id ASC'
   );
@@ -25542,13 +25574,13 @@ router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
     counts: {
       // `requested` is the PENDING count and nothing else — the figure the
       // Pending chip prints, and it agrees with Home by construction now.
-      requested: tdb().prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${fapiaoQueue.pendingSql('o')}`).get().n,
-      issued:    tdb().prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${fapiaoQueue.issuedSql('o')}`).get().n,
+      requested: tdb().prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${fapiaoQueue.pendingSql('o')}${pin.sql}`).get(...pin.params).n,
+      issued:    tdb().prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${fapiaoQueue.issuedSql('o')}${pin.sql}`).get(...pin.params).n,
       // Un-issued requests on orders that were cancelled or never paid. Its own
       // number because the All chip sums the three, and because "2 requests
       // nobody can act on" is a fact worth being able to see rather than a
       // discrepancy between two other counts.
-      blocked:   tdb().prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${fapiaoQueue.blockedSql('o')}`).get().n,
+      blocked:   tdb().prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${fapiaoQueue.blockedSql('o')}${pin.sql}`).get(...pin.params).n,
     },
   });
 });
@@ -25579,9 +25611,12 @@ router.post('/api/retail-admin/invoices/:id/snooze', requireRetailAdmin, express
   // order dying, both remove it from the queue — deferring either would write a
   // date onto work that no longer exists and leave a stale stamp behind for
   // whoever reads the column next.
+  // And only a row in THIS login's stores. Snoozing a Yuexiu fapiao from a
+  // Tianhe pin would write a date onto work that login cannot see.
+  const pin = pinnedOrderStoreSql('o', operatorCaps.storeIdsOf(req));
   const row = tdb().prepare(
-    `SELECT o.id FROM retail_orders o WHERE o.id = ? AND ${fapiaoQueue.pendingSql('o')}`
-  ).get(id);
+    `SELECT o.id FROM retail_orders o WHERE o.id = ? AND ${fapiaoQueue.pendingSql('o')}${pin.sql}`
+  ).get(id, ...pin.params);
   if (!row) return res.status(404).json({ success: false, error: 'not_pending' });
 
   // The sweep and this route must agree about what "tomorrow" means, so the

@@ -136,7 +136,7 @@ db.exec(`
 CREATE TABLE retail_orders (
   id INTEGER PRIMARY KEY, order_no TEXT, status TEXT, total REAL,
   needs_invoice INTEGER DEFAULT 0, invoice_status TEXT, invoice_title TEXT,
-  placed_at TEXT, recipient_name TEXT, customer_id INTEGER,
+  placed_at TEXT, recipient_name TEXT, customer_id INTEGER, store_id INTEGER,
   invoice_reminder_last_at DATETIME, invoice_reminder_count INTEGER DEFAULT 0,
   invoice_reminder_snoozed_until DATETIME
 );
@@ -157,7 +157,10 @@ INSERT INTO retail_orders (id, order_no, status, total, needs_invoice, invoice_s
 const sent = [];
 require('../routes/push'); // may or may not load; the recorder below is what counts
 const pushStub = {
-  sendPushToOperatorsWithCaps: (t, caps, p) => { sent.push({ t, caps, ...p }); return Promise.resolve({ sent: 1 }); },
+  sendPushToOperatorsWithCaps: (t, caps, p, opts) => {
+    sent.push({ t, caps, ...p, storeId: opts && opts.storeId != null ? opts.storeId : null });
+    return Promise.resolve({ sent: 1 });
+  },
   sendPushByPermission: () => Promise.resolve({ sent: 0 }),
 };
 // The module caches its push handle at load; swap it through require.cache so
@@ -371,6 +374,27 @@ db.prepare("INSERT INTO storefront_config (key, value_json) VALUES ('shop.timezo
 fired = frLive.sweepDbOnce(db, D('2026-09-22T10:00:00'), 1);
 ok(fired > 0 && rowOf(40).invoice_reminder_count === 1,
    'with the zone back, it is asked (inside the digest, as rows 10–13 are still waiting)', { fired, row: rowOf(40) });
+
+// ── 5c. A pinned store is not told about the other ──────────────────────────
+// The send carries the order's store. sendPushToOperatorsWithCaps drops a
+// login pinned to a different one; a digest that mixed both stores could
+// only be kept or dropped whole, so the sweep asks per store.
+console.log('\nOne store\'s fapiao');
+db.prepare('UPDATE retail_orders SET needs_invoice = 0').run();
+db.exec(`
+INSERT INTO retail_orders (id, order_no, status, total, needs_invoice, invoice_status, placed_at, store_id) VALUES
+  (51, 'TC000951', 'paid', 51, 1, 'requested', '${STORED('2026-09-20T09:00:00')}', 1),
+  (52, 'TC000952', 'paid', 52, 1, 'requested', '${STORED('2026-09-20T09:00:00')}', 2);
+`);
+sent.length = 0;
+fired = frLive.sweepDbOnce(db, D('2026-09-22T10:00:00'), 1);
+ok(fired === 2 && sent.length === 2,
+   'two stores are two reminders, not one digest a Tianhe login would also receive',
+   sent.map(s => s.tag));
+const storeOf = (tag) => { const s = sent.find(x => x.tag === tag); return s && s.storeId; };
+ok(storeOf('retail-fapiao-51') === 1 && storeOf('retail-fapiao-52') === 2,
+   'each reminder names the order\'s own store, so a pin to the other store is not told',
+   sent.map(s => [s.tag, s.storeId]));
 
 if (realPush) require.cache[pushPath] = realPush; else delete require.cache[pushPath];
 
