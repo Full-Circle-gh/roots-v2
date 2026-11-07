@@ -97,6 +97,7 @@ function grabConst(name) {
 
 const LIFTED = [
   'normalizeAreaName', 'isGuangzhou', 'provinceForCity', 'cfgValue',
+  'gzEnglishKey', 'blobHasEnglishDistrict', 'gzDistrictNamed', 'addressZoneProblem',
   'defaultDeliveryZone', 'matchDeliveryZone', 'weightDeliveryFee',
   'computeDeliveryAndPacking', 'parseWeightToGrams', 'normalizeChinaAddress',
   // §83's shared refusal shape. manualOrderFees calls it for the `unmatched`

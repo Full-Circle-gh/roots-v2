@@ -80,7 +80,10 @@ Page({
     freeShipping: false,
     pointsEarnedPreview: 0,
     zone: null,              // { name_cn, name_en, supports_max, max_fee, ... } from /quote
-    zoneError: '',           // 'no_zone_match' | '' — populated when the address isn't covered
+    zoneError: '',           // 'no_zone_match' | 'max_not_offered' | '' 
+    zoneErrorTitle: '',      // what is wrong, in the customer's language
+    zoneErrorBody: '',       // how to fix it
+    zoneErrorKitchen: false, // kitchen line only when pickup is the real alternative
     kitchenAddress: '',      // shown in the no-zone-match message
     localOnlyBlock: false,   // true when the cart has a Guangzhou-only item but the address is outside GZ
     localOnlyNames: [],      // display names of those offending items (for the banner + modal)
@@ -1583,7 +1586,16 @@ Page({
       slot_kind: this.data.selectedSlotKind || '',
     };
     if (hasSaved) body.address_id = a.id;
-    else          body.address    = { city: a.city, district: a.district };
+    else          body.address    = {
+      province: a.province || null,
+      city: a.city || null,
+      district: a.district || null,
+      // The street is how an English address names its district ("Tianhe East
+      // Road" under a city-wide Guangzhou pick). Without it the quote can only
+      // see the area wheel and refuses a deliverable door.
+      address: a.address || null,
+      detail: a.detail || null,
+    };
 
     this.setData({ quoting: true, quoteFailed: false });
     // Returning the chain so callers (e.g. the stock-race recovery in
@@ -1727,6 +1739,10 @@ Page({
         this.setData({
           zone: data.zone || null,
           zoneError: '',
+          zoneErrorTitle: '',
+          zoneErrorBody: '',
+          zoneErrorKitchen: false,
+          areaError: false,
           deliveryFee: effectiveDelivery.toFixed(2),
           autoApplied: this.autoAppliedBanner(ev, voucherDiscount),
           couponShown: voucherDiscount > 0 ? voucherDiscount.toFixed(2) : '',
@@ -1865,9 +1881,16 @@ Page({
           this.autoRemoveLocalOnly((err.body && err.body.data && err.body.data.products) || []);
           return;
         } else if (code === 'no_zone_match' || code === 'max_not_offered') {
+          const problem = this._zoneProblemCopy(code, err && err.body);
           this.setData({
             zone: null,
             zoneError: code,
+            zoneErrorTitle: problem.title,
+            zoneErrorBody: problem.body,
+            zoneErrorKitchen: problem.showKitchen,
+            // The fix is the area wheel, so mark that field. A missing district
+            // is not "we don't deliver" — the red frame points at the control.
+            areaError: code === 'no_zone_match',
             deliveryFee: '0.00',
             packingFee: '0.00',
             freeShipping: false,
@@ -2560,6 +2583,9 @@ Page({
     // When section falsely reads "closed / no slots" (the dual-entry trap a
     // customer hit on 2026-06-15).
     if (field === 'address') this._deriveAreaFromTyped(value);
+    // The unit line can carry the district too ("天河 1603"). Re-quote it the
+    // same way, without treating the room number as a new city.
+    if (field === 'detail') this._reQuoteStreet();
     // Typing a good number should retire the notice as they finish it, not on
     // the next re-quote — and typing a bad one into the inline form should
     // raise it without waiting either.
@@ -2575,7 +2601,13 @@ Page({
     if (this._deriveTimer) clearTimeout(this._deriveTimer);
     this._deriveTimer = setTimeout(() => {
       const a = this.data.address || {};
-      if ((a.city || a.district) && this._areaPicked) return;  // honour explicit pick
+      // Honour an explicit area pick — don't overwrite it from the street —
+      // but DO re-quote. The street is what names the district when the wheel
+      // was left on city-wide ("Tianhe East Road" under Guangdong · Guangzhou).
+      if ((a.city || a.district) && this._areaPicked) {
+        this.refreshQuote();
+        return;
+      }
       const p = this.parseCnAddress(raw);
       const city = p.city || (/市$/.test(p.province) ? p.province : '');
       const district = p.district || '';
@@ -2592,6 +2624,72 @@ Page({
       this.refreshQuote();
     }, 600);
   },
+
+  // Street or unit changed after the area was already chosen. Quote again so
+  // the matcher can read a district out of what they typed.
+  _reQuoteStreet() {
+    if (this._deriveTimer) clearTimeout(this._deriveTimer);
+    this._deriveTimer = setTimeout(() => {
+      const a = this.data.address || {};
+      if (a.city || a.district || a.address) this.refreshQuote();
+    }, 600);
+  },
+
+  // What to say when a quote is refused for the address. The old line was one
+  // sentence for three different problems, and the screenshot's problem was
+  // the first: Guangzhou with no district. `reason` comes from the server
+  // (lib/delivery-zones.addressZoneProblem); the local guess covers a server
+  // that hasn't been updated yet.
+  _looksLikeGuangzhou(a) {
+    const city = String((a && a.city) || '');
+    const street = String((a && a.address) || '') + ' ' + String((a && a.detail) || '');
+    return /广州/.test(city) || /guangzhou/i.test(city) || /广州/.test(street) || /guangzhou/i.test(street);
+  },
+  _zoneProblemCopy(code, body) {
+    const cn = this.data.lang === 'cn';
+    if (code === 'max_not_offered') {
+      return {
+        title: cn ? '此区域不提供 MAX 配送' : "MAX isn't available for this area",
+        body: cn ? '请选择标准配送。' : 'Switch to standard delivery.',
+        showKitchen: false,
+      };
+    }
+    const b = body || {};
+    const reason = b.reason || '';
+    const a = this.data.address || {};
+    const placeCn = b.place_cn || a.district || a.city || '';
+    const placeEn = b.place_en || a.district_en || a.city_en || a.district || a.city || '';
+    const place = cn ? (placeCn || placeEn) : (placeEn || placeCn);
+    const gz = this._looksLikeGuangzhou(a);
+    if (reason === 'gz_district_missing' || (!reason && gz && !a.district)) {
+      return {
+        title: cn ? '请选择所在的区' : 'Choose your district',
+        body: cn
+          ? '广州按区配送。请打开配送区域，选择这个地址所在的区。'
+          : 'Delivery in Guangzhou is by district. Open Delivery area and pick the district this address is in.',
+        showKitchen: false,
+      };
+    }
+    if (reason === 'gz_district_unserved' || (!reason && gz && a.district)) {
+      const p = place || (cn ? '该区' : 'this district');
+      return {
+        title: cn ? (p + '暂不配送') : ("We don't deliver to " + p + ' yet'),
+        body: cn
+          ? '请打开配送区域，选择其他区，或改为到店自取。'
+          : 'Open Delivery area and choose a different district, or switch to Pickup.',
+        showKitchen: true,
+      };
+    }
+    const p = place || (cn ? '该地址' : 'this address');
+    return {
+      title: cn ? (p + '暂不配送') : ("We don't deliver to " + p + ' yet'),
+      body: cn
+        ? '请打开配送区域，选择其他城市，或改为到店自取。'
+        : 'Open Delivery area and choose another city, or switch to Pickup.',
+      showKitchen: true,
+    };
+  },
+
   selectSaved(e) {
     const id = e.currentTarget.dataset.id;
     const a = this.data.savedAddresses.find(x => x.id === id);
@@ -2874,7 +2972,8 @@ Page({
     // why).
     if (this.data.isBound && this.data.zoneError) {
       wx.showToast({
-        title: this.data.lang === 'cn' ? '此地址暂不在配送范围内' : "We don't deliver to this address",
+        title: this.data.zoneErrorTitle
+          || (this.data.lang === 'cn' ? '请检查配送区域' : 'Check the delivery area'),
         icon: 'none',
       });
       return;
@@ -3588,10 +3687,22 @@ Page({
       // Balance changed between quote and submit (e.g. another order spent it).
       // Re-quote so the toggle subtitle + total reflect the real balance.
       if (e?.message === 'insufficient_balance') this.refreshQuote();
+      if (e?.message === 'no_zone_match' || e?.message === 'max_not_offered') {
+        this.setData({ placing: false });
+        const problem = this._zoneProblemCopy(e.message, e.body);
+        this.setData({
+          zoneError: e.message,
+          zoneErrorTitle: problem.title,
+          zoneErrorBody: problem.body,
+          zoneErrorKitchen: problem.showKitchen,
+          areaError: e.message === 'no_zone_match',
+        });
+        wx.showToast({ title: problem.title, icon: 'none' });
+        return;
+      }
       const friendly = {
         insufficient_points:  this.data.lang === 'cn' ? '积分不足' : 'Not enough points',
         insufficient_balance: this.data.lang === 'cn' ? '余额不足' : 'Not enough balance',
-        no_zone_match:        this.data.lang === 'cn' ? '该地址无法配送' : 'Address not in delivery range',
       };
       // The server refused rather than charge a residual the customer wasn't
       // shown — so say what is actually due. Same words the points row already

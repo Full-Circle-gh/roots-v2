@@ -1860,7 +1860,7 @@ function coErrMsg(code){
   pickup_too_soon:state.lang==='cn'?'请选择更晚的取货时间，让我们有时间备货':'Pick a later pickup time so we can pack it',
   pickup_time_outside_hours:state.lang==='cn'?'请选择营业时间内的取货时间':'Pick a time within opening hours',
   pickup_time_required:state.lang==='cn'?'请选择取货时间':'Choose a pickup time',
-  no_zone_match:state.lang==='cn'?'该地址暂不支持配送':'We don’t deliver to this address yet',
+  no_zone_match:state.lang==='cn'?'请检查配送区域':'Check the delivery area',
   // A line whose questions are unanswered. The server refuses these now (§229);
   // without a word here the shopper met "Order failed: choice_required" — a raw
   // code with no item named and nowhere to go. The cart survives in this
@@ -2614,7 +2614,7 @@ async function coQuote(){
   let j;
   try{ const r=await fetch('/api/retail/checkout/quote',{method:'POST',headers:authHeaders({'Content-Type':'application/json','Accept':'application/json'}),body:JSON.stringify(body)}); j=await r.json().catch(()=>({})); }
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
-  if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j.data);} else {coMsg(coErrMsg(j.error));} return; }
+  if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j);} else {coMsg(coErrMsg(j.error));} return; }
   const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
   renderCoSlots(d); renderCoPoints(d); renderCoBalance(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d); renderCoLocalFresh(d); renderCoStoreMove(d); renderCoRiderPhone(d);
   coLoadOffers();   // keep the pre-pay upsell warm for the current cart
@@ -3112,8 +3112,35 @@ function renderCoSummary(d){
      undo its no-dates state and re-arm a checkout with no slot to send. */
   const place=$('#coPlace'); if(place)place.disabled=!!co.noDates;
 }
-function renderNoZone(d){
-  const s=$('#coSummary'); if(s)s.innerHTML='<div class="cx-zone">'+(state.lang==='cn'?'抱歉，该地址暂不支持配送。':'Sorry, we don’t deliver to this address yet.')+(d&&d.kitchen_address?'<br>'+esc(d.kitchen_address):'')+'</div>';
+// Which address problem this is, and the one thing the customer can do about it.
+// The web checkout has no pickup tab, so the fix is always the delivery-area
+// control — never "switch to pickup". `j` is the quote body (reason on the
+// top, kitchen under data) or the order refusal (reason on the top, no data).
+function coZoneCopy(j){
+  const cn=state.lang==='cn';
+  const reason=(j&&j.reason)||'';
+  const place=cn?((j&&j.place_cn)||''):((j&&(j.place_en||j.place_cn))||'');
+  if(reason==='gz_district_missing'){
+    return {title:cn?'请选择所在的区':'Choose your district',
+      body:cn?'广州按区配送。请打开配送区域，选择这个地址所在的区。':'Delivery in Guangzhou is by district. Open Delivery area and pick the district this address is in.'};
+  }
+  if(reason==='gz_district_unserved'){
+    const p=place||(cn?'该区':'this district');
+    return {title:cn?(p+'暂不配送'):("We don’t deliver to "+p+' yet'),
+      body:cn?'请打开配送区域，选择其他区。':'Open Delivery area and choose a different district.'};
+  }
+  const p=place||(cn?'该地址':'this address');
+  return {title:cn?(p+'暂不配送'):("We don’t deliver to "+p+' yet'),
+    body:cn?'请打开配送区域，选择其他城市。':'Open Delivery area and choose another city.'};
+}
+function renderNoZone(j){
+  const s=$('#coSummary'); if(!s)return;
+  const copy=coZoneCopy(j||{});
+  const kitchen=j&&j.data&&j.data.kitchen_address?'<br>'+esc(j.data.kitchen_address):'';
+  // Kitchen only when the area itself isn't served. A missing district is
+  // fixed by picking one; the kitchen address would say the wrong thing.
+  const showKitchen=(j&&j.reason&&j.reason!=='gz_district_missing')?kitchen:'';
+  s.innerHTML='<div class="cx-zone"><div>'+esc(copy.title)+'</div><div>'+esc(copy.body)+'</div>'+showKitchen+'</div>';
   const t=$('#coStickyTotal'); if(t)t.textContent=money(0);
   const place=$('#coPlace'); if(place)place.disabled=true;
 }
@@ -3281,6 +3308,7 @@ async function coPlace(){
   if(r.status===409&&j.error==='needs_fallback_confirmation'){ coFallback(); return; }
   // Balance moved between quote and submit — re-quote so the toggle + total resync.
   if(j.error==='insufficient_balance') coQuote();
+  if(j.error==='no_zone_match'){ const c=coZoneCopy(j); coMsg(c.title+' — '+c.body); return; }
   coMsg(coErrMsg(j.error));
   // Unanswered questions have exactly one fix and it is not on this screen, so
   // take them to it rather than leaving the message to be acted on. The message

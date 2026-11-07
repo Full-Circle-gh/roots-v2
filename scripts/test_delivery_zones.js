@@ -60,7 +60,9 @@ const inventory = {
   listStores: () => W.stores,
 };
 
-const NAMES = ['GZ_CITY_ALIASES', 'normalizeAreaName', 'isGuangzhou', 'defaultDeliveryZone', 'matchDeliveryZone',
+const NAMES = ['GZ_CITY_ALIASES', 'normalizeAreaName', 'isGuangzhou',
+  'gzEnglishKey', 'blobHasEnglishDistrict', 'gzDistrictNamed', 'addressZoneProblem',
+  'defaultDeliveryZone', 'matchDeliveryZone',
   'noZoneMatchPayload', 'fulfillingStoreFor', 'HK_DISTRICTS_EN', '_zoneEnMap', 'zoneEnglishName', '_zoneProvMap',
   'HK_CN', 'zoneProvince'];
 const EXPOSE = NAMES.filter((n) => !n.startsWith('_') && n !== 'HK_CN' && n !== 'GZ_CITY_ALIASES');
@@ -149,6 +151,27 @@ it('Guangzhou with the district only in the address text (a WeChat import)', () 
 it('Guangzhou with the district written without 区 in the address text', () => {
   assert.strictEqual(match({ address: '广州天河体育中心东门' }), 'tianhe');
 });
+it('an English street names the district — Tianhe East Road, city-wide Guangzhou', () => {
+  // The checkout in the screenshot: area wheel on Guangdong · Guangzhou (no
+  // district), street "Ascott Guangzhou, No. 73 Tianhe East Road", unit "16 (1603)".
+  assert.strictEqual(match({
+    province: '广东省', city: '广州市',
+    address: 'Ascott Guangzhou, No. 73 Tianhe East Road',
+    detail: '16 (1603)',
+  }), 'tianhe');
+  assert.strictEqual(match({ city: '广州市', address: 'TIANHE East Rd' }), 'tianhe');
+});
+it('an English district field matches the Chinese zone row', () => {
+  assert.strictEqual(match({ city: '广州市', district: 'Tianhe' }), 'tianhe');
+  assert.strictEqual(match({ city: '广州市', district: 'Yuexiu District' }), 'yuexiu');
+});
+it('English inside a longer word is not a district', () => {
+  assert.strictEqual(match({ city: '广州市', address: 'notianhere' }), null);
+});
+it('Guangzhou with no district anywhere is still refused', () => {
+  CFG = { 'delivery.defaultZone': { enabled: true } };
+  assert.strictEqual(match({ city: '广州市', address: 'Ascott Guangzhou, No. 73' }), null);
+});
 it('Guangzhou in a district with no zone is refused — never sent to rest of China', () => {
   CFG = { 'delivery.defaultZone': { enabled: true } };
   assert.strictEqual(match({ city: '广州市', district: '番禺区' }), null);
@@ -190,13 +213,26 @@ it('a shop with no Guangzhou districts treats Guangzhou as an ordinary city', ()
   } finally { db = real; }
 });
 
-it('a refused address names the place to add a zone for', () => {
+it('a refused address names the place to add a zone for, and which fix to tell the customer', () => {
   assert.deepStrictEqual(Z.noZoneMatchPayload({ province: '四川省', city: '成都市', district: '武侯区' }),
-    { success: false, error: 'no_zone_match', province: '四川省', city: '成都市', district: '武侯区', unmatched: '四川省 成都市 武侯区' });
+    { success: false, error: 'no_zone_match', province: '四川省', city: '成都市', district: '武侯区', unmatched: '四川省 成都市 武侯区',
+      reason: 'outside_coverage', place_cn: '成都市', place_en: null });
   assert.deepStrictEqual(Z.noZoneMatchPayload({ city: '成都市' }),
-    { success: false, error: 'no_zone_match', province: null, city: '成都市', district: null, unmatched: '成都市' });
+    { success: false, error: 'no_zone_match', province: null, city: '成都市', district: null, unmatched: '成都市',
+      reason: 'outside_coverage', place_cn: '成都市', place_en: null });
   assert.deepStrictEqual(Z.noZoneMatchPayload(null),
-    { success: false, error: 'no_zone_match', province: null, city: null, district: null, unmatched: null });
+    { success: false, error: 'no_zone_match', province: null, city: null, district: null, unmatched: null,
+      reason: 'outside_coverage', place_cn: null, place_en: null });
+  const missing = Z.noZoneMatchPayload({ city: '广州市', address: 'Ascott Guangzhou, No. 73' });
+  assert.strictEqual(missing.reason, 'gz_district_missing');
+  assert.strictEqual(missing.place_en, 'Guangzhou');
+  const panyu = Z.noZoneMatchPayload({ city: '广州市', district: '番禺区' });
+  assert.strictEqual(panyu.reason, 'gz_district_unserved');
+  assert.strictEqual(panyu.place_cn, '番禺区');
+  assert.strictEqual(panyu.place_en, 'Panyu');
+  const street = Z.noZoneMatchPayload({ city: '广州市', address: '1 Panyu Avenue' });
+  assert.strictEqual(street.reason, 'gz_district_unserved');
+  assert.strictEqual(street.place_en, 'Panyu');
 });
 
 // ══ 4. which store ships it ════════════════════════════════════════════════

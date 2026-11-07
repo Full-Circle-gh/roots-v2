@@ -76,6 +76,10 @@ function makeCtx(initial) {
     },
     refreshQuote() {},
     _deriveAreaFromTyped() {},
+    // Detail edits re-quote so a district typed into the unit line is read.
+    // The pin must survive that; this stub is the no-op the real method is
+    // beside the pin logic, not part of it.
+    _reQuoteStreet() {},
   };
   return ctx;
 }
@@ -144,6 +148,12 @@ console.log('\nmini-app checkout — onAddrField (F1)');
     page.onAddrField.call(ctx, field('address', '另一个小区'));
     assert.strictEqual(ctx.data.address.lat, null);
     assert.strictEqual(ctx.data.address.pinFresh, false);
+  });
+  it('an unsaved quote sends the street, so "Tianhe East Road" can name the district', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'miniapp/pages/checkout/checkout.js'), 'utf8');
+    assert.ok(/address:\s*a\.address/.test(src), 'the quote body drops the street');
+    const retail = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+    assert.ok(/address:\s*body\.address\.address/.test(retail), 'the quote route drops the street');
   });
 }
 
