@@ -315,6 +315,7 @@ await itAsync('PAZHOU BASIS: a nameless coordinate in another district is not ta
       SHOP,
       poiList([{ ...M(23.00, 113.33), name: findable, address: '汉溪大道东', provider: 'qingyun' }]),
       { geocode: stubGeo(null, {
+          districtMatches: geocode.districtMatches,
           reverseGeocode: async () => ({ district: '番禺区', city: '广州市' }),
         }) }),
     (e) => {
@@ -325,6 +326,18 @@ await itAsync('PAZHOU BASIS: a nameless coordinate in another district is not ta
     });
 });
 
+await itAsync('a perfect name with no district on the hit is still taken when the pin is in the right district', async () => {
+  const p = await buildCreatePayload(
+    ORDER({ province: '广东省', city: '广州市', district: '海珠区', address: '广州贝赛思中国华西项目部' }),
+    SHOP,
+    poiList([{ ...NEAR, name: '广州贝赛思中国华西项目部', address: '石基路205号', provider: 'qingyun' }]),
+    { geocode: {
+        ...blindGeo,
+        districtMatches: geocode.districtMatches,
+        reverseGeocode: async () => ({ district: '海珠区' }),
+      } });
+  assert.strictEqual(p._geo.source, 'poi_auto');
+});
 await itAsync('same district name in the address text still auto-takes', async () => {
   const p = await buildCreatePayload(
     ORDER({ province: '广东省', city: '广州市', district: '越秀区', address: '富力新天地' }),
