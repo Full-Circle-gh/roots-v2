@@ -34640,10 +34640,15 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     ).get(addressId, req.customer.id);
     if (!address) return res.status(400).json({ success: false, error: 'address_not_found' });
   } else if (body.address && typeof body.address === 'object') {
+    // Street and unit travel with the area. A city-wide Guangzhou pick whose
+    // street says "Tianhe East Road" is Tianhe; dropping the street here made
+    // the matcher refuse a deliverable address.
     address = {
       province: body.address.province || null,
       city:     body.address.city     || null,
       district: body.address.district || null,
+      address:  body.address.address  || null,
+      detail:   body.address.detail   || null,
     };
   } else {
     return res.status(400).json({ success: false, error: 'address_required' });

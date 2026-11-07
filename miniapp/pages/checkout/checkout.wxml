@@ -236,8 +236,9 @@
 
     <block wx:elif="{{zoneError}}">
     <view class="zone-error">
-      <view class="ze-title f-bear">{{lang === 'cn' ? '抱歉，此地址暂不在配送范围内' : "Sorry, we don't deliver to this address yet"}}</view>
-      <view wx:if="{{kitchenAddress}}" class="ze-sub muted">{{lang === 'cn' ? '厨房地址：' : 'Our kitchen: '}}{{kitchenAddress}}</view>
+      <view class="ze-title f-bear">{{zoneErrorTitle}}</view>
+      <view wx:if="{{zoneErrorBody}}" class="ze-sub">{{zoneErrorBody}}</view>
+      <view wx:if="{{zoneErrorKitchen && kitchenAddress}}" class="ze-sub muted">{{lang === 'cn' ? '厨房地址：' : 'Our kitchen: '}}{{kitchenAddress}}</view>
     </view>
     </block>
 

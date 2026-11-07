@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.395 · 2026-11-07 · CHECKOUT NAMES THE ADDRESS PROBLEM — COMPOSED BY THE SESSION.** A Guangzhou address with no district was told `Sorry, we don't deliver to this address yet` / `抱歉，此地址暂不在配送范围内`, which is the wrong fact and names no fix. The When block now says which problem it is. **COMPOSED:** `Choose your district · 请选择所在的区`. `Delivery in Guangzhou is by district. Open Delivery area and pick the district this address is in. · 广州按区配送。请打开配送区域，选择这个地址所在的区。` `{place}暂不配送` beside `We don't deliver to {place} yet` — `{place}` is the district or the city the matcher names. `Open Delivery area and choose a different district, or switch to Pickup. · 请打开配送区域，选择其他区，或改为到店自取。` `Open Delivery area and choose another city, or switch to Pickup. · 请打开配送区域，选择其他城市，或改为到店自取。` The web checkout has no pickup tab, so its two fixes drop the pickup clause: `Open Delivery area and choose a different district. · 请打开配送区域，选择其他区。` and `Open Delivery area and choose another city. · 请打开配送区域，选择其他城市。` `MAX isn't available for this area · 此区域不提供 MAX 配送` and `Switch to standard delivery. · 请选择标准配送。` `MAX` and `标准配送` are the checkout's own option labels. **Live words used, not minted:** `配送区域` (the area field's own label), `到店自取`, `请选择`, `请打开`. Rejected: keeping `此地址暂不在配送范围内` for a missing district — it tells the customer the shop does not deliver, and the fix is to pick the district. The kitchen line stays only when the area itself is not served. Nothing retired. Rules 1 to 7 unchanged.
+
 **v1.394 · 2026-11-07 · THE SUGGESTED BAND ROWS — COMPOSED BY THE SESSION.** **COMPOSED:** `Suggested rows. Nothing changes until you turn this on and save. · 建议分段。打开并保存前,价格不变。` `建议` and `保存` and `价格` are live. The sentence sits under the shop line so the prefilled 0–4 ¥15, 4–8 ¥25, 8–12 ¥39 rows are not read as already charging. Nothing retired. Rules 1 to 7 unchanged.
 
 **v1.393 · 2026-11-07 · THE SHOP NAMES ARE A SENTENCE, NOT BUTTONS — COMPOSED BY THE SESSION.** The chips looked like a choice and did nothing. **COMPOSED:** `Counted from Tianhe and Yuexiu. · 从天河和越秀起算。` The shop names are the live store names, joined with ` and ` / `和`. `起算` is the same verb as v1.392. The chip label `Counted from · 从这些门店起算` is retired with the chips. Rules 1 to 7 unchanged.
@@ -13271,8 +13273,9 @@ each settled word was already live on one surface.
 - **The customer's own delivery area.** `配送区域` is kept in the shop's and
   the mini app's address pickers (`点击选择配送区域`, `请选择配送区域`) and in
   `超出本订单的配送区域`.
-- **Coverage.** `配送范围` is kept in the mini app's `此地址暂不在配送范围内` and
-  in the desktop's `Coverage & pricing · 配送范围与费用`.
+- **Coverage.** `配送范围` is kept in the desktop's `Coverage & pricing · 配送范围与费用`.
+  The mini app's `此地址暂不在配送范围内` was the checkout refusal; v1.395 retired
+  it, because that sentence did not say what was wrong with the address.
 
 These are different things from the operator's zones. One word per thing
 means they keep theirs.
