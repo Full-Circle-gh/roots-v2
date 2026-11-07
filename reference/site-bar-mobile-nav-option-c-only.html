@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roots — mobile nav Option C only</title>
+<style>
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --lime:#CCD900;
+    --paper:#fff; --line:rgba(0,0,0,.08);
+    --f-bear:'Bear Serif',Georgia,serif;
+    --f-toni:'Toni Grotesk',sans-serif;
+    --f-aleo:'Aleo',Georgia,serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:var(--f-aleo);background:#e8e0d8;color:var(--ink);-webkit-font-smoothing:antialiased;}
+  .page{max-width:960px;margin:0 auto;padding:32px 20px 48px;}
+  h1{font-family:var(--f-bear);font-size:32px;margin-bottom:10px;}
+  .lead{font-size:16px;color:#4a4a44;max-width:65ch;line-height:1.55;margin-bottom:28px;}
+  .lead strong{font-weight:600;}
+  .row{display:flex;flex-wrap:wrap;gap:28px;justify-content:center;align-items:flex-start;}
+  .col{text-align:center;}
+  .label{font-family:var(--f-toni);font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6A6E2D;margin-bottom:10px;}
+
+  .device{width:280px;border-radius:28px;overflow:hidden;border:2px solid var(--ink);
+    background:var(--oat);box-shadow:0 14px 36px rgba(0,0,0,.15);position:relative;min-height:520px;}
+  .site-bar{background:var(--paper);border-bottom:1px solid var(--line);padding:12px 16px;position:relative;z-index:5;}
+  .bar-in{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .wordmark img{height:38px;width:auto;display:block;}
+  .hero-mini{height:88px;background:linear-gradient(135deg,#ddd 0%,#c8c8c8 100%);}
+  .hero-txt{padding:14px 16px 18px;font-family:var(--f-bear);font-size:17px;line-height:1.12;}
+  .since{background:var(--forest);color:var(--lime);font-family:var(--f-toni);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;text-align:center;padding:10px;}
+
+  .icon-btn{
+    width:48px;height:48px;border:2px solid var(--ink);border-radius:8px;background:rgba(255,255,255,.9);
+    display:inline-flex;align-items:center;justify-content:center;padding:0;flex:none;
+  }
+  .icon-btn svg{width:24px;height:24px;}
+
+  .nav-links{list-style:none;}
+  .nav-links a{
+    display:flex;align-items:center;min-height:48px;width:100%;text-align:left;
+    font-family:var(--f-bear);font-size:22px;font-weight:500;letter-spacing:0;
+    text-decoration:none;color:var(--ink);padding:16px 0;border-bottom:2px solid var(--line);
+  }
+  .menu-row{
+    display:flex;align-items:center;justify-content:center;min-height:52px;margin-top:auto;
+    font-family:var(--f-toni);font-weight:700;font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+    background:var(--forest);color:#fff;border:0;border-radius:999px;width:calc(100% - 32px);margin:16px 16px 20px;
+  }
+
+  .dev-c .full-c{
+    position:absolute;inset:0;background:var(--paper);z-index:6;display:flex;flex-direction:column;padding:16px 18px 0;
+  }
+  .dev-c .full-c .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+  .dev-c .full-c .top span{font-family:var(--f-toni);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--forest);}
+  .dev-c .full-c .x{width:44px;height:44px;border:0;background:transparent;font-size:28px;line-height:1;}
+  .dev-c.closed .full-c{display:none;}
+
+  .note{margin-top:32px;padding:16px 18px;background:#fff;border:2px solid var(--ink);font-size:15px;line-height:1.5;max-width:65ch;}
+  .note b{font-family:var(--f-bear);font-size:18px;display:block;margin-bottom:6px;}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Option C — full-screen list</h1>
+  <p class="lead">On phone: wordmark left, <strong>three-line button</strong> right. Tap opens a <strong>full-screen</strong> white panel with the same six section links as the computer bar, then the green <strong>Menu</strong> pill for Ramada. Left: closed. Right: open.</p>
+
+  <div class="row">
+    <div class="col">
+      <div class="label">Closed — bar only</div>
+      <div class="device dev-c closed">
+        <header class="site-bar"><div class="bar-in">
+          <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+          <button type="button" class="icon-btn" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+        </div></header>
+        <div class="hero-mini"></div>
+        <div class="hero-txt">Landed in Guangzhou?</div>
+        <div class="since">Since 2017</div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="label">Open — full screen</div>
+      <div class="device dev-c open">
+        <div class="full-c">
+          <div class="top"><span>Jump to</span><button type="button" class="x" aria-label="Close">&times;</button></div>
+          <ul class="nav-links">
+            <li><a href="#">New to China</a></li>
+            <li><a href="#">Our products</a></li>
+            <li><a href="#">Our location</a></li>
+            <li><a href="#">Social</a></li>
+            <li><a href="#">Our story</a></li>
+            <li><a href="#">Canton Fair</a></li>
+          </ul>
+          <button type="button" class="menu-row">Menu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>What happens when you tap</b>
+    A section link scrolls to that block and closes this panel. <strong>Menu</strong> opens the Ramada QR menu (same as today). The × (or the bar button again) closes without navigating.
+  </div>
+</div>
+</body>
+</html>

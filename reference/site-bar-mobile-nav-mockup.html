@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roots — mobile nav drawer options</title>
+<style>
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --olive:#6A6E2D; --lime:#CCD900;
+    --paper:#fff; --line:rgba(0,0,0,.08); --muted:#5c5c54;
+    --f-bear:'Bear Serif',Georgia,serif;
+    --f-toni:'Toni Grotesk',sans-serif;
+    --f-aleo:'Aleo',Georgia,serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:var(--f-aleo);background:#e8e0d8;color:var(--ink);-webkit-font-smoothing:antialiased;}
+  .page{max-width:1200px;margin:0 auto;padding:28px 20px 80px;}
+  h1{font-family:var(--f-bear);font-size:28px;margin-bottom:8px;}
+  .lead{font-size:15px;color:#4a4a44;max-width:70ch;line-height:1.5;margin-bottom:12px;}
+  .links-list{font-size:14px;color:#4a4a44;margin-bottom:28px;max-width:70ch;line-height:1.5;}
+  .links-list b{font-family:var(--f-bear);font-weight:500;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:32px;}
+  .opt{display:flex;flex-direction:column;gap:10px;}
+  .opt-h{font-family:var(--f-toni);font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--olive);}
+  .opt-t{font-size:17px;font-family:var(--f-bear);line-height:1.15;}
+  .opt-n{font-size:13px;color:var(--muted);line-height:1.45;}
+  .pair{display:flex;gap:10px;align-items:flex-start;}
+  .pair-label{font-size:11px;font-family:var(--f-toni);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--olive);text-align:center;margin-bottom:4px;}
+
+  /* Phone frame */
+  .device{width:100%;max-width:200px;flex:1;border-radius:22px;overflow:hidden;border:1px solid rgba(0,0,0,.12);
+    background:var(--oat);box-shadow:0 10px 28px rgba(0,0,0,.12);position:relative;min-height:380px;}
+  .device.tall{min-height:420px;}
+  .site-bar{background:var(--paper);border-bottom:1px solid var(--line);padding:10px 14px;position:relative;z-index:5;}
+  .bar-in{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .wordmark img{height:34px;width:auto;display:block;}
+  .hero-mini{height:72px;background:linear-gradient(135deg,#ddd 0%,#c8c8c8 100%);}
+  .hero-txt{padding:12px 14px 16px;font-family:var(--f-bear);font-size:15px;line-height:1.1;}
+  .since{background:var(--forest);color:var(--lime);font-family:var(--f-toni);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;text-align:center;padding:8px;}
+
+  .icon-btn{
+    width:44px;height:44px;border:2px solid var(--ink);border-radius:8px;background:rgba(255,255,255,.9);
+    display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex:none;
+  }
+  .icon-btn svg{width:22px;height:22px;}
+  .icon-btn:focus-visible{outline:3px solid var(--lime);outline-offset:2px;}
+
+  .nav-links{list-style:none;}
+  .nav-links a,.nav-links button{
+    display:flex;align-items:center;min-height:44px;width:100%;text-align:left;
+    font-family:var(--f-toni);font-weight:700;font-size:13px;letter-spacing:.06em;
+    text-decoration:none;color:var(--ink);background:transparent;border:0;cursor:pointer;
+  }
+  .menu-row{
+    display:flex;align-items:center;justify-content:center;min-height:48px;margin-top:8px;
+    font-family:var(--f-toni);font-weight:700;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    background:var(--forest);color:#fff;border:0;border-radius:999px;width:calc(100% - 28px);margin-left:14px;margin-right:14px;
+  }
+
+  /* Option A — full height panel under bar */
+  .dev-a .panel-a{
+    position:absolute;left:0;right:0;top:58px;bottom:0;background:var(--oat);z-index:4;
+    display:flex;flex-direction:column;padding:8px 0 14px;border-top:2px solid var(--ink);
+  }
+  .dev-a .panel-a .nav-links a{padding:0 18px;border-bottom:1px solid var(--line);}
+  .dev-a .panel-a .menu-row{margin-top:auto;}
+  .dev-a.closed .panel-a{display:none;}
+  .dev-a.open .dim{display:none;}
+
+  /* Option B — right drawer */
+  .dev-b .dim{position:absolute;inset:0;background:rgba(26,26,23,.45);z-index:3;}
+  .dev-b .drawer-b{
+    position:absolute;top:0;right:0;bottom:0;width:78%;max-width:280px;background:var(--paper);z-index:4;
+    box-shadow:-8px 0 24px rgba(0,0,0,.12);display:flex;flex-direction:column;padding:12px 0 16px;
+  }
+  .dev-b .drawer-b .drawer-head{padding:8px 16px 12px;font-family:var(--f-bear);font-size:18px;border-bottom:1px solid var(--line);}
+  .dev-b .drawer-b .nav-links a{padding:0 16px;border-bottom:1px solid var(--line);}
+  .dev-b .drawer-b .menu-row{width:calc(100% - 32px);margin:12px 16px 0;}
+  .dev-b.closed .dim,.dev-b.closed .drawer-b{display:none;}
+
+  /* Option C — full screen white */
+  .dev-c .full-c{
+    position:absolute;inset:0;background:var(--paper);z-index:6;display:flex;flex-direction:column;padding:14px 16px 18px;
+  }
+  .dev-c .full-c .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .dev-c .full-c .top span{font-family:var(--f-toni);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--forest);}
+  .dev-c .full-c .x{width:40px;height:40px;border:0;background:transparent;font-size:26px;line-height:1;cursor:pointer;}
+  .dev-c .full-c .nav-links a{
+    font-family:var(--f-bear);font-size:20px;font-weight:500;letter-spacing:0;padding:14px 0;
+    border-bottom:2px solid var(--line);
+  }
+  .dev-c .full-c .menu-row{margin-top:auto;}
+  .dev-c.closed .full-c{display:none;}
+
+  /* Option D — bottom sheet */
+  .dev-d .dim{position:absolute;inset:0;background:rgba(26,26,23,.45);z-index:3;}
+  .dev-d .sheet-d{
+    position:absolute;left:0;right:0;bottom:0;z-index:4;background:var(--paper);
+    border-radius:20px 20px 0 0;border-top:2px solid var(--ink);padding:10px 0 16px;
+    max-height:72%;
+  }
+  .dev-d .sheet-d .grab{width:40px;height:4px;background:rgba(0,0,0,.15);border-radius:99px;margin:4px auto 10px;}
+  .dev-d .sheet-d .nav-links a{padding:0 18px;min-height:42px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;}
+  .dev-d .sheet-d .menu-row{margin-top:6px;}
+  .dev-d.closed .dim,.dev-d.closed .sheet-d{display:none;}
+
+  /* Option E — centered card (QR-menu family) */
+  .dev-e .dim{position:absolute;inset:0;background:rgba(26,26,23,.55);z-index:3;display:flex;align-items:center;justify-content:center;padding:14px;}
+  .dev-e .card-e{
+    width:100%;background:var(--oat);border-radius:20px;border:2px solid var(--ink);overflow:hidden;
+    box-shadow:0 16px 40px rgba(0,0,0,.2);
+  }
+  .dev-e .card-e .card-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:2px solid var(--ink);font-family:var(--f-bear);font-size:16px;}
+  .dev-e .card-e .nav-links a{padding:0 14px;min-height:40px;font-size:12px;}
+  .dev-e .card-e .menu-row{margin:10px 14px 14px;width:calc(100% - 28px);}
+  .dev-e.closed .dim{display:none;}
+
+  .rec{margin-top:36px;padding:18px 20px;background:#fff;border:2px solid var(--ink);max-width:72ch;font-size:15px;line-height:1.5;}
+  .rec b{font-family:var(--f-bear);font-size:18px;display:block;margin-bottom:6px;}
+
+  @media (max-width:720px){
+    .pair{flex-direction:column;}
+    .device{max-width:100%;}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Mobile site bar — hamburger menu options</h1>
+  <p class="lead">Below 768px the bar is wordmark left and a <strong>three-line button</strong> right (replacing the lone Menu pill). Tap opens a window with the same seven destinations as the computer bar: the six section links, then <strong>Menu</strong> for the Ramada QR menu. Each pair shows closed, then open.</p>
+  <p class="links-list"><b>Inside the window:</b> New to China · Our products · Our location · Social · Our story · Canton Fair · Menu (Ramada). A section link scrolls and closes the window. Menu opens the Ramada menu (same phone-frame overlay as today on a computer).</p>
+
+  <div class="grid">
+    <section class="opt">
+      <div class="opt-h">Option A</div>
+      <div class="opt-t">Panel under the bar</div>
+      <p class="opt-n">The sticky bar stays visible. The list drops down and covers the page. Feels attached to the header; quick to scan. Menu pill pinned at the bottom of the panel.</p>
+      <div class="pair">
+        <div>
+          <div class="pair-label">Closed</div>
+          <div class="device dev-a closed">
+            <header class="site-bar"><div class="bar-in">
+              <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+              <button type="button" class="icon-btn" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+            </div></header>
+            <div class="hero-mini"></div><div class="hero-txt">Landed in Guangzhou?</div><div class="since">Since 2017</div>
+            <div class="panel-a"><ul class="nav-links">
+              <li><a href="#">New to China</a></li><li><a href="#">Our products</a></li><li><a href="#">Our location</a></li>
+              <li><a href="#">Social</a></li><li><a href="#">Our story</a></li><li><a href="#">Canton Fair</a></li>
+            </ul><button type="button" class="menu-row">Menu</button></div>
+          </div>
+        </div>
+        <div>
+          <div class="pair-label">Open</div>
+          <div class="device dev-a open tall">
+            <header class="site-bar"><div class="bar-in">
+              <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+              <button type="button" class="icon-btn" aria-label="Close menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </div></header>
+            <div class="panel-a"><ul class="nav-links">
+              <li><a href="#">New to China</a></li><li><a href="#">Our products</a></li><li><a href="#">Our location</a></li>
+              <li><a href="#">Social</a></li><li><a href="#">Our story</a></li><li><a href="#">Canton Fair</a></li>
+            </ul><button type="button" class="menu-row">Menu</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option B</div>
+      <div class="opt-t">Right drawer</div>
+      <p class="opt-n">Dimmed page; white sheet slides in from the right. Familiar app pattern. Page stays visible on the left edge — good if you want context while choosing.</p>
+      <div class="pair">
+        <div>
+          <div class="pair-label">Closed</div>
+          <div class="device dev-b closed">
+            <header class="site-bar"><div class="bar-in">
+              <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+              <button type="button" class="icon-btn" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+            </div></header>
+            <div class="hero-mini"></div><div class="hero-txt">Landed in Guangzhou?</div><div class="since">Since 2017</div>
+          </div>
+        </div>
+        <div>
+          <div class="pair-label">Open</div>
+          <div class="device dev-b open tall">
+            <header class="site-bar"><div class="bar-in">
+              <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+              <button type="button" class="icon-btn" aria-label="Close menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </div></header>
+            <div class="hero-mini"></div><div class="dim"></div>
+            <div class="drawer-b">
+              <div class="drawer-head">On this page</div>
+              <ul class="nav-links">
+                <li><a href="#">New to China</a></li><li><a href="#">Our products</a></li><li><a href="#">Our location</a></li>
+                <li><a href="#">Social</a></li><li><a href="#">Our story</a></li><li><a href="#">Canton Fair</a></li>
+              </ul>
+              <button type="button" class="menu-row">Menu</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option C</div>
+      <div class="opt-t">Full-screen list</div>
+      <p class="opt-n">Covers the whole phone. Large Bear titles — easiest to read and tap. Best match for tourists and the 17px body-copy scale on the live mobile site.</p>
+      <div class="pair">
+        <div>
+          <div class="pair-label">Closed</div>
+          <div class="device dev-c closed">
+            <header class="site-bar"><div class="bar-in">
+              <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+              <button type="button" class="icon-btn" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+            </div></header>
+            <div class="hero-mini"></div><div class="hero-txt">Landed in Guangzhou?</div><div class="since">Since 2017</div>
+          </div>
+        </div>
+        <div>
+          <div class="pair-label">Open</div>
+          <div class="device dev-c open tall">
+            <div class="full-c">
+              <div class="top"><span>Jump to</span><button type="button" class="x" aria-label="Close">&times;</button></div>
+              <ul class="nav-links">
+                <li><a href="#">New to China</a></li><li><a href="#">Our products</a></li><li><a href="#">Our location</a></li>
+                <li><a href="#">Social</a></li><li><a href="#">Our story</a></li><li><a href="#">Canton Fair</a></li>
+              </ul>
+              <button type="button" class="menu-row">Menu</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option D</div>
+      <div class="opt-t">Bottom sheet</div>
+      <p class="opt-n">Sheet rises from the bottom; hero stays visible above the dim. Thumb-friendly. Slightly less room for long labels on small phones.</p>
+      <div class="pair">
+        <div>
+          <div class="pair-label">Closed</div>
+          <div class="device dev-d closed">
+            <header class="site-bar"><div class="bar-in">
+              <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+              <button type="button" class="icon-btn" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+            </div></header>
+            <div class="hero-mini"></div><div class="hero-txt">Landed in Guangzhou?</div><div class="since">Since 2017</div>
+          </div>
+        </div>
+        <div>
+          <div class="pair-label">Open</div>
+          <div class="device dev-d open tall">
+            <header class="site-bar"><div class="bar-in">
+              <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+              <button type="button" class="icon-btn" aria-label="Close menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </div></header>
+            <div class="hero-mini"></div><div class="dim"></div>
+            <div class="sheet-d">
+              <div class="grab"></div>
+              <ul class="nav-links">
+                <li><a href="#">New to China</a></li><li><a href="#">Our products</a></li><li><a href="#">Our location</a></li>
+                <li><a href="#">Social</a></li><li><a href="#">Our story</a></li><li><a href="#">Canton Fair</a></li>
+              </ul>
+              <button type="button" class="menu-row">Menu</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="opt">
+      <div class="opt-h">Option E</div>
+      <div class="opt-t">Center card</div>
+      <p class="opt-n">Same family as the Ramada phone-frame overlay: dimmed page, rounded card in the middle. Keeps one visual language for “something opened on top.” Compact on very small screens.</p>
+      <div class="pair">
+        <div>
+          <div class="pair-label">Closed</div>
+          <div class="device dev-e closed">
+            <header class="site-bar"><div class="bar-in">
+              <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+              <button type="button" class="icon-btn" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+            </div></header>
+            <div class="hero-mini"></div><div class="hero-txt">Landed in Guangzhou?</div><div class="since">Since 2017</div>
+          </div>
+        </div>
+        <div>
+          <div class="pair-label">Open</div>
+          <div class="device dev-e open tall">
+            <header class="site-bar"><div class="bar-in">
+              <a class="wordmark" href="#"><img src="/assets/brand/roots-wordmark.png" alt="Roots"></a>
+              <button type="button" class="icon-btn" aria-label="Close menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </div></header>
+            <div class="hero-mini"></div><div class="dim">
+              <div class="card-e">
+                <div class="card-head">On this page <span aria-hidden="true">&times;</span></div>
+                <ul class="nav-links">
+                  <li><a href="#">New to China</a></li><li><a href="#">Our products</a></li><li><a href="#">Our location</a></li>
+                  <li><a href="#">Social</a></li><li><a href="#">Our story</a></li><li><a href="#">Canton Fair</a></li>
+                </ul>
+                <button type="button" class="menu-row">Menu</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="rec">
+    <b>Recommendation</b>
+    Option <strong>C</strong> (full-screen list) if readability and big tap targets matter most on a phone. Option <strong>A</strong> if you want the bar to stay obviously “open” without hiding the logo. Option <strong>E</strong> if you want the nav overlay to look like the Ramada menu overlay you already have on a computer. Say A, B, C, D, or E (or a mix, e.g. C with the square hamburger from A) and we wire it on the live site.
+  </div>
+</div>
+</body>
+</html>
