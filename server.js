@@ -1228,7 +1228,8 @@ const httpServer = app.listen(PORT, () => {
   catch (e) { console.warn('[releases] announce failed at boot:', e.message); }
   // Start the retail-inventory reservation sweeper. Releases any
   // soft-reserves that have passed their expires_at and auto-cancels the
-  // owning order if it never paid. Runs every 60s.
+  // owning order if it never paid. The same tick claims a paid order's fresh
+  // line when the shelf can already cover it (§523). Runs every 60s.
   try { require('./lib/inventory').startReservationSweeper(); }
   catch (e) { console.warn('[inventory.sweeper] start failed:', e.message); }
   // Kd100 subscription retry sweeper. Re-attempts failed kuaidi100

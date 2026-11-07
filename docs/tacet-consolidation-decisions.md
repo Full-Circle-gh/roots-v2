@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.628
+# Tacet shared-core consolidation — decisions record, v4.629
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-07 · v4.629 — **§523 · A PAID ORDER TAKES ITS FRESH LINE AS SOON AS THE SHELF CAN COVER IT, EVEN BEFORE THE SHIP DAY (§58 AND §478 AMENDED) — ASH:** *"build"*, on TC002576. Two tofu wraps sat on the Tianhe shelf for a paid order leaving tomorrow, still sellable until someone pressed Start preparing. A covered fresh line is now taken at payment, on a restock, and by the reservation tick for stock already there. A short shelf is left for the kitchen. No new words. No schema, no change to `.gitignore` or CI. See §523.
 
 2026-11-07 · v4.628 — **§522 · A GUANGZHOU ORDER SHOWS WHAT THE CUSTOMER PAID FOR DELIVERY BESIDE WHAT WE PAID THE RIDER — ASH.** See §522.
 
@@ -34027,3 +34029,32 @@ The mini app already has campaign pop-ups (`popups.list`, Marketing → Pop-ups)
 1. **THE CUSTOMER'S NUMBER IS THE DELIVERY FEE ON THE ORDER**, including ¥0 when delivery was free.
 2. **OUR NUMBER IS WRITTEN WHEN ONE COURIER IS DISPATCHED**, the price Qingyun quoted for that courier. Calling several at once does not write a price, because only the one who accepts is billed and that is not known here.
 3. **IT IS NOT A COST IN THE BOOKS.** The figure is not part of the order total and is not deducted from revenue. Courier spend stays in the expense book.
+
+## §523 — A PAID ORDER TAKES ITS FRESH LINE AS SOON AS THE SHELF CAN COVER IT
+
+**2026-11-07 · DECIDED BY ASH:** *"build"*, on TC002576.
+
+TC002576 was paid, WeChat, Shenzhen, fulfilled from Tianhe, leaving the next day. Two tofu wraps were on the shelf. The drawer said stock had not been deducted. Until someone pressed Start preparing, the count still offered those wraps to the next order. That next order would leave this one short, and the delivery would wait for the batch after tomorrow.
+
+§58 holds a kitchen line back from the payment decrement, because a sold-out fresh item is a promise that the kitchen makes the next batch, and deducting it at payment used to drive the shelf negative. §478 then takes the line on the ship day, and only when stock increases. Stock already on the shelf, and any day before the ship day, stayed free. That is the hole this order is sitting in.
+
+**The rule.** A paid WeChat or web order's batch-made line comes off the shelf the moment free stock covers that line in full. The ship day is no longer the gate.
+
+1. **At payment**, after the grocery lines commit and §58 has held the fresh lines back, each held-back fresh line is taken if free stock covers it. A line the shelf cannot cover stays held back. The count does not go negative. The kitchen still owes that batch.
+2. **When stock increases**, the §478 take runs for every paid order with a promised ship date, including a date that has not arrived. Oldest ship date, then oldest payment. A parked awaiting-restock order still takes first, because this still runs after that release.
+3. **Stock already on the shelf is claimed without a new cook.** The reservation sweeper's tick does it, every minute and once shortly after boot, so an order paid before this change is covered on the next tick. The same claim runs at payment, so a new order does not wait for the tick.
+4. **It is the order's own take, and the words already exist.** Stock that was already there is recorded as taken at payment. Stock taken because a restock just landed is recorded as taken on restock. The ship-day restock keeps the actor it already had. Both rows are read by preparing, the kitchen list, a refund and a shop move, so none of those take the units a second time. No new words.
+5. **A short line is left whole.** One wrap on the shelf and an order that needs two takes nothing.
+
+**What stays as it was.**
+
+- §58 still holds a fresh line back from the payment decrement itself. The claim is a second step, and it refuses a line the shelf cannot cover. A sold-out pre-order still does not drive the count negative.
+- A Guangzhou same-day order still reserves at checkout and commits that reservation at payment. This claim skips a product that already has a hold or a stock row for the order.
+- A counter sale still takes its fresh line in the payment decrement. This claim finds it already taken.
+- An order with no promised ship date is not claimed here. It still waits for preparing.
+- Bundles, a split order already preparing or dispatched, and Meituan or Eleme orders stay on the rules §478 left them.
+- A shop transfer still does not read open orders. Once this claim has run, the count the picker sees is already down.
+
+**The consequence.** A paid order for tomorrow takes wraps that are still in the fridge tonight. Today's shopper sees what is left after that order's line. Those wraps are already sold.
+
+No schema change. No change to `.gitignore` or CI.

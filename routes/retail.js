@@ -5347,6 +5347,14 @@ function markOrderPaid(orderId) {
       try {
         prepareCommitUnreservedOrder(orderId, { actorLabel: 'Auto · paid', atPayment: true });
       } catch (e) { console.error('[inventory.prepareCommit (paid)]', e); }
+
+      // §523 — the held-back fresh line is claimed in the same moment when the
+      // shelf can already cover it in full. A short shelf stays held back for
+      // the kitchen's next batch, which is the deferral above. This take
+      // refuses a line free stock cannot cover, so it cannot drive the shelf
+      // negative, and a later 备货 finds the line already taken.
+      try { inventory.claimCoveredFreshForOrder(orderId); }
+      catch (e) { console.error('[inventory.claimCoveredFresh (paid)]', e); }
     }
     // Award earn-points on the actual transition. awardOrderPoints is
     // idempotent so calling it on already-paid orders is safe.

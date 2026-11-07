@@ -17,8 +17,10 @@
  *   • a full refund must return the groceries AND the fresh line — the reason a
  *     hold was not used (reverseOrderStock stops after the hold reverser);
  *   • the kitchen's "to make" list must drop the line once it is taken;
- *   • a parked order keeps first claim; a short shelf, a future ship day, a
- *     split order already moving, a bundle, and a platform order take nothing.
+ *   • a parked order keeps first claim; a short shelf, a split order already
+ *     moving, a bundle, and a platform order take nothing;
+ *   • a future ship day DOES take, once the shelf covers the line (§523).
+ *     Stock already on the shelf is claimed without waiting for a restock.
  *
  * Runs against a REAL sqlite database, the REAL lib/inventory.js, and the REAL
  * status route for 备货, so every count printed is observed rather than argued.
@@ -231,15 +233,20 @@ const clearOrders = () => {
       assert.strictEqual(shelf(P_WRAP), 1);
     });
 
-    section('── What takes nothing');
+    section('── Shipping tomorrow: the shelf that can cover the line is taken now');
     clearOrders(); setShelf(P_WRAP, 0);
     const tomorrow = makeOrder([{ pid: P_WRAP, qty: 1 }], { shipDate: TOMORROW });
     kitchenAdd(3);
-    await it('shipping tomorrow → nothing taken a day early (§58 stands)', () => {
-      assert.strictEqual(rows(tomorrow, P_WRAP).length, 0);
-      assert.strictEqual(shelf(P_WRAP), 3);
+    await it('shipping tomorrow, the add that covers the line takes it (3 → 2)', () => {
+      assert.strictEqual(shelf(P_WRAP), 2);
+      const r = rows(tomorrow, P_WRAP);
+      assert.strictEqual(r.length, 1, JSON.stringify(r));
+      assert.strictEqual(r[0].reason, 'order_restock');
+      assert.strictEqual(r[0].delta, -1);
+      assert.strictEqual(r[0].actor_label, 'Auto · covered');
     });
 
+    section('── What takes nothing');
     clearOrders(); setShelf(P_WRAP, 0);
     const big = makeOrder([{ pid: P_WRAP, qty: 2 }]);
     kitchenAdd(1);
@@ -300,6 +307,72 @@ const clearOrders = () => {
       assert.strictEqual(rows(newer, P_WRAP).length, 0);
     });
 
+    clearOrders(); setShelf(P_WRAP, 0);
+    const later = makeOrder([{ pid: P_WRAP, qty: 1 }], { shipDate: TOMORROW });
+    const sooner = makeOrder([{ pid: P_WRAP, qty: 1 }], { shipDate: TODAY });
+    kitchenAdd(1);
+    await it('one wrap, a tomorrow order and a today order → the earlier ship date takes it', () => {
+      assert.strictEqual(rows(sooner, P_WRAP).length, 1);
+      assert.strictEqual(rows(later, P_WRAP).length, 0);
+      assert.strictEqual(rows(sooner, P_WRAP)[0].actor_label, 'Auto · ship day');
+    });
+
+    section('── TC002576: paid for tomorrow, the wraps are already on the shelf');
+    clearOrders(); setShelf(P_WRAP, 2);
+    const held = makeOrder([{ pid: P_WRAP, qty: 2 }], { shipDate: TOMORROW });
+    await it('before anyone acts, the two wraps still look free and the order reads stock pending', () => {
+      assert.strictEqual(shelf(P_WRAP), 2);
+      assert.strictEqual(rows(held, P_WRAP).length, 0);
+      assert.strictEqual(inventory.isStockPending(held, 'paid', 'wechat'), true);
+    });
+    const swept = inventory.sweepCoveredFresh({ storeId: STORE });
+    await it('the sweep takes both wraps for that order (2 → 0) and the note goes', () => {
+      assert.strictEqual(shelf(P_WRAP), 0);
+      const r = rows(held, P_WRAP);
+      assert.strictEqual(r.length, 1, JSON.stringify(r));
+      assert.strictEqual(r[0].reason, 'order_commit');
+      assert.strictEqual(r[0].delta, -2);
+      assert.strictEqual(r[0].actor_label, 'Auto · covered');
+      assert.strictEqual(inventory.isStockPending(held, 'paid', 'wechat'), false);
+      assert.ok(swept.taken >= 1, JSON.stringify(swept));
+    });
+    inventory.sweepCoveredFresh({ storeId: STORE });
+    await it('a second sweep takes nothing more', () => {
+      assert.strictEqual(shelf(P_WRAP), 0);
+      assert.strictEqual(rows(held, P_WRAP).length, 1);
+    });
+    const prepHeld = await setStatus(held, 'preparing');
+    await it('备货 afterwards takes nothing more for those wraps', () => {
+      assert.strictEqual(prepHeld.status, 200, JSON.stringify(prepHeld.body));
+      assert.strictEqual(shelf(P_WRAP), 0);
+      assert.deepStrictEqual(rows(held, P_WRAP).map(r => r.reason), ['order_commit']);
+    });
+    inventory.reverseCommittedOrder(held, {});
+    const heldBack = inventory.reverseCommittedLedger(held, [{ product_id: P_WRAP, qty: 2 }], {});
+    await it('a refund returns the two wraps the sweep took', () => {
+      assert.strictEqual(heldBack.reversed, 2, JSON.stringify(heldBack));
+      assert.strictEqual(shelf(P_WRAP), 2);
+    });
+
+    clearOrders(); setShelf(P_WRAP, 1);
+    const shortHeld = makeOrder([{ pid: P_WRAP, qty: 2 }], { shipDate: TOMORROW });
+    inventory.sweepCoveredFresh({ storeId: STORE });
+    inventory.claimCoveredFreshForOrder(shortHeld);
+    await it('one wrap on the shelf and an order that needs two → nothing taken, shelf stays 1', () => {
+      assert.strictEqual(shelf(P_WRAP), 1);
+      assert.strictEqual(rows(shortHeld, P_WRAP).length, 0);
+      assert.strictEqual(inventory.isStockPending(shortHeld, 'paid', 'wechat'), true);
+    });
+
+    clearOrders(); setShelf(P_WRAP, 2);
+    const atPay = makeOrder([{ pid: P_WRAP, qty: 2 }, { pid: P_JAR, qty: 1 }], { shipDate: TOMORROW });
+    inventory.claimCoveredFreshForOrder(atPay);
+    await it('the payment claim takes the covered wraps and leaves the jar on its own row', () => {
+      assert.strictEqual(shelf(P_WRAP), 0);
+      assert.strictEqual(rows(atPay, P_WRAP)[0].reason, 'order_commit');
+      assert.deepStrictEqual(rows(atPay, P_JAR).map(r => r.reason), ['order_prepare']);
+    });
+
     section('── The label both Stock activity screens show');
     const fs = require('fs');
     for (const f of ['public/retail-admin/13-activity.js', 'public/m.html']) {
@@ -308,6 +381,12 @@ const clearOrders = () => {
         assert.ok(/order_restock[^\n]*'Taken on restock'[^\n]*'已补货，自动扣减'/.test(src), 'label missing');
       });
     }
+    const retailSrc = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+    const invSrc = fs.readFileSync(path.join(ROOT, 'lib', 'inventory.js'), 'utf8');
+    await it('payment calls the claim, and the reservation tick runs the shelf sweep', () => {
+      assert.ok(/inventory\.claimCoveredFreshForOrder\(orderId\)/.test(retailSrc), 'payment hook missing');
+      assert.ok(/sweepCoveredFresh\(\)/.test(invSrc), 'sweep missing from the tick');
+    });
   } finally {
     server.close();
     cleanup();
