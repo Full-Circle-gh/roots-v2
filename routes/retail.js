@@ -14588,13 +14588,13 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       sku: r.sku, image_url, units: r.units, revenue: r.revenue, orders: r.orders,
     };
   });
-  // The window immediately before this one, same products, same predicate.
-  // Row 0 above stays the top earner (revenue order) for the fact line. The
-  // screen re-sorts and cuts to 10, 20, 50, or every row; the cut is not done
-  // here, because All is this list. A product that sold only in the previous
-  // window is absent: this is what sold now, with a mark for where it was.
+  // The window immediately before this one, same predicate. Row 0 above
+  // stays the top earner (revenue order) for the fact line. The screen
+  // re-sorts and cuts to 10, 20, 50, or every row; the cut is not done here,
+  // because All is this list. A product that sold only in the previous window
+  // is not a bar — it is the "sold then, none now" list under them.
   const priorByProduct = new Map(tdb().prepare(`
-    SELECT i.product_id,
+    SELECT i.product_id, i.name_en, i.name_cn,
            COALESCE(SUM(i.qty), 0) AS units,
            COALESCE(SUM(i.line_total), 0) AS revenue
       FROM retail_order_items i
@@ -14605,6 +14605,66 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     const prev = priorByProduct.get(row.product_id);
     row.prior_units = prev ? prev.units : 0;
     row.prior_revenue = prev ? prev.revenue : 0;
+  }
+  const soldNow = new Set(topProducts.map(r => r.product_id));
+  const stopped = [];
+  for (const [id, prev] of priorByProduct) {
+    if (soldNow.has(id)) continue;
+    if (!(Number(prev.units) || Number(prev.revenue))) continue;
+    stopped.push({
+      product_id: id, name_en: prev.name_en, name_cn: prev.name_cn,
+      prior_units: prev.units, prior_revenue: prev.revenue,
+    });
+  }
+  stopped.sort((a, b) => (Number(b.prior_units) - Number(a.prior_units))
+    || (Number(b.prior_revenue) - Number(a.prior_revenue)));
+
+  // The shelf note is the running-low card's own rule, and only on a product
+  // that sold MORE units than the window before. A drop that is also short
+  // is a different question; this note is "the green number has nothing left
+  // to sell". Same populations as the card: published and active, out at
+  // <= 0, low while still positive and at or under the threshold. One store
+  // uses that store's shelf and its own default; every store (or a scoped
+  // operator's stores) uses the sum, which is what the card counts.
+  const risingIds = topProducts
+    .filter(r => Number(r.units) > Number(r.prior_units || 0))
+    .map(r => Number(r.product_id))
+    .filter(id => Number.isInteger(id) && id > 0);
+  if (risingIds.length && !(SCOPED && dashStores.length === 0)) {
+    const lowDefault = lowStockDefault();
+    const oneStore = SCOPED && dashStores.length === 1 ? dashStores[0] : null;
+    let storeDefault = null;
+    if (oneStore) {
+      const srow = tdb().prepare('SELECT low_stock_threshold FROM retail_stores WHERE id = ?').get(oneStore);
+      storeDefault = srow ? srow.low_stock_threshold : null;
+    }
+    const inList = SCOPED ? dashStores.join(',') : '';
+    const stockExpr = oneStore
+      ? `COALESCE((SELECT rss.physical_qty FROM retail_store_stock rss WHERE rss.product_id = p.id AND rss.store_id = ${oneStore}), 0)`
+      : `COALESCE((SELECT SUM(rss.physical_qty) FROM retail_store_stock rss JOIN retail_stores rs ON rs.id = rss.store_id WHERE rss.product_id = p.id AND rs.is_active = 1${inList ? ` AND rss.store_id IN (${inList})` : ''}), p.stock_qty, 0)`;
+    const carried = oneStore
+      ? `AND EXISTS (SELECT 1 FROM retail_store_stock rss WHERE rss.product_id = p.id AND rss.store_id = ${oneStore})`
+      : '';
+    const thresh = oneStore ? 'COALESCE(p.low_stock_threshold, ?, ?)' : 'COALESCE(p.low_stock_threshold, ?)';
+    const binds = oneStore ? [storeDefault, lowDefault] : [lowDefault];
+    const shelfRows = tdb().prepare(`
+      SELECT p.id AS product_id, ${stockExpr} AS stock_qty, ${thresh} AS threshold
+        FROM store_products p
+       WHERE p.id IN (${risingIds.map(() => '?').join(',')})
+         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1 AND p.is_published = 1
+         ${carried}
+    `).all(...binds, ...risingIds);
+    const shelfById = new Map();
+    for (const s of shelfRows) {
+      const qty = Number(s.stock_qty) || 0;
+      const threshold = Number(s.threshold);
+      if (qty <= 0) shelfById.set(s.product_id, { kind: 'out', qty: 0 });
+      else if (Number.isFinite(threshold) && qty <= threshold) shelfById.set(s.product_id, { kind: 'low', qty });
+    }
+    for (const row of topProducts) {
+      const shelf = shelfById.get(row.product_id);
+      if (shelf) row.shelf = shelf;
+    }
   }
 
   // ── Top customers (by spend in window) ──
@@ -15032,7 +15092,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         rows: channelRows,
         topups_unassigned: tuSales.received || 0,
       },
-      topProducts, topCustomers, tiers,
+      topProducts, stopped, topCustomers, tiers,
       geoCities, geoDistricts,
       marketing: { vouchers, points, manualDiscounts },
       traffic: { scenes },
@@ -15060,6 +15120,72 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     for (const [k, v] of _dashMemo) if (Date.now() - v.at >= DASH_MEMO_TTL) _dashMemo.delete(k);
   }
   res.json(dashBody);
+});
+
+// One product's units across the dashboard's own window. The bars say how
+// many and whether that moved; this is the shape — one Saturday, or every
+// day. Same predicate as the bars (PAIDO_ALL, store scope included) so the
+// points add up to the bar. A single day is hours. Longer than a quarter
+// rolls up to weeks, the same cut the product Sales card uses, because a
+// day per point stops being a shape past that.
+router.get('/api/retail-admin/dashboard/product-days', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.query.product_id, 10);
+  const from = String(req.query.from || '');
+  const to = String(req.query.to || '');
+  if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+    return res.status(400).json({ success: false, error: 'bad_window' });
+  }
+  const span = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
+  if (!Number.isFinite(span) || span > 800) return res.status(400).json({ success: false, error: 'bad_window' });
+
+  const TZ = shopSqlShift();
+  const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
+  const PHOUR = `strftime('%H', COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
+  const dashStores = dashStoreScope(req);
+  const SCOPED = dashStores !== null;
+  const scopedPO = (w) => (SCOPED ? `(${w}) AND ${dashStores.length ? `o.store_id IN (${dashStores.join(',')})` : '0'}` : w);
+  const PAIDO_ALL = scopedPO(financeWindow.PAID_O);
+
+  if (from === to) {
+    const productHourRows = tdb().prepare(`
+      SELECT CAST(${PHOUR} AS INTEGER) AS h, COALESCE(SUM(i.qty), 0) AS units
+        FROM retail_order_items i
+        JOIN retail_orders o ON o.id = i.order_id
+       WHERE i.product_id = ? AND ${PAIDO_ALL} AND ${PDATEO} = ?
+       GROUP BY h`).all(id, from);
+    const byH = new Map(productHourRows.map(r => [Number(r.h), r.units]));
+    const points = [];
+    for (let h = 0; h < 24; h++) points.push({ bucket: String(h).padStart(2, '0'), units: byH.get(h) || 0 });
+    return res.json({ success: true, data: { product_id: id, from, to, granularity: 'hour', points } });
+  }
+
+  const productDayRows = tdb().prepare(`
+    SELECT ${PDATEO} AS d, COALESCE(SUM(i.qty), 0) AS units
+      FROM retail_order_items i
+      JOIN retail_orders o ON o.id = i.order_id
+     WHERE i.product_id = ? AND ${PAIDO_ALL} AND ${PDATEO} BETWEEN ? AND ?
+     GROUP BY d`).all(id, from, to);
+  const byDay = new Map(productDayRows.map(r => [r.d, r.units]));
+  const days = [];
+  for (let d = new Date(from + 'T00:00:00Z'); d <= new Date(to + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+    const key = d.toISOString().slice(0, 10);
+    days.push({ bucket: key, units: byDay.get(key) || 0 });
+  }
+  const granularity = days.length <= 92 ? 'day' : 'week';
+  let points = days;
+  if (granularity === 'week') {
+    const buckets = new Map();
+    for (const row of days) {
+      const dt = new Date(row.bucket + 'T00:00:00Z');
+      const dow = (dt.getUTCDay() + 6) % 7;
+      dt.setUTCDate(dt.getUTCDate() - dow);
+      const key = dt.toISOString().slice(0, 10);
+      buckets.set(key, (buckets.get(key) || 0) + row.units);
+    }
+    points = [...buckets.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)
+      .map(([bucket, units]) => ({ bucket, units }));
+  }
+  res.json({ success: true, data: { product_id: id, from, to, granularity, points } });
 });
 
 // ── Catalogue highlights — the "Your catalogue" summary's second band ──────

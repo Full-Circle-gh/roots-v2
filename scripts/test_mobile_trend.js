@@ -196,7 +196,12 @@ const FULL = WEEK + `state.trendFull={
     topups_unassigned:880},
   topCustomers:[{customer_id:5,nickname:'Mei',revenue:980,orders:6}],
   geoCities:[{city:'广州',city_en:'Guangzhou',orders:61,revenue:6100}],
-  topProducts:[{product_id:2,name_en:'Falafel Wrap',name_cn:'法拉费卷',units:140,revenue:2800,prior_units:100,prior_revenue:2000}],
+  topProducts:[
+    {product_id:2,name_en:'Falafel Wrap',name_cn:'法拉费卷',units:140,revenue:2800,prior_units:100,prior_revenue:2000,shelf:{kind:'low',qty:3}},
+    // A drop that is also out of stock. The shelf note is only for a rise,
+    // so "Sold out" must not appear beside this row.
+    {product_id:3,name_en:'Rye crisp',name_cn:'黑麦脆',units:10,revenue:100,prior_units:40,prior_revenue:400,shelf:{kind:'out',qty:0}}],
+  stopped:[{product_id:9,name_en:'Rye loaf',name_cn:'黑麦',prior_units:12,prior_revenue:240}],
   kpis:{conversion_rate:6.25},
   checkout:{started:40,converted:25,abandoned:15},
   stores:[{store_id:1,name_en:'Tianhe',name_cn:'天河',orders:52,revenue:5200},
@@ -290,6 +295,10 @@ CASES.push(
     ['and the change against the window before', `txt('content').includes('+40')`],
     ['the two marks are named', `txt('content').includes('This window') && txt('content').includes('The one before')`],
     ['and it is not called a top seller', `!txt('content').includes('Top seller')`],
+    ['a rise that is short says how many are left', `txt('content').includes('3 left')`],
+    ['a drop that is out of stock does not', `!txt('content').includes('Sold out')`],
+    ['what sold then and not now is named', `txt('content').includes('Sold then, none now') && txt('content').includes('Rye loaf')`],
+    ['with the units it sold then', `txt('content').includes('−12')`],
     // kpis.conversion_rate is the mini app's own, never all-channel orders
     // over sessions — the server fixed that at source and this reads it whole.
     ['conversion is the server\'s',  `txt('content').includes('6.3%')`],
@@ -395,6 +404,13 @@ CASES.push(
     // window reads low. The date travels with the figure rather than the screen
     // quietly under-reporting.
     ['Meituan carries the date it starts from', `txt('content').includes('Meituan from')`],
+  ]],
+  ['tapping a product draws the days in this window', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','products');
+    state.prodOpen=2;
+    state.prodDays={id:2, key:trendReadKey(), granularity:'day', points:[{bucket:'2999-01-01',units:20},{bucket:'2999-01-07',units:40}]};
+    render();`, [
+    ['the days are named', `txt('content').includes('Each day')`],
+    ['and drawn under the bars', `document.querySelectorAll('#content svg').length >= 2`],
   ]],
   ['the product ranking no longer claims wholesale is excluded', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','products');`, [
     // §185 put the mirror's lines in this ranking. The note that said they were

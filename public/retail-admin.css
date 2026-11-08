@@ -2233,6 +2233,18 @@
     border-left: 4px solid transparent; border-right: 4px solid transparent;
     border-top: 5px solid var(--td-text2);
   }
+  .db-prod-hit { display: block; width: 100%; padding: 0; border: none; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .db-prod-shelf { margin: 4px 0 0 26px; font-size: 12px; color: var(--td-amber-ink); }
+  .db-prod-days { margin: 8px 0 2px 26px; }
+  .db-prod-days .cap, .db-prod-stopped .cap { font-size: 12px; color: var(--td-text2); margin-bottom: 4px; }
+  .db-prod-days.muted { font-size: 12px; color: var(--td-text2); }
+  .db-prod-spark { display: block; width: 100%; height: 72px; }
+  .db-prod-days .ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--td-text2); font-variant-numeric: tabular-nums; padding-top: 4px; }
+  .db-prod-stopped { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--td-border); }
+  .db-prod-stop { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-top: 8px; font-size: 13.5px; }
+  .db-prod-stop .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .db-prod-stop .mv { font-variant-numeric: tabular-nums; }
+  .db-prod-stop .down { color: var(--td-amber-ink); }
 
   /* Small in-card group heading (Vouchers / Entry scenes). */
   .db-group-h { font-size: 12px; font-weight: 500; color: var(--td-text2); margin: 16px 0 10px; }
