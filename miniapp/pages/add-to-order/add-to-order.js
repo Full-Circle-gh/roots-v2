@@ -80,7 +80,6 @@ Page({
       // changed is what both of them say. See the shop grid's own note.
       nextBatch: 'NEXT BATCH',
       preorder: 'PRE-ORDER',
-      pickRequired: 'Please choose an option',
       opAdd: 'Add',
       opCancel: 'Cancel',
       back: '← Back',
@@ -131,7 +130,6 @@ Page({
         soldOut: '已售罄',
         nextBatch: '下批现做',
         preorder: '可预订',
-        pickRequired: '请选择一个选项',
         opAdd: '加入',
         opCancel: '取消',
         back: '← 返回',
@@ -489,8 +487,10 @@ Page({
       // the counter, sitting on one side, that the sheet is asking for two.
       if ((g.is_required && !n) || (min && n < min)) {
         const hint = min > 1 ? optionText.limHint(g, this.data.lang) : '';
+        const what = optionText.askLabel(g, this.data.lang);
         wx.showToast({
-          title: this.data.copy.pickRequired + (hint ? (cn ? '（' + hint + '）' : ' (' + hint + ')') : ''),
+          title: (cn ? '请选择 ' + what : 'Please choose: ' + what)
+            + (hint ? (cn ? '（' + hint + '）' : ' (' + hint + ')') : ''),
           icon: 'none',
         });
         return;
