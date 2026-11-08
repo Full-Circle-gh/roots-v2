@@ -2560,9 +2560,11 @@ function boxOf(text) {
       const st = await pickerState();
       assert.ok(st.sheetOpen, 'the picker closed on a refusal');
       assert.ok(st.barHidden, 'the drink was added despite the unanswered question');
-      // The live pair, question text and all — "Please choose: Sugar level".
-      assert.match(st.err, /Please choose: Sugar level/, `the refusal said: "${st.err}"`);
-      assert.match(st.err, /请选择 糖度/, 'the 中文 half of the refusal is missing');
+      // The answers, not the heading. "Please choose: Sugar level" does not
+      // say which sugar is still open. Full sugar and Half sugar do.
+      assert.match(st.err, /Please choose: Full sugar or Half sugar/, `the refusal said: "${st.err}"`);
+      assert.doesNotMatch(st.err, /Please choose: Sugar level/, 'the refusal stopped at the heading');
+      assert.match(st.err, /请选择 全糖或半糖/, 'the 中文 half of the refusal is missing');
     });
 
     await check('§120 the button carries the running price as answers are ticked', async () => {

@@ -1333,8 +1333,9 @@ Page({
       if ((o.is_required && !n) || (min && n < min)) {
         const L = this.data.lang;
         const hint = min > 1 ? optionText.limHint(o, L) : '';
+        const what = optionText.askLabel(o, L);
         wx.showToast({
-          title: (L === 'cn' ? '请选择 ' + o.question : 'Please choose: ' + o.question)
+          title: (L === 'cn' ? '请选择 ' + what : 'Please choose: ' + what)
             + (hint ? (L === 'cn' ? '（' + hint + '）' : ' (' + hint + ')') : ''),
           icon: 'none',
         });
@@ -1397,7 +1398,8 @@ Page({
   confirmOptions() {
     for (const o of this.data.optionsSingle) {
       if (o.is_required && !this._selIds(o).length) {
-        wx.showToast({ title: this.data.lang === 'cn' ? '请选择 ' + o.question : 'Please choose: ' + o.question, icon: 'none' });
+        const what = optionText.askLabel(o, this.data.lang);
+        wx.showToast({ title: this.data.lang === 'cn' ? '请选择 ' + what : 'Please choose: ' + what, icon: 'none' });
         return;
       }
     }

@@ -4996,8 +4996,48 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   }
 
   // The first question that is not answered yet, or null. Drives both the
-  // blocked Add and the line of red under it — naming the question is the
-  // difference between "you cannot add this" and a cashier knowing why.
+  // blocked Add and the line of red under it. The line names the answers
+  // still open (lib/option-ask.js), so "Shots" does not stand in for
+  // House Blend or SOE.
+  // Copied from lib/option-ask.js. The test requires this text to match.
+function askWhat(choices, qEn, qCn) {
+  function trim(s) {
+    return String(s == null ? '' : s).replace(/^\s+|\s+$/g, '');
+  }
+  function yesNo(labels, cn) {
+    var i, s;
+    if (!labels.length) return false;
+    for (i = 0; i < labels.length; i++) {
+      s = labels[i];
+      if (cn) { if (s !== '是' && s !== '否') return false; }
+      else if (s.toLowerCase() !== 'yes' && s.toLowerCase() !== 'no') return false;
+    }
+    return true;
+  }
+  function joinOr(labels, cn) {
+    var or, comma;
+    if (labels.length <= 1) return labels[0] || '';
+    or = cn ? '或' : ' or ';
+    if (labels.length === 2) return labels[0] + or + labels[1];
+    comma = cn ? '、' : ', ';
+    return labels.slice(0, -1).join(comma) + or + labels[labels.length - 1];
+  }
+  function side(labels, question, cn) {
+    if (!labels.length || labels.length > 4 || yesNo(labels, cn)) return question || '';
+    return joinOr(labels, cn);
+  }
+  var en = [], cn = [], i, c, e, z;
+  choices = choices || [];
+  for (i = 0; i < choices.length; i++) {
+    c = choices[i];
+    if (!c || c.out) continue;
+    e = trim(c.en);
+    z = trim(c.cn);
+    if (e) en.push(e);
+    if (z) cn.push(z);
+  }
+  return { en: side(en, qEn, false), cn: side(cn, qCn, true) };
+}
   function optsMissing() {
     if (!S.opts) return null;
     var qs = S.opts.p.options || [];
@@ -5086,9 +5126,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
            + '</button>';
       });
     });
-    // The refusal names the question, in the storefront's own words.
+    // The refusal names the answers still open, in the storefront's own words.
     if (S.opts.err && miss) {
-      h += '<div class="opt-err">' + esc(T('pleaseChoose') + cuT(miss.q_en, miss.q_cn)
+      var asked = askWhat(miss.choices, miss.q_en, miss.q_cn);
+      h += '<div class="opt-err">' + esc(T('pleaseChoose') + cuT(asked.en, asked.cn)
            + (optsLimitText(miss) ? cuT(' (', '（') + optsLimitText(miss) + cuT(')', '）') : '')) + '</div>';
     }
     h += '<div class="opt-ft">'

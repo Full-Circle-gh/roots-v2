@@ -384,6 +384,33 @@ section('4b · a product with questions is asked them before its line is made');
   is(String(o.err && o.err.msg), 'Flat white — Out of stock', 'naming the product');
 }
 
+// A heading is not a choice. "Please choose: Shots" names the group the
+// customer can already see. The refusal names the answers still open.
+{
+  const o = form({ ful: 'pickup' });
+  o.lines = [];
+  const SHOT = {
+    id: 24, name_en: 'Espresso', name_cn: '意式浓缩', sell_price: 18,
+    options: [
+      { id: 4, q_en: 'Shots', q_cn: '浓缩', multi: 0, req: 1, min: 0, max: 0,
+        choices: [{ id: 41, en: 'House Blend', cn: '拼配', d: 0, def: 0, out: 0 },
+                  { id: 42, en: 'SOE', cn: '单一产地', d: 4, def: 0, out: 0 }] },
+    ],
+  };
+  o.picks = [SHOT];
+  ctx.CMD.onwAddLine(24);
+  ctx.CMD.onwOptAdd();
+  yes(A.onwOptHtml().indexOf('Please choose: House Blend or SOE') >= 0,
+      'the refusal names the answers, not the heading');
+  yes(A.onwOptHtml().indexOf('Please choose: Shots') < 0,
+      'and does not stop at Shots');
+  ctx.LANG = 'cn';
+  yes(A.onwOptHtml().indexOf('请选择 拼配或单一产地') >= 0,
+      'the Chinese names the answers too');
+  ctx.LANG = 'en';
+  ctx.CMD.onwOptClose();
+}
+
 // ── §5 · every refusal the server can answer with has a home ──────────────
 section('5 · the server’s vocabulary, covered');
 

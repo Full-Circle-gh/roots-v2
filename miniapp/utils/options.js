@@ -96,4 +96,57 @@ function limHint(o, L) {
   return '';
 }
 
-module.exports = { format, formatOne, limHint, SEP };
+// Copied from lib/option-ask.js. The test requires this text to match.
+function askWhat(choices, qEn, qCn) {
+  function trim(s) {
+    return String(s == null ? '' : s).replace(/^\s+|\s+$/g, '');
+  }
+  function yesNo(labels, cn) {
+    var i, s;
+    if (!labels.length) return false;
+    for (i = 0; i < labels.length; i++) {
+      s = labels[i];
+      if (cn) { if (s !== '是' && s !== '否') return false; }
+      else if (s.toLowerCase() !== 'yes' && s.toLowerCase() !== 'no') return false;
+    }
+    return true;
+  }
+  function joinOr(labels, cn) {
+    var or, comma;
+    if (labels.length <= 1) return labels[0] || '';
+    or = cn ? '或' : ' or ';
+    if (labels.length === 2) return labels[0] + or + labels[1];
+    comma = cn ? '、' : ', ';
+    return labels.slice(0, -1).join(comma) + or + labels[labels.length - 1];
+  }
+  function side(labels, question, cn) {
+    if (!labels.length || labels.length > 4 || yesNo(labels, cn)) return question || '';
+    return joinOr(labels, cn);
+  }
+  var en = [], cn = [], i, c, e, z;
+  choices = choices || [];
+  for (i = 0; i < choices.length; i++) {
+    c = choices[i];
+    if (!c || c.out) continue;
+    e = trim(c.en);
+    z = trim(c.cn);
+    if (e) en.push(e);
+    if (z) cn.push(z);
+  }
+  return { en: side(en, qEn, false), cn: side(cn, qCn, true) };
+}
+
+// One language, for a sheet whose labels are already localised. A sold-out
+// answer is not named. Yes/No falls back to the question inside askWhat.
+function askLabel(o, L) {
+  const cn = L === 'cn';
+  const choices = (o.choices || []).map(c => ({
+    en: cn ? '' : (c.label || ''),
+    cn: cn ? (c.label || '') : '',
+    out: c.sold_out ? 1 : 0,
+  }));
+  const named = askWhat(choices, cn ? '' : (o.question || ''), cn ? (o.question || '') : '');
+  return cn ? named.cn : named.en;
+}
+
+module.exports = { format, formatOne, limHint, askWhat, askLabel, SEP };

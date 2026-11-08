@@ -78,6 +78,7 @@ const inventory = require('../lib/inventory');
 // rather than being copied; the module header says why. lib/option-limits is
 // no longer required here because the one caller that used it went with them.
 const productOptions = require('../lib/product-options');
+const optionAsk = require('../lib/option-ask');
 const optionSwitch = require('../lib/option-switch');
 const { choicePhotoVersions } = require('../lib/choice-photo');
 // resolveProductImage and normalizeCurrency are retail.js's, exported for this
@@ -2722,12 +2723,14 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // refusal; a dead answer inside the picker is the same fact one level down.
   //
   // Please choose: · 请选择 is the required-option refusal, live in BOTH the
-  // storefront and the mini app, in both cases with the question's own text
-  // appended exactly as it is appended here.
+  // storefront and the mini app. What follows it is askWhat (lib/option-ask.js,
+  // pasted below): the answers still open, when naming them is clearer than
+  // the heading. "Please choose: Shots" does not say House Blend or SOE.
   `var L_ADD=${JSON.stringify(bi('Add to basket', '加入购物车'))},` +
   `L_OUT=${JSON.stringify(bi('Sold out', '售罄'))},` +
   `L_PICK_EN=${JSON.stringify('Please choose: ')},` +
   `L_PICK_CN=${JSON.stringify('请选择 ')},` +
+  `askWhat=${optionAsk.askWhat.toString()};` +
   // §153's four customer pairs for HOW MANY a pick-any question takes, and
   // every one is COPIED rather than composed: public/shop.html builds these
   // exact four shapes in its own limHint(), and v1.99 of the vocabulary
@@ -3242,11 +3245,12 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(count()===0&&mine.length){if(mine.length===1){location.href=mine[0].u;return}` +
   `openOrders();return}` +
   `pkClose();errEl.hidden=true;foot.hidden=false;paintSheet();shOpen(sheet)},false);` +
-  /* RULE 2B (§120). A required question left unanswered BLOCKS, and the refusal
-     NAMES THE QUESTION — "Please choose: Sugar level", not a bare "please
-     choose", because a picker with four questions on it gives the customer no
-     way to tell which one it means. Both halves are the live pair the web
-     storefront and the mini app already refuse with, question text and all.
+  /* RULE 2B (§120). A required question left unanswered BLOCKS. The refusal
+     NAMES WHAT IS STILL OPEN — "Please choose: House Blend or SOE", not
+     "Please choose: Shots". The heading is already on the sheet; the heading
+     is not the choice. A yes/no pair stays the question ("Please choose:
+     Heat up?"), and so does a list longer than four. askWhat is lib/option-ask.js,
+     pasted above, the same function the other sheets use.
      The alternative — silently pre-picking the first answer and never blocking
      — was considered and rejected in §120: a defaulted sugar level is a wrong
      drink the customer did not order and the counter cannot tell was never
@@ -3259,8 +3263,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      it is the whole message: the customer looking at one ticked side needs to
      read that the question wanted two, not just that it wants something. */
   `if(miss){var mt=(miss.min>1)?limTxt(miss):null;` +
-  `oErr.innerHTML=bi(L_PICK_EN+miss.q_en+(mt?(L_PO_EN+mt[0]+L_PC_EN):''),` +
-  `L_PICK_CN+miss.q_cn+(mt?(L_PO_CN+mt[1]+L_PC_CN):''));` +
+  `var asked=askWhat(miss.choices,miss.q_en,miss.q_cn);` +
+  `oErr.innerHTML=bi(L_PICK_EN+asked.en+(mt?(L_PO_EN+mt[0]+L_PC_EN):''),` +
+  `L_PICK_CN+asked.cn+(mt?(L_PO_CN+mt[1]+L_PC_CN):''));` +
   `oErr.hidden=false;return}` +
   /* pkPrice(), NOT pk.p. The basket line carries the price the customer will
      actually be charged — base PLUS every delta they ticked — and pk.p is the
