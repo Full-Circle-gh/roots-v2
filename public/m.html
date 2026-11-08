@@ -4230,13 +4230,21 @@ function qyDayPanel(o){
   const q=qyOf(o), from=escAttr((o.shipFrom&&o.shipFrom.promised_date)||'');
   const dis=state.orderBusy?' disabled':'';
   const pick=q&&q.day;
+  const slots=(q&&q.slots)||[];
+  const needTime=!!(pick&&q&&!q.loading&&!q.dayOnly);
+  const dest=q&&q.slotLabel?pick+' '+q.slotLabel:pick;
+  const show=!!(pick&&q&&!q.loading&&(q.dayOnly||q.slot));
   return `<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
     <div style="display:flex;flex-wrap:wrap;gap:8px">${qyDays().map(d=>
       `<button class="chip ${pick===d.iso?'on':''}"${dis} onclick="APP.cmd('qyDayPick','${d.iso}')"><span class="num">${d.iso}</span>${d.rel?` <span style="color:var(--text-secondary)">${d.rel}</span>`:''}</button>`).join('')}</div>
     <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.6">${T('The rider is called on the morning of the day you pick. Nothing is dispatched before then.','所选日期当天才会呼叫骑手,在此之前不会发单。')}</div>
-    ${pick?`<div style="padding:10px 12px;border-radius:12px;background:var(--surface-raised);font-size:13.5px;line-height:1.55">${T(
-        'Move this delivery from '+from+' to '+pick+'? The customer is told the new day.',
-        '将配送日期由 '+from+' 改为 '+pick+'？系统会告知顾客新的日期。')}
+    ${q&&q.loading?qyNote(T('Loading…','加载中…')):''}
+    ${q&&q.err&&!q.loading?qyNote(q.err):''}
+    ${needTime?`<div style="display:flex;flex-wrap:wrap;gap:8px">${slots.map(s=>
+      `<button class="chip ${q.slot===s.slot_id?'on':''}"${(s.passed||dis)?' disabled':''} onclick="APP.cmd('qyDayTime','${escAttr(s.slot_id)}')"><span class="num">${escAttr(s.label_en)}</span></button>`).join('')}</div>`:''}
+    ${show?`<div style="padding:10px 12px;border-radius:12px;background:var(--surface-raised);font-size:13.5px;line-height:1.55">${T(
+        'Move this delivery from '+from+' to '+dest+'? The customer is told the new day.',
+        '将配送日期由 '+from+' 改为 '+dest+'？系统会告知顾客新的日期。')}
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="cta" style="flex:1"${dis} onclick="APP.cmd('qyDayGo')">${state.orderBusy==='qyday'?T('Moving…','处理中…'):T('Move the delivery','确认改期')}</button>
         <button class="btn2" style="flex:1"${dis} onclick="APP.cmd('qyClose')">${T('Keep the current date','保持原日期')}</button></div></div>`:''}
@@ -4306,16 +4314,35 @@ reg('qyDayOpen', ()=>{
 reg('qyDayPick', iso=>{
   const o=currentOrder(), q=qyOf(o); if(!q||q.panel!=='day') return;
   if(!qyDays().some(d=>d.iso===iso)) return;
-  q.day=iso; render();
+  q.day=iso; q.slot=null; q.slotLabel=null; q.slots=null; q.dayOnly=false; q.loading=true; q.err=null; render();
+  api('/orders/'+o._id+'/qingyun/day-slots?date='+encodeURIComponent(iso)).then(d=>{
+    if(state.qy!==q||q.day!==iso) return;
+    q.loading=false;
+    // A read that names no windows (the tests' empty object, a day-only zone)
+    // still moves by the day. A real time-slot zone sends day_only:false.
+    q.dayOnly=!d||d.day_only!==false;
+    q.slots=q.dayOnly?[]:(Array.isArray(d.slots)?d.slots:[]);
+    render();
+  }).catch(e=>{
+    if(state.qy!==q||String(e.message)==='auth') return;
+    q.loading=false; q.err=e.refused?T(...e.words):T('Load failed','加载失败'); render();
+  });
+});
+reg('qyDayTime', id=>{
+  const o=currentOrder(), q=qyOf(o); if(!q||q.panel!=='day'||q.loading) return;
+  const s=(q.slots||[]).find(x=>x&&x.slot_id===id&&!x.passed);
+  if(!s) return;
+  q.slot=id; q.slotLabel=s.label_en; render();
 });
 reg('qyDayGo', ()=>{
   if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
-  const o=currentOrder(), q=qyOf(o); if(!qyCanEdit(o)||!q||q.panel!=='day'||!q.day) return;
+  const o=currentOrder(), q=qyOf(o); if(!qyCanEdit(o)||!q||q.panel!=='day'||!q.day||q.loading) return;
+  if(!q.dayOnly&&!q.slot) return;
   const iso=q.day;
   // Beijing day, the server's gzDateStr — the two must agree about "today".
   const today=iso===qyDays()[0].iso;
   const when=today?'today':iso, whenCn=today?'今天':' '+iso;
-  qyWrite(o,'qyday','/orders/'+o._id+'/qingyun/reschedule',{date:iso},{waiting_copy:['Could not remove it — do it in the Qingyun app','删除失败 — 请在青云 App 中删除'],_:['Could not move it','改期失败']},
+  qyWrite(o,'qyday','/orders/'+o._id+'/qingyun/reschedule',q.slot?{date:iso,slot:q.slot}:{date:iso},{waiting_copy:['Could not remove it — do it in the Qingyun app','删除失败 — 请在青云 App 中删除'],_:['Could not move it','改期失败']},
     j=>j.already_created?T('A courier is already on this one — cancel it in the Qingyun app first','已呼叫运力。请先在青云 App 取消该单。')
       :(j.requeued||j.kept_waiting)?(today?T('Moved to today — it goes back in the queue now','已改期至今天 — 已重新排队')
         :T('Moved to '+iso+' — the rider is called that morning','已改期至 '+iso+' — 当天呼叫骑手'))

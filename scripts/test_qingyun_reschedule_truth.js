@@ -146,6 +146,14 @@ it('a waiting 待配送 copy is not read as a rider', () => {
     'the endpoint grew its own idea of "nobody sent"');
 });
 
+it('a window the kitchen does not have never reaches the delete', () => {
+  const slot = ENDPOINT.indexOf("error: 'slot_required'");
+  const del = ENDPOINT.indexOf('_qingyunDeleteCopy');
+  assert.ok(slot > 0 && del > slot, 'a missing window still deletes the waiting copy');
+  assert.ok(/staffDayWindows\(/.test(ENDPOINT), 'the window is not taken from the kitchen hours');
+  assert.ok(/error: 'slot_unavailable'/.test(ENDPOINT), 'a made-up window is written anyway');
+});
+
 it('a later day removes that waiting copy before the date is written', () => {
   // Left in 待配送, anyone at the store can dispatch it today, which is no
   // longer the day. The delete is the ship-from move's, and it has to finish
