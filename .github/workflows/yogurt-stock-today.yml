@@ -1,0 +1,51 @@
+name: Yogurt stock today
+
+# One-shot read of the live ledger for the coconut-yogurt shelf tag.
+# Same SSH and read-only rules as ro-query.yml. Ships nothing, restarts nothing.
+# Fires only when this branch is pushed, so it cannot run from main.
+
+on:
+  push:
+    branches: [cursor/yogurt-stock-today-9574]
+
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          cat > ~/.ssh/config <<EOF
+          Host prod
+            HostName $DEPLOY_HOST
+            User root
+            IdentityFile ~/.ssh/id_deploy
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 20
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Run the ledger dump
+        run: |
+          set -euo pipefail
+          S=scripts/diagnose_coconut_yogurt_1190_today.js
+          REMOTE="/tmp/ro-yogurt-$GITHUB_RUN_ID.js"
+          scp -q "$S" "prod:$REMOTE"
+          set +e
+          ssh prod "ROOTS_DB=/root/roots-v2/data/roots.db node '$REMOTE'"; RC=$?
+          set -e
+          ssh prod "rm -f '$REMOTE'"
+          echo "exit=$RC"
+          exit $RC
