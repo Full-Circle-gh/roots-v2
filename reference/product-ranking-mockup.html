@@ -138,6 +138,35 @@ button { font:inherit; color:inherit; background:none; border:0; cursor:default;
 .bars i { flex:1; background:var(--td-text); border-radius:2px 2px 0 0; display:block; }
 .axis { display:flex; justify-content:space-between; font-size:12px; color:var(--td-text2); margin-top:6px; }
 
+/* the combined picture: one bar per product, a mark for the window before */
+.grow { padding:9px 0; border-top:1px solid var(--td-border); }
+.grow:first-of-type { border-top:none; }
+.grow .top { display:flex; align-items:baseline; gap:8px; font-size:14px; }
+.grow .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.track { position:relative; height:8px; margin-top:6px; background:var(--td-raised); border-radius:4px; }
+.track .now { position:absolute; left:0; top:0; bottom:0; background:var(--td-text); border-radius:4px; }
+.track .was {
+  position:absolute; top:-4px; width:0; height:0; transform:translateX(-4px);
+  border-left:4px solid transparent; border-right:4px solid transparent;
+  border-top:5px solid var(--td-text2);
+}
+.legend { display:flex; gap:16px; align-items:center; margin-top:8px; font-size:12px; color:var(--td-text2); }
+.legend i { display:inline-block; width:18px; height:8px; border-radius:4px; background:var(--td-text); margin-right:6px; vertical-align:middle; }
+.legend .mark {
+  display:inline-block; width:0; height:0; margin-right:6px; vertical-align:middle;
+  border-left:4px solid transparent; border-right:4px solid transparent;
+  border-top:5px solid var(--td-text2);
+}
+.lines { width:100%; height:168px; display:block; }
+.lines .g { fill:none; stroke:var(--td-text); stroke-width:1.5; opacity:.35; }
+.ln-ink { fill:none; stroke:var(--td-text); stroke-width:2; }
+.ln-sage { fill:none; stroke:var(--td-sage-ink); stroke-width:2; }
+.ln-amber { fill:none; stroke:var(--td-amber-ink); stroke-width:2; }
+.key { display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:8px; font-size:12.5px; color:var(--td-text2); }
+.key b { font-weight:500; }
+.sw { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:5px; vertical-align:-1px; }
+.tick { width:16px; flex:none; font-size:13px; color:var(--td-text2); }
+
 table.words { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; }
 table.words th { text-align:left; font-weight:500; font-size:12px; color:#58606E; padding:8px 10px; border-bottom:1px solid #C9C4B8; }
 table.words td { padding:8px 10px; border-bottom:1px solid #E4E0D5; vertical-align:top; }
@@ -316,6 +345,104 @@ table.words td:first-child { white-space:nowrap; }
         <li>The line is for the product whose total and whose direction disagree.</li>
         <li class="good">Seven days of a steady seller is a real shape.</li>
         <li class="bad">A quiet product’s daily line is mostly blank. That case stays a sentence.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>The picture of all of them <span class="rec">with A</span></h2>
+  <p class="opt-s">You asked for every product, or the top 20, or a number you pick, together on one graph. <b>One line per product does not survive that.</b> Eight lines already cross. Twenty is the same picture, denser, and a full catalogue is a knot. The bar row is the same ranking as A, drawn so the lengths compare, and the count is yours: 10, 20, 50, or every product that sold.</p>
+
+  <h2 style="font-size:15px;margin-top:8px">What I would not build</h2>
+  <p class="opt-s">Eight products, one line each, across the seven days. The totals match the list above. Past this, adding products only adds crossings.</p>
+  <div class="row">
+    <div class="skin desk">
+      <div class="card">
+        <div class="hd"><h3>Units per day</h3><span class="sub">8 products</span></div>
+        <svg class="lines" viewBox="0 0 280 120" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="8" y1="108" x2="272" y2="108" stroke="var(--td-border)" stroke-width="1"/>
+          <polyline class="g" points="8,39.8 52,33.6 96,21.2 140,15.0 184,27.4 228,21.2 272,21.2"/>
+          <polyline class="g" points="8,15.0 52,21.2 96,27.4 140,39.8 184,46.0 228,46.0 272,52.2"/>
+          <polyline class="g" points="8,70.8 52,64.6 96,58.4 140,52.2 184,39.8 228,21.2 272,11.9"/>
+          <polyline class="g" points="8,108 52,108 96,83.2 140,70.8 184,52.2 228,33.6 272,27.4"/>
+          <polyline class="g" points="8,70.8 52,77.0 96,83.2 140,86.3 184,89.4 228,92.5 272,98.7"/>
+          <polyline class="g" points="8,77.0 52,73.9 96,77.0 140,73.9 184,77.0 228,73.9 272,73.9"/>
+          <polyline class="g" points="8,95.6 52,95.6 96,92.5 140,92.5 184,89.4 228,86.3 272,83.2"/>
+          <polyline class="g" points="8,92.5 52,95.6 96,95.6 140,98.7 184,101.8 228,101.8 272,101.8"/>
+        </svg>
+        <div class="axis"><span>Mon</span><span>Sun</span></div>
+        <div class="key"><span>Greens</span><span>Ginger shot</span><span>Oat milk</span><span>Harissa</span><span>Quinoa</span><span>Berry yogurt</span><span>Mango sorbet</span><span>House granola</span></div>
+      </div>
+    </div>
+    <div class="note"><b>Why it fails</b>
+      <ul>
+        <li class="bad">No line can be followed across the week.</li>
+        <li class="bad">Twenty products needs twenty colors, and the screen does not have them.</li>
+        <li class="bad">“All” on a real catalogue is a few hundred lines.</li>
+        <li>The shape of one product already has a home: tap the row.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 style="font-size:15px">What I would build</h2>
+  <p class="opt-s">Each product is one bar. The bar is this window. The mark is where the bar ended in the window before. A mark sitting past the end of the bar is a product that sold less. You pick how many, and the longest bar is always the biggest in that set. Money or Units changes what the length means, same switch as the list.</p>
+  <div class="row">
+    <div class="skin desk">
+      <div class="card">
+        <div class="hd"><h3>Top products</h3><span class="sub">vs prior 7 days</span></div>
+        <div class="sorts"><span class="on">Units</span><span>Money</span></div>
+        <div class="sorts"><span>10</span><span class="on">20</span><span>50</span><span>All</span></div>
+        <div class="grow"><div class="top"><span class="ix num">1</span><span class="nm">Greens 300ml</span><span class="money num">186</span><span class="delta up num">+42</span></div><div class="track"><div class="now" style="width:100%"></div><div class="was" style="left:77%"></div></div></div>
+        <div class="grow"><div class="top"><span class="ix num">2</span><span class="nm">Ginger shot</span><span class="money num">164</span><span class="delta down num">−18</span></div><div class="track"><div class="now" style="width:88%"></div><div class="was" style="left:98%"></div></div></div>
+        <div class="grow"><div class="top"><span class="ix num">3</span><span class="nm">Oat milk 1L</span><span class="money num">141</span><span class="delta up num">+61</span></div><div class="track"><div class="now" style="width:76%"></div><div class="was" style="left:43%"></div></div></div>
+        <div class="grow"><div class="top"><span class="ix num">4</span><span class="nm">Harissa</span><span class="money num">88</span><span class="delta flat num">0 → 88</span></div><div class="track"><div class="now" style="width:47%"></div><div class="was" style="left:0%"></div></div></div>
+        <div class="grow"><div class="top"><span class="ix num">5</span><span class="nm">Berry yogurt</span><span class="money num">74</span><span class="delta up num">+2</span></div><div class="track"><div class="now" style="width:40%"></div><div class="was" style="left:39%"></div></div></div>
+        <div class="grow"><div class="top"><span class="ix num">6</span><span class="nm">Quinoa 500g</span><span class="money num">51</span><span class="delta down num">−22</span></div><div class="track"><div class="now" style="width:27%"></div><div class="was" style="left:39%"></div></div></div>
+        <div class="grow"><div class="top"><span class="ix num">7</span><span class="nm">Mango sorbet</span><span class="money num">39</span><span class="delta up num">+11</span></div><div class="track"><div class="now" style="width:21%"></div><div class="was" style="left:15%"></div></div></div>
+        <div class="grow"><div class="top"><span class="ix num">8</span><span class="nm">House granola</span><span class="money num">22</span><span class="delta down num">−9</span></div><div class="track"><div class="now" style="width:12%"></div><div class="was" style="left:17%"></div></div></div>
+        <div class="legend"><span><i></i>This window</span><span><span class="mark"></span>Window before</span></div>
+      </div>
+    </div>
+    <div class="note"><b>How the count works</b>
+      <ul>
+        <li class="good">20 is the default. 10, 50, and All are the same picture, longer or shorter.</li>
+        <li class="good">All means every product that sold. You scroll. The chart does not get a new kind of drawing.</li>
+        <li class="good">Ginger’s mark sits past the bar. Quinoa’s does too. Oat milk’s mark is far behind it.</li>
+        <li>This sample has eight products, so 20 and All look the same here.</li>
+        <li>On the phone the rows are these rows. Twenty of them scroll.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 style="font-size:15px">Lines, only for a few you pick</h2>
+  <p class="opt-s">This is the combined line, kept small on purpose. Tick up to five products on the list. Those five get one chart, so you can compare their shape across the days. It does not try to hold the top 20.</p>
+  <div class="row">
+    <div class="skin desk">
+      <div class="card">
+        <div class="hd"><h3>Compare</h3><span class="sub">3 of 5</span></div>
+        <svg class="lines" viewBox="0 0 280 120" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="8" y1="108" x2="272" y2="108" stroke="var(--td-border)" stroke-width="1"/>
+          <polyline class="ln-ink" points="8,39.8 52,33.6 96,21.2 140,15.0 184,27.4 228,21.2 272,21.2"/>
+          <polyline class="ln-amber" points="8,15.0 52,21.2 96,27.4 140,39.8 184,46.0 228,46.0 272,52.2"/>
+          <polyline class="ln-sage" points="8,70.8 52,64.6 96,58.4 140,52.2 184,39.8 228,21.2 272,11.9"/>
+        </svg>
+        <div class="axis"><span>Mon</span><span>Sun</span></div>
+        <div class="key">
+          <span><i class="sw" style="background:var(--td-text)"></i><b style="color:var(--td-text)">Greens 300ml</b></span>
+          <span><i class="sw" style="background:var(--td-amber-ink)"></i><b style="color:var(--td-text)">Ginger shot</b></span>
+          <span><i class="sw" style="background:var(--td-sage-ink)"></i><b style="color:var(--td-text)">Oat milk 1L</b></span>
+        </div>
+        <div class="pr"><span class="tick">✓</span><span class="nm">Greens 300ml</span><span class="units num">186</span></div>
+        <div class="pr"><span class="tick">✓</span><span class="nm">Ginger shot</span><span class="units num">164</span></div>
+        <div class="pr"><span class="tick">✓</span><span class="nm">Oat milk 1L</span><span class="units num">141</span></div>
+        <div class="pr"><span class="tick"></span><span class="nm">Harissa</span><span class="units num">88</span></div>
+        <div class="foot">Five is the most. A sixth tick turns the chart back into the knot above.</div>
+      </div>
+    </div>
+    <div class="note"><b>When this earns its place</b>
+      <ul>
+        <li class="good">Oat milk climbs through the week. Ginger shot slides. The bars cannot say that.</li>
+        <li class="good">You choose the products, so the lines stay few enough to name.</li>
+        <li>It is a second step, after the bars. The bars answer “who, and by how much.”</li>
       </ul>
     </div>
   </div>
