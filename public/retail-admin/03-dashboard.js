@@ -4107,6 +4107,86 @@ function dashShelfLine(r) {
   const word = s.kind === 'out' ? cuT('Sold out', '售罄') : cuT((Number(s.qty) || 0) + ' left', '剩 ' + (Number(s.qty) || 0));
   return `<div class="db-prod-shelf">${word}</div>`;
 }
+function dashProdReadHtml(r, noMoney) {
+  if (dashProdOpen !== Number(r.product_id)) return '';
+  const orders = Number(r.orders) || 0;
+  const lines = [];
+  const row = (left, right, color) => `<div class="db-prod-read${color ? ' ' + color : ''}"><span>${left}</span>${right ? `<span class="num">${right}</span>` : ''}</div>`;
+  if (orders === 1) lines.push(row(cuT('1 order', '1 单')));
+  else if (orders) lines.push(row(cuT(orders + ' orders', orders + ' 单')));
+  if (!noMoney && r.prior_revenue != null) {
+    const units = Number(r.units) || 0, prevU = Number(r.prior_units) || 0;
+    const rev = Number(r.revenue) || 0, prevR = Number(r.prior_revenue) || 0;
+    if (units > prevU && rev < prevR) lines.push(row(cuT('More pieces, less money', '件数多了，营收取少了'), '', 'down'));
+    else if (rev !== prevR) {
+      const d = Math.round(rev - prevR), up = d > 0;
+      lines.push(row(`${cuT('Money', '营收')} ${up ? '+' : '−'}${dashMoney(Math.abs(d))}`, '', up ? 'up' : 'down'));
+    }
+  }
+  if (!noMoney && (Number(r.units) || 0) > 0) {
+    const price = Math.round((Number(r.revenue) || 0) / Number(r.units));
+    const prevU = Number(r.prior_units) || 0;
+    let tail = '';
+    if (prevU > 0 && r.prior_revenue != null) {
+      const was = Math.round((Number(r.prior_revenue) || 0) / prevU);
+      tail = was === price
+        ? `<span class="muted">${cuT('same as before', '与此前相同')}</span>`
+        : `<span class="down">${cuT('was', '此前')} ${dashMoney(was)}</span>`;
+    }
+    lines.push(`<div class="db-prod-read"><span>${cuT('Price', '售价')} ${dashMoney(price)}</span>${tail}</div>`);
+  }
+  const alone = Number(r.alone) || 0;
+  const w = r.with;
+  if (w && Number(w.orders) > 0 && (!orders || Number(w.orders) >= alone)) {
+    const en = w.name_en || w.name_cn || '', zh = w.name_cn || w.name_en || '';
+    const of = orders ? cuT(w.orders + ' of ' + orders, orders + ' 单中的 ' + w.orders) : String(w.orders);
+    lines.push(row(escapeHtml(cuT('With ' + en, '与' + zh + '同单')), of));
+  } else if (alone && (!orders || alone === orders)) {
+    const word = orders === 2 ? cuT('both orders', '两单都是') : (orders === 1 ? cuT('1 order', '1 单') : cuT((orders || alone) + ' orders', (orders || alone) + ' 单'));
+    lines.push(row(cuT('On its own', '单独成单'), word));
+  }
+  const places = (r.places || []).filter(x => Number(x.units) > 0);
+  if (places.length) {
+    const max = Math.max(1, ...places.map(x => Number(x.units) || 0));
+    const cn = window.cuLang && cuLang() === 'cn';
+    lines.push(places.map(x => {
+      const name = x.kind === 'wholesale' ? cuT('Wholesale', '批发')
+        : ((cn ? (x.name_cn || x.name_en) : (x.name_en || x.name_cn)) || cuT('Store', '门店'));
+      const wdt = Math.max(2, Math.round((Number(x.units) || 0) / max * 100));
+      return `<div class="db-prod-place"><span class="shop">${escapeHtml(name)}</span><span class="tbar"><i style="width:${wdt}%"></i></span><span class="q">${dashNum(x.units)}</span></div>`;
+    }).join(''));
+  }
+  if (!noMoney && r.unit_cost != null && r.kept != null && (Number(r.units) || 0) > 0) {
+    const cost = Math.round(Number(r.unit_cost) * Number(r.units));
+    const kept = Number(r.kept), up = kept >= 0;
+    const keptWord = (up ? '' : '−') + dashMoney(Math.abs(kept));
+    lines.push(row(
+      `<span class="muted">${cuT('Food cost', '食品成本')} ${dashMoney(cost)}</span>`,
+      `<span class="${up ? 'up' : 'down'}">${cuT('Kept', '留下')} ${keptWord}</span>`));
+  }
+  if (!lines.length) return '';
+  return `<div class="db-prod-readwrap">${lines.join('')}</div>`;
+}
+function dashProdTails() {
+  const D = DASH_DATA || {};
+  const outs = D.stockouts || [];
+  const refs = D.refunded_products || [];
+  if (!outs.length && !refs.length) return '';
+  const dowEn = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dowCn = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  let html = '';
+  if (outs.length) {
+    html += `<div class="db-prod-stopped"><div class="cap">${cuT('Out on a day it sells', '在常售日售罄')}</div>`
+      + outs.map(p => `<div class="db-prod-stop"><span class="who">${escapeHtml(dbProdName(p))}</span><span class="mv down">${escapeHtml(cuT(dowEn[p.dow] || '', dowCn[p.dow] || ''))}</span></div>`).join('')
+      + '</div>';
+  }
+  if (refs.length) {
+    html += `<div class="db-prod-stopped"><div class="cap">${cuT('Refunded', '已退款')}</div>`
+      + refs.map(p => `<div class="db-prod-stop"><span class="who">${escapeHtml(dbProdName(p))}${p.reason ? `<span class="quiet"> ${escapeHtml(p.reason)}</span>` : ''}</span><span class="mv">${dashNum(p.orders)}</span></div>`).join('')
+      + '</div>';
+  }
+  return html;
+}
 function dashStoppedHtml(rows) {
   if (!rows || !rows.length) return '';
   const body = rows.map(r => `<div class="db-prod-stop">
@@ -4135,54 +4215,70 @@ function dashRenderProducts() {
   if (!all.length) { host.innerHTML = dashStoppedHtml(stopped); return; }
   const noMoney = tdRecapNoMoney();
   const measure = noMoney ? 'units' : dashProdMeasure;
-  const val = r => measure === 'revenue' ? Number(r.revenue) || 0 : Number(r.units) || 0;
+  const val = r => measure === 'kept' ? (Number(r.kept) || 0) : measure === 'revenue' ? Number(r.revenue) || 0 : Number(r.units) || 0;
   const priorOf = r => {
+    if (measure === 'kept') return null;
     if (measure === 'revenue') return r.prior_revenue == null ? null : Number(r.prior_revenue) || 0;
     return r.prior_units == null ? null : Number(r.prior_units) || 0;
   };
-  const sorted = all.slice().sort((a, b) => val(b) - val(a));
+  const pool = measure === 'kept' ? all.filter(r => r.kept != null) : all;
+  const sorted = pool.slice().sort((a, b) => val(b) - val(a));
   const shown = dashProdN === 'all' ? sorted : sorted.slice(0, Number(dashProdN) || 20);
   const max = Math.max(1, ...shown.map(r => Math.max(val(r), priorOf(r) || 0)));
   const chip = (pairs, cur, fn) => `<div class="db-prod-chips">${pairs.map(([k, label]) =>
     `<button type="button" class="${String(cur) === k ? 'on' : ''}" onclick="${fn}('${k}')">${label}</button>`).join('')}</div>`;
   const measures = [['units', cuT('Units', '件数')]];
   if (!noMoney) measures.push(['revenue', cuT('Revenue', '营收')]);
+  if (!noMoney && all.some(r => r.kept != null)) measures.push(['kept', cuT('Kept', '留下')]);
   const counts = [['10', '10'], ['20', '20'], ['50', '50'], ['all', cuT('All', '全部')]];
   const rows = shown.map((r, i) => {
     const v = val(r);
     const pr = priorOf(r);
     const w = v <= 0 ? 0 : Math.max(2, Math.round(v / max * 100));
     const mark = pr == null ? '' : `<div class="db-prod-was" style="left:${Math.round(pr / max * 100)}%"></div>`;
-    const big = measure === 'revenue' ? dashMoney(r.revenue) : dashNum(r.units);
-    const quiet = noMoney ? '' : (measure === 'revenue' ? dashNum(r.units) : dashMoney(r.revenue));
+    const keptNeg = measure === 'kept' && Number(r.kept) < 0;
+    const big = measure === 'kept'
+      ? ((keptNeg ? '−' : '') + dashMoney(Math.abs(Number(r.kept) || 0)))
+      : (measure === 'revenue' ? dashMoney(r.revenue) : dashNum(r.units));
+    const quiet = noMoney ? '' : (measure === 'revenue' || measure === 'kept' ? dashNum(r.units) : dashMoney(r.revenue));
     return `<div class="db-prod-row">
       <button type="button" class="db-prod-hit" onclick="dashProdToggle(${Number(r.product_id) || 0})">
       <div class="db-prod-top">
         <span class="ix">${i + 1}</span>
         <span class="nm"><span class="who">${escapeHtml(dbProdName(r))}</span>${quiet ? `<span class="quiet">${quiet}</span>` : ''}</span>
-        <span class="fig">${big}</span>
+        <span class="fig${keptNeg ? ' down' : ''}">${big}</span>
         ${dashProdMove(r.units, r.prior_units)}
       </div></button>
       <div class="db-prod-track"><div class="db-prod-now" style="width:${w}%"></div>${mark}</div>
       ${dashShelfLine(r)}
       ${dashProdDaysHtml(Number(r.product_id))}
+      ${dashProdReadHtml(r, noMoney)}
     </div>`;
   }).join('');
   const legend = shown.some(r => r.prior_units != null)
     ? `<div class="db-prod-legend"><span><i class="bar"></i>${cuT('This window', '本时段')}</span><span><i class="mark"></i>${cuT('The one before', '上一时段')}</span></div>`
     : '';
-  host.innerHTML = chip(measures, measure, 'dashProdSetMeasure') + chip(counts, dashProdN, 'dashProdSetN') + rows + legend + dashStoppedHtml(stopped);
+  host.innerHTML = chip(measures, measure, 'dashProdSetMeasure') + chip(counts, dashProdN, 'dashProdSetN') + rows + legend + dashStoppedHtml(stopped) + dashProdTails();
 }
 
 function dashRenderCustomers() {
   const c = DASH_DATA.topCustomers || [];
-  if (!c.length) { $('#db-customers').innerHTML = '<div class="db-muted">No buyers in range · 区间内无买家</div>'; return; }
+  const every = DASH_DATA.return_every_days;
+  const stopped = DASH_DATA.stopped_customers || [];
+  const stoppedN = Number(DASH_DATA.stopped_customer_count) || stopped.length;
+  if (!c.length && !every && !stoppedN) { $('#db-customers').innerHTML = '<div class="db-muted">No buyers in range · 区间内无买家</div>'; return; }
+  const everyLine = every
+    ? `<div class="db-prod-read"><span>${cuT('A returning buyer orders every', '回头客平均每')}</span><span class="num">${cuT(every + ' days', every + ' 天一单')}</span></div>`
+    : '';
+  const stoppedHtml = stoppedN ? `<div class="db-prod-stopped"><div class="cap">${cuT('Bought then, none now', '上一时段有购买，本时段无')} · ${cuT(stoppedN === 1 ? '1 person' : stoppedN + ' people', stoppedN + ' 人')}</div>`
+    + stopped.slice(0, 8).map(r => `<div class="db-prod-stop"><span class="who">${escapeHtml(r.nickname || ('#' + r.customer_id))}</span><span class="mv">${cuT((Number(r.days_ago) || 0) + ' days ago', (Number(r.days_ago) || 0) + ' 天前')}</span></div>`).join('')
+    + '</div>' : '';
   $('#db-customers').innerHTML = '<div class="db-rank">' + c.map((r, i) => `
     <div class="db-rank-row" title="${escapeAttr(`${dashNum(r.orders)} ${cuT('orders', '单')} · ${r.tier_key || 'seed'}`)}">
       <span class="idx">${i + 1}</span>
       <span class="name">${escapeHtml(r.nickname || ('Customer #' + r.customer_id))}</span>
       <span class="rv">${dashMoney(r.revenue, 2)}</span>
-    </div>`).join('') + '</div>';
+    </div>`).join('') + '</div>' + everyLine + stoppedHtml;
 }
 
 function dashRenderTiers() {

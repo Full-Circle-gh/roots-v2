@@ -45486,6 +45486,86 @@ function trendShelfLine(p){
   const word=s.kind==='out'?T('Sold out','售罄'):T((Number(s.qty)||0)+' left','剩 '+(Number(s.qty)||0));
   return `<div style="margin:4px 0 0 26px;font-size:12px;color:var(--amber-ink)">${word}</div>`;
 }
+/* The open row. Orders, whether the money moved with the pieces, the price
+   against the window before, what else was in the bag, which shop, and what
+   the recipe cost left. Money lines stay off an account that cannot see it. */
+function trendProdReadHtml(p, noMoney, mn){
+  if(state.prodOpen!==Number(p.product_id)) return '';
+  const orders=Number(p.orders)||0;
+  const lines=[];
+  const row=(left, right, color)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding-top:4px${color?';color:var(--'+color+'-ink)':''}"><span>${left}</span>${right?`<span class="num">${right}</span>`:''}</div>`;
+  if(orders===1) lines.push(row(T('1 order','1 单')));
+  else if(orders) lines.push(row(T(orders+' orders', orders+' 单')));
+  if(!noMoney && p.prior_revenue!=null){
+    const units=Number(p.units)||0, prevU=Number(p.prior_units)||0;
+    const rev=Number(p.revenue)||0, prevR=Number(p.prior_revenue)||0;
+    if(units>prevU && rev<prevR) lines.push(row(T('More pieces, less money','件数多了，营收取少了'), '', 'amber'));
+    else if(rev!==prevR){
+      const d=Math.round(rev-prevR), up=d>0;
+      lines.push(row(`${T('Money','营收')} ${up?'+':'−'}${mn(Math.abs(d))}`, '', up?'sage':'amber'));
+    }
+  }
+  if(!noMoney && (Number(p.units)||0)>0){
+    const price=Math.round((Number(p.revenue)||0)/Number(p.units));
+    const prevU=Number(p.prior_units)||0;
+    let tail='';
+    if(prevU>0 && p.prior_revenue!=null){
+      const was=Math.round((Number(p.prior_revenue)||0)/prevU);
+      tail = was===price
+        ? `<span style="color:var(--text-secondary)">${T('same as before','与此前相同')}</span>`
+        : `<span style="color:var(--amber-ink)">${T('was','此前')} ${mn(was)}</span>`;
+    }
+    lines.push(`<div style="display:flex;justify-content:space-between;gap:12px;padding-top:4px"><span>${T('Price','售价')} ${mn(price)}</span>${tail}</div>`);
+  }
+  const alone=Number(p.alone)||0;
+  const w=p.with;
+  if(w && Number(w.orders)>0 && (!orders || Number(w.orders)>=alone)){
+    const en=w.name_en||w.name_cn||'', zh=w.name_cn||w.name_en||'';
+    const of = orders ? T(w.orders+' of '+orders, orders+' 单中的 '+w.orders) : String(w.orders);
+    lines.push(row(escAttr(T('With '+en, '与'+zh+'同单')), of));
+  } else if(alone && (!orders || alone===orders)){
+    const word = orders===2 ? T('both orders','两单都是') : (orders===1?T('1 order','1 单'):T((orders||alone)+' orders', (orders||alone)+' 单'));
+    lines.push(row(T('On its own','单独成单'), word));
+  }
+  const places=(p.places||[]).filter(x=>Number(x.units)>0);
+  if(places.length){
+    const max=Math.max(1, ...places.map(x=>Number(x.units)||0));
+    lines.push(places.map(x=>{
+      const name=x.kind==='wholesale' ? T('Wholesale','批发')
+        : ((LANG==='en'?(x.name_en||x.name_cn):(x.name_cn||x.name_en))||T('Store','门店'));
+      const wdt=Math.max(2, Math.round((Number(x.units)||0)/max*100));
+      return `<div style="display:flex;align-items:center;gap:8px;padding-top:5px;font-size:13px"><span style="width:6.6em;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(name)}</span><span style="flex:1;height:6px;background:var(--surface-raised);border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:${wdt}%;background:var(--text-primary)"></i></span><span class="num" style="width:2.4em;text-align:right">${Math.round(Number(x.units)||0)}</span></div>`;
+    }).join(''));
+  }
+  if(!noMoney && p.unit_cost!=null && p.kept!=null && (Number(p.units)||0)>0){
+    const cost=Math.round(Number(p.unit_cost)*Number(p.units));
+    const kept=Number(p.kept), up=kept>=0;
+    const keptWord=(up?'': '−')+mn(Math.abs(kept));
+    lines.push(row(
+      `<span style="color:var(--text-secondary)">${T('Food cost','食品成本')} ${mn(cost)}</span>`,
+      `<span style="color:var(--${up?'sage':'amber'}-ink)">${T('Kept','留下')} ${keptWord}</span>`));
+  }
+  if(!lines.length) return '';
+  return `<div style="margin:8px 0 0 26px;font-size:13.5px">${lines.join('')}</div>`;
+}
+function trendAfterBars(){
+  const d=state.trendFull; if(!d) return '';
+  const pname=p=>((LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||'');
+  let html='';
+  const outs=d.stockouts||[];
+  if(outs.length){
+    html+=`<div style="border-top:1px solid var(--border-default);margin-top:8px;padding-top:10px"><div style="font-size:12.5px;color:var(--text-secondary)">${T('Out on a day it sells','在常售日售罄')}</div>`
+      +outs.map(p=>`<div style="display:flex;justify-content:space-between;gap:12px;padding-top:8px"><span>${escAttr(pname(p))}</span><span style="color:var(--amber-ink)">${escAttr(T(TREND_DOW_EN[p.dow]||'', TREND_DOW_CN[p.dow]||''))}</span></div>`).join('')
+      +'</div>';
+  }
+  const refs=d.refunded_products||[];
+  if(refs.length){
+    html+=`<div style="border-top:1px solid var(--border-default);margin-top:8px;padding-top:10px"><div style="font-size:12.5px;color:var(--text-secondary)">${T('Refunded','已退款')}</div>`
+      +refs.map(p=>`<div style="padding-top:8px"><div style="display:flex;justify-content:space-between;gap:12px"><span>${escAttr(pname(p))}</span><span class="num">${Math.round(Number(p.orders)||0)}</span></div>${p.reason?`<div style="font-size:12.5px;color:var(--text-secondary)">${escAttr(p.reason)}</div>`:''}</div>`).join('')
+      +'</div>';
+  }
+  return html;
+}
 function trendStoppedHtml(rows, num){
   if(!rows||!rows.length) return '';
   const pname=p=>((LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||'');
@@ -45507,18 +45587,21 @@ function trendProductChart(rows, noMoney, mn, num){
   const all=(rows||[]).filter(p=>Number(p.units)||Number(p.revenue));
   const stopped=(state.trendFull&&state.trendFull.stopped)||[];
   if(!all.length){
-    if(!stopped.length) return null;
-    return {summary:{t:T('Sold then, none now','上一时段有售，本时段无'), v:String(stopped.length)},
-      html:trendStoppedHtml(stopped, num)};
+    const tail=trendAfterBars();
+    if(!stopped.length && !tail) return null;
+    return {summary:stopped.length?{t:T('Sold then, none now','上一时段有售，本时段无'), v:String(stopped.length)}:null,
+      html:trendStoppedHtml(stopped, num)+tail};
   }
   const measure=noMoney?'units':(state.prodMeasure||'units');
   const n=state.prodN||'20';
-  const val=p=>measure==='revenue'?(Number(p.revenue)||0):(Number(p.units)||0);
+  const val=p=>measure==='kept'?(Number(p.kept)||0):measure==='revenue'?(Number(p.revenue)||0):(Number(p.units)||0);
   const priorOf=p=>{
+    if(measure==='kept') return null;
     if(measure==='revenue') return p.prior_revenue==null?null:(Number(p.prior_revenue)||0);
     return p.prior_units==null?null:(Number(p.prior_units)||0);
   };
-  const sorted=all.slice().sort((a,b)=>val(b)-val(a));
+  const pool=measure==='kept'?all.filter(p=>p.kept!=null):all;
+  const sorted=pool.slice().sort((a,b)=>val(b)-val(a));
   const shown=n==='all'?sorted:sorted.slice(0, Number(n)||20);
   const max=Math.max(1, ...shown.map(p=>Math.max(val(p), priorOf(p)||0)));
   const pname=p=>((LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||'');
@@ -45535,13 +45618,17 @@ function trendProductChart(rows, noMoney, mn, num){
     `<button type="button" onclick="APP.cmd('${cmd}','${k}')" style="padding:4px 10px;border-radius:999px;border:1px solid var(--border-default);font:inherit;font-size:12.5px;cursor:pointer;background:${String(cur)===k?'var(--text-primary)':'transparent'};color:${String(cur)===k?'var(--surface-card)':'var(--text-secondary)'}">${T(en,zh)}</button>`).join('')}</div>`;
   const measures=[['units','Units','件数']];
   if(!noMoney) measures.push(['revenue','Revenue','营收']);
+  if(!noMoney && all.some(p=>p.kept!=null)) measures.push(['kept','Kept','留下']);
   const counts=[['10','10','10'],['20','20','20'],['50','50','50'],['all','All','全部']];
   const body=shown.map((p,i)=>{
     const v=val(p), pr=priorOf(p);
     const w=v<=0?0:Math.max(2, Math.round(v/max*100));
     const mark=pr==null?'':`<div style="position:absolute;left:${Math.round(pr/max*100)}%;top:-4px;width:0;height:0;transform:translateX(-4px);border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid var(--text-secondary)"></div>`;
-    const big=(measure==='revenue'&&!noMoney)?mn(p.revenue):num(p.units);
-    const quiet=noMoney?'':(measure==='revenue'?num(p.units):mn(p.revenue));
+    const keptNeg=measure==='kept' && Number(p.kept)<0;
+    const big=measure==='kept'
+      ? ((keptNeg?'−':'')+mn(Math.abs(Number(p.kept)||0)))
+      : ((measure==='revenue'&&!noMoney)?mn(p.revenue):num(p.units));
+    const quiet=noMoney?'':(measure==='kept'?num(p.units):measure==='revenue'?num(p.units):mn(p.revenue));
     return `<div style="padding-top:11px;border-top:1px solid var(--border-default)">
       <button type="button" onclick="APP.cmd('prodDays',${Number(p.product_id)||0})" style="display:block;width:100%;padding:0;border:none;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer">
       <div style="display:flex;align-items:baseline;gap:8px">
@@ -45550,7 +45637,7 @@ function trendProductChart(rows, noMoney, mn, num){
           <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pname(p))}</span>
           ${quiet?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${quiet}</span>`:''}
         </span>
-        <span class="num" style="font-weight:500;flex:none">${big}</span>
+        <span class="num" style="font-weight:500;flex:none${keptNeg?';color:var(--amber-ink)':''}">${big}</span>
         ${move(p)}
       </div></button>
       <div style="position:relative;height:8px;margin:6px 0 0 26px;background:var(--surface-raised);border-radius:4px">
@@ -45559,6 +45646,7 @@ function trendProductChart(rows, noMoney, mn, num){
       </div>
       ${trendShelfLine(p)}
       ${trendProdDaysHtml(p)}
+      ${trendProdReadHtml(p, noMoney, mn)}
     </div>`;
   }).join('');
   const knows=shown.some(p=>p.prior_units!=null);
@@ -45569,7 +45657,7 @@ function trendProductChart(rows, noMoney, mn, num){
   const top=shown[0];
   return {
     summary:{t:pname(top), v:noMoney?num(top.units):(num(top.units)+' · '+mn(top.revenue))},
-    html:`<div style="display:flex;flex-direction:column;gap:8px">${chip(measures,measure,'prodMeasure')}${chip(counts,n,'prodN')}<div>${body}</div>${legend}${trendStoppedHtml(stopped, num)}</div>`,
+    html:`<div style="display:flex;flex-direction:column;gap:8px">${chip(measures,measure,'prodMeasure')}${chip(counts,n,'prodN')}<div>${body}</div>${legend}${trendStoppedHtml(stopped, num)}${trendAfterBars()}</div>`,
   };
 }
 
@@ -45707,6 +45795,11 @@ function trendSections(){
     v:(LANG==='en'?(gc.city_en||gc.city):gc.city)+' · '+nOrders(gc.orders)});
   const r1=trendRetain1();
   if(r1!=null) cust.push({t:T('Still buying a month later','一个月后仍回购'),v:Math.round(r1)+'%'});
+  if(d.return_every_days) cust.push({t:T('A returning buyer orders every','回头客平均每'),
+    v:T(d.return_every_days+' days', d.return_every_days+' 天一单')});
+  const stoppedN=Number(d.stopped_customer_count)||(d.stopped_customers||[]).length;
+  if(stoppedN) cust.push({t:T('Bought then, none now','上一时段有购买，本时段无'),
+    v:T(stoppedN===1?'1 person':stoppedN+' people', stoppedN+' 人')});
   /* WHICH PEOPLE THESE ARE, on the card that counts them. Every figure in this
      section is keyed on customer_id, and the two marketplaces never write one —
      routes/meituan-internal.js and routes/eleme-internal.js simply do not carry
@@ -45738,7 +45831,11 @@ function trendSections(){
   const mtSince=(bbc&&bbc.meituan&&bbc.meituan.since)||null;
   const winFrom=(d.window&&d.window.from)||null;
   const saySince=mtSince&&(!winFrom||mtSince>winFrom);
+  const stoppedCust=(d.stopped_customers||[]).slice(0,2);
+  const stoppedMore=Math.max(0, stoppedN-(stoppedCust.length));
+  const stoppedCustHtml=stoppedCust.length?`<div>${stoppedCust.map(r=>`<div style="display:flex;justify-content:space-between;gap:12px;padding-top:8px;font-size:14px"><span>${escAttr(r.nickname||('#'+r.customer_id))}</span><span class="num" style="color:var(--text-secondary)">${T((Number(r.days_ago)||0)+' days ago',(Number(r.days_ago)||0)+' 天前')}</span></div>`).join('')}${stoppedMore?`<div style="padding-top:8px;font-size:13px;color:var(--text-secondary)">${T(stoppedMore+' more','还有 '+stoppedMore+' 人')}</div>`:''}</div>`:'';
   if(cust.length) out.push({key:'customers',icon:'users',tone:'dusk',title:T('Customers','客户'),rows:cust,
+    extra:stoppedCustHtml,
     note:bbc
       ? T('Counted separately — the same person on two channels cannot be matched. Eleme shares no customer'
           + (saySince?'; Meituan from '+fmtDateOnly(mtSince):'')+'.',
@@ -45759,8 +45856,9 @@ function trendSections(){
   if(co.abandoned) prod.push({t:T('Started checkout, did not pay','进入结算但未付款'),v:num(co.abandoned)});
   /* Wholesale lines are in this ranking (§185). The old note said they were
      not, which was the exclusion before that decision. */
-  if(chart||prod.length) out.push({key:'products',icon:'package',tone:'amber',title:T('Products & traffic','商品与流量'),
-    summary:chart?chart.summary:null, chart:chart?chart.html:'', rows:prod});
+  const prodTail=chart?'':trendAfterBars();
+  if(chart||prod.length||prodTail) out.push({key:'products',icon:'package',tone:'amber',title:T('Products & traffic','商品与流量'),
+    summary:chart?chart.summary:null, chart:(chart?chart.html:'')+prodTail, rows:prod});
 
   // ── Stores ──
   /* The breakdown the old note sent people to a desktop for. Six at most: a
@@ -45790,6 +45888,37 @@ function statusTrend(){
         : state.trendRange==='yesterday' ? T('yesterday','昨天')
         : T('last '+state.trendRange+' days','近 '+state.trendRange+' 天'))
     + (trendStoreName()?' · '+escAttr(trendStoreName()):'');
+}
+function trendAovCell(){
+  if(recapNoMoney()) return '';
+  const k=(state.trendFull&&state.trendFull.kpis)||{};
+  if(k.aov==null) return '';
+  const ch=k.aov_change==null?null:Number(k.aov_change);
+  const sub=ch==null||!ch?'':`<div class="num" style="font-size:12.5px;color:var(--${ch>0?'sage':'amber'}-ink)">${ch>0?'+':'−'}${money0(CUR,Math.abs(ch))}</div>`;
+  return `<div style="min-width:0"><div style="font-size:13px;color:var(--text-secondary)">${T('Average order','客单价')}</div>
+    <div class="num" style="font-size:18px;font-weight:500;line-height:1.4;margin-top:2px">${money0(CUR,k.aov)}</div>${sub}</div>`;
+}
+function trendRefundCell(){
+  const k=(state.trendFull&&state.trendFull.kpis)||{};
+  if(k.refunded_orders==null && k.refund_rate==null) return '';
+  const n=Math.round(Number(k.refunded_orders)||0);
+  return `<div style="min-width:0"><div style="font-size:13px;color:var(--text-secondary)">${T('Refunded','已退款')}</div>
+    <div class="num" style="font-size:18px;font-weight:500;line-height:1.4;margin-top:2px">${n.toLocaleString()} · ${Number(k.refund_rate||0).toFixed(1)}%</div></div>`;
+}
+function trendMoneyOf(){
+  const m=state.trendFull&&state.trendFull.money_of;
+  if(!m) return '';
+  const food=Number(m.food)||0, del=Number(m.delivery_fees)||0, wallet=Number(m.wallet_loads)||0, given=Number(m.given_away)||0;
+  const sum=food+del+wallet;
+  if(!sum && !given) return '';
+  const line=(en,zh,v,quiet)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding-top:6px;font-size:14px"><span${quiet?' style="color:var(--text-secondary)"':''}>${T(en,zh)}</span><span class="num"${quiet?' style="color:var(--amber-ink)"':''}>${money0(CUR,v)}</span></div>`;
+  return `<div style="border-top:1px solid var(--border-default);margin-top:4px;padding-top:10px">
+    <div style="font-size:12px;color:var(--text-secondary)">${T('Of the '+money0(CUR,sum), '这 '+money0(CUR,sum)+' 里')}</div>
+    ${line('Food','商品',food)}
+    ${line('Delivery fees','运费',del)}
+    ${wallet?line('Wallet loads','钱包充值',wallet):''}
+    ${given?line('Given away','让利',given,true):''}
+  </div>`;
 }
 function screenTrend(){
   loadTrend();
@@ -45892,6 +46021,7 @@ function screenTrend(){
         <span style="flex:none;color:var(--text-secondary);display:flex">${ic(open?'chevron-down':'chevron-right')}</span></button>
       ${open?`<div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:11px">
         ${s.chart||''}
+        ${s.extra||''}
         ${s.rows.map(r=>`<div style="border-top:1px solid var(--border-default);padding-top:11px">
           <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
             <span style="font-size:14px;color:var(--text-secondary);min-width:0">${escAttr(r.t)}</span>
@@ -45919,6 +46049,9 @@ function screenTrend(){
       ${fact(T('A typical day','日均'),fmt(total/days))}
       ${bestDow?fact(T('Best day of the week','一周中最旺的一天'),bestDow,T('on average','平均')):''}
       ${fact(T('Days counted','统计天数'),String(days))}`}
+      ${trendAovCell()}
+      ${trendRefundCell()}
+      ${recapNoMoney()?'':`<div style="grid-column:1 / -1">${trendMoneyOf()}</div>`}
     </div>
     ${trendReadCard()}
     ${sections.map(section).join('')}

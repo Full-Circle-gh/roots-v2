@@ -19,6 +19,7 @@ const db = require('../database');
 const { recipeOwnsProductCost, fireRecompute } = require('../lib/recipe-rollup');
 const { bundleOwnsProductCost } = require('../lib/bundle-cost');
 const { productUnitCostYuan } = require('../lib/product-cost');
+const { medianDays, daysBetween } = require('../lib/trend-read');
 const { reorderSlots } = require('../lib/reorder-slots');
 // The cost half of a product option — see lib/option-cost.js for why a chosen
 // extra's cost had nowhere to land until this existed.
@@ -14667,6 +14668,230 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     }
   }
 
+  // The open row, and the two lists under the bars. Same orders as the bars
+  // (PAIDO_ALL) for anything about a product. People stay on PAIDO: a
+  // wholesale mirror has no customer. A missing cost stays off the row — a
+  // stored zero is "unknown", the same rule productUnitCostYuan uses, because
+  // a kept figure of the whole selling price would read as a free recipe.
+  let returnEveryDays = null;
+  let stoppedCustomers = [];
+  let stoppedCustomerCount = 0;
+  let stockouts = [];
+  let refundedProducts = [];
+  try {
+    const ids = topProducts.map(r => Number(r.product_id)).filter(id => id > 0);
+    if (ids.length) {
+      const inList = ids.map(() => '?').join(',');
+      const costRows = tdb().prepare(
+        `SELECT id, unit_cost FROM store_products WHERE id IN (${inList})`).all(...ids);
+      const costById = new Map(costRows.map(r => [r.id, r]));
+      for (const row of topProducts) {
+        row.orders = Number(row.orders) || 0;
+        const c = costById.get(row.product_id);
+        const cost = c && c.unit_cost != null ? Number(c.unit_cost) : null;
+        if (cost != null && Number.isFinite(cost) && cost > 0) {
+          row.unit_cost = cost;
+          row.kept = Math.round((Number(row.revenue) - cost * Number(row.units)) * 100) / 100;
+        }
+      }
+
+      const placeRows = tdb().prepare(`
+        SELECT i.product_id,
+               CASE WHEN COALESCE(o.channel,'') = 'gzgrocery' THEN 1 ELSE 0 END AS wholesale,
+               CASE WHEN COALESCE(o.channel,'') = 'gzgrocery' THEN 0 ELSE COALESCE(o.store_id, 0) END AS store_id,
+               COALESCE(SUM(i.qty), 0) AS units
+          FROM retail_order_items i
+          JOIN retail_orders o ON o.id = i.order_id
+         WHERE i.product_id IN (${inList}) AND ${PAIDO_ALL} AND ${PDATEO} BETWEEN ? AND ?
+         GROUP BY 1, 2, 3`).all(...ids, from, to);
+      const storeIds = [...new Set(placeRows.filter(r => !r.wholesale && r.store_id).map(r => r.store_id))];
+      const storeName = new Map();
+      if (storeIds.length) {
+        for (const s of tdb().prepare(
+          `SELECT id, name_en, name_cn FROM retail_stores WHERE id IN (${storeIds.map(() => '?').join(',')})`
+        ).all(...storeIds)) storeName.set(s.id, s);
+      }
+      const placesBy = new Map();
+      for (const r of placeRows) {
+        if (!(Number(r.units) > 0)) continue;
+        const list = placesBy.get(r.product_id) || [];
+        if (r.wholesale) {
+          const hit = list.find(x => x.kind === 'wholesale');
+          if (hit) hit.units += Number(r.units) || 0;
+          else list.push({ kind: 'wholesale', units: Number(r.units) || 0 });
+        } else {
+          const s = storeName.get(r.store_id) || {};
+          list.push({
+            kind: 'store', name_en: s.name_en || null, name_cn: s.name_cn || null,
+            units: Number(r.units) || 0,
+          });
+        }
+        placesBy.set(r.product_id, list);
+      }
+
+      const withRows = tdb().prepare(`
+        SELECT a.product_id AS product_id, b.product_id AS with_id,
+               MAX(b.name_en) AS name_en, MAX(b.name_cn) AS name_cn,
+               COUNT(DISTINCT a.order_id) AS orders
+          FROM retail_order_items a
+          JOIN retail_order_items b ON b.order_id = a.order_id AND b.product_id != a.product_id
+          JOIN retail_orders o ON o.id = a.order_id
+         WHERE a.product_id IN (${inList}) AND ${PAIDO_ALL} AND ${PDATEO} BETWEEN ? AND ?
+         GROUP BY a.product_id, b.product_id`).all(...ids, from, to);
+      const withBy = new Map();
+      for (const r of withRows) {
+        const cur = withBy.get(r.product_id);
+        if (!cur || Number(r.orders) > Number(cur.orders)) withBy.set(r.product_id, r);
+      }
+      const aloneRows = tdb().prepare(`
+        SELECT i.product_id, COUNT(DISTINCT i.order_id) AS alone
+          FROM retail_order_items i
+          JOIN retail_orders o ON o.id = i.order_id
+         WHERE i.product_id IN (${inList}) AND ${PAIDO_ALL} AND ${PDATEO} BETWEEN ? AND ?
+           AND NOT EXISTS (
+             SELECT 1 FROM retail_order_items j
+              WHERE j.order_id = i.order_id AND j.product_id != i.product_id)
+         GROUP BY i.product_id`).all(...ids, from, to);
+      const aloneBy = new Map(aloneRows.map(r => [r.product_id, Number(r.alone) || 0]));
+      for (const row of topProducts) {
+        const places = placesBy.get(row.product_id) || [];
+        places.sort((a, b) => b.units - a.units);
+        if (places.length) row.places = places;
+        const w = withBy.get(row.product_id);
+        const alone = aloneBy.get(row.product_id) || 0;
+        if (alone) row.alone = alone;
+        if (w && Number(w.orders) > 0 && Number(w.orders) >= alone) {
+          row.with = { name_en: w.name_en, name_cn: w.name_cn, orders: Number(w.orders) || 0 };
+        }
+      }
+    }
+
+    const stoppedCustRows = tdb().prepare(`
+      SELECT o.customer_id, c.nickname, MAX(${PDATEO}) AS last_day
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
+         AND o.customer_id IS NOT NULL
+         AND o.customer_id NOT IN (
+           SELECT customer_id FROM retail_orders
+            WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ? AND customer_id IS NOT NULL)
+       GROUP BY o.customer_id
+       ORDER BY last_day DESC`).all(prevFrom, prevTo, from, to);
+    const today = shopToday();
+    stoppedCustomerCount = stoppedCustRows.length;
+    stoppedCustomers = stoppedCustRows.slice(0, 8).map(r => ({
+      customer_id: r.customer_id,
+      nickname: r.nickname || null,
+      days_ago: daysBetween(r.last_day, today),
+    }));
+
+    const gapRows = tdb().prepare(`
+      WITH days AS (
+        SELECT customer_id, ${PDATE} AS d
+          FROM retail_orders
+         WHERE ${PAID} AND customer_id IS NOT NULL
+         GROUP BY customer_id, d
+      ),
+      ranked AS (
+        SELECT customer_id, d,
+               ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY d DESC) AS rn
+          FROM days
+         WHERE customer_id IN (
+           SELECT DISTINCT customer_id FROM retail_orders
+            WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ? AND customer_id IS NOT NULL)
+      )
+      SELECT customer_id, d, rn FROM ranked WHERE rn <= 2`).all(from, to);
+    const byCust = new Map();
+    for (const r of gapRows) {
+      const pair = byCust.get(r.customer_id) || {};
+      pair[r.rn] = r.d;
+      byCust.set(r.customer_id, pair);
+    }
+    const gaps = [];
+    for (const pair of byCust.values()) {
+      if (!pair[1] || !pair[2]) continue;
+      const gap = daysBetween(pair[2], pair[1]);
+      if (gap > 0) gaps.push(gap);
+    }
+    returnEveryDays = medianDays(gaps);
+
+    // A movement that day took some store's shelf to zero, and that weekday
+    // is one the product sold on in this window or the one before. The ledger
+    // is the only record of "gone"; a quiet day with stock still on the shelf
+    // is not this list.
+    const storeLedger = SCOPED
+      ? (dashStores.length ? ` AND l.store_id IN (${dashStores.join(',')})` : ' AND 0')
+      : '';
+    const zeroRows = tdb().prepare(`
+      SELECT l.product_id, date(l.created_at, '${TZ}') AS d
+        FROM retail_stock_ledger l
+       WHERE l.balance_after <= 0 AND l.delta < 0
+         AND date(l.created_at, '${TZ}') BETWEEN ? AND ?${storeLedger}
+       GROUP BY l.product_id, d`).all(from, to);
+    const dowRows = tdb().prepare(`
+      SELECT i.product_id, CAST(strftime('%w', ${PDATEO}) AS INTEGER) AS dow,
+             COALESCE(SUM(i.qty), 0) AS units
+        FROM retail_order_items i
+        JOIN retail_orders o ON o.id = i.order_id
+       WHERE ${PAIDO_ALL} AND ${PDATEO} BETWEEN ? AND ?
+       GROUP BY i.product_id, dow
+      HAVING units > 0`).all(prevFrom, to);
+    const sells = new Set(dowRows.map(r => r.product_id + ':' + r.dow));
+    const latest = new Map();
+    for (const z of zeroRows) {
+      if (!z.d) continue;
+      const dow = new Date(z.d + 'T00:00:00Z').getUTCDay();
+      if (!sells.has(z.product_id + ':' + dow)) continue;
+      const cur = latest.get(z.product_id);
+      if (!cur || z.d > cur.date) latest.set(z.product_id, { date: z.d, dow });
+    }
+    if (latest.size) {
+      const zids = [...latest.keys()];
+      const names = tdb().prepare(
+        `SELECT id, name_en, name_cn FROM store_products WHERE id IN (${zids.map(() => '?').join(',')})`
+      ).all(...zids);
+      const nameBy = new Map(names.map(n => [n.id, n]));
+      stockouts = zids.map(id => {
+        const z = latest.get(id);
+        const n = nameBy.get(id) || {};
+        return { product_id: id, name_en: n.name_en || null, name_cn: n.name_cn || null, dow: z.dow };
+      });
+    }
+
+    const refundWhere = `o.status = 'refunded' AND ${NOTGZO}${SCOPED ? ` AND ${STORE_INO}` : ''}`
+      + ` AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?`;
+    const refundRows = tdb().prepare(`
+      SELECT i.product_id, MAX(i.name_en) AS name_en, MAX(i.name_cn) AS name_cn,
+             COUNT(DISTINCT o.id) AS orders
+        FROM retail_order_items i
+        JOIN retail_orders o ON o.id = i.order_id
+       WHERE ${refundWhere}
+       GROUP BY i.product_id
+       ORDER BY orders DESC
+       LIMIT 12`).all(from, to);
+    const reasonRows = refundRows.length ? tdb().prepare(`
+      SELECT i.product_id, TRIM(o.refund_reason) AS reason, COUNT(DISTINCT o.id) AS n
+        FROM retail_order_items i
+        JOIN retail_orders o ON o.id = i.order_id
+       WHERE ${refundWhere}
+         AND TRIM(COALESCE(o.refund_reason, '')) != ''
+         AND i.product_id IN (${refundRows.map(() => '?').join(',')})
+       GROUP BY i.product_id, reason`).all(from, to, ...refundRows.map(r => r.product_id)) : [];
+    const reasonBy = new Map();
+    for (const r of reasonRows) {
+      const cur = reasonBy.get(r.product_id);
+      if (!cur || Number(r.n) > Number(cur.n)) reasonBy.set(r.product_id, r);
+    }
+    refundedProducts = refundRows.map(r => ({
+      product_id: r.product_id,
+      name_en: r.name_en, name_cn: r.name_cn,
+      orders: Number(r.orders) || 0,
+      reason: (reasonBy.get(r.product_id) || {}).reason || null,
+    }));
+  } catch (e) {
+    console.error('[dashboard/trend-read]', e.message);
+  }
+
   // ── Top customers (by spend in window) ──
   const topCustomers = tdb().prepare(`
     SELECT o.customer_id, c.nickname, c.phone, c.tier_key,
@@ -14991,6 +15216,26 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const conversion = !SCOPED && vis.sessions > 0 ? (miniOrders / vis.sessions) * 100 : null;
   const pct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
+  // What the headline is made of, in three slices that add up to it. Food is
+  // what remains after delivery fees and wallet loads are lifted out, so a
+  // discount already sits inside it. Given away is that discount, named
+  // beside the slices rather than subtracted a second time. A store's answer
+  // has no wallet loads: a top-up is paid to the shop, not to one store.
+  const shipAll = tdb().prepare(`
+    SELECT COALESCE(SUM(shipping_fee), 0) AS delivery,
+           COALESCE(SUM(voucher_amount), 0) + COALESCE(SUM(points_amount), 0)
+             + COALESCE(SUM(manual_discount_amount), 0) AS given
+      FROM retail_orders
+     WHERE ${PAID_ALL} AND ${PDATE} BETWEEN ? AND ?`).get(from, to);
+  const walletLoads = SCOPED ? 0 : Number(tuSales.received || 0);
+  const deliveryFees = Number(shipAll.delivery) || 0;
+  const moneyOf = {
+    food: +((Number(kpi.revenue) || 0) - walletLoads - deliveryFees).toFixed(2),
+    delivery_fees: +deliveryFees.toFixed(2),
+    wallet_loads: +walletLoads.toFixed(2),
+    given_away: +(Number(shipAll.given) || 0).toFixed(2),
+  };
+
   const dashBody = {
     success: true,
     data: {
@@ -15000,6 +15245,8 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         revenue:       kpi.revenue,
         orders:        kpi.orders,
         aov:           kpi.aov,
+        aov_change:    Number(kpiPrev.orders) > 0
+          ? +((Number(kpi.aov) || 0) - (Number(kpiPrev.aov) || 0)).toFixed(2) : null,
         buyers:        kpi.buyers,
         new_customers: newCust,
         visits:        vis.visits,
@@ -15093,6 +15340,12 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         topups_unassigned: tuSales.received || 0,
       },
       topProducts, stopped, topCustomers, tiers,
+      money_of: moneyOf,
+      return_every_days: returnEveryDays,
+      stopped_customers: stoppedCustomers,
+      stopped_customer_count: stoppedCustomerCount,
+      stockouts,
+      refunded_products: refundedProducts,
       geoCities, geoDistricts,
       marketing: { vouchers, points, manualDiscounts },
       traffic: { scenes },
