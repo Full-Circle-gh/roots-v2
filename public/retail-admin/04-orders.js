@@ -5785,7 +5785,7 @@ async function qpDoReschedule(orderId, iso, btn) {
         // (about collecting somewhere else) is dropped.
         toast(cuT('A courier is already on this one — cancel it in the Qingyun app first',
                   '已呼叫运力。请先在青云 App 取消该单。'), 'err');
-      } else if (j.requeued) {
+      } else if (j.requeued || j.kept_waiting) {
         // TODAY keeps its own wording — "it goes back in the queue now" is true
         // and is what the operator is waiting to read. A LATER day must not say
         // that: the row IS queued, but parked, and nobody is dispatched until
@@ -5818,7 +5818,11 @@ async function qpDoReschedule(orderId, iso, btn) {
       return;
     }
     if (btn) { btn.disabled = false; btn.textContent = cuT('Move the delivery', '确认改期'); }
-    toast(cuT('Could not move it', '改期失败'), 'err');
+    // The waiting Qingyun order could not be removed, so the day was left where
+    // it is. Same sentence the Remove button uses when its own delete fails.
+    toast(j && j.error === 'waiting_copy'
+      ? cuT('Could not remove it — do it in the Qingyun app', '删除失败 — 请在青云 App 中删除')
+      : cuT('Could not move it', '改期失败'), 'err');
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = cuT('Move the delivery', '确认改期'); }
     toast(cuT('Network error', '网络错误'), 'err');

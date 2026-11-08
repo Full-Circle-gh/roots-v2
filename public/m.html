@@ -4312,9 +4312,9 @@ reg('qyDayGo', ()=>{
   // Beijing day, the server's gzDateStr — the two must agree about "today".
   const today=iso===qyDays()[0].iso;
   const when=today?'today':iso, whenCn=today?'今天':' '+iso;
-  qyWrite(o,'qyday','/orders/'+o._id+'/qingyun/reschedule',{date:iso},{_:['Could not move it','改期失败']},
+  qyWrite(o,'qyday','/orders/'+o._id+'/qingyun/reschedule',{date:iso},{waiting_copy:['Could not remove it — do it in the Qingyun app','删除失败 — 请在青云 App 中删除'],_:['Could not move it','改期失败']},
     j=>j.already_created?T('A courier is already on this one — cancel it in the Qingyun app first','已呼叫运力。请先在青云 App 取消该单。')
-      :j.requeued?(today?T('Moved to today — it goes back in the queue now','已改期至今天 — 已重新排队')
+      :(j.requeued||j.kept_waiting)?(today?T('Moved to today — it goes back in the queue now','已改期至今天 — 已重新排队')
         :T('Moved to '+iso+' — the rider is called that morning','已改期至 '+iso+' — 当天呼叫骑手'))
       :j.stale_copy?T('Moved to '+when+'. The old courier order may still be live — cancel it in the Qingyun app, then call another courier.',
         '已改期至'+whenCn+'。运单可能仍在,请先在青云 App 取消该单,再叫一家运力。')
