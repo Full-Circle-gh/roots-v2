@@ -27918,6 +27918,16 @@ function qingyunShipFromState(retailOrderId) {
   // instead of returning null: a refused order is one nobody is coming for, and
   // it stays that way until a human sees it.
   if (!q.qingyun_order_id) {
+    // Scored against the building the address names, so the pick list can say
+    // which rows are the area rather than the door. A tap on an area row is
+    // refused by confirm-place; the flag is what lets the drawer say so first.
+    let findable = '';
+    const qyPayload = require('../lib/qingyun-payload');
+    try {
+      const row = tdb().prepare('SELECT address_json FROM retail_orders WHERE id = ?').get(retailOrderId);
+      const a = JSON.parse((row && row.address_json) || '{}') || {};
+      findable = qyPayload.addressFindable(a);
+    } catch { findable = ''; }
     return {
       store_code: q.store_code,
       ...nameOf(q.store_code),
@@ -27994,6 +28004,9 @@ function qingyunShipFromState(retailOrderId) {
         lng: c.lng != null ? c.lng / 1e6 : null,
         drop_km: c.dropKm != null ? c.dropKm : null,
         score: c.score != null ? c.score : null,
+        // False when this place is the estate or a landmark inside the name,
+        // not the building. The rider's map would be sent here.
+        covers: qyPayload.placeCoversAddress(findable, c.name || ''),
       })).filter(c => c.lat != null && c.lng != null),
       // The grade in words. Never a code, and never a dash: an unrecorded
       // grade is a fact about what we know, so it gets said in words too.
@@ -28618,6 +28631,17 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-place', requireRetailA
   let addr = {};
   try { addr = JSON.parse(o.address_json || '{}') || {}; } catch { addr = {}; }
   if (addr.pickup) return res.status(422).json({ success: false, error: 'pickup_order' });
+
+  // The waybill keeps the typed address. The pin we would write is this
+  // place's coordinates, and that is what the rider's map navigates to. A
+  // place that does not name the building — the estate, or a hospital that
+  // only shares the front of the name — leaves the words right and the map
+  // kilometres away. Nothing is written; the list stays up so the operator
+  // can place the point on the building instead.
+  const { addressFindable, placeCoversAddress } = require('../lib/qingyun-payload');
+  if (!placeCoversAddress(addressFindable(addr), pick.name)) {
+    return res.status(422).json({ success: false, error: 'place_is_area', name: pick.name || '' });
+  }
 
   // NO NETWORK CALL HERE, same as confirm-point and for the same reason: the
   // push is the drain's job, and an await on a remote call inside this block

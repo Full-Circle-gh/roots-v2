@@ -24,6 +24,7 @@
 const assert = require('assert');
 const {
   buildCreatePayload, splitFindable, nameScore, joinStreetDetail,
+  addressFindable, placeCoversAddress, rememberedPickIsDoor,
   POI_AUTO_SCORE, POI_MIN_SHARED, MAX_DROP_KM, ABS_MAX_KM,
 } = require('../lib/qingyun-payload');
 const qingyunQueue = require('../lib/qingyun-queue');
@@ -145,6 +146,36 @@ it('a coincidental shared word scores near zero', () => {
 
 it('an unrelated place scores 0', () => {
   assert.strictEqual(nameScore('祈福新村倚湖湾', '广州南站').score, 0);
+});
+
+it('the estate does not cover the tower, so it cannot be the rider pin', () => {
+  // 祈福新村 is the compound; 倚湖湾 is one part of it. Picking the compound
+  // writes the compound's coordinates while the waybill still says the tower.
+  const addr = { address: '祈福新村倚湖湾', detail: '5座1106' };
+  assert.strictEqual(addressFindable(addr), '祈福新村倚湖湾');
+  assert.strictEqual(placeCoversAddress(addressFindable(addr), '祈福新村'), false);
+});
+
+it('a landmark that only shares the front of the name does not cover the tower', () => {
+  const findable = addressFindable({ address: '祈福新村倚湖湾', detail: '5座1106' });
+  assert.strictEqual(placeCoversAddress(findable, '祈福医院'), false);
+  assert.strictEqual(placeCoversAddress(findable, '番禺区祈福医院'), false);
+});
+
+it('the tower itself, and a longer name that contains it, does cover the address', () => {
+  const findable = addressFindable({ address: '祈福新村倚湖湾', detail: '5座1106' });
+  assert.strictEqual(placeCoversAddress(findable, '祈福新村倚湖湾'), true);
+  assert.strictEqual(placeCoversAddress(findable, '祈福新村倚湖湾北'), true);
+  // The address named only the estate. A more specific place still covers it.
+  assert.strictEqual(placeCoversAddress('祈福新村', '祈福新村倚湖湾'), true);
+});
+
+it('a remembered name is reused only when it is the building', () => {
+  const addr = { address: '祈福新村倚湖湾', detail: '5座1106' };
+  assert.strictEqual(rememberedPickIsDoor(addr, { source: 'poi_picked', placeName: '祈福医院' }), false);
+  assert.strictEqual(rememberedPickIsDoor(addr, { source: 'poi_picked', placeName: '祈福新村倚湖湾' }), true);
+  assert.strictEqual(rememberedPickIsDoor(addr, { source: 'staff_pin', placeName: '祈福医院' }), true,
+    'a point someone placed on the map is the door, whatever the nearest name is');
 });
 
 it('the absolute shared-character floor is what stops short-string inflation', () => {

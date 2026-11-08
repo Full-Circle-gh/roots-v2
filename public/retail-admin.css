@@ -12738,6 +12738,14 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     display: block; font-size: 12px; line-height: 1.5; color: var(--text-3);
     margin-top: 3px; overflow-wrap: anywhere;
   }
+  /* Not a choice. The place shares the address and is not the building, so
+     the row stays visible and does not dispatch. */
+  #order-drawer .qpc-opt-area { cursor: default; }
+  #order-drawer .qpc-opt-area:hover { background: var(--bg-pane); border-color: var(--line); }
+  #order-drawer .qpc-area {
+    display: block; font-size: 12px; line-height: 1.5; color: var(--warn);
+    margin-top: 4px; font-weight: 600;
+  }
   /* How far the rider goes. Tabular so three rows compare down the column at a
      glance — the wrong-district hit is spotted by the number being unlike the
      others, which only works if they line up. Never coloured by threshold: the

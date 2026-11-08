@@ -180,6 +180,26 @@ async function main() {
     const n = mk({ order: o }); n.CMD.qyPickPlace(-1); n.CMD.qyPickPlace('x'); await tick();
     is(n.calls.writes, [], 'a bad index sends nothing');
     hasnt(h, 'Place the point on a map', 'no switch to a map the phone does not have (§97, held)');
+    const area = sfo({ awaiting_choice: true, candidates: [
+      { idx: 0, name: '祈福新村倚湖湾', address: '番禺区', drop_km: 18, covers: true },
+      { idx: 1, name: '祈福医院', address: '番禺区', drop_km: 19, covers: false },
+    ]});
+    const am = mk({ order: area });
+    const ah = am.ctx.shipFromCard(am.order);
+    has(ah, "APP.cmd('qyPickPlace',0)", 'the building is still a button');
+    hasnt(ah, "APP.cmd('qyPickPlace',1)", 'the hospital is not — its pin is kilometres from the door');
+    has(ah, 'Area, not the door', 'and it says so');
+    has(ah, "APP.cmd('qyRejectPlaces')", 'the way out is the desktop map');
+    const none = sfo({ awaiting_choice: true, candidates: [
+      { idx: 0, name: '祈福新村', covers: false }, { idx: 1, name: '祈福医院', covers: false },
+    ]});
+    const nm = mk({ order: none });
+    const nh = nm.ctx.shipFromCard(nm.order);
+    has(nh, 'None of these is the building', 'when every place is the area, the list says so');
+    hasnt(nh, 'qyPickPlace', 'and none of them dispatches');
+    const refused = mk({ order: area, respond: () => fault('place_is_area') });
+    refused.CMD.qyPickPlace(1); await tick();
+    is(String(refused.ctx.state.orderErr), 'That place is the area, not the door. Place the point on the desktop map.', 'a stale client that still posts the hospital is told why');
     const pt = mk({ order: sfo({ awaiting_point: true }) });
     has(pt.ctx.shipFromCard(pt.order), 'The point is placed on the desktop map.', 'the map surface still points at the desktop');
     has(pt.ctx.shipFromCard(pt.order), "APP.cmd('shipToOpen','edit')", 'with the desktop\'s Edit ship-to beside it');
