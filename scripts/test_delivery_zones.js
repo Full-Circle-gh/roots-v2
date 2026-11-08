@@ -196,21 +196,36 @@ it('Hong Kong: the one HK zone, from the SAR name or "Hong Kong"', () => {
   // The street mentions 广州; the province is still the SAR.
   assert.strictEqual(match({ province: '香港特别行政区', city: '香港', address: '广州贸易公司' }), 'hk');
 });
-it('香港 inside a company name on a mainland street is not Hong Kong', () => {
-  // TC002601. The door is 广园东路, Tianhe. The company is 香港百式.
+it('a place name in the company or the road is not the region', () => {
+  // The door decides. These are the same rule, in different cities.
+  const company = '香港百式实业有限公司广州代表处';
   assert.strictEqual(match({
     province: '广东省', city: '广州市', district: '天河区',
-    address: '香港百式实业有限公司广州代表处',
-    detail: '广园东路2193号时代新世界中心北塔508',
+    address: company, detail: '广园东路2193号时代新世界中心北塔508',
   }), 'tianhe');
-  // The same line dumped into the street, with no separate city field.
   assert.strictEqual(match({
-    address: '广东省广州市天河区香港百式实业有限公司广州代表处 广园东路2193号时代新世界中心北塔508',
-  }), 'tianhe');
+    province: '广东省', city: '广州市', district: '越秀区',
+    address: '天河路100号' + company,
+  }), 'yuexiu');
   assert.strictEqual(match({
     province: '广东省', city: '深圳市', district: '南山区',
-    address: '香港百式实业有限公司',
+    address: company,
   }), 'shenzhen');
+  assert.strictEqual(match({
+    province: '江苏省', city: '苏州市', address: company,
+  }), 'jiangsu');
+  assert.strictEqual(match({
+    province: '四川省', city: '成都市', address: company,
+  }), null);
+  CFG = { 'delivery.defaultZone': { enabled: true } };
+  assert.strictEqual(match({
+    province: '四川省', city: '成都市', address: company,
+  }), 'Rest of China');
+  // No separate city field: the line itself names 天河区, and the company
+  // name in the middle does not take it.
+  assert.strictEqual(match({
+    address: '广东省广州市天河区' + company + ' 广园东路2193号',
+  }), 'tianhe');
 });
 it('a switched-off zone is never matched', () => {
   assert.strictEqual(match({ province: '广东省', city: '东莞市' }), null);
