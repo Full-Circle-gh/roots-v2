@@ -5256,23 +5256,40 @@ function renderQyCandidateSurface(o, sf) {
 
   const tomorrow = sf.date_posture === 'tomorrow';
   const addrLines = escapeHtml(o.address_full || '').split(' ').filter(Boolean).join('<br>');
-  const rows = (sf.candidates || []).map((c) => `
-    <button class="qpc-opt" type="button" onclick="qpPickPlace(${o.id}, ${c.idx}, this)">
+  // A place that does not name the building is not a button. Choosing it used
+  // to write its coordinates as the rider's pin while the waybill kept the
+  // typed door — the words read right, the map was kilometres off.
+  const areaLabel = cuT('Area, not the door', '片区，不是门口');
+  const rows = (sf.candidates || []).map((c) => {
+    const area = c.covers === false;
+    const body = `
       <span class="qpc-opt-main">
         <span class="qpc-name" data-no-i18n>${escapeHtml(c.name || '')}</span>
         <span class="qpc-addr" data-no-i18n>${escapeHtml(c.address || '')}</span>
+        ${area ? `<span class="qpc-area">${areaLabel}</span>` : ''}
       </span>
       ${c.drop_km != null
         ? `<span class="qpc-km">${escapeHtml(String(c.drop_km))}km</span>`
-        : ''}
-    </button>`).join('');
+        : ''}`;
+    return area
+      ? `<div class="qpc-opt qpc-opt-area">${body}</div>`
+      : `<button class="qpc-opt" type="button" onclick="qpPickPlace(${o.id}, ${c.idx}, this)">${body}</button>`;
+  }).join('');
+  const anyArea = (sf.candidates || []).some((c) => c.covers === false);
+  const allArea = anyArea && (sf.candidates || []).every((c) => c.covers === false);
 
   return `
     <div class="qp qpc" id="qp-${o.id}">
       <h3 class="qp-h">${cuT('Pick the delivery point', '选择配送点')}</h3>
-      <p class="qp-sub">${cuT(
+      <p class="qp-sub">${allArea ? cuT(
+        'None of these is the building. The rider navigates to the pin, not to the words on the order. Place the point on the building.',
+        '这些都不是楼栋。骑手按定位点导航，不按订单上的文字。请在地图上标记楼栋。')
+        : cuT(
         'This address matches more than one place. Pick the right one.',
         '该地址匹配到多个地点，请选择正确的一个。')}</p>
+      ${anyArea && !allArea ? `<p class="qp-sub">${cuT(
+        'A place marked “Area, not the door” would send the map there. That can be kilometres from the building.',
+        '标为「片区，不是门口」的地点会把骑手的地图导航到那里，可能离楼栋数公里。')}</p>` : ''}
 
       <div class="qp-grid">
         <div class="qp-map-col">
@@ -5330,6 +5347,7 @@ async function qpPickPlace(orderId, idx, btn) {
     toast(j.error === 'order_closed'   ? cuT('This order is closed', '该订单已关闭')
         : j.error === 'choice_gone'    ? cuT('That option is gone — reopen the order', '该选项已失效，请重新打开订单')
         : j.error === 'row_moved'      ? cuT('It moved on while you were looking — reopen the order', '状态已变更，请重新打开订单')
+        : j.error === 'place_is_area'  ? cuT('That place is the area, not the door. Place the point on the building.', '该地点是片区，不是门口。请在地图上标记楼栋。')
         : cuT('Could not pick it', '选择失败'), 'err');
   } catch (e) {
     if (btn) { btn.disabled = false; btn.classList.remove('is-sending'); }

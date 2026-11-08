@@ -4280,10 +4280,19 @@ reg('qyPickPlace', idx=>{
   const i=Number(idx); if(!Number.isInteger(i)||i<0) return;
   const c=((o.shipFrom&&o.shipFrom.candidates)||[]).find(x=>x&&x.idx===i);
   qyWrite(o,'qyplace','/orders/'+o._id+'/qingyun/confirm-place',{idx:i},
-    {order_closed:QY_CLOSED, choice_gone:['That option is gone — reopen the order','该选项已失效，请重新打开订单'], row_moved:QY_MOVED_ON, _:['Could not pick it','选择失败']},
+    {order_closed:QY_CLOSED, choice_gone:['That option is gone — reopen the order','该选项已失效，请重新打开订单'], row_moved:QY_MOVED_ON,
+     place_is_area:['That place is the area, not the door. Place the point on the desktop map.','该地点是片区，不是门口。请在电脑端地图上标记楼栋。'],
+     _:['Could not pick it','选择失败']},
     j=>{ if(j.already_created) return T(...QY_ALREADY);
       const nm=j.name||(c&&c.name)||'';
       return T('Picked '+nm+' — sending it to the channel, about a minute','已选择 '+nm+' — 约一分钟内发单'); });
+});
+reg('qyRejectPlaces', ()=>{
+  if(!mCan('orders:edit')) return;
+  const o=currentOrder(); if(!qyCanEdit(o)) return;
+  qyWrite(o,'qyplace','/orders/'+o._id+'/qingyun/reject-places',{},
+    {row_moved:QY_MOVED_ON, _:['Could not do that','操作失败']},
+    ()=>T('Place the point on the desktop map.','配送点请在电脑端地图上标记。'));
 });
 reg('qyClose', ()=>{ state.qy=null; render(); });
 reg('qyDayOpen', ()=>{
@@ -40651,18 +40660,28 @@ function shipFromCard(o){
       /* Each place is its own button and choosing IS the confirm — nothing is
          pre-selected (the desktop's qpPickPlace). Only the index travels. */
       const busy=state.orderBusy==='qyplace';
+      const anyArea=sf.candidates.some(c=>c&&c.covers===false);
+      const allArea=anyArea&&sf.candidates.every(c=>c&&c.covers===false);
       return card(head(T('Pick the delivery point','选择配送点'),'amber-ink')
-        +sub(T('This address matches more than one place. Pick the right one.','该地址匹配到多个地点，请选择正确的一个。'))
+        +sub(allArea
+          ?T('None of these is the building. The rider navigates to the pin, not to the words on the order. Place the point on the desktop map.',
+             '这些都不是楼栋。骑手按定位点导航，不按订单上的文字。请在电脑端地图上标记楼栋。')
+          :T('This address matches more than one place. Pick the right one.','该地址匹配到多个地点，请选择正确的一个。'))
+        +(anyArea&&!allArea?sub(T(
+          'A place marked “Area, not the door” would send the map there. That can be kilometres from the building.',
+          '标为「片区，不是门口」的地点会把骑手的地图导航到那里，可能离楼栋数公里。')):'')
         +`<div style="margin-top:8px">${sf.candidates.map(c=>{
+            const area=c&&c.covers===false;
             const inner=`<span style="flex:1;min-width:0;text-align:left"><span style="display:block;font-size:14px;font-weight:500;overflow-wrap:anywhere;color:var(--text-primary)">${escAttr(c.name||'')}</span>
-              <span style="display:block;font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(c.address||'')}</span></span>
+              <span style="display:block;font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(c.address||'')}</span>
+              ${area?`<span style="display:block;font-size:12.5px;color:var(--amber-ink);margin-top:2px">${T('Area, not the door','片区，不是门口')}</span>`:''}</span>
             ${c.drop_km!=null?`<span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(String(c.drop_km))}km</span>`:''}`;
-            return can&&Number.isInteger(c.idx)
+            return can&&Number.isInteger(c.idx)&&!area
               ?`<button ${busy||state.orderBusy?'disabled':''} onclick="APP.cmd('qyPickPlace',${c.idx})" style="display:flex;gap:10px;align-items:flex-start;width:100%;padding:10px 0;border:none;border-top:1px solid var(--hairline);background:none;cursor:pointer;font-family:inherit">${inner}</button>`
               :`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--hairline)">${inner}</div>`;
           }).join('')}</div>`
         +sub(busy?T('Working…','处理中…'):T('Distances are from the store the rider collects from.','距离为骑手取货门店到该地点的距离。'))
-        +urgent+btns([qyPlaceBtn(o),editShipTo]),true);
+        +urgent+btns([anyArea&&can?qyBtn(T('Mark it on the desktop map','在电脑端地图上标记'),"APP.cmd('qyRejectPlaces')"):'',qyPlaceBtn(o),editShipTo]),true);
     }
     const refused=!!sf.needs_attention, held=!refused&&!!sf.push_held,
           booked=!refused&&!held&&!!sf.awaiting_dispatch;

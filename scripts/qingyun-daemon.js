@@ -61,7 +61,7 @@ const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup
 // Ops-alert latches that survive a restart (see lib/alert-latch).
 const { latchStore } = require('../lib/alert-latch');
 const geocode = require('../lib/geocode'); // Tencent/AMap — resolve English/pin-less addresses
-const { buildCreatePayload } = require('../lib/qingyun-payload'); // shared with the ship-from override
+const { buildCreatePayload, rememberedPickIsDoor } = require('../lib/qingyun-payload'); // shared with the ship-from override
 const { translateToChinese } = require('../lib/address-cn'); // English/pinyin street → Chinese, before the rider sees it
 const inventory = require('../lib/inventory'); // isQingyunSameCityToday — same-city/same-day eligibility
 const phoneCn = require('../lib/phone-cn'); // is this a number a rider can call? (advisory — see the file)
@@ -847,7 +847,13 @@ async function drainPushQueue(storeCode, br) {
         // alreadyApplied is the loop guard: if this order is ALREADY carrying
         // the remembered point and the build parked anyway, the memory has
         // nothing to add and the row parks as it would have.
-        if (hit && !pointMemory.alreadyApplied(parked, hit)) {
+        if (hit && !pointMemory.alreadyApplied(parked, hit) && !rememberedPickIsDoor(parked, hit)) {
+          // A remembered name that does not cover the building would send the
+          // next order's rider to the same wrong pin, silently. Leave the row
+          // parked so the question is asked again.
+          log(storeCode, `push: order ${parkedOrder.order_no || row.retail_order_id} remembered `
+            + `"${hit.placeName || ''}" does not name the building — not reusing it`);
+        } else if (hit && !pointMemory.alreadyApplied(parked, hit)) {
           // Both writes or neither, the same rule the confirm endpoint follows:
           // a point on an order that was never requeued is an order that looks
           // fixed and never ships, and a requeue without the point sends the
