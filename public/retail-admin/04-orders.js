@@ -5740,25 +5740,71 @@ function qpOpenReschedule(orderId, btn) {
     <div id="qp-confirm-${orderId}"></div>`;
 }
 
-function qpPickDate(orderId, iso) {
-  const box = document.getElementById('qp-confirm-' + orderId);
-  const o = _OPEN_ORDER || {};
-  const from = (o.qingyun_ship_from && o.qingyun_ship_from.promised_date) || '';
-  if (!box) return;
-  box.innerHTML = `
+const _qpTimes = {};
+
+function qpMoveConfirm(orderId, from, dest, value) {
+  return `
     <div class="qp-confirm">
       <div>${cuT(
-        `Move this delivery from <span class="swap">${escapeHtml(from)}</span> to <span class="swap">${escapeHtml(iso)}</span>? The customer is told the new day.`,
-        `将配送日期由 <span class="swap">${escapeHtml(from)}</span> 改为 <span class="swap">${escapeHtml(iso)}</span>？系统会告知顾客新的日期。`)}
+        `Move this delivery from <span class="swap">${escapeHtml(from)}</span> to <span class="swap">${escapeHtml(dest)}</span>? The customer is told the new day.`,
+        `将配送日期由 <span class="swap">${escapeHtml(from)}</span> 改为 <span class="swap">${escapeHtml(dest)}</span>？系统会告知顾客新的日期。`)}
       </div>
       <div style="display:flex;gap:10px;margin-top:11px;">
-        <button class="btn btn-primary btn-sm" type="button" onclick="qpDoReschedule(${orderId}, '${iso}', this)">${cuT('Move the delivery', '确认改期')}</button>
+        <button class="btn btn-primary btn-sm" type="button" onclick="qpDoReschedule(${orderId}, '${value}', this)">${cuT('Move the delivery', '确认改期')}</button>
         <button class="btn btn-sm" type="button" onclick="openOrder(${orderId}, { instant: true })">${cuT('Keep the current date', '保持原日期')}</button>
       </div>
     </div>`;
 }
 
+async function qpPickDate(orderId, iso) {
+  const box = document.getElementById('qp-confirm-' + orderId);
+  if (!box) return;
+  const o = _OPEN_ORDER || {};
+  const from = (o.qingyun_ship_from && o.qingyun_ship_from.promised_date) || '';
+  box.innerHTML = `<div class="muted" style="font-size:12px;margin-top:8px;">${cuT('Loading…', '加载中…')}</div>`;
+  let j;
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/day-slots?date=${encodeURIComponent(iso)}`);
+    j = await r.json();
+  } catch (e) {
+    box.innerHTML = `<div class="muted" style="font-size:12px;margin-top:8px;">${cuT('Load failed', '加载失败')}</div>`;
+    return;
+  }
+  if (!j || !j.success || !j.data) {
+    box.innerHTML = `<div class="muted" style="font-size:12px;margin-top:8px;">${cuT('Load failed', '加载失败')}</div>`;
+    return;
+  }
+  // A zone with no windows still moves by the day. A zone with windows waits
+  // for one of them: the confirm below names the window inside the same sentence.
+  if (j.data.day_only) {
+    box.innerHTML = qpMoveConfirm(orderId, from, iso, iso);
+    return;
+  }
+  const slots = Array.isArray(j.data.slots) ? j.data.slots : [];
+  _qpTimes[orderId] = { from, iso, slots };
+  box.innerHTML = `
+    <div class="qp-dates" style="margin-top:8px;">
+      ${slots.map(s => `
+      <label class="qp-date"${s.passed ? ' style="opacity:.45;"' : ''}>
+        <input type="radio" name="qp-time-${orderId}" value="${escapeHtml(s.slot_id)}"${s.passed ? ' disabled' : ''} onchange="qpPickSlot(${orderId}, this.value)">
+        <span class="d">${escapeHtml(s.label_en)}</span>
+      </label>`).join('')}
+    </div>
+    <div id="qp-time-confirm-${orderId}"></div>`;
+}
+
+function qpPickSlot(orderId, slotId) {
+  const box = document.getElementById('qp-time-confirm-' + orderId);
+  const held = _qpTimes[orderId];
+  if (!box || !held) return;
+  const s = (held.slots || []).find(x => x && x.slot_id === slotId && !x.passed);
+  if (!s) return;
+  box.innerHTML = qpMoveConfirm(orderId, held.from, held.iso + ' ' + s.label_en, slotId);
+}
+
 async function qpDoReschedule(orderId, iso, btn) {
+  const slot = String(iso).length > 10 ? String(iso) : '';
+  iso = String(iso).slice(0, 10);
   if (btn) { btn.disabled = true; btn.textContent = cuT('Moving…', '处理中…'); }
   // Beijing day, matching the server's gzDateStr — the two must agree about what
   // "today" is, or a 23:30 move would be worded for the wrong day.
@@ -5768,7 +5814,7 @@ async function qpDoReschedule(orderId, iso, btn) {
   try {
     const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/reschedule`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: iso }),
+      body: JSON.stringify(slot ? { date: iso, slot } : { date: iso }),
     });
     const j = await r.json();
     if (j.success) {

@@ -235,7 +235,7 @@ const sameDayBands = require('../lib/same-day-bands');
 const {
   hhmmToMinutes, batchScheduleCfg, deliveryTz, parseYmdLocal, toYmdLocal, tzNowParts, nextBatchShipDate,
   batchItemsInCart, todaysBatchStillComing, slotWindowEnd, freshLinesCoveredToday, expressEarliestIso,
-  computeDeliverySlots, logSlotKindMismatch, resolveDeliverySlot,
+  computeDeliverySlots, staffDayWindows, logSlotKindMismatch, resolveDeliverySlot,
 } = require('../lib/delivery-calendar');
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
@@ -28970,6 +28970,25 @@ router.post('/api/retail-admin/orders/:id/qingyun/set-place', requireRetailAdmin
 // today. That is a silent no-op wearing a success response, so the endpoint
 // refuses it rather than accepting a move it cannot honour. The gate lives
 // here and not only in the UI: an API caller gets the same answer as a button.
+// The windows Change delivery day can offer for one day. The customer's
+// calendar is the wrong source: it starts three days out and hides a window
+// once it has started. Staff are moving an order that already exists.
+router.get('/api/retail-admin/orders/:id/qingyun/day-slots', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const date = String(req.query.date || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'bad_date' });
+  const o = tdb().prepare(
+    'SELECT id, delivery_zone_id, address_json, store_id FROM retail_orders WHERE id = ?'
+  ).get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({
+    success: true,
+    data: staffDayWindows(zoneForOrder(o), date, new Date(), {
+      storeHours: deliveryStoreHours(o.store_id ?? null),
+    }),
+  });
+});
+
 router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const date = String(req.body?.date || '').trim();
@@ -29087,7 +29106,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   }
 
   const o = tdb().prepare(
-    'SELECT id, order_no, status, scheduled_for, delivery_slot_kind FROM retail_orders WHERE id = ?'
+    'SELECT id, order_no, status, scheduled_for, delivery_slot_kind, delivery_zone_id, address_json, store_id FROM retail_orders WHERE id = ?'
   ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (qingyunQueue.isClosedOrderStatus(o.status)) {
@@ -29107,6 +29126,26 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   // A later day takes a null kind, which is the "scheduled / legacy" path: the
   // disposition then compares scheduled_for against today and parks the row.
   const kind = date === today ? 'today' : null;
+  // A time-slot zone has to name a window. The bare day is only enough where
+  // the zone itself has no windows. Checked BEFORE the delete below: a window
+  // the kitchen does not have must not remove the waiting Qingyun order.
+  const slotRaw = String(req.body?.slot || '').trim();
+  let scheduledFor = date;
+  let slotLabel = date;
+  const windows = staffDayWindows(zoneForOrder(o), date, new Date(), {
+    storeHours: deliveryStoreHours(o.store_id ?? null),
+  });
+  if (slotRaw) {
+    const mSlot = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(slotRaw);
+    const hit = mSlot && mSlot[1] === date
+      ? windows.slots.find((s) => s.slot_id === slotRaw && !s.passed)
+      : null;
+    if (!hit) return res.status(400).json({ success: false, error: 'slot_unavailable' });
+    scheduledFor = businessDate.dateInZone(deliveryTz(), date, Number(mSlot[2]), Number(mSlot[3])).toISOString();
+    slotLabel = hit.label_en;
+  } else if (!windows.day_only) {
+    return res.status(400).json({ success: false, error: 'slot_required' });
+  }
   // A waiting copy is not a rider. Today keeps it: staff dispatch that copy, and
   // deleting it would only put the order back in line for the same day. A later
   // day cannot keep it. The copy sits in 待配送, and anyone at the store can send
@@ -29143,7 +29182,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
             SET scheduled_for = ?, delivery_slot_label = ?, delivery_slot_kind = ?,
                 seen_at = NULL, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`
-      ).run(date, date, kind, id);                     // ← the date, FIRST
+      ).run(scheduledFor, slotLabel, kind, id);       // ← the day, and its window when the zone has one
       // A cancelled copy takes the compare-and-swap that clears its dead id; every
       // other row takes the ordinary manual-retry statement, whose own guard
       // (qingyun_order_id IS NULL) is untouched. Both return 0 rows rather than
@@ -29176,7 +29215,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   }
 
   logActivity(req.user.id, req.user.username, 'qingyun_reschedule', 'retail_order', id,
-    { from: wasDate, to: date, requeued, after_cancel: !!cancelledCopy, stale_copy: staleCopy,
+    { from: wasDate, to: date, slot: slotRaw || null, requeued, after_cancel: !!cancelledCopy, stale_copy: staleCopy,
       kept_waiting: keptWaiting }, req.ip);
   // `moved` is the date write, which always happens once we get here; `requeued`
   // is the queue, which can legitimately be false (another writer won the swap).
@@ -29185,7 +29224,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   // these — see qpDoReschedule — because "moved to today" over a row that was
   // not re-queued is the half-truth this endpoint has been telling.
   res.json({ success: true, moved: true, requeued, kept_waiting: keptWaiting, after_cancel: !!cancelledCopy,
-             stale_copy: staleCopy, from: wasDate, to: date });
+             stale_copy: staleCopy, from: wasDate, to: date, slot: slotRaw || null });
 });
 
 // Retry deleting the leftover copy a move couldn't remove. Powers the drawer's

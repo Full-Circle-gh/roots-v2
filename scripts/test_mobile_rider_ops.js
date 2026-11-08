@@ -266,13 +266,34 @@ async function main() {
     hasnt(h, BJ(7), 'and no more'); has(h, 'today', 'today named'); has(h, 'tomorrow', 'and tomorrow');
     has(h, 'The rider is called on the morning of the day you pick. Nothing is dispatched before then.', 'with what picking a day means');
     m.CMD.qyDayPick('1999-01-01'); is(m.ctx.state.qy.day, null, 'a day not offered cannot be picked');
-    m.CMD.qyDayPick(BJ(2)); h = m.ctx.shipFromCard(m.order);
+    m.CMD.qyDayPick(BJ(2)); await tick(); h = m.ctx.shipFromCard(m.order);
     has(h, 'Move this delivery from 2026-09-30 to ' + BJ(2) + '? The customer is told the new day.', 'asks, naming both days');
     is(m.calls.writes, [], 'nothing before Move the delivery');
+    is(m.calls.reads, ['/orders/7/qingyun/day-slots?date=' + BJ(2)], 'the day\'s windows are read');
     m.CMD.qyDayGo(); await tick();
     is(m.calls.writes, [{ p: '/orders/7/qingyun/reschedule', method: 'POST', body: { date: BJ(2) } }], 'POST …/qingyun/reschedule {date}');
     is(m.calls.toasts, ['Moved to ' + BJ(2) + ' — the rider is called that morning'], 'a later day: the rider is called that morning');
-    const outcome = async (resp, day) => { const x = mk({ order: exp, respond: () => resp }); x.CMD.qyDayOpen(); x.CMD.qyDayPick(day); x.CMD.qyDayGo(); await tick(); return x; };
+    const windows = { day_only: false, slots: [
+      { slot_id: BJ(2) + 'T10:00', label_en: '10:00\u201312:00', passed: true },
+      { slot_id: BJ(2) + 'T12:00', label_en: '12:00\u201314:00', passed: false },
+    ] };
+    const timed = mk({ order: exp, read: () => windows, respond: () => ({ success: true, moved: true, requeued: true }) });
+    timed.CMD.qyDayOpen(); timed.CMD.qyDayPick(BJ(2)); await tick();
+    h = timed.ctx.shipFromCard(timed.order);
+    has(h, '10:00\u201312:00', 'the ended window is shown'); has(h, '12:00\u201314:00', 'and the one still open');
+    hasnt(h, 'Move this delivery from', 'a day with windows does not ask until a window is picked');
+    timed.CMD.qyDayGo(); await tick();
+    is(timed.calls.writes, [], 'and nothing is sent until then');
+    timed.CMD.qyDayTime(BJ(2) + 'T10:00');
+    hasnt(timed.ctx.shipFromCard(timed.order), 'Move this delivery from', 'a window that has ended cannot be picked');
+    timed.CMD.qyDayTime(BJ(2) + 'T12:00');
+    has(timed.ctx.shipFromCard(timed.order), 'Move this delivery from 2026-09-30 to ' + BJ(2) + ' 12:00\u201314:00? The customer is told the new day.', 'the window is named in the question');
+    timed.CMD.qyDayGo(); await tick();
+    is(timed.calls.writes, [{ p: '/orders/7/qingyun/reschedule', method: 'POST', body: { date: BJ(2), slot: BJ(2) + 'T12:00' } }], 'POST …/qingyun/reschedule {date, slot}');
+    const unread = mk({ order: exp, read: () => new Error('HTTP 500') });
+    unread.CMD.qyDayOpen(); unread.CMD.qyDayPick(BJ(1)); await tick();
+    has(unread.ctx.shipFromCard(unread.order), 'Load failed', 'a windows read that fails says so');
+    const outcome = async (resp, day) => { const x = mk({ order: exp, respond: () => resp }); x.CMD.qyDayOpen(); x.CMD.qyDayPick(day); await tick(); x.CMD.qyDayGo(); await tick(); return x; };
     is((await outcome({ success: true, requeued: true }, BJ(0))).calls.toasts, ['Moved to today — it goes back in the queue now'], 'today: back in the queue now');
     is((await outcome({ success: true, already_created: true }, BJ(1))).calls.toasts, ['A courier is already on this one — cancel it in the Qingyun app first'], 'a live rider: nothing moved');
     is((await outcome({ success: true, moved: true, stale_copy: true }, BJ(0))).calls.toasts, ['Moved to today. The old courier order may still be live — cancel it in the Qingyun app, then call another courier.'], 'a frozen copy: moved, finish by hand');

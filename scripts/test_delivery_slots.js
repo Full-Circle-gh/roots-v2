@@ -78,7 +78,7 @@ class FakeDate extends Date {
 const NAMES = ['batchScheduleCfg', '_tzCache', 'DELIVERY_TZ_TTL_MS', 'deliveryTz', 'parseYmdLocal', 'toYmdLocal',
   'tzNowParts', 'nextBatchShipDate', 'batchItemsInCart', 'todaysBatchStillComing', 'slotWindowEnd',
   'freshLinesCoveredToday', 'expressEarliestIso', 'hhmmToMinutes', 'storeDeliveryWindow', 'computeDeliverySlots',
-  'matchScheduledTimeSlot', 'logSlotKindMismatch', 'resolveDeliverySlot'];
+  'staffDayWindows', 'matchScheduledTimeSlot', 'logSlotKindMismatch', 'resolveDeliverySlot'];
 const F = new Function('cfgValue', 'tdb', 'currentTenantId', 'businessDate', 'batchCadence', 'Date',
   `${NAMES.map(declSrc).join('\n')}\nreturn { ${NAMES.filter((n) => n !== 'DELIVERY_TZ_TTL_MS').join(', ')} };`)(
   cfgValue, () => db, () => { if (W.throwTid) throw new Error('no tenant'); return W.tid; },
@@ -776,11 +776,12 @@ it('a whole-day zone keeps its Today chip until the store\'s own close', () => {
   assert.ok(slots(zone, at('2026-10-15', 20, 5), { storeHours: YUEXIU }).today_day_chip);
   assert.strictEqual(slots(zone, at('2026-10-15', 20, 5)).today_day_chip, null);
 });
-it('all four places that offer or check a delivery time hand over the cooking store\'s hours', () => {
-  // The checkout quote, the order itself, and the reschedule picker and its
-  // check. One that stopped passing them would quietly fall back to the zone.
+it('every place that offers or checks a delivery time hands over the cooking store\'s hours', () => {
+  // The checkout quote, the order itself, the customer reschedule picker and
+  // its check, and the staff day-slots read and the staff move. One that
+  // stopped passing them would quietly fall back to the zone.
   const sites = SRC.match(/storeHours: deliveryStoreHours\(/g) || [];
-  assert.strictEqual(sites.length, 4);
+  assert.strictEqual(sites.length, 6);
 });
 it('a window before 10:00 carries a two-digit hour, so the one offered is the one accepted', () => {
   // Was 'T8:00', which resolveDeliverySlot's 'THH:MM' refused at payment.
@@ -801,6 +802,43 @@ it('placing the order: an 08:00 window on a later day is Yuexiu\'s to give, not 
   const t = at('2026-10-15', 11, 30);
   assert.strictEqual(resolve({}, '2026-10-20T08:00', t, { storeHours: YUEXIU }).kind, 'schedule');
   assert.deepStrictEqual(resolve({}, '2026-10-20T08:00', t, { storeHours: TIANHE }), { error: 'slot_unavailable' });
+});
+
+section('7. the windows staff can move a delivery onto');
+const staff = (zone, date, now, opts = {}) => F.staffDayWindows(zone, date, now, { tz: TZ, ...opts });
+const staffIds = (r) => r.slots.filter((s) => !s.passed).map((s) => s.slot_id);
+it('a later day offers every kitchen window, and a window that has started is still open until it ends', () => {
+  const now = at('2026-10-15', 11, 30);
+  const later = staff({}, '2026-10-16', now);
+  assert.strictEqual(later.day_only, false);
+  assert.deepStrictEqual(staffIds(later), [
+    '2026-10-16T10:00', '2026-10-16T12:00', '2026-10-16T14:00', '2026-10-16T16:00', '2026-10-16T18:00',
+  ]);
+  assert.strictEqual(later.slots[0].label_en, '10:00\u201312:00');
+  assert.strictEqual(later.slots[0].label_cn, later.slots[0].label_en);
+  const today = staff({}, '2026-10-15', now);
+  assert.deepStrictEqual(staffIds(today), [
+    '2026-10-15T10:00', '2026-10-15T12:00', '2026-10-15T14:00', '2026-10-15T16:00', '2026-10-15T18:00',
+  ]);
+  assert.strictEqual(today.slots[0].passed, false);
+});
+it('a window that has ended is still listed, and cannot be chosen', () => {
+  const r = staff({}, '2026-10-15', at('2026-10-15', 18, 30));
+  assert.strictEqual(r.slots.find((s) => s.slot_id === '2026-10-15T16:00').passed, true);
+  assert.strictEqual(r.slots.find((s) => s.slot_id === '2026-10-15T18:00').passed, false);
+  assert.deepStrictEqual(staffIds(r), ['2026-10-15T18:00']);
+});
+it('the windows follow the cooking store\'s hours', () => {
+  const r = staff({}, '2026-10-16', at('2026-10-15', 11, 30), { storeHours: YUEXIU });
+  assert.strictEqual(r.slots[0].slot_id, '2026-10-16T08:00');
+  assert.strictEqual(r.slots[r.slots.length - 1].slot_id, '2026-10-16T18:00');
+  assert.strictEqual(r.slots[r.slots.length - 1].label_en, '18:00\u201320:00');
+});
+it('a day-only zone, a past day, and a day past the lead have no window to pick', () => {
+  const now = at('2026-10-15', 11, 30);
+  assert.deepStrictEqual(staff({ day_only: 1 }, '2026-10-16', now), { day_only: true, slots: [] });
+  assert.deepStrictEqual(staff({}, '2026-10-14', now).slots, []);
+  assert.deepStrictEqual(staff({}, '2026-11-15', now).slots, []);
 });
 
 for (const run of pending) run();
