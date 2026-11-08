@@ -45472,7 +45472,7 @@ function trendProdDaysHtml(p){
   const cap=d.granularity==='hour'?T('Each hour','每小时'):d.granularity==='week'?T('Each week','每一周'):T('Each day','每一天');
   const lab=x=>d.granularity==='hour'?(x.bucket+':00'):fmtDateOnly(x.bucket);
   const a=d.points[0], b=d.points[d.points.length-1];
-  return `<div style="margin:8px 0 0 26px">
+  return `<div style="margin:14px 0 0 26px">
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${cap}</div>
     ${trendProdSpark(d.points.map(x=>Number(x.units)||0))}
     <div class="num" style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary);padding-top:4px">
@@ -45484,7 +45484,7 @@ function trendShelfLine(p){
   const s=p.shelf; if(!s) return '';
   if(!((Number(p.units)||0)>(Number(p.prior_units)||0))) return '';
   const word=s.kind==='out'?T('Sold out','售罄'):T((Number(s.qty)||0)+' left','剩 '+(Number(s.qty)||0));
-  return `<div style="margin:4px 0 0 26px;font-size:12px;color:var(--amber-ink)">${word}</div>`;
+  return `<div style="margin:10px 0 0 26px;font-size:13px;color:var(--amber-ink)">${word}</div>`;
 }
 /* The open row. Orders, whether the money moved with the pieces, the price
    against the window before, what else was in the bag, which shop, and what
@@ -45493,60 +45493,62 @@ function trendProdReadHtml(p, noMoney, mn){
   if(state.prodOpen!==Number(p.product_id)) return '';
   const orders=Number(p.orders)||0;
   const lines=[];
-  const row=(left, right, color)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding-top:4px${color?';color:var(--'+color+'-ink)':''}"><span>${left}</span>${right?`<span class="num">${right}</span>`:''}</div>`;
-  if(orders===1) lines.push(row(T('1 order','1 单')));
-  else if(orders) lines.push(row(T(orders+' orders', orders+' 单')));
-  if(!noMoney && p.prior_revenue!=null){
-    const units=Number(p.units)||0, prevU=Number(p.prior_units)||0;
-    const rev=Number(p.revenue)||0, prevR=Number(p.prior_revenue)||0;
-    if(units>prevU && rev<prevR) lines.push(row(T('More pieces, less money','件数多了，营收取少了'), '', 'amber'));
-    else if(rev!==prevR){
-      const d=Math.round(rev-prevR), up=d>0;
-      lines.push(row(`${T('Money','营收')} ${up?'+':'−'}${mn(Math.abs(d))}`, '', up?'sage':'amber'));
-    }
-  }
-  if(!noMoney && (Number(p.units)||0)>0){
-    const price=Math.round((Number(p.revenue)||0)/Number(p.units));
-    const prevU=Number(p.prior_units)||0;
-    let tail='';
-    if(prevU>0 && p.prior_revenue!=null){
-      const was=Math.round((Number(p.prior_revenue)||0)/prevU);
-      tail = was===price
-        ? `<span style="color:var(--text-secondary)">${T('same as before','与此前相同')}</span>`
-        : `<span style="color:var(--amber-ink)">${T('was','此前')} ${mn(was)}</span>`;
-    }
-    lines.push(`<div style="display:flex;justify-content:space-between;gap:12px;padding-top:4px"><span>${T('Price','售价')} ${mn(price)}</span>${tail}</div>`);
-  }
+  /* One column of figures. The label is on the left, the number on the right,
+     and every number is the same size, so a change cannot be read as the
+     amount taken and Kept cannot be read as that change. */
+  const fig=(label, value, color)=>`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding-top:12px"><span style="color:var(--text-secondary)">${label}</span><span class="num" style="font-size:17px;font-weight:500;flex:none${color?';color:var(--'+color+'-ink)':''}">${value}</span></div>`;
+  if(orders===1) lines.push(`<div style="font-size:16px">${T('1 order','1 单')}</div>`);
+  else if(orders) lines.push(`<div style="font-size:16px">${T(orders+' orders', orders+' 单')}</div>`);
   const alone=Number(p.alone)||0;
   const w=p.with;
   if(w && Number(w.orders)>0 && (!orders || Number(w.orders)>=alone)){
     const en=w.name_en||w.name_cn||'', zh=w.name_cn||w.name_en||'';
     const of = orders ? T(w.orders+' of '+orders, orders+' 单中的 '+w.orders) : String(w.orders);
-    lines.push(row(escAttr(T('With '+en, '与'+zh+'同单')), of));
+    lines.push(fig(escAttr(T('With '+en, '与'+zh+'同单')), of));
   } else if(alone && (!orders || alone===orders)){
     const word = orders===2 ? T('both orders','两单都是') : (orders===1?T('1 order','1 单'):T((orders||alone)+' orders', (orders||alone)+' 单'));
-    lines.push(row(T('On its own','单独成单'), word));
+    lines.push(fig(T('On its own','单独成单'), word));
+  }
+  if(!noMoney && (Number(p.units)||0)>0){
+    const rev=Number(p.revenue)||0;
+    lines.push(fig(T('This window','本时段'), mn(rev)));
+    if(p.prior_revenue!=null){
+      const units=Number(p.units)||0, prevU=Number(p.prior_units)||0, prevR=Number(p.prior_revenue)||0;
+      if(units>prevU && rev<prevR) lines.push(`<div style="padding-top:12px;color:var(--amber-ink)">${T('More pieces, less money','件数多了，营收取少了')}</div>`);
+      if(rev!==prevR){
+        const d=Math.round(rev-prevR), up=d>0;
+        lines.push(fig(T('vs the one before','对比上一时段'), (up?'+':'−')+mn(Math.abs(d)), up?'sage':'amber'));
+      }
+    }
+    const price=Math.round(rev/Number(p.units));
+    const prevU=Number(p.prior_units)||0;
+    lines.push(fig(T('Price','售价'), mn(price)));
+    if(prevU>0 && p.prior_revenue!=null){
+      const was=Math.round((Number(p.prior_revenue)||0)/prevU);
+      lines.push(was===price
+        ? `<div style="padding-top:12px;color:var(--text-secondary)">${T('same as before','与此前相同')}</div>`
+        : fig(T('was','此前'), mn(was), 'amber'));
+    }
+    if(p.unit_cost!=null && p.kept!=null){
+      const cost=Math.round(Number(p.unit_cost)*Number(p.units));
+      const kept=Number(p.kept), up=kept>=0;
+      lines.push(fig(T('Food cost','食品成本'), mn(cost)));
+      lines.push(fig(T('Kept','留下'), (up?'':'−')+mn(Math.abs(kept)), up?'sage':'amber'));
+    }
   }
   const places=(p.places||[]).filter(x=>Number(x.units)>0);
+  let shops='';
   if(places.length){
     const max=Math.max(1, ...places.map(x=>Number(x.units)||0));
-    lines.push(places.map(x=>{
+    shops=`<div style="margin-top:16px">${places.map(x=>{
       const name=x.kind==='wholesale' ? T('Wholesale','批发')
         : ((LANG==='en'?(x.name_en||x.name_cn):(x.name_cn||x.name_en))||T('Store','门店'));
       const wdt=Math.max(2, Math.round((Number(x.units)||0)/max*100));
-      return `<div style="display:flex;align-items:center;gap:8px;padding-top:5px;font-size:13px"><span style="width:6.6em;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(name)}</span><span style="flex:1;height:6px;background:var(--surface-raised);border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:${wdt}%;background:var(--text-primary)"></i></span><span class="num" style="width:2.4em;text-align:right">${Math.round(Number(x.units)||0)}</span></div>`;
-    }).join(''));
+      return `<div style="display:flex;align-items:center;gap:10px;padding-top:12px;font-size:15px"><span style="width:7em;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(name)}</span><span style="flex:1;height:8px;background:var(--surface-raised);border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:${wdt}%;background:var(--text-primary)"></i></span><span class="num" style="width:3em;text-align:right;font-size:16px;font-weight:500">${Math.round(Number(x.units)||0)}</span></div>`;
+    }).join('')}</div>`;
   }
-  if(!noMoney && p.unit_cost!=null && p.kept!=null && (Number(p.units)||0)>0){
-    const cost=Math.round(Number(p.unit_cost)*Number(p.units));
-    const kept=Number(p.kept), up=kept>=0;
-    const keptWord=(up?'': '−')+mn(Math.abs(kept));
-    lines.push(row(
-      `<span style="color:var(--text-secondary)">${T('Food cost','食品成本')} ${mn(cost)}</span>`,
-      `<span style="color:var(--${up?'sage':'amber'}-ink)">${T('Kept','留下')} ${keptWord}</span>`));
-  }
-  if(!lines.length) return '';
-  return `<div style="margin:8px 0 0 26px;font-size:13.5px">${lines.join('')}</div>`;
+  if(!lines.length && !shops) return '';
+  return `<div style="margin:18px 0 8px 26px;font-size:15px">${lines.join('')}${shops}</div>`;
 }
 function trendAfterBars(){
   const d=state.trendFull; if(!d) return '';
@@ -45608,11 +45610,11 @@ function trendProductChart(rows, noMoney, mn, num){
   const move=p=>{
     if(p.prior_units==null) return '';
     const prev=Number(p.prior_units)||0, cur=Number(p.units)||0;
-    if(!prev) return `<span class="num" style="color:var(--text-secondary);min-width:4.2em;text-align:right;flex:none">0 → ${num(cur)}</span>`;
+    if(!prev) return `<span class="num" style="color:var(--text-secondary);min-width:4.6em;text-align:right;flex:none;font-size:16px">0 → ${num(cur)}</span>`;
     const d=cur-prev;
-    if(!d) return `<span class="num" style="color:var(--text-secondary);min-width:4.2em;text-align:right;flex:none">0</span>`;
+    if(!d) return `<span class="num" style="color:var(--text-secondary);min-width:4.6em;text-align:right;flex:none;font-size:16px">0</span>`;
     const up=d>0;
-    return `<span class="num" style="color:var(--${up?'sage':'amber'}-ink);min-width:4.2em;text-align:right;flex:none">${up?'+':'−'}${num(Math.abs(d))}</span>`;
+    return `<span class="num" style="color:var(--${up?'sage':'amber'}-ink);min-width:4.6em;text-align:right;flex:none;font-size:16px;font-weight:500">${up?'+':'−'}${num(Math.abs(d))}</span>`;
   };
   const chip=(list,cur,cmd)=>`<div style="display:flex;gap:6px;flex-wrap:wrap">${list.map(([k,en,zh])=>
     `<button type="button" onclick="APP.cmd('${cmd}','${k}')" style="padding:4px 10px;border-radius:999px;border:1px solid var(--border-default);font:inherit;font-size:12.5px;cursor:pointer;background:${String(cur)===k?'var(--text-primary)':'transparent'};color:${String(cur)===k?'var(--surface-card)':'var(--text-secondary)'}">${T(en,zh)}</button>`).join('')}</div>`;
@@ -45629,18 +45631,18 @@ function trendProductChart(rows, noMoney, mn, num){
       ? ((keptNeg?'−':'')+mn(Math.abs(Number(p.kept)||0)))
       : ((measure==='revenue'&&!noMoney)?mn(p.revenue):num(p.units));
     const quiet=noMoney?'':(measure==='kept'?num(p.units):measure==='revenue'?num(p.units):mn(p.revenue));
-    return `<div style="padding-top:11px;border-top:1px solid var(--border-default)">
+    return `<div style="padding-top:18px;border-top:1px solid var(--border-default)">
       <button type="button" onclick="APP.cmd('prodDays',${Number(p.product_id)||0})" style="display:block;width:100%;padding:0;border:none;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer">
-      <div style="display:flex;align-items:baseline;gap:8px">
+      <div style="display:flex;align-items:baseline;gap:10px">
         <span class="num" style="width:18px;flex:none;font-size:12px;color:var(--text-secondary)">${i+1}</span>
         <span style="flex:1;min-width:0">
           <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pname(p))}</span>
-          ${quiet?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${quiet}</span>`:''}
+          ${quiet?`<span class="num" style="display:block;margin-top:3px;font-size:14px;color:var(--text-secondary)">${quiet}</span>`:''}
         </span>
-        <span class="num" style="font-weight:500;flex:none${keptNeg?';color:var(--amber-ink)':''}">${big}</span>
+        <span class="num" style="font-size:17px;font-weight:500;flex:none${keptNeg?';color:var(--amber-ink)':''}">${big}</span>
         ${move(p)}
       </div></button>
-      <div style="position:relative;height:8px;margin:6px 0 0 26px;background:var(--surface-raised);border-radius:4px">
+      <div style="position:relative;height:8px;margin:12px 0 0 26px;background:var(--surface-raised);border-radius:4px">
         <div style="position:absolute;left:0;top:0;bottom:0;width:${w}%;background:var(--text-primary);border-radius:4px"></div>
         ${mark}
       </div>
