@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Product ranking on Trend</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   PRODUCT RANKING ON TREND — three options, one sample week.
+
+   The phone Trend card today names a single top earner. Desktop
+   Reports stops at 15, ranked by money, and prints units. Neither
+   says whether a product is selling more or less than the window
+   before.
+
+   Every frame below uses the same eight products, last 7 days
+   against the 7 days before. The figures are sample. They are not
+   this shop's sales.
+
+   Down is the Reports delta's clay (amber ink), never an error red.
+   A product with no sales in the prior window prints "0 → n", not
+   a percent. New products are kept out of the up/down lists: a
+   jump from nothing is a different fact from a jump from 80 to 141.
+
+   ENGLISH ONLY inside the frames, per the standing mockup rule.
+   Proposed Chinese sits in the words table at the bottom.
+
+   Type inside a frame is Inter 400/500. Fraunces appears once, on
+   this document's title. No dusk: nothing here is the AI.
+   ============================================================ */
+:root {
+  --td-surface:#FFFFFF; --td-raised:#F6F3EC; --td-border:#E4E0D5;
+  --td-text:#111A2B; --td-text2:#58606E;
+  --td-sage-ink:#4A6249; --td-amber-ink:#8A6425;
+  --td-paper:#FBF9F4;
+  --f-sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+  --f-display:"Fraunces",Georgia,serif;
+  --r-card:14px; --r-control:8px;
+}
+:root[data-theme="dark"] {
+  --td-surface:#18233A; --td-raised:#1E2A44; --td-border:#2A3550;
+  --td-text:#FBF9F4; --td-text2:#9AA3B2;
+  --td-sage-ink:#A3B49F; --td-amber-ink:#C9954A;
+  --td-paper:#111A2B;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0; font-family:var(--f-sans); background:#EDEAE2; color:#111A2B;
+  -webkit-font-smoothing:antialiased; padding:48px 24px 96px; line-height:1.6;
+}
+button { font:inherit; color:inherit; background:none; border:0; cursor:default; }
+.num { font-variant-numeric:tabular-nums; }
+.doc { max-width:1180px; margin:0 auto; }
+.doc h1 {
+  font-family:var(--f-display); font-weight:300; font-size:40px; line-height:1.15;
+  margin:0 0 10px; letter-spacing:-0.01em; text-wrap:balance;
+}
+.lede { font-size:17px; margin:0 0 8px; max-width:72ch; color:#2B3444; }
+.meta { font-size:13px; color:#58606E; margin:0 0 8px; max-width:78ch; }
+.bar {
+  position:sticky; top:0; z-index:5; display:flex; gap:16px; align-items:center;
+  margin:18px -24px 8px; padding:10px 24px;
+  background:#111A2B; color:#FBF9F4; font-size:13px;
+}
+.bar b { font-weight:500; }
+.bar label { display:inline-flex; gap:6px; align-items:center; cursor:pointer; opacity:.8; }
+.doc h2 { font-size:18px; font-weight:500; margin:48px 0 4px; }
+.rec { font-size:12px; font-weight:500; color:#4A6249; margin-left:8px; }
+.doc h2 + p, .opt-s { font-size:14px; color:#2B3444; margin:0 0 16px; max-width:78ch; }
+.opt-s b, .note b { font-weight:500; color:#111A2B; }
+.row { display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap; }
+.note { font-size:13px; color:#58606E; max-width:32ch; }
+.note ul { margin:8px 0 0; padding-left:16px; }
+.note li { margin:0 0 6px; }
+.good { color:#4A6249; } .bad { color:#8A6425; }
+
+/* frames sit on the product's own paper, so dark mode reaches them only */
+.skin { background:var(--td-paper); color:var(--td-text); border-radius:18px; }
+.phone { width:390px; flex:none; padding:14px 14px 18px; border:1px solid #C9C4B8; border-radius:22px; }
+.desk { width:640px; flex:none; padding:18px; border:1px solid #C9C4B8; border-radius:18px; }
+.cap { font-size:12px; color:#58606E; margin:8px 0 0; max-width:390px; }
+.cap.wide { max-width:640px; }
+
+.chips { display:flex; gap:3px; background:var(--td-raised); border-radius:11px; padding:3px; margin-bottom:12px; }
+.chips span {
+  flex:1; text-align:center; padding:7px 4px; border-radius:9px;
+  font-size:13px; color:var(--td-text2);
+}
+.chips span.on { background:var(--td-surface); color:var(--td-text); font-weight:500; }
+
+.card { background:var(--td-surface); border:1px solid var(--td-border); border-radius:var(--r-card); padding:14px 14px 8px; }
+.card + .card { margin-top:12px; }
+.hd { display:flex; align-items:baseline; gap:8px; margin-bottom:2px; }
+.hd h3 { font-size:15px; font-weight:500; }
+.hd .sub { margin-left:auto; font-size:12px; color:var(--td-text2); }
+.sorts { display:flex; gap:6px; margin:10px 0 4px; }
+.sorts span {
+  font-size:12.5px; padding:3px 10px; border-radius:999px;
+  border:1px solid var(--td-border); color:var(--td-text2);
+}
+.sorts span.on { background:var(--td-text); border-color:var(--td-text); color:var(--td-paper); }
+
+.pr { display:flex; align-items:baseline; gap:10px; padding:10px 0; border-top:1px solid var(--td-border); font-size:14px; }
+.pr:first-of-type { border-top:none; }
+.ix { width:16px; flex:none; font-size:12px; color:var(--td-text2); }
+.nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.units { color:var(--td-text2); font-size:13px; flex:none; }
+.money { font-weight:500; flex:none; }
+.sheet .units { width:2.6em; text-align:right; }
+.sheet .money { width:5.4em; text-align:right; }
+.delta { flex:none; font-size:13px; text-align:right; width:7.4em; white-space:nowrap; }
+.cols { display:flex; gap:10px; margin-top:8px; font-size:12px; color:var(--td-text2); }
+.cols .nm { flex:1; }
+.cols .u { width:2.6em; text-align:right; }
+.cols .m { width:5.4em; text-align:right; }
+.cols .c { width:7.4em; text-align:right; }
+.delta .pct { color:var(--td-text2); font-weight:400; margin-left:4px; }
+.up { color:var(--td-sage-ink); } .down { color:var(--td-amber-ink); } .flat { color:var(--td-text2); }
+.stack .pr { align-items:flex-start; }
+.stack .nm { white-space:normal; }
+.stack .who { display:block; }
+.stack .quiet { display:block; font-size:12.5px; color:var(--td-text2); margin-top:1px; }
+
+.hlist { font-size:12px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; color:var(--td-text2); margin:14px 0 0; }
+.foot { font-size:12.5px; color:var(--td-text2); border-top:1px solid var(--td-border); margin-top:4px; padding:10px 0 8px; }
+
+.pair { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.mini .pr { padding:8px 0; }
+
+.kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:12px; }
+.kpis .v { font-size:18px; font-weight:500; }
+.kpis .l { font-size:12.5px; color:var(--td-text2); }
+.sentence { margin-top:12px; font-size:14px; }
+.bars { display:flex; align-items:flex-end; gap:6px; height:56px; margin-top:12px; }
+.bars i { flex:1; background:var(--td-text); border-radius:2px 2px 0 0; display:block; }
+.axis { display:flex; justify-content:space-between; font-size:12px; color:var(--td-text2); margin-top:6px; }
+
+table.words { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; }
+table.words th { text-align:left; font-weight:500; font-size:12px; color:#58606E; padding:8px 10px; border-bottom:1px solid #C9C4B8; }
+table.words td { padding:8px 10px; border-bottom:1px solid #E4E0D5; vertical-align:top; }
+table.words td:first-child { white-space:nowrap; }
+</style>
+</head>
+<body>
+
+<div class="doc">
+  <h1>Product ranking on Trend</h1>
+  <p class="lede">Three ways to list what sold, best to worst, and to see which products are moving. Same eight products in every frame. Last 7 days against the 7 days before.</p>
+  <p class="meta">Sample figures, not this shop’s sales. The window is the one Trend already uses. A tap opens the product you already have, with its line drawn.</p>
+
+  <div class="bar">
+    <b>Sample week</b>
+    <span style="opacity:.55">8 products · prior window is the 7 days before</span>
+    <span style="flex:1"></span>
+    <label><input type="checkbox" onchange="document.documentElement.setAttribute('data-theme', this.checked ? 'dark' : 'light')"> Dark</label>
+  </div>
+
+  <h2>Today</h2>
+  <p class="opt-s">Trend names the one product that earned the most. Desktop Reports lists 15, by money, and shows units. Nothing compares a product with the window before.</p>
+  <div class="row">
+    <div class="skin phone">
+      <div class="chips"><span>Yesterday</span><span class="on">7 days</span><span>30 days</span><span>90 days</span></div>
+      <div class="card">
+        <div class="hd"><h3>Products &amp; traffic</h3></div>
+        <div class="pr"><span class="nm">Top earner</span><span class="money">Greens 300ml</span></div>
+        <div class="pr"><span class="nm">Units sold</span><span class="money">186 · ¥4,836</span></div>
+        <div class="pr"><span class="nm">Sessions became orders</span><span class="money">4.2%</span></div>
+      </div>
+    </div>
+    <div class="note"><b>What this answers</b>
+      <ul>
+        <li>Which single product earned the most.</li>
+        <li class="bad">Ginger shot earned the second most and sold 18 fewer. Invisible.</li>
+        <li class="bad">Oat milk gained 61 units. Invisible.</li>
+        <li class="bad">No order switch between money and units.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>A · The change sits on the row <span class="rec">recommended</span></h2>
+  <p class="opt-s">One list. <b>Money</b> or <b>Units</b> sets the order. Every row shows units, money, and the unit change against the prior window. The percent sits beside the change and never decides the order. A first-time seller prints <b>0 → 88</b>.</p>
+  <div class="row">
+    <div class="skin phone">
+      <div class="chips"><span>Yesterday</span><span class="on">7 days</span><span>30 days</span><span>90 days</span></div>
+      <div class="card stack">
+        <div class="hd"><h3>Top products</h3><span class="sub">vs prior 7 days</span></div>
+        <div class="sorts"><span class="on">Money</span><span>Units</span></div>
+        <div class="pr"><span class="ix num">1</span><span class="nm"><span class="who">Greens 300ml</span><span class="quiet num">186 units · ¥4,836</span></span><span class="delta up num">+42 <span class="pct">+29%</span></span></div>
+        <div class="pr"><span class="ix num">2</span><span class="nm"><span class="who">Ginger shot</span><span class="quiet num">164 units · ¥3,280</span></span><span class="delta down num">−18 <span class="pct">−10%</span></span></div>
+        <div class="pr"><span class="ix num">3</span><span class="nm"><span class="who">Oat milk 1L</span><span class="quiet num">141 units · ¥2,538</span></span><span class="delta up num">+61 <span class="pct">+76%</span></span></div>
+        <div class="pr"><span class="ix num">4</span><span class="nm"><span class="who">Harissa</span><span class="quiet num">88 units · ¥2,112</span></span><span class="delta flat num">0 → 88</span></div>
+        <div class="pr"><span class="ix num">5</span><span class="nm"><span class="who">Quinoa 500g</span><span class="quiet num">51 units · ¥1,632</span></span><span class="delta down num">−22 <span class="pct">−30%</span></span></div>
+        <div class="pr"><span class="ix num">6</span><span class="nm"><span class="who">Berry yogurt</span><span class="quiet num">74 units · ¥1,480</span></span><span class="delta up num">+2 <span class="pct">+3%</span></span></div>
+        <div class="pr"><span class="ix num">7</span><span class="nm"><span class="who">Mango sorbet</span><span class="quiet num">39 units · ¥1,170</span></span><span class="delta up num">+11 <span class="pct">+39%</span></span></div>
+        <div class="pr"><span class="ix num">8</span><span class="nm"><span class="who">House granola</span><span class="quiet num">22 units · ¥660</span></span><span class="delta down num">−9 <span class="pct">−29%</span></span></div>
+      </div>
+    </div>
+    <div class="skin desk">
+      <div class="card sheet">
+        <div class="hd"><h3>Top products</h3><span class="sub">by money · vs prior 7 days</span></div>
+        <div class="sorts"><span class="on">Money</span><span>Units</span></div>
+        <div class="cols"><span class="ix"></span><span class="nm"></span><span class="u">Units</span><span class="m">Money</span><span class="c">Change</span></div>
+        <div class="pr"><span class="ix num">1</span><span class="nm">Greens 300ml</span><span class="units num">186</span><span class="money num">¥4,836</span><span class="delta up num">+42 <span class="pct">+29%</span></span></div>
+        <div class="pr"><span class="ix num">2</span><span class="nm">Ginger shot</span><span class="units num">164</span><span class="money num">¥3,280</span><span class="delta down num">−18 <span class="pct">−10%</span></span></div>
+        <div class="pr"><span class="ix num">3</span><span class="nm">Oat milk 1L</span><span class="units num">141</span><span class="money num">¥2,538</span><span class="delta up num">+61 <span class="pct">+76%</span></span></div>
+        <div class="pr"><span class="ix num">4</span><span class="nm">Harissa</span><span class="units num">88</span><span class="money num">¥2,112</span><span class="delta flat num">0 → 88</span></div>
+        <div class="pr"><span class="ix num">5</span><span class="nm">Quinoa 500g</span><span class="units num">51</span><span class="money num">¥1,632</span><span class="delta down num">−22 <span class="pct">−30%</span></span></div>
+        <div class="pr"><span class="ix num">6</span><span class="nm">Berry yogurt</span><span class="units num">74</span><span class="money num">¥1,480</span><span class="delta up num">+2 <span class="pct">+3%</span></span></div>
+        <div class="pr"><span class="ix num">7</span><span class="nm">Mango sorbet</span><span class="units num">39</span><span class="money num">¥1,170</span><span class="delta up num">+11 <span class="pct">+39%</span></span></div>
+        <div class="pr"><span class="ix num">8</span><span class="nm">House granola</span><span class="units num">22</span><span class="money num">¥660</span><span class="delta down num">−9 <span class="pct">−29%</span></span></div>
+      </div>
+    </div>
+  </div>
+  <p class="cap">Phone, inside the existing Trend card. Units sorts the same rows by the units figure. Berry yogurt then sits above quinoa.</p>
+
+  <h2>B · A ranking, then who moved</h2>
+  <p class="opt-s">The full list stays a ranking. Movement is two short lists under it, ordered by <b>how many units changed</b>. Harissa is a line of its own, because it had no prior sales to change from.</p>
+  <div class="row">
+    <div class="skin phone">
+      <div class="chips"><span>Yesterday</span><span class="on">7 days</span><span>30 days</span><span>90 days</span></div>
+      <div class="card sheet">
+        <div class="hd"><h3>Top products</h3><span class="sub">by money</span></div>
+        <div class="sorts"><span class="on">Money</span><span>Units</span></div>
+        <div class="pr"><span class="ix num">1</span><span class="nm">Greens 300ml</span><span class="units num">186</span><span class="money num">¥4,836</span></div>
+        <div class="pr"><span class="ix num">2</span><span class="nm">Ginger shot</span><span class="units num">164</span><span class="money num">¥3,280</span></div>
+        <div class="pr"><span class="ix num">3</span><span class="nm">Oat milk 1L</span><span class="units num">141</span><span class="money num">¥2,538</span></div>
+        <div class="pr"><span class="ix num">4</span><span class="nm">Harissa</span><span class="units num">88</span><span class="money num">¥2,112</span></div>
+        <div class="pr"><span class="ix num">5</span><span class="nm">Quinoa 500g</span><span class="units num">51</span><span class="money num">¥1,632</span></div>
+        <div class="pr"><span class="ix num">6</span><span class="nm">Berry yogurt</span><span class="units num">74</span><span class="money num">¥1,480</span></div>
+        <div class="pr"><span class="ix num">7</span><span class="nm">Mango sorbet</span><span class="units num">39</span><span class="money num">¥1,170</span></div>
+        <div class="pr"><span class="ix num">8</span><span class="nm">House granola</span><span class="units num">22</span><span class="money num">¥660</span></div>
+        <div class="hlist">Selling more</div>
+        <div class="pr"><span class="nm">Oat milk 1L</span><span class="delta up num">+61</span></div>
+        <div class="pr"><span class="nm">Greens 300ml</span><span class="delta up num">+42</span></div>
+        <div class="pr"><span class="nm">Mango sorbet</span><span class="delta up num">+11</span></div>
+        <div class="pr"><span class="nm">Berry yogurt</span><span class="delta up num">+2</span></div>
+        <div class="hlist">Selling less</div>
+        <div class="pr"><span class="nm">Quinoa 500g</span><span class="delta down num">−22</span></div>
+        <div class="pr"><span class="nm">Ginger shot</span><span class="delta down num">−18</span></div>
+        <div class="pr"><span class="nm">House granola</span><span class="delta down num">−9</span></div>
+        <div class="foot">First sales this window · Harissa, 88 units</div>
+      </div>
+    </div>
+    <div class="note"><b>Trade</b>
+      <ul>
+        <li class="good">The movers are named, so you don’t scan every row.</li>
+        <li class="good">Oat milk leads “selling more” even though it is third by money.</li>
+        <li class="bad">Ginger shot is in the ranking and again in “selling less.”</li>
+        <li class="bad">On a phone the second list starts below the fold.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>C · The sort is the question</h2>
+  <p class="opt-s">One list, four orders: <b>Money</b>, <b>Units</b>, <b>More</b>, <b>Fewer</b>. The right-hand figure is whichever you picked. You see one question at a time.</p>
+  <div class="row">
+    <div class="skin phone">
+      <div class="card sheet">
+        <div class="hd"><h3>Top products</h3><span class="sub">vs prior 7 days</span></div>
+        <div class="sorts"><span class="on">Money</span><span>Units</span><span>More</span><span>Fewer</span></div>
+        <div class="pr"><span class="ix num">1</span><span class="nm">Greens 300ml</span><span class="money num">¥4,836</span></div>
+        <div class="pr"><span class="ix num">2</span><span class="nm">Ginger shot</span><span class="money num">¥3,280</span></div>
+        <div class="pr"><span class="ix num">3</span><span class="nm">Oat milk 1L</span><span class="money num">¥2,538</span></div>
+        <div class="pr"><span class="ix num">4</span><span class="nm">Harissa</span><span class="money num">¥2,112</span></div>
+        <div class="pr"><span class="ix num">5</span><span class="nm">Quinoa 500g</span><span class="money num">¥1,632</span></div>
+        <div class="pr"><span class="ix num">6</span><span class="nm">Berry yogurt</span><span class="money num">¥1,480</span></div>
+        <div class="pr"><span class="ix num">7</span><span class="nm">Mango sorbet</span><span class="money num">¥1,170</span></div>
+        <div class="pr"><span class="ix num">8</span><span class="nm">House granola</span><span class="money num">¥660</span></div>
+      </div>
+    </div>
+    <div class="skin phone">
+      <div class="card">
+        <div class="hd"><h3>Top products</h3><span class="sub">vs prior 7 days</span></div>
+        <div class="sorts"><span>Money</span><span>Units</span><span class="on">More</span><span>Fewer</span></div>
+        <div class="pr"><span class="ix num">1</span><span class="nm">Oat milk 1L</span><span class="delta up num">+61 units</span></div>
+        <div class="pr"><span class="ix num">2</span><span class="nm">Greens 300ml</span><span class="delta up num">+42 units</span></div>
+        <div class="pr"><span class="ix num">3</span><span class="nm">Mango sorbet</span><span class="delta up num">+11 units</span></div>
+        <div class="pr"><span class="ix num">4</span><span class="nm">Berry yogurt</span><span class="delta up num">+2 units</span></div>
+        <div class="foot">First sales this window · Harissa, 88 units. Fewer lists quinoa, ginger shot, granola.</div>
+      </div>
+    </div>
+  </div>
+  <p class="cap wide">Left is the money ranking. Right is the same card after More. Ginger shot’s slip only appears once you pick Fewer.</p>
+  <div class="note" style="max-width:78ch;margin-top:12px"><b>Trade</b>
+    <ul>
+      <li class="good">The shortest row. One number, and it matches the sort.</li>
+      <li class="bad">A best seller that is slipping never shows both facts together.</li>
+      <li class="bad">Units sold disappear the moment you look at movement.</li>
+    </ul>
+  </div>
+
+  <h2>A tap opens the product</h2>
+  <p class="opt-s">Same destination from A, B, or C. This is Ginger shot, the second earner, down 18. The seven bars are the seven days. A product that sells on a handful of days keeps the sentence it already has and does not grow a chart of empty days.</p>
+  <div class="row">
+    <div class="skin phone">
+      <div class="card">
+        <div class="hd"><h3>Ginger shot</h3><span class="sub">last 7 days</span></div>
+        <div class="kpis">
+          <div><div class="v num">164</div><div class="l">units</div></div>
+          <div><div class="v num">¥3,280</div><div class="l">money</div></div>
+          <div><div class="v num down">−18</div><div class="l">vs prior 7 days</div></div>
+        </div>
+        <div class="bars" aria-hidden="true">
+          <i style="height:90%"></i><i style="height:71%"></i><i style="height:100%"></i><i style="height:58%"></i><i style="height:77%"></i><i style="height:61%"></i><i style="height:71%"></i>
+        </div>
+        <div class="axis"><span>Mon</span><span>Sun</span></div>
+        <div class="sentence">Sold every day. Last sale was yesterday. #2 by money.</div>
+      </div>
+    </div>
+    <div class="note"><b>Why ginger, not the leader</b>
+      <ul>
+        <li>Greens is up. The row already said that.</li>
+        <li>The line is for the product whose total and whose direction disagree.</li>
+        <li class="good">Seven days of a steady seller is a real shape.</li>
+        <li class="bad">A quiet product’s daily line is mostly blank. That case stays a sentence.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Words</h2>
+  <p class="opt-s">Inside the frames, English only. These are the pairs a build would use. Locked ones are copied from the live screens. The two movement headings are not locked.</p>
+  <table class="words">
+    <thead><tr><th>English</th><th>Chinese</th><th>Where it comes from</th></tr></thead>
+    <tbody>
+      <tr><td>Top products</td><td>商品排行</td><td>Live, the desktop panel heading.</td></tr>
+      <tr><td>Money</td><td>营收</td><td>Live. The current meta says 按营收排序.</td></tr>
+      <tr><td>Units</td><td>件数</td><td>Live. The same meta says 显示件数.</td></tr>
+      <tr><td>vs prior 7 days</td><td>对比前 7 天</td><td>Live, on Trend and on Reports.</td></tr>
+      <tr><td>Selling more</td><td>卖得更多</td><td>Not locked. Proposed for option B only.</td></tr>
+      <tr><td>Selling less</td><td>卖得更少</td><td>Not locked. Proposed for option B only.</td></tr>
+      <tr><td>First sales this window</td><td>本时段首次售出</td><td>Not locked. 时段 is the word Trend already uses.</td></tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>
