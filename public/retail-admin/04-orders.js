@@ -454,16 +454,25 @@ let _ORDERS_IN_FLIGHT = false;
 let _ORDERS_REQ_ID = 0;
 
 // Cheap fingerprint — id + status + tracking + refund + updated_at for
-// each row. Catches new orders, status changes, and refund transitions.
+// each row, plus the live courier stage. The stage lives on delivery_jobs,
+// so an order's own updated_at does not move when a rider is being sought.
+// Leaving it out made a silent refetch look identical and the "Finding a
+// rider" pill stay hidden until a full reload. ETA and the job's own
+// updated_at are NOT in here: those tick on every daemon poll and would
+// rebuild the table for a dot that had not moved.
 function _ordersFp(rows) {
   let s = rows.length + '|';
   for (const r of rows) {
+    const c = r.courier || {};
     s += r.id + ':' + (r.status||'') + ':'
        + (r.refund_status||'') + ':'
        + (r.invoice_status||'') + ':'
        + (r.tracking_number||'') + ':'
        + (r.local_eta||'') + ':'
-       + (r.updated_at || r.placed_at || '') + ',';
+       + (r.updated_at || r.placed_at || '') + ':'
+       + (c.stage || '') + ':'
+       + (c.rider_name || '') + ':'
+       + (c.cancelled_at || '') + ',';
   }
   return s;
 }
@@ -5033,6 +5042,133 @@ async function mountCourierMap(o) {
   if (_courierMap === state) state.timer = setInterval(poll, 25000);
 }
 
+// What the courier card is currently saying, reduced to the fields that
+// change its words. GPS and the "~N min" countdown tick on every daemon
+// poll and must not rebuild the drawer. `scheduled` says nothing on the
+// card (no entry in COURIER_STAGE), so it shares the empty key with "no
+// job yet".
+function courierCardKey(c) {
+  if (!c || !c.stage || c.stage === 'scheduled') return '';
+  const rider = c.rider || {};
+  const name = rider.name || c.rider_name || '';
+  const phone = rider.phone || c.rider_phone || '';
+  return [c.stage, name, phone, c.cancelled_at || ''].join('|');
+}
+
+// True when the live track would paint a different card than the one on
+// screen. A cancel comes back as tracking:false (the shopper endpoint hides
+// it, and this one shares that payload) — that is a change only while the
+// card is still describing a live run. A dispatch we just accepted can be
+// ahead of the daemon: the drawer already says "Finding a rider" while the
+// mirror still says scheduled. Taking the card back down for that gap is
+// the bug this exists to close.
+function courierStageMoved(shown, track) {
+  const have = courierCardKey(shown);
+  if (!track || track.tracking === false) {
+    if (!shown || !shown.stage || shown.stage === 'scheduled' || shown.stage === 'cancelled') return false;
+    return true;
+  }
+  const next = courierCardKey(track);
+  if (next === have) return false;
+  if (shown && shown.stage === 'awaiting_dispatch' && (!track.stage || track.stage === 'scheduled')) return false;
+  return true;
+}
+
+// An order whose rider stage can still change while the drawer sits open.
+// A finished order with no live run has nothing to catch up on.
+function courierOrderWatchable(o) {
+  if (!o) return false;
+  const stage = o.courier && o.courier.stage;
+  // Delivered, as a stage or as the order, is the end of the card. A cancel
+  // is not: the next thing staff do is call another rider, and that has to
+  // show up on the same open drawer.
+  if (stage === 'delivered') return false;
+  if (['delivered', 'cancelled', 'refunded'].includes(o.status)) return false;
+  if (stage === 'awaiting_dispatch' || stage === 'heading_to_pickup' || stage === 'in_transit'
+      || stage === 'scheduled' || stage === 'cancelled') return true;
+  return !!(o.qingyun_ship_from || o.is_local);
+}
+
+// The operator is in the middle of the drawer. Rebuilding it would throw
+// away the arrival time they just typed, the carrier list they are picking
+// from, or a confirm that is still up.
+function courierDrawerBusy() {
+  if (document.querySelector('.tdlg-scrim.on')) return true;
+  const drawer = document.getElementById('order-drawer');
+  const ae = document.activeElement;
+  if (ae && drawer && drawer.contains(ae) && ae.matches('input, textarea, select, [contenteditable="true"]')) return true;
+  const o = _OPEN_ORDER;
+  if (!o) return false;
+  const carriers = document.getElementById('qy-carriers-' + o.id);
+  if (carriers && carriers.childElementCount) return true;
+  const resched = document.getElementById('qp-resched-' + o.id);
+  if (resched && resched.childElementCount) return true;
+  const shipments = o.shipments || [];
+  for (let i = 0; i < shipments.length; i++) {
+    const hid = document.getElementById('eta-time-' + shipments[i].id);
+    if (hid && (hid.value || '') !== (shipments[i].local_eta || '')) return true;
+  }
+  return false;
+}
+
+// While the drawer is open, follow the rider stage. The map poll does not
+// do this: it only starts once a rider is already on the way, so the step
+// into "Finding a rider" had nobody watching it. The live hub is the fast
+// path (the watermark now moves when delivery_jobs' stage does). The timer
+// is the backstop for a socket that looks open and delivers nothing.
+let _courierWatch = null;
+function _ensureCourierWatchHub() {
+  if (window._courierWatchHub) return;
+  window._courierWatchHub = true;
+  if (typeof retailLiveSubscribe === 'function') retailLiveSubscribe(_courierLiveNudge);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshOpenCourierIfMoved();
+  });
+}
+function _courierLiveNudge() {
+  if (!_courierWatch) return;
+  clearTimeout(_courierWatch.debounce);
+  _courierWatch.debounce = setTimeout(refreshOpenCourierIfMoved, 400);
+}
+function startCourierWatch(o) {
+  stopCourierWatch();
+  if (!courierOrderWatchable(o)) return;
+  _ensureCourierWatchHub();
+  _courierWatch = {
+    orderId: o.id,
+    busy: false,
+    debounce: null,
+    timer: setInterval(refreshOpenCourierIfMoved, 15000),
+  };
+}
+function stopCourierWatch() {
+  if (!_courierWatch) return;
+  clearInterval(_courierWatch.timer);
+  clearTimeout(_courierWatch.debounce);
+  _courierWatch = null;
+}
+async function refreshOpenCourierIfMoved() {
+  if (document.hidden) return;
+  const watch = _courierWatch;
+  const o = _OPEN_ORDER;
+  if (!watch || !o || watch.orderId !== o.id || watch.busy) return;
+  if (courierDrawerBusy()) return;
+  watch.busy = true;
+  const id = o.id;
+  try {
+    const r = await api('/api/retail-admin/orders/' + id + '/delivery-track');
+    if (!_courierWatch || _courierWatch.orderId !== id || !_OPEN_ORDER || _OPEN_ORDER.id !== id) return;
+    if (!courierStageMoved(_OPEN_ORDER.courier, r && r.data)) return;
+    if (courierDrawerBusy()) return;
+    const mount = document.getElementById('order-detail-mount');
+    const scrollTop = mount ? mount.scrollTop : 0;
+    await openOrder(id, { instant: true, scrollTop });
+  } catch (e) { /* next tick */ }
+  finally {
+    if (_courierWatch && _courierWatch.orderId === id) _courierWatch.busy = false;
+  }
+}
+
 // Same-city courier dispatch (青云聚信) — compare live carrier prices and send a rider
 // straight from here, instead of the Qingyun app. Only meaningful once the order is in
 // Qingyun (auto-pushed as 待配送). Loads on demand (a click) so the drawer stays fast.
@@ -6263,7 +6399,13 @@ function odFocusPointSection(orderId) {
   return true;
 }
 
+let _openOrderSeq = 0;
 async function openOrder(id, opts = {}) {
+  // A courier refresh and a click can both be in flight. The later call is
+  // the one the operator is looking at; the earlier one must not paint over it
+  // when its fetch comes back.
+  const seq = ++_openOrderSeq;
+  stopCourierWatch();          // the fetch below is the fresh read; don't poll the order we just left
   _OPEN_ORDER = null;
   _ORDER_BACK_CUSTOMER = null;
   _ODM_OPEN = false;               // Refund/Cancel menu closed on a fresh open
@@ -6308,10 +6450,12 @@ async function openOrder(id, opts = {}) {
   // we fetch, then run a bounded 396ms cross-fade once the data is in hand.
   try {
     const o = (await fetchP)[0].data;
+    if (seq !== _openOrderSeq) return;
     _OPEN_ORDER = o;
     if (switching) {
       mount.classList.add('od-swapping');                       // fade old out (317ms)
       await new Promise(r => setTimeout(r, 317));
+      if (seq !== _openOrderSeq) return;
       renderOpenOrder(o);                                       // swap into hidden mount
       requestAnimationFrame(() => mount.classList.remove('od-swapping'));  // fade new in
     } else {
@@ -6324,6 +6468,10 @@ async function openOrder(id, opts = {}) {
     // Live rider map — mounts only when the drawer rendered a courier-map
     // container (an on-the-way same-city order). Self-tears-down any prior map.
     try { mountCourierMap(o); } catch (e) { /* map is best-effort */ }
+    // Same moment as the map: the drawer is on screen and holding this order.
+    // Covers the stretch before a rider exists, which the map deliberately
+    // does not — that is when "Finding a rider" has to appear on its own.
+    startCourierWatch(o);
     // Same contract for the delivery-point map: the element has to exist and
     // have a width before any SDK will lay a map into it, so it mounts here
     // rather than inside the template. Only a parked order renders the box.
@@ -6348,6 +6496,7 @@ async function openOrder(id, opts = {}) {
     const _crumb = document.getElementById('ord-page-crumb');
     if (_crumb) _crumb.textContent = o.order_no || '';
   } catch (e) {
+    if (seq !== _openOrderSeq) return;
     mount.innerHTML = `<div class="order-card err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
     mount.classList.remove('od-swapping');
   }
@@ -6372,6 +6521,7 @@ async function openOrder(id, opts = {}) {
   // the error path never scrolls; nothing async runs between the catch and here
   // for a concurrent open to race with; and a missing #qp-<id> is still a clean
   // no-op inside odFocusPointSection.
+  if (seq !== _openOrderSeq) return;
   if (opts.focus === 'point' && _OPEN_ORDER) odFocusPointSection(_OPEN_ORDER.id);
 }
 
@@ -6562,6 +6712,7 @@ document.addEventListener('click', (e) => {
 // Order-drawer cleanup hook — clear the mount after slide-out.
 onDrawerClose('#order-drawer', () => {
   teardownCourierMap();            // stop polling + destroy the AMap instance
+  stopCourierWatch();
   const m = document.getElementById('order-detail-mount');
   if (m) m.innerHTML = '';
   _OPEN_ORDER = null;
