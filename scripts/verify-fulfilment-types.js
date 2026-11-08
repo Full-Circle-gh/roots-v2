@@ -1779,9 +1779,24 @@ const walletsBlock = (/var WALLETS = \[[\s\S]*?\n  \];/.exec(TILL_SRC) || [''])[
    The window is exactly this function, so a composed label anywhere else on the
    page is still a failure. */
 const doorsBlock = (/\n  function homeFromDoor\(home\) \{[\s\S]*?\n  \}\n/.exec(TILL_SRC) || [''])[0];
+/* A FOURTH DECLARED BLOCK, on the same terms. askWhat is the shared refusal
+   helper (lib/option-ask.js), pasted byte-for-byte into the till because the
+   page loads no external script. scripts/test_option_ask.js fails if this
+   copy drifts from the QR menu, the phone, the desktop and the mini app.
+   The three characters in it are not till labels: 是 and 否 are the yes/no
+   sentinels that keep "Please choose: Heat up?" from becoming "Yes or No",
+   and 或 is the conjunction the vocabulary already declared as composed
+   (v1.401, A或B). Routing them through STRINGS would make this copy differ
+   from the others and put that guard out. The window is exactly this
+   function. The check under it refuses any other character inside it, so a
+   composed label still cannot hide here. */
+const askBlock = (/\nfunction askWhat\(choices, qEn, qCn\) \{[\s\S]*?\n\}\n/.exec(TILL_SRC) || [''])[0];
+const askCn = [...new Set(askBlock.match(/[一-鿿]+/g) || [])].sort();
+check('the shared refusal helper on the till holds only 是, 否 and 或',
+  askCn, ['否', '或', '是']);
 const authCn = (/请先在后台登录[^']*/g);
 const declared = new Set(
-  ((stringsBlock + walletsBlock + doorsBlock).match(/[一-鿿]+/g) || [])
+  ((stringsBlock + walletsBlock + doorsBlock + askBlock).match(/[一-鿿]+/g) || [])
 );
 // The one CN string outside those two blocks is the signed-out line, which is
 // reused verbatim in two places; it is listed here rather than left unexplained.
