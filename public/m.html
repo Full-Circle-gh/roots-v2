@@ -1026,6 +1026,9 @@ const state = {
   roles:[],            /* the tenant's own roles, so a role is named the way its shop names it */
   caps:null,           /* the signed-in operator's effective permissions; null = unknown, treated as allowed */
   trend:null, trendFull:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
+  /* Product bars on Trend. Units lands first because the change is units.
+     20 is the cut until 10, 50, or all is picked. */
+  prodMeasure:'units', prodN:'20',
   /* §300 F5 — Reports on the phone: the custom days, the store picked, whether
      the stores were asked for, the AI read (per window key) and the Ask log. */
   trendFrom:null, trendTo:null, trendStore:'', trendStoresTried:false,
@@ -6444,6 +6447,8 @@ reg('trendRange', v=>{
   state.trendRange=v; state.trendFrom=null; state.trendTo=null; render(); loadTrend(); });
 reg('trendMetric', v=>{ state.trendMetric=v; render(); });
 reg('trendSection', k=>{ state.trendOpen[k]=!state.trendOpen[k]; render(); });
+reg('prodMeasure', v=>{ state.prodMeasure=v; render(); });
+reg('prodN', v=>{ state.prodN=v; render(); });
 reg('openChannel', k=>{ state.chanSheet=k; state.chanErr=null; render(); });
 reg('closeChannel', ()=>{ state.chanSheet=null; state.chanErr=null; render(); });
 /* §325 S2m — WHAT CLOSING ELEME ACTUALLY DOES. Closing Eleme at a store writes
@@ -45349,6 +45354,74 @@ function trendBestDow(vals){
   return b<0?null:T(TREND_DOW[b][0],TREND_DOW[b][1]);
 }
 
+/* The product bars. One bar per product that sold. The length is this window
+   in the measure picked (units, or revenue when the account may see money).
+   The mark is the window before, on the same scale. The figure on the right
+   of the name is always the unit change: a first sale in the window reads
+   "0 → n", not a percent. The server list stays in revenue order; this
+   re-sorts and cuts. */
+function trendProductChart(rows, noMoney, mn, num){
+  const all=(rows||[]).filter(p=>Number(p.units)||Number(p.revenue));
+  if(!all.length) return null;
+  const measure=noMoney?'units':(state.prodMeasure||'units');
+  const n=state.prodN||'20';
+  const val=p=>measure==='revenue'?(Number(p.revenue)||0):(Number(p.units)||0);
+  const priorOf=p=>{
+    if(measure==='revenue') return p.prior_revenue==null?null:(Number(p.prior_revenue)||0);
+    return p.prior_units==null?null:(Number(p.prior_units)||0);
+  };
+  const sorted=all.slice().sort((a,b)=>val(b)-val(a));
+  const shown=n==='all'?sorted:sorted.slice(0, Number(n)||20);
+  const max=Math.max(1, ...shown.map(p=>Math.max(val(p), priorOf(p)||0)));
+  const pname=p=>((LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||'');
+  const move=p=>{
+    if(p.prior_units==null) return '';
+    const prev=Number(p.prior_units)||0, cur=Number(p.units)||0;
+    if(!prev) return `<span class="num" style="color:var(--text-secondary);min-width:4.2em;text-align:right;flex:none">0 → ${num(cur)}</span>`;
+    const d=cur-prev;
+    if(!d) return `<span class="num" style="color:var(--text-secondary);min-width:4.2em;text-align:right;flex:none">0</span>`;
+    const up=d>0;
+    return `<span class="num" style="color:var(--${up?'sage':'amber'}-ink);min-width:4.2em;text-align:right;flex:none">${up?'+':'−'}${num(Math.abs(d))}</span>`;
+  };
+  const chip=(list,cur,cmd)=>`<div style="display:flex;gap:6px;flex-wrap:wrap">${list.map(([k,en,zh])=>
+    `<button type="button" onclick="APP.cmd('${cmd}','${k}')" style="padding:4px 10px;border-radius:999px;border:1px solid var(--border-default);font:inherit;font-size:12.5px;cursor:pointer;background:${String(cur)===k?'var(--text-primary)':'transparent'};color:${String(cur)===k?'var(--surface-card)':'var(--text-secondary)'}">${T(en,zh)}</button>`).join('')}</div>`;
+  const measures=[['units','Units','件数']];
+  if(!noMoney) measures.push(['revenue','Revenue','营收']);
+  const counts=[['10','10','10'],['20','20','20'],['50','50','50'],['all','All','全部']];
+  const body=shown.map((p,i)=>{
+    const v=val(p), pr=priorOf(p);
+    const w=v<=0?0:Math.max(2, Math.round(v/max*100));
+    const mark=pr==null?'':`<div style="position:absolute;left:${Math.round(pr/max*100)}%;top:-4px;width:0;height:0;transform:translateX(-4px);border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid var(--text-secondary)"></div>`;
+    const big=(measure==='revenue'&&!noMoney)?mn(p.revenue):num(p.units);
+    const quiet=noMoney?'':(measure==='revenue'?num(p.units):mn(p.revenue));
+    return `<div style="padding-top:11px;border-top:1px solid var(--border-default)">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <span class="num" style="width:18px;flex:none;font-size:12px;color:var(--text-secondary)">${i+1}</span>
+        <span style="flex:1;min-width:0">
+          <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pname(p))}</span>
+          ${quiet?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${quiet}</span>`:''}
+        </span>
+        <span class="num" style="font-weight:500;flex:none">${big}</span>
+        ${move(p)}
+      </div>
+      <div style="position:relative;height:8px;margin:6px 0 0 26px;background:var(--surface-raised);border-radius:4px">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:${w}%;background:var(--text-primary);border-radius:4px"></div>
+        ${mark}
+      </div>
+    </div>`;
+  }).join('');
+  const knows=shown.some(p=>p.prior_units!=null);
+  const legend=knows?`<div style="display:flex;gap:14px;align-items:center;font-size:12px;color:var(--text-secondary);padding-top:4px">
+    <span><i style="display:inline-block;width:18px;height:8px;border-radius:4px;background:var(--text-primary);margin-right:6px;vertical-align:middle"></i>${T('This window','本时段')}</span>
+    <span><i style="display:inline-block;width:0;height:0;margin-right:6px;vertical-align:-1px;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid var(--text-secondary)"></i>${T('The one before','上一时段')}</span>
+  </div>`:'';
+  const top=shown[0];
+  return {
+    summary:{t:pname(top), v:noMoney?num(top.units):(num(top.units)+' · '+mn(top.revenue))},
+    html:`<div style="display:flex;flex-direction:column;gap:8px">${chip(measures,measure,'prodMeasure')}${chip(counts,n,'prodN')}<div>${body}</div>${legend}</div>`,
+  };
+}
+
 /* The four sections, built from the payload and from nothing else. A row whose
    source is missing is not pushed; a section with no rows is not returned. */
 function trendSections(){
@@ -45525,20 +45598,7 @@ function trendSections(){
 
   // ── Products & traffic ──
   const prod=[];
-  const tp=(d.topProducts||[])[0];
-  const tpName=tp?((LANG==='en'?(tp.name_en||tp.name_cn):(tp.name_cn||tp.name_en))||''):'';
-  if(tpName){
-    /* NOT THE MOST UNITS — THE MOST MONEY. topProducts comes back
-       `ORDER BY revenue DESC` (routes/retail.js), so row one is the product that
-       EARNED most, and its unit count can be lower than the row below it. Called
-       "Top seller" it read as a volume ranking and was not one; a costly product
-       shifting seventeen units outranked a cheap one shifting four hundred. The
-       desktop's own Top products panel carries the same fault and is renamed
-       with this (03-dashboard.js / retail-admin.html). Renamed rather than
-       re-sorted: the ranking is useful, it was only ever named wrong. */
-    prod.push({t:T('Top earner','营收最高'),v:tpName});
-    prod.push({t:T('Units sold','销量'),v:noMoney?num(tp.units):num(tp.units)+' · '+mn(tp.revenue)});
-  }
+  const chart=trendProductChart(d.topProducts, noMoney, mn, num);
   const k=d.kpis||{};
   /* The mini app's own conversion, and the server says so: kpis.conversion_rate
      divides mini_app_orders by sessions, never the all-channel order count. */
@@ -45546,13 +45606,10 @@ function trendSections(){
     v:Number(k.conversion_rate).toFixed(1)+'%'});
   const co=d.checkout||{};
   if(co.abandoned) prod.push({t:T('Started checkout, did not pay','进入结算但未付款'),v:num(co.abandoned)});
-  /* The wholesale channel's REVENUE is in the headline and its ITEMS are not in
-     this ranking — topProducts filters channel='gzgrocery' out. The exclusion is
-     there to stop its takings being counted twice (they arrive by their own
-     ledger), and it catches the order lines on the way past. Said out loud here
-     rather than left for somebody to discover by adding the rows up. */
-  if(prod.length) out.push({key:'products',icon:'package',tone:'amber',title:T('Products & traffic','商品与流量'),rows:prod,
-    note:T('Wholesale pickups are not counted here.','不含批发提货。')});
+  /* Wholesale lines are in this ranking (§185). The old note said they were
+     not, which was the exclusion before that decision. */
+  if(chart||prod.length) out.push({key:'products',icon:'package',tone:'amber',title:T('Products & traffic','商品与流量'),
+    summary:chart?chart.summary:null, chart:chart?chart.html:'', rows:prod});
 
   // ── Stores ──
   /* The breakdown the old note sent people to a desktop for. Six at most: a
@@ -45661,6 +45718,7 @@ function screenTrend(){
   const sections=trendSections();
   const section=s=>{
     const open=!!state.trendOpen[s.key];
+    const sum=s.summary||(s.rows&&s.rows[0]);
     return `<div class="card" style="overflow:hidden">
       <button onclick="APP.cmd('trendSection','${s.key}')" style="display:flex;align-items:center;gap:12px;width:100%;padding:15px 16px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
         <span style="flex:none;width:32px;height:32px;border-radius:9px;background:var(--${s.tone}-tint);color:var(--${s.tone}-ink);display:flex;align-items:center;justify-content:center">${ic(s.icon,17)}</span>
@@ -45677,11 +45735,12 @@ function screenTrend(){
                 carrying no figure, worse than none at all. Laid out like the rows
                 it summarises instead: label truncates from the right, value never
                 does. */''}
-          ${open?'':`<span style="display:flex;align-items:baseline;gap:8px;margin-top:1px">
-            <span style="font-size:12.5px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(s.rows[0].t)}</span>
-            <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${escAttr(s.rows[0].v)}</span></span>`}</span>
+          ${open||!sum?'':`<span style="display:flex;align-items:baseline;gap:8px;margin-top:1px">
+            <span style="font-size:12.5px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(sum.t)}</span>
+            <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${escAttr(sum.v)}</span></span>`}</span>
         <span style="flex:none;color:var(--text-secondary);display:flex">${ic(open?'chevron-down':'chevron-right')}</span></button>
       ${open?`<div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:11px">
+        ${s.chart||''}
         ${s.rows.map(r=>`<div style="border-top:1px solid var(--border-default);padding-top:11px">
           <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
             <span style="font-size:14px;color:var(--text-secondary);min-width:0">${escAttr(r.t)}</span>
@@ -45930,7 +45989,8 @@ function trendDigest(){
     wallet:D.topups?{topups_received:r2(D.topups.received),store_credit_redeemed:r2(D.topups.redeemed)}:null,
     busiest_hours:(D.heat||[]).slice().sort((a,b)=>b.orders-a.orders).slice(0,3)
       .map(h=>({weekday:TREND_DOW_EN[h.dow],hour:h.hour,orders:h.orders})),
-    top_products:(D.topProducts||[]).slice(0,8).map(p=>({name:p.name_en||p.name_cn,units:p.units,revenue:r2(p.revenue)})),
+    top_products:(D.topProducts||[]).slice(0,8).map(p=>({name:p.name_en||p.name_cn,units:p.units,revenue:r2(p.revenue),
+      prior_units:p.prior_units==null?null:p.prior_units, prior_revenue:p.prior_revenue==null?null:r2(p.prior_revenue)})),
     top_customers:(D.topCustomers||[]).slice(0,5).map(c=>({name:c.nickname||('#'+c.customer_id),orders:c.orders,revenue:r2(c.revenue)})),
     buyers_by_channel:trendDigestBuyers(D),
     top_cities:(D.geoCities||[]).slice(0,6).map(g=>({city:g.city_en||g.city,city_cn:g.city,orders:g.orders,revenue:r2(g.revenue)})),

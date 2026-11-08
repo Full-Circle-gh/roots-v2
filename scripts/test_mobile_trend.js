@@ -196,7 +196,7 @@ const FULL = WEEK + `state.trendFull={
     topups_unassigned:880},
   topCustomers:[{customer_id:5,nickname:'Mei',revenue:980,orders:6}],
   geoCities:[{city:'广州',city_en:'Guangzhou',orders:61,revenue:6100}],
-  topProducts:[{product_id:2,name_en:'Falafel Wrap',name_cn:'法拉费卷',units:140,revenue:2800}],
+  topProducts:[{product_id:2,name_en:'Falafel Wrap',name_cn:'法拉费卷',units:140,revenue:2800,prior_units:100,prior_revenue:2000}],
   kpis:{conversion_rate:6.25},
   checkout:{started:40,converted:25,abandoned:15},
   stores:[{store_id:1,name_en:'Tianhe',name_cn:'天河',orders:52,revenue:5200},
@@ -282,13 +282,14 @@ CASES.push(
     ['and nothing is summed', `!txt('content').includes('110')`],
     ['Eleme is absent, not zero', `!txt('content').includes('Bought on Eleme')`],
     ['the city is English on an English phone', `txt('content').includes('Guangzhou · 61 orders')`],
-    // topProducts is ORDER BY revenue DESC, so row one is the biggest EARNER and
-    // its unit count can be lower than the row beneath it. It was called "Top
-    // seller", which reads as a volume ranking it has never been.
-    ['the earner is named',  `txt('content').includes('Falafel Wrap')`],
-    ['and named as an earner, not a volume leader',
-     `txt('content').includes('Top earner') && !txt('content').includes('Top seller')`],
-    ['units carry the money they made', `txt('content').includes('140 · ¥2,800')`],
+    // The list is the bars. Units is the landing order. The money sits under
+    // the name. The change is units against the window before: 140 now, 100 then.
+    ['the product is named', `txt('content').includes('Falafel Wrap')`],
+    ['with its units', `txt('content').includes('140')`],
+    ['and the money they made', `txt('content').includes('¥2,800')`],
+    ['and the change against the window before', `txt('content').includes('+40')`],
+    ['the two marks are named', `txt('content').includes('This window') && txt('content').includes('The one before')`],
+    ['and it is not called a top seller', `!txt('content').includes('Top seller')`],
     // kpis.conversion_rate is the mini app's own, never all-channel orders
     // over sessions — the server fixed that at source and this reads it whole.
     ['conversion is the server\'s',  `txt('content').includes('6.3%')`],
@@ -328,7 +329,7 @@ CASES.push(
     ['and the top spender',              `!txt('content').includes('Top spender')`],
     ['what is not about money survives', `txt('content').includes('Busiest hour')`],
     ['stores are counted, not priced',   `txt('content').includes('52 orders')`],
-    ['and units carry no money either',   `txt('content').includes('Units sold') && !txt('content').includes('140 · ')`],
+    ['and units carry no money either',   `txt('content').includes('Falafel Wrap') && txt('content').includes('140') && !txt('content').includes('¥')`],
   ]],
   ['a section with nothing left in it is not drawn',
    `state.pos='warehouse'; ` + WEEK + `state.trendFull={payments:[{method:'wechat',orders:60,revenue:6000}]}; APP.cmd('push','trend');`, [
@@ -395,10 +396,11 @@ CASES.push(
     // quietly under-reporting.
     ['Meituan carries the date it starts from', `txt('content').includes('Meituan from')`],
   ]],
-  ['the product ranking says what it leaves out', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','products');`, [
-    // gzgrocery revenue is in the headline; its order lines are filtered out of
-    // topProducts. Stated rather than left to be found by adding rows up.
-    ['wholesale is named as excluded', `txt('content').includes('Wholesale pickups are not counted here')`],
+  ['the product ranking no longer claims wholesale is excluded', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','products');`, [
+    // §185 put the mirror's lines in this ranking. The note that said they were
+    // left out was the exclusion from before that decision, and it was wrong.
+    ['the old note is gone', `!txt('content').includes('Wholesale pickups are not counted here')`],
+    ['the product is still there', `txt('content').includes('Falafel Wrap')`],
   ]],
   ['a closed section does not print its note', FULL + `APP.cmd('push','trend');`, [
     ['the note rides the open body', `!txt('content').includes('Counted separately')`],

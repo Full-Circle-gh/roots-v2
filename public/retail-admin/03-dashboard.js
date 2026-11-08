@@ -380,7 +380,7 @@ function dashInit() {
   // the charts themselves re-render on dashLoad.
   if (window.onLangChange) onLangChange(() => {
     dashRangeLabel(); dashWinMeta();
-    if (DASH_DATA) { dashRenderHeadlines(); dashRenderFacts(); dashRenderSplits(); }
+    if (DASH_DATA) { dashRenderHeadlines(); dashRenderFacts(); dashRenderSplits(); dashRenderProducts(); }
     dashReadRender(); dashNotesRender(); dashAskChipsRender(); dashAskRender();
   });
   // Initial 30d window. The deep Reports build (~28 aggregate queries) is
@@ -4032,17 +4032,67 @@ function dashRenderSplits() {
   $('#db-splits').innerHTML = html;
 }
 
+// The product bars. Units is the landing order because the change on the row
+// is units; Revenue is the other length. 20 is the cut until the operator
+// picks 10, 50, or all. The server list stays in revenue order so the fact
+// line's top earner is still row 0.
+let dashProdMeasure = 'units';
+let dashProdN = '20';
+function dashProdSetMeasure(v) { dashProdMeasure = v; dashRenderProducts(); }
+function dashProdSetN(v) { dashProdN = v; dashRenderProducts(); }
+
+function dashProdMove(units, prior) {
+  if (prior == null) return '';
+  const prev = Number(prior) || 0;
+  const cur = Number(units) || 0;
+  if (!prev) return `<span class="mv flat">0 → ${dashNum(cur)}</span>`;
+  const d = cur - prev;
+  if (!d) return '<span class="mv flat">0</span>';
+  const up = d > 0;
+  return `<span class="mv ${up ? 'up' : 'down'}">${up ? '+' : '−'}${dashNum(Math.abs(d))}</span>`;
+}
+
 function dashRenderProducts() {
-  const p = DASH_DATA.topProducts || [];
-  if (!p.length) { $('#db-products').innerHTML = '<div class="db-muted">No sales in range · 区间内无销售</div>'; return; }
-  // Ranked rows (the mockup): index · name · units. Revenue and order count
-  // ride each row as a hover title so the detail isn't lost, just quiet.
-  $('#db-products').innerHTML = '<div class="db-rank">' + p.map((r, i) => `
-    <div class="db-rank-row" title="${escapeAttr(`${dashMoney(r.revenue)} · ${dashNum(r.orders)} ${cuT('orders', '单')}`)}">
-      <span class="idx">${i + 1}</span>
-      <span class="name">${escapeHtml(dbProdName(r))}</span>
-      <span class="rv">${dashNum(r.units)}</span>
-    </div>`).join('') + '</div>';
+  const host = $('#db-products');
+  if (!host) return;
+  const all = DASH_DATA.topProducts || [];
+  if (!all.length) { host.innerHTML = '<div class="db-muted">No sales in range · 区间内无销售</div>'; return; }
+  const noMoney = tdRecapNoMoney();
+  const measure = noMoney ? 'units' : dashProdMeasure;
+  const val = r => measure === 'revenue' ? Number(r.revenue) || 0 : Number(r.units) || 0;
+  const priorOf = r => {
+    if (measure === 'revenue') return r.prior_revenue == null ? null : Number(r.prior_revenue) || 0;
+    return r.prior_units == null ? null : Number(r.prior_units) || 0;
+  };
+  const sorted = all.slice().sort((a, b) => val(b) - val(a));
+  const shown = dashProdN === 'all' ? sorted : sorted.slice(0, Number(dashProdN) || 20);
+  const max = Math.max(1, ...shown.map(r => Math.max(val(r), priorOf(r) || 0)));
+  const chip = (pairs, cur, fn) => `<div class="db-prod-chips">${pairs.map(([k, label]) =>
+    `<button type="button" class="${String(cur) === k ? 'on' : ''}" onclick="${fn}('${k}')">${label}</button>`).join('')}</div>`;
+  const measures = [['units', cuT('Units', '件数')]];
+  if (!noMoney) measures.push(['revenue', cuT('Revenue', '营收')]);
+  const counts = [['10', '10'], ['20', '20'], ['50', '50'], ['all', cuT('All', '全部')]];
+  const rows = shown.map((r, i) => {
+    const v = val(r);
+    const pr = priorOf(r);
+    const w = v <= 0 ? 0 : Math.max(2, Math.round(v / max * 100));
+    const mark = pr == null ? '' : `<div class="db-prod-was" style="left:${Math.round(pr / max * 100)}%"></div>`;
+    const big = measure === 'revenue' ? dashMoney(r.revenue) : dashNum(r.units);
+    const quiet = noMoney ? '' : (measure === 'revenue' ? dashNum(r.units) : dashMoney(r.revenue));
+    return `<div class="db-prod-row">
+      <div class="db-prod-top">
+        <span class="ix">${i + 1}</span>
+        <span class="nm"><span class="who">${escapeHtml(dbProdName(r))}</span>${quiet ? `<span class="quiet">${quiet}</span>` : ''}</span>
+        <span class="fig">${big}</span>
+        ${dashProdMove(r.units, r.prior_units)}
+      </div>
+      <div class="db-prod-track"><div class="db-prod-now" style="width:${w}%"></div>${mark}</div>
+    </div>`;
+  }).join('');
+  const legend = shown.some(r => r.prior_units != null)
+    ? `<div class="db-prod-legend"><span><i class="bar"></i>${cuT('This window', '本时段')}</span><span><i class="mark"></i>${cuT('The one before', '上一时段')}</span></div>`
+    : '';
+  host.innerHTML = chip(measures, measure, 'dashProdSetMeasure') + chip(counts, dashProdN, 'dashProdSetN') + rows + legend;
 }
 
 function dashRenderCustomers() {
@@ -4612,7 +4662,11 @@ function dashAiDigest() {
     wallet: D.topups ? { topups_received: r2(D.topups.received), store_credit_redeemed: r2(D.topups.redeemed) } : null,
     busiest_hours: (D.heat || []).slice().sort((a, b) => b.orders - a.orders).slice(0, 3)
       .map(h => ({ weekday: DASH_DOW_EN[h.dow], hour: h.hour, orders: h.orders })),
-    top_products: (D.topProducts || []).slice(0, 8).map(p => ({ name: p.name_en || p.name_cn, units: p.units, revenue: r2(p.revenue) })),
+    top_products: (D.topProducts || []).slice(0, 8).map(p => ({
+      name: p.name_en || p.name_cn, units: p.units, revenue: r2(p.revenue),
+      prior_units: p.prior_units == null ? null : p.prior_units,
+      prior_revenue: p.prior_revenue == null ? null : r2(p.prior_revenue),
+    })),
     top_customers: (D.topCustomers || []).slice(0, 5).map(c => ({ name: c.nickname || ('#' + c.customer_id), orders: c.orders, revenue: r2(c.revenue) })),
     // WHO BOUGHT, BY CHANNEL (§169), and never a single buyer count. `orders`
     // in kpis is every channel, but a buyer can only be counted where the
