@@ -277,7 +277,9 @@ async function main() {
     is((await outcome({ success: true, already_created: true }, BJ(1))).calls.toasts, ['A courier is already on this one — cancel it in the Qingyun app first'], 'a live rider: nothing moved');
     is((await outcome({ success: true, moved: true, stale_copy: true }, BJ(0))).calls.toasts, ['Moved to today. The old courier order may still be live — cancel it in the Qingyun app, then call another courier.'], 'a frozen copy: moved, finish by hand');
     is((await outcome({ success: true, moved: true, requeued: false }, BJ(3))).calls.toasts, ['Moved to ' + BJ(3) + ', but it was not re-queued — check the courier'], 'moved but not queued: both halves');
+    is((await outcome({ success: true, moved: true, kept_waiting: true }, BJ(0))).calls.toasts, ['Moved to today — it goes back in the queue now'], 'today, nobody sent: the waiting copy stays');
     is(String((await outcome(fault('date_passed'), BJ(1))).ctx.state.orderErr), 'Could not move it', 'a failure says so');
+    is(String((await outcome(fault('waiting_copy'), BJ(1))).ctx.state.orderErr), 'Could not remove it — do it in the Qingyun app', 'the waiting order could not be removed');
     m.CMD.qyDayOpen(); m.CMD.qyClose(); is(m.ctx.state.qy, null, 'Keep the current date closes it');
 
     const live = sfo(Object.assign({}, CREATED, { date_posture: 'today', promised_date: BJ(0) }));
