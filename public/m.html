@@ -1028,7 +1028,7 @@ const state = {
   trend:null, trendFull:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
   /* Product bars on Trend. Units lands first because the change is units.
      20 is the cut until 10, 50, or all is picked. */
-  prodMeasure:'units', prodN:'20',
+  prodMeasure:'units', prodN:'20', prodOpen:null, prodDays:null,
   /* §300 F5 — Reports on the phone: the custom days, the store picked, whether
      the stores were asked for, the AI read (per window key) and the Ask log. */
   trendFrom:null, trendTo:null, trendStore:'', trendStoresTried:false,
@@ -6476,6 +6476,31 @@ reg('trendMetric', v=>{ state.trendMetric=v; render(); });
 reg('trendSection', k=>{ state.trendOpen[k]=!state.trendOpen[k]; render(); });
 reg('prodMeasure', v=>{ state.prodMeasure=v; render(); });
 reg('prodN', v=>{ state.prodN=v; render(); });
+reg('prodDays', id=>{
+  id=Number(id);
+  const key=trendReadKey();
+  if(state.prodOpen===id && state.prodDays && state.prodDays.key===key && !state.prodDays.loading){
+    state.prodOpen=null; render(); return;
+  }
+  state.prodOpen=id;
+  if(state.prodDays && state.prodDays.id===id && state.prodDays.key===key && state.prodDays.points){
+    render(); return;
+  }
+  state.prodDays={id, key, loading:true};
+  render();
+  const win=trendWindow();
+  const seq=id+'|'+key;
+  state.prodDaysSeq=seq;
+  api('/dashboard/product-days?product_id='+id+'&from='+encodeURIComponent(win.from)+'&to='+encodeURIComponent(win.to)+trendStoreQS()).then(d=>{
+    if(state.prodDaysSeq!==seq) return;
+    state.prodDays={id, key, granularity:d.granularity, points:d.points||[]};
+    render();
+  }).catch(()=>{
+    if(state.prodDaysSeq!==seq) return;
+    state.prodDays={id, key, err:true};
+    render();
+  });
+});
 reg('openChannel', k=>{ state.chanSheet=k; state.chanErr=null; render(); });
 reg('closeChannel', ()=>{ state.chanSheet=null; state.chanErr=null; render(); });
 /* §325 S2m — WHAT CLOSING ELEME ACTUALLY DOES. Closing Eleme at a store writes
@@ -45265,6 +45290,7 @@ function loadTrend(force){
   const key=trendReadKey();
   if(state.trendKey===key&&!force) return;
   state.trendKey=key; state.trend=null; state.trendFull=null; state.trendErr=null;
+  state.prodOpen=null; state.prodDays=null;
   /* THE WINDOW WAS ONE DAY TOO LONG IN GUANGZHOU, which is to say everywhere it
      actually runs. `new Date(to+'T00:00:00')` is LOCAL midnight and setDate
      steps back in LOCAL days — but the result was serialised with
@@ -45381,15 +45407,70 @@ function trendBestDow(vals){
   return b<0?null:T(TREND_DOW[b][0],TREND_DOW[b][1]);
 }
 
+/* One product's days, drawn under the bar that was tapped. Ink, not a status
+   colour: the line is the shape, and the green number above it is the change. */
+function trendProdSpark(vals){
+  const n=vals.length; if(!n) return '';
+  const W=1000,H=160,pad=6;
+  const max=Math.max(1,...vals);
+  const x=i=>pad+(n===1?(W-2*pad)/2:(i/(n-1))*(W-2*pad));
+  const y=v=>pad+(H-2*pad)-(v/max)*(H-2*pad);
+  const pts=vals.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1));
+  const area='M'+x(0).toFixed(1)+','+(H-pad)+' L'+pts.join(' L')+' L'+x(n-1).toFixed(1)+','+(H-pad)+' Z';
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;width:100%;height:72px" aria-hidden="true">
+    <path d="${area}" fill="var(--surface-raised)"></path>
+    <path d="M${pts.join(' L')}" fill="none" stroke="var(--text-primary)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+    <circle cx="${x(n-1).toFixed(1)}" cy="${y(vals[n-1]).toFixed(1)}" r="6" fill="var(--text-primary)"></circle></svg>`;
+}
+function trendProdDaysHtml(p){
+  const id=Number(p.product_id);
+  if(state.prodOpen!==id) return '';
+  const d=state.prodDays, key=trendReadKey();
+  if(!d||d.id!==id||d.key!==key) return '';
+  if(d.loading) return `<div style="margin:8px 0 0 26px;font-size:12px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(d.err||!d.points||!d.points.length) return `<div style="margin:8px 0 0 26px;font-size:12px;color:var(--text-secondary)">${T('Could not load these days.','无法加载这几天。')}</div>`;
+  const cap=d.granularity==='hour'?T('Each hour','每小时'):d.granularity==='week'?T('Each week','每一周'):T('Each day','每一天');
+  const lab=x=>d.granularity==='hour'?(x.bucket+':00'):fmtDateOnly(x.bucket);
+  const a=d.points[0], b=d.points[d.points.length-1];
+  return `<div style="margin:8px 0 0 26px">
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${cap}</div>
+    ${trendProdSpark(d.points.map(x=>Number(x.units)||0))}
+    <div class="num" style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary);padding-top:4px">
+      <span>${escAttr(lab(a))}</span><span>${escAttr(lab(b))}</span></div></div>`;
+}
+/* The running-low card's words, and only beside a rise. Sold out and "N left"
+   are that card's own pairs. */
+function trendShelfLine(p){
+  const s=p.shelf; if(!s) return '';
+  if(!((Number(p.units)||0)>(Number(p.prior_units)||0))) return '';
+  const word=s.kind==='out'?T('Sold out','售罄'):T((Number(s.qty)||0)+' left','剩 '+(Number(s.qty)||0));
+  return `<div style="margin:4px 0 0 26px;font-size:12px;color:var(--amber-ink)">${word}</div>`;
+}
+function trendStoppedHtml(rows, num){
+  if(!rows||!rows.length) return '';
+  const pname=p=>((LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||'');
+  const body=rows.map(p=>`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:10px">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pname(p))}</span>
+      <span class="num" style="color:var(--amber-ink);flex:none">−${num(Math.round(Number(p.prior_units)||0))}</span></div>`).join('');
+  return `<div style="border-top:1px solid var(--border-default);padding-top:12px;margin-top:4px">
+    <div style="font-size:12.5px;color:var(--text-secondary)">${T('Sold then, none now','上一时段有售，本时段无')}</div>${body}</div>`;
+}
+
 /* The product bars. One bar per product that sold. The length is this window
    in the measure picked (units, or revenue when the account may see money).
    The mark is the window before, on the same scale. The figure on the right
    of the name is always the unit change: a first sale in the window reads
    "0 → n", not a percent. The server list stays in revenue order; this
-   re-sorts and cuts. */
+   re-sorts and cuts. Tap a row for that product's days. Under the bars, the
+   products that sold in the window before and none in this one. */
 function trendProductChart(rows, noMoney, mn, num){
   const all=(rows||[]).filter(p=>Number(p.units)||Number(p.revenue));
-  if(!all.length) return null;
+  const stopped=(state.trendFull&&state.trendFull.stopped)||[];
+  if(!all.length){
+    if(!stopped.length) return null;
+    return {summary:{t:T('Sold then, none now','上一时段有售，本时段无'), v:String(stopped.length)},
+      html:trendStoppedHtml(stopped, num)};
+  }
   const measure=noMoney?'units':(state.prodMeasure||'units');
   const n=state.prodN||'20';
   const val=p=>measure==='revenue'?(Number(p.revenue)||0):(Number(p.units)||0);
@@ -45422,6 +45503,7 @@ function trendProductChart(rows, noMoney, mn, num){
     const big=(measure==='revenue'&&!noMoney)?mn(p.revenue):num(p.units);
     const quiet=noMoney?'':(measure==='revenue'?num(p.units):mn(p.revenue));
     return `<div style="padding-top:11px;border-top:1px solid var(--border-default)">
+      <button type="button" onclick="APP.cmd('prodDays',${Number(p.product_id)||0})" style="display:block;width:100%;padding:0;border:none;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer">
       <div style="display:flex;align-items:baseline;gap:8px">
         <span class="num" style="width:18px;flex:none;font-size:12px;color:var(--text-secondary)">${i+1}</span>
         <span style="flex:1;min-width:0">
@@ -45430,11 +45512,13 @@ function trendProductChart(rows, noMoney, mn, num){
         </span>
         <span class="num" style="font-weight:500;flex:none">${big}</span>
         ${move(p)}
-      </div>
+      </div></button>
       <div style="position:relative;height:8px;margin:6px 0 0 26px;background:var(--surface-raised);border-radius:4px">
         <div style="position:absolute;left:0;top:0;bottom:0;width:${w}%;background:var(--text-primary);border-radius:4px"></div>
         ${mark}
       </div>
+      ${trendShelfLine(p)}
+      ${trendProdDaysHtml(p)}
     </div>`;
   }).join('');
   const knows=shown.some(p=>p.prior_units!=null);
@@ -45445,7 +45529,7 @@ function trendProductChart(rows, noMoney, mn, num){
   const top=shown[0];
   return {
     summary:{t:pname(top), v:noMoney?num(top.units):(num(top.units)+' · '+mn(top.revenue))},
-    html:`<div style="display:flex;flex-direction:column;gap:8px">${chip(measures,measure,'prodMeasure')}${chip(counts,n,'prodN')}<div>${body}</div>${legend}</div>`,
+    html:`<div style="display:flex;flex-direction:column;gap:8px">${chip(measures,measure,'prodMeasure')}${chip(counts,n,'prodN')}<div>${body}</div>${legend}${trendStoppedHtml(stopped, num)}</div>`,
   };
 }
 
@@ -46017,7 +46101,9 @@ function trendDigest(){
     busiest_hours:(D.heat||[]).slice().sort((a,b)=>b.orders-a.orders).slice(0,3)
       .map(h=>({weekday:TREND_DOW_EN[h.dow],hour:h.hour,orders:h.orders})),
     top_products:(D.topProducts||[]).slice(0,8).map(p=>({name:p.name_en||p.name_cn,units:p.units,revenue:r2(p.revenue),
-      prior_units:p.prior_units==null?null:p.prior_units, prior_revenue:p.prior_revenue==null?null:r2(p.prior_revenue)})),
+      prior_units:p.prior_units==null?null:p.prior_units, prior_revenue:p.prior_revenue==null?null:r2(p.prior_revenue),
+      shelf:p.shelf?p.shelf.kind:null, shelf_qty:p.shelf?p.shelf.qty:null})),
+    stopped:(D.stopped||[]).slice(0,8).map(p=>({name:p.name_en||p.name_cn, prior_units:p.prior_units})),
     top_customers:(D.topCustomers||[]).slice(0,5).map(c=>({name:c.nickname||('#'+c.customer_id),orders:c.orders,revenue:r2(c.revenue)})),
     buyers_by_channel:trendDigestBuyers(D),
     top_cities:(D.geoCities||[]).slice(0,6).map(g=>({city:g.city_en||g.city,city_cn:g.city,orders:g.orders,revenue:r2(g.revenue)})),

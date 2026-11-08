@@ -4038,8 +4038,82 @@ function dashRenderSplits() {
 // line's top earner is still row 0.
 let dashProdMeasure = 'units';
 let dashProdN = '20';
+let dashProdOpen = null;
+let dashProdDays = null;
+let dashProdSeq = 0;
 function dashProdSetMeasure(v) { dashProdMeasure = v; dashRenderProducts(); }
 function dashProdSetN(v) { dashProdN = v; dashRenderProducts(); }
+function dashProdWinKey() {
+  const from = $('#db-from') ? $('#db-from').value : '';
+  const to = $('#db-to') ? $('#db-to').value : '';
+  return from + '|' + to + '|' + (dashStoreId() || '');
+}
+function dashProdToggle(id) {
+  id = Number(id);
+  const key = dashProdWinKey();
+  const showing = dashProdOpen === id && dashProdDays && dashProdDays.key === key && !dashProdDays.loading;
+  if (showing) { dashProdOpen = null; dashRenderProducts(); return; }
+  dashProdOpen = id;
+  if (dashProdDays && dashProdDays.id === id && dashProdDays.key === key && dashProdDays.points) {
+    dashRenderProducts(); return;
+  }
+  const seq = ++dashProdSeq;
+  dashProdDays = { id, key, loading: true };
+  dashRenderProducts();
+  const from = $('#db-from').value, to = $('#db-to').value;
+  api(`/api/retail-admin/dashboard/product-days?product_id=${id}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${dashStoreQS()}`)
+    .then(j => {
+      if (seq !== dashProdSeq || dashProdOpen !== id) return;
+      const d = (j && j.data) || {};
+      dashProdDays = { id, key, granularity: d.granularity, points: d.points || [] };
+      dashRenderProducts();
+    })
+    .catch(() => {
+      if (seq !== dashProdSeq) return;
+      dashProdDays = { id, key, err: true };
+      dashRenderProducts();
+    });
+}
+function dashProdSpark(vals) {
+  const n = vals.length; if (!n) return '';
+  const W = 1000, H = 160, pad = 6;
+  const max = Math.max(1, ...vals);
+  const x = i => pad + (n === 1 ? (W - 2 * pad) / 2 : (i / (n - 1)) * (W - 2 * pad));
+  const y = v => pad + (H - 2 * pad) - (v / max) * (H - 2 * pad);
+  const pts = vals.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1));
+  const area = 'M' + x(0).toFixed(1) + ',' + (H - pad) + ' L' + pts.join(' L') + ' L' + x(n - 1).toFixed(1) + ',' + (H - pad) + ' Z';
+  return `<svg class="db-prod-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <path d="${area}" fill="var(--td-raised)"></path>
+    <path d="M${pts.join(' L')}" fill="none" stroke="var(--td-text)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+    <circle cx="${x(n - 1).toFixed(1)}" cy="${y(vals[n - 1]).toFixed(1)}" r="6" fill="var(--td-text)"></circle></svg>`;
+}
+function dashProdDaysHtml(id) {
+  if (dashProdOpen !== id) return '';
+  const d = dashProdDays, key = dashProdWinKey();
+  if (!d || d.id !== id || d.key !== key) return '';
+  if (d.loading) return `<div class="db-prod-days muted">${cuT('Loading…', '加载中…')}</div>`;
+  if (d.err || !d.points || !d.points.length) return `<div class="db-prod-days muted">${cuT('Could not load these days.', '无法加载这几天。')}</div>`;
+  const cap = d.granularity === 'hour' ? cuT('Each hour', '每小时')
+    : d.granularity === 'week' ? cuT('Each week', '每一周') : cuT('Each day', '每一天');
+  const lab = x => d.granularity === 'hour' ? (x.bucket + ':00')
+    : (window.tdWhen ? tdWhen(x.bucket, 'date') : x.bucket);
+  const a = d.points[0], b = d.points[d.points.length - 1];
+  return `<div class="db-prod-days"><div class="cap">${cap}</div>${dashProdSpark(d.points.map(x => Number(x.units) || 0))}
+    <div class="ends"><span>${escapeHtml(lab(a))}</span><span>${escapeHtml(lab(b))}</span></div></div>`;
+}
+function dashShelfLine(r) {
+  const s = r.shelf;
+  if (!s || !((Number(r.units) || 0) > (Number(r.prior_units) || 0))) return '';
+  const word = s.kind === 'out' ? cuT('Sold out', '售罄') : cuT((Number(s.qty) || 0) + ' left', '剩 ' + (Number(s.qty) || 0));
+  return `<div class="db-prod-shelf">${word}</div>`;
+}
+function dashStoppedHtml(rows) {
+  if (!rows || !rows.length) return '';
+  const body = rows.map(r => `<div class="db-prod-stop">
+      <span class="who">${escapeHtml(dbProdName(r))}</span>
+      <span class="mv down">−${dashNum(r.prior_units)}</span></div>`).join('');
+  return `<div class="db-prod-stopped"><div class="cap">${cuT('Sold then, none now', '上一时段有售，本时段无')}</div>${body}</div>`;
+}
 
 function dashProdMove(units, prior) {
   if (prior == null) return '';
@@ -4056,7 +4130,9 @@ function dashRenderProducts() {
   const host = $('#db-products');
   if (!host) return;
   const all = DASH_DATA.topProducts || [];
-  if (!all.length) { host.innerHTML = '<div class="db-muted">No sales in range · 区间内无销售</div>'; return; }
+  const stopped = DASH_DATA.stopped || [];
+  if (!all.length && !stopped.length) { host.innerHTML = '<div class="db-muted">No sales in range · 区间内无销售</div>'; return; }
+  if (!all.length) { host.innerHTML = dashStoppedHtml(stopped); return; }
   const noMoney = tdRecapNoMoney();
   const measure = noMoney ? 'units' : dashProdMeasure;
   const val = r => measure === 'revenue' ? Number(r.revenue) || 0 : Number(r.units) || 0;
@@ -4080,19 +4156,22 @@ function dashRenderProducts() {
     const big = measure === 'revenue' ? dashMoney(r.revenue) : dashNum(r.units);
     const quiet = noMoney ? '' : (measure === 'revenue' ? dashNum(r.units) : dashMoney(r.revenue));
     return `<div class="db-prod-row">
+      <button type="button" class="db-prod-hit" onclick="dashProdToggle(${Number(r.product_id) || 0})">
       <div class="db-prod-top">
         <span class="ix">${i + 1}</span>
         <span class="nm"><span class="who">${escapeHtml(dbProdName(r))}</span>${quiet ? `<span class="quiet">${quiet}</span>` : ''}</span>
         <span class="fig">${big}</span>
         ${dashProdMove(r.units, r.prior_units)}
-      </div>
+      </div></button>
       <div class="db-prod-track"><div class="db-prod-now" style="width:${w}%"></div>${mark}</div>
+      ${dashShelfLine(r)}
+      ${dashProdDaysHtml(Number(r.product_id))}
     </div>`;
   }).join('');
   const legend = shown.some(r => r.prior_units != null)
     ? `<div class="db-prod-legend"><span><i class="bar"></i>${cuT('This window', '本时段')}</span><span><i class="mark"></i>${cuT('The one before', '上一时段')}</span></div>`
     : '';
-  host.innerHTML = chip(measures, measure, 'dashProdSetMeasure') + chip(counts, dashProdN, 'dashProdSetN') + rows + legend;
+  host.innerHTML = chip(measures, measure, 'dashProdSetMeasure') + chip(counts, dashProdN, 'dashProdSetN') + rows + legend + dashStoppedHtml(stopped);
 }
 
 function dashRenderCustomers() {
@@ -4666,6 +4745,11 @@ function dashAiDigest() {
       name: p.name_en || p.name_cn, units: p.units, revenue: r2(p.revenue),
       prior_units: p.prior_units == null ? null : p.prior_units,
       prior_revenue: p.prior_revenue == null ? null : r2(p.prior_revenue),
+      shelf: p.shelf ? p.shelf.kind : null,
+      shelf_qty: p.shelf ? p.shelf.qty : null,
+    })),
+    stopped: (D.stopped || []).slice(0, 8).map(p => ({
+      name: p.name_en || p.name_cn, prior_units: p.prior_units,
     })),
     top_customers: (D.topCustomers || []).slice(0, 5).map(c => ({ name: c.nickname || ('#' + c.customer_id), orders: c.orders, revenue: r2(c.revenue) })),
     // WHO BOUGHT, BY CHANNEL (§169), and never a single buyer count. `orders`
