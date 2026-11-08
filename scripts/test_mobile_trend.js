@@ -431,7 +431,7 @@ CASES.push(
     ['the three slices add up to the total', `txt('content').includes('Of the ¥18,400') && txt('content').includes('¥15,900') && txt('content').includes('¥1,100') && txt('content').includes('¥1,400')`],
     ['what was given away sits beside them', `txt('content').includes('Given away') && txt('content').includes('¥480')`],
     ['the open row says how many orders', `txt('content').includes('38 orders')`],
-    ['and whether the money moved', `txt('content').includes('Money') && txt('content').includes('+¥800')`],
+    ['the amount this window, and the change beside it', `txt('content').includes('This window') && txt('content').includes('¥2,800') && txt('content').includes('vs the one before') && txt('content').includes('+¥800')`],
     ['the price, against the window before', `txt('content').includes('Price') && txt('content').includes('¥20') && txt('content').includes('same as before')`],
     ['what else was in the bag', `txt('content').includes('With Hummus') && txt('content').includes('24 of 38')`],
     ['which shop, and wholesale on its own', `txt('content').includes('Tianhe') && txt('content').includes('Wholesale')`],

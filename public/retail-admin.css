@@ -2208,18 +2208,18 @@
     border: 1px solid var(--td-border); background: transparent; color: var(--td-text2); cursor: pointer;
   }
   .db-prod-chips button.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
-  .db-prod-row { padding: 8px 0; border-top: 1px solid var(--td-border); }
-  .db-prod-top { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; }
+  .db-prod-row { padding: 14px 0; border-top: 1px solid var(--td-border); }
+  .db-prod-top { display: flex; align-items: baseline; gap: 10px; font-size: 14.5px; }
   .db-prod-top .ix { width: 18px; flex: none; font-size: 12px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
   .db-prod-top .nm { flex: 1; min-width: 0; }
   .db-prod-top .who { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .db-prod-top .quiet { display: block; font-size: 12px; color: var(--td-text2); font-weight: 400; font-variant-numeric: tabular-nums; }
-  .db-prod-top .fig { font-weight: 500; font-variant-numeric: tabular-nums; flex: none; }
-  .db-prod-top .mv { min-width: 4.6em; text-align: right; font-variant-numeric: tabular-nums; flex: none; font-size: 13px; }
+  .db-prod-top .quiet { display: block; margin-top: 3px; font-size: 13.5px; color: var(--td-text2); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .db-prod-top .fig { font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; flex: none; }
+  .db-prod-top .mv { min-width: 4.6em; text-align: right; font-variant-numeric: tabular-nums; flex: none; font-size: 15px; font-weight: 500; }
   .db-prod-top .mv.up { color: var(--td-sage-ink); }
   .db-prod-top .mv.down { color: var(--td-amber-ink); }
   .db-prod-top .mv.flat { color: var(--td-text2); }
-  .db-prod-track { position: relative; height: 8px; margin: 6px 0 0 26px; background: var(--td-raised); border-radius: 4px; }
+  .db-prod-track { position: relative; height: 8px; margin: 12px 0 0 26px; background: var(--td-raised); border-radius: 4px; }
   .db-prod-now { position: absolute; left: 0; top: 0; bottom: 0; background: var(--td-text); border-radius: 4px; }
   .db-prod-was {
     position: absolute; top: -4px; width: 0; height: 0; transform: translateX(-4px);
@@ -2234,17 +2234,20 @@
     border-top: 5px solid var(--td-text2);
   }
   .db-prod-hit { display: block; width: 100%; padding: 0; border: none; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-  .db-prod-shelf { margin: 4px 0 0 26px; font-size: 12px; color: var(--td-amber-ink); }
-  .db-prod-readwrap { margin: 6px 0 2px 26px; display: flex; flex-direction: column; gap: 4px; }
-  .db-prod-read { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; }
+  .db-prod-shelf { margin: 10px 0 0 26px; font-size: 13px; color: var(--td-amber-ink); }
+  .db-prod-readwrap { margin: 16px 0 6px 26px; display: flex; flex-direction: column; }
+  .db-prod-read { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-top: 12px; font-size: 14.5px; }
+  .db-prod-read.lead { font-size: 15px; }
   .db-prod-read .muted { color: var(--td-text2); }
-  .db-prod-read .up { color: var(--td-sage-ink); }
-  .db-prod-read .down { color: var(--td-amber-ink); }
-  .db-prod-place { display: flex; align-items: center; gap: 8px; margin-top: 3px; font-size: 12.5px; }
+  .db-prod-read .num { font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .db-prod-read .up, .db-prod-read.up { color: var(--td-sage-ink); }
+  .db-prod-read .down, .db-prod-read.down { color: var(--td-amber-ink); }
+  .db-prod-places { margin-top: 16px; }
+  .db-prod-place { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 14.5px; }
   .db-prod-place .shop { flex: 0 1 42%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .db-prod-place .tbar { flex: 1; height: 6px; border-radius: 3px; background: var(--td-raised); overflow: hidden; }
-  .db-prod-place .tbar i { display: block; height: 6px; border-radius: 3px; background: var(--td-amber-ink); }
-  .db-prod-place .q { flex: none; font-variant-numeric: tabular-nums; color: var(--td-text2); }
+  .db-prod-place .tbar { flex: 1; height: 8px; border-radius: 4px; background: var(--td-raised); overflow: hidden; }
+  .db-prod-place .tbar i { display: block; height: 8px; border-radius: 4px; background: var(--td-amber-ink); }
+  .db-prod-place .q { flex: none; font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
   .db-prod-top .fig.down { color: var(--td-amber-ink); }
   .db-prod-days { margin: 8px 0 2px 26px; }
   .db-prod-days .cap, .db-prod-stopped .cap { font-size: 12px; color: var(--td-text2); margin-bottom: 4px; }

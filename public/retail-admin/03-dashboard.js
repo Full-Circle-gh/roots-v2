@@ -4111,58 +4111,56 @@ function dashProdReadHtml(r, noMoney) {
   if (dashProdOpen !== Number(r.product_id)) return '';
   const orders = Number(r.orders) || 0;
   const lines = [];
-  const row = (left, right, color) => `<div class="db-prod-read${color ? ' ' + color : ''}"><span>${left}</span>${right ? `<span class="num">${right}</span>` : ''}</div>`;
-  if (orders === 1) lines.push(row(cuT('1 order', '1 单')));
-  else if (orders) lines.push(row(cuT(orders + ' orders', orders + ' 单')));
-  if (!noMoney && r.prior_revenue != null) {
-    const units = Number(r.units) || 0, prevU = Number(r.prior_units) || 0;
-    const rev = Number(r.revenue) || 0, prevR = Number(r.prior_revenue) || 0;
-    if (units > prevU && rev < prevR) lines.push(row(cuT('More pieces, less money', '件数多了，营收取少了'), '', 'down'));
-    else if (rev !== prevR) {
-      const d = Math.round(rev - prevR), up = d > 0;
-      lines.push(row(`${cuT('Money', '营收')} ${up ? '+' : '−'}${dashMoney(Math.abs(d))}`, '', up ? 'up' : 'down'));
-    }
-  }
-  if (!noMoney && (Number(r.units) || 0) > 0) {
-    const price = Math.round((Number(r.revenue) || 0) / Number(r.units));
-    const prevU = Number(r.prior_units) || 0;
-    let tail = '';
-    if (prevU > 0 && r.prior_revenue != null) {
-      const was = Math.round((Number(r.prior_revenue) || 0) / prevU);
-      tail = was === price
-        ? `<span class="muted">${cuT('same as before', '与此前相同')}</span>`
-        : `<span class="down">${cuT('was', '此前')} ${dashMoney(was)}</span>`;
-    }
-    lines.push(`<div class="db-prod-read"><span>${cuT('Price', '售价')} ${dashMoney(price)}</span>${tail}</div>`);
-  }
+  const fig = (label, value, color) => `<div class="db-prod-read"><span class="muted">${label}</span><span class="num${color ? ' ' + color : ''}">${value}</span></div>`;
+  if (orders === 1) lines.push(`<div class="db-prod-read lead">${cuT('1 order', '1 单')}</div>`);
+  else if (orders) lines.push(`<div class="db-prod-read lead">${cuT(orders + ' orders', orders + ' 单')}</div>`);
   const alone = Number(r.alone) || 0;
   const w = r.with;
   if (w && Number(w.orders) > 0 && (!orders || Number(w.orders) >= alone)) {
     const en = w.name_en || w.name_cn || '', zh = w.name_cn || w.name_en || '';
     const of = orders ? cuT(w.orders + ' of ' + orders, orders + ' 单中的 ' + w.orders) : String(w.orders);
-    lines.push(row(escapeHtml(cuT('With ' + en, '与' + zh + '同单')), of));
+    lines.push(fig(escapeHtml(cuT('With ' + en, '与' + zh + '同单')), of));
   } else if (alone && (!orders || alone === orders)) {
     const word = orders === 2 ? cuT('both orders', '两单都是') : (orders === 1 ? cuT('1 order', '1 单') : cuT((orders || alone) + ' orders', (orders || alone) + ' 单'));
-    lines.push(row(cuT('On its own', '单独成单'), word));
+    lines.push(fig(cuT('On its own', '单独成单'), word));
+  }
+  if (!noMoney && (Number(r.units) || 0) > 0) {
+    const rev = Number(r.revenue) || 0;
+    lines.push(fig(cuT('This window', '本时段'), dashMoney(rev)));
+    if (r.prior_revenue != null) {
+      const units = Number(r.units) || 0, prevU = Number(r.prior_units) || 0, prevR = Number(r.prior_revenue) || 0;
+      if (units > prevU && rev < prevR) lines.push(`<div class="db-prod-read down">${cuT('More pieces, less money', '件数多了，营收取少了')}</div>`);
+      if (rev !== prevR) {
+        const d = Math.round(rev - prevR), up = d > 0;
+        lines.push(fig(cuT('vs the one before', '对比上一时段'), (up ? '+' : '−') + dashMoney(Math.abs(d)), up ? 'up' : 'down'));
+      }
+    }
+    const price = Math.round(rev / Number(r.units));
+    const prevU = Number(r.prior_units) || 0;
+    lines.push(fig(cuT('Price', '售价'), dashMoney(price)));
+    if (prevU > 0 && r.prior_revenue != null) {
+      const was = Math.round((Number(r.prior_revenue) || 0) / prevU);
+      lines.push(was === price
+        ? `<div class="db-prod-read"><span class="muted">${cuT('same as before', '与此前相同')}</span></div>`
+        : fig(cuT('was', '此前'), dashMoney(was), 'down'));
+    }
+    if (r.unit_cost != null && r.kept != null) {
+      const cost = Math.round(Number(r.unit_cost) * Number(r.units));
+      const kept = Number(r.kept), up = kept >= 0;
+      lines.push(fig(cuT('Food cost', '食品成本'), dashMoney(cost)));
+      lines.push(fig(cuT('Kept', '留下'), (up ? '' : '−') + dashMoney(Math.abs(kept)), up ? 'up' : 'down'));
+    }
   }
   const places = (r.places || []).filter(x => Number(x.units) > 0);
   if (places.length) {
     const max = Math.max(1, ...places.map(x => Number(x.units) || 0));
     const cn = window.cuLang && cuLang() === 'cn';
-    lines.push(places.map(x => {
+    lines.push('<div class="db-prod-places">' + places.map(x => {
       const name = x.kind === 'wholesale' ? cuT('Wholesale', '批发')
         : ((cn ? (x.name_cn || x.name_en) : (x.name_en || x.name_cn)) || cuT('Store', '门店'));
       const wdt = Math.max(2, Math.round((Number(x.units) || 0) / max * 100));
       return `<div class="db-prod-place"><span class="shop">${escapeHtml(name)}</span><span class="tbar"><i style="width:${wdt}%"></i></span><span class="q">${dashNum(x.units)}</span></div>`;
-    }).join(''));
-  }
-  if (!noMoney && r.unit_cost != null && r.kept != null && (Number(r.units) || 0) > 0) {
-    const cost = Math.round(Number(r.unit_cost) * Number(r.units));
-    const kept = Number(r.kept), up = kept >= 0;
-    const keptWord = (up ? '' : '−') + dashMoney(Math.abs(kept));
-    lines.push(row(
-      `<span class="muted">${cuT('Food cost', '食品成本')} ${dashMoney(cost)}</span>`,
-      `<span class="${up ? 'up' : 'down'}">${cuT('Kept', '留下')} ${keptWord}</span>`));
+    }).join('') + '</div>');
   }
   if (!lines.length) return '';
   return `<div class="db-prod-readwrap">${lines.join('')}</div>`;
