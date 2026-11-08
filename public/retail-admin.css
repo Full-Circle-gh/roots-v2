@@ -2235,6 +2235,17 @@
   }
   .db-prod-hit { display: block; width: 100%; padding: 0; border: none; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
   .db-prod-shelf { margin: 4px 0 0 26px; font-size: 12px; color: var(--td-amber-ink); }
+  .db-prod-readwrap { margin: 6px 0 2px 26px; display: flex; flex-direction: column; gap: 4px; }
+  .db-prod-read { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; }
+  .db-prod-read .muted { color: var(--td-text2); }
+  .db-prod-read .up { color: var(--td-sage-ink); }
+  .db-prod-read .down { color: var(--td-amber-ink); }
+  .db-prod-place { display: flex; align-items: center; gap: 8px; margin-top: 3px; font-size: 12.5px; }
+  .db-prod-place .shop { flex: 0 1 42%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .db-prod-place .tbar { flex: 1; height: 6px; border-radius: 3px; background: var(--td-raised); overflow: hidden; }
+  .db-prod-place .tbar i { display: block; height: 6px; border-radius: 3px; background: var(--td-amber-ink); }
+  .db-prod-place .q { flex: none; font-variant-numeric: tabular-nums; color: var(--td-text2); }
+  .db-prod-top .fig.down { color: var(--td-amber-ink); }
   .db-prod-days { margin: 8px 0 2px 26px; }
   .db-prod-days .cap, .db-prod-stopped .cap { font-size: 12px; color: var(--td-text2); margin-bottom: 4px; }
   .db-prod-days.muted { font-size: 12px; color: var(--td-text2); }

@@ -37,34 +37,22 @@ const { run } = require('./lib/m-probe');
  * failing on a screen nobody had touched. Same expiry as the purchasing probe
  * (558eed3), same answer.
  *
- * LOCAL DATES, NOT UTC AND NOT UTC+8. This one differs from the purchasing
- * fixture on purpose. _date() appends 'T00:00:00' with no Z to a bare
- * YYYY-MM-DD, so a bucket is parsed as LOCAL midnight, and fmtDateOnly compares
- * it against a LOCAL now. Building these from a UTC or Guangzhou date would
- * disagree with the page by a day for part of every day, in whichever direction
- * the runner's zone happens to lean. The fixture uses the same clock the
- * comparison does.
- *
- * The shape is unchanged: seven days, rising, with the peak on the sixth so
- * "Busiest day" has a single unambiguous answer — and that sixth day is now
- * yesterday, which is what makes the label assertion mean anything.
+ * SHOP DATES, NOT THE MACHINE'S. fmtDateOnly asks shopToday(), and the shop
+ * keeps its own calendar. A runner in UTC after 16:00 is already on the shop's
+ * next day; building the week from the machine's date then makes the last
+ * bucket "Yesterday" and the check for "Today" fails on a screen that is
+ * right. A bare YYYY-MM-DD is a calendar day (td-datetime), so these strings
+ * are that day in every zone.
  */
 const CLOCK = `
-  var _n=new Date();
-  var _pad=function(x){ return String(x).padStart(2,'0') };
-  var _day=function(off){
-    var d=new Date(_n.getFullYear(), _n.getMonth(), _n.getDate()+off);
-    return d.getFullYear()+'-'+_pad(d.getMonth()+1)+'-'+_pad(d.getDate());
-  };
-  // What the LEFT end of the line should read, derived here rather than by
-  // calling the screen's own fmtDay — a check that asks the code what it printed
-  // and then agrees with it has asserted nothing. Carries the year only when the
-  // window crosses one, which is fmtDay's rule and matters in the first week of
-  // January.
-  var _l=new Date(_n.getFullYear(), _n.getMonth(), _n.getDate()-6);
-  var LEFT_END = _l.getFullYear()===_n.getFullYear()
-    ? _l.toLocaleDateString('en-US',{month:'short',day:'numeric'})
-    : _l.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  var _nIso=shopToday();
+  var _day=function(off){ return shopDayAdd(_nIso, off); };
+  var _lIso=shopDayAdd(_nIso, -6);
+  var _utc=function(iso){ return new Date(iso+'T00:00:00Z'); };
+  var _l=_utc(_lIso), _n=_utc(_nIso);
+  var LEFT_END = _l.getUTCFullYear()===_n.getUTCFullYear()
+    ? _l.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'})
+    : _l.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
 `;
 
 const WEEK = CLOCK + `state.trendKey='7'; state.trend=[
@@ -212,7 +200,7 @@ const FULL = WEEK + `state.trendFull={
  * the runner's clock for the same reason the week above is, and long enough
  * that every weekday has had two goes at it. */
 const FORTNIGHT = CLOCK + `
-  var _v=function(off){ var d=new Date(_n.getFullYear(), _n.getMonth(), _n.getDate()+off); return d.getDay()===6?100:10; };
+  var _v=function(off){ var d=new Date(shopDayAdd(_nIso, off)+'T00:00:00Z'); return d.getUTCDay()===6?100:10; };
   var _t=[]; for(var i=13;i>=0;i--){ _t.push({bucket:_day(-i),orders:_v(-i),revenue:_v(-i)*10,visits:_v(-i)*2}); }
   state.trendRange='30'; state.trendKey='30'; state.trend=_t;`;
 
@@ -225,6 +213,28 @@ const COHORTS = FULL + `
     return y+'-'+String(mo).padStart(2,'0'); };
   state.trendFull.cohortSizes=[{cohort_month:_ym(-2),size:100},{cohort_month:_ym(0),size:50}];
   state.trendFull.cohorts=[{cohort_month:_ym(-2),active_month:_ym(-1),active_customers:40}];`;
+
+/* The six readings under the total and on the open bar. One sample week, the
+ * same shape the screen paints from /dashboard. */
+const DEEPER = FULL + `
+  state.trendFull.kpis.aov=86; state.trendFull.kpis.aov_change=4;
+  state.trendFull.kpis.refunded_orders=6; state.trendFull.kpis.refund_rate=2.7;
+  state.trendFull.money_of={food:15900,delivery_fees:1100,wallet_loads:1400,given_away:480};
+  state.trendFull.return_every_days=9;
+  state.trendFull.stopped_customer_count=4;
+  state.trendFull.stopped_customers=[
+    {customer_id:1,nickname:'Chen',days_ago:16},
+    {customer_id:2,nickname:'Lin',days_ago:21}];
+  state.trendFull.stockouts=[{product_id:2,name_en:'Falafel Wrap',name_cn:'法拉费卷',dow:6}];
+  state.trendFull.refunded_products=[{product_id:8,name_en:'Greens',name_cn:'青菜',orders:2,reason:'Short'}];
+  var f=state.trendFull.topProducts[0];
+  f.orders=38;
+  f.places=[{kind:'store',name_en:'Tianhe',name_cn:'天河',units:90},{kind:'wholesale',units:18}];
+  f.with={name_en:'Hummus',name_cn:'鹰嘴豆酱',orders:24};
+  f.unit_cost=7; f.kept=1820;
+  state.trendFull.topProducts.push({product_id:4,name_en:'Sesame bun',name_cn:'芝麻包',units:60,revenue:420,
+    prior_units:38,prior_revenue:608,orders:2,alone:2,unit_cost:9,kept:-120});
+`;
 
 CASES.push(
   ['the window before this one', FULL + `APP.cmd('push','trend');`, [
@@ -411,6 +421,39 @@ CASES.push(
     render();`, [
     ['the days are named', `txt('content').includes('Each day')`],
     ['and drawn under the bars', `document.querySelectorAll('#content svg').length >= 2`],
+  ]],
+  ['the open row and the lines under the total', DEEPER + `APP.cmd('push','trend'); APP.cmd('trendSection','products'); APP.cmd('trendSection','customers');
+    state.prodOpen=2;
+    state.prodDays={id:2, key:trendReadKey(), granularity:'day', points:[{bucket:'2999-01-01',units:20}]};
+    render();`, [
+    ['the average order is yuan, against the window before', `txt('content').includes('Average order') && txt('content').includes('¥86') && txt('content').includes('+¥4')`],
+    ['refunds are a count and a rate', `txt('content').includes('Refunded') && txt('content').includes('6 · 2.7%')`],
+    ['the three slices add up to the total', `txt('content').includes('Of the ¥18,400') && txt('content').includes('¥15,900') && txt('content').includes('¥1,100') && txt('content').includes('¥1,400')`],
+    ['what was given away sits beside them', `txt('content').includes('Given away') && txt('content').includes('¥480')`],
+    ['the open row says how many orders', `txt('content').includes('38 orders')`],
+    ['and whether the money moved', `txt('content').includes('Money') && txt('content').includes('+¥800')`],
+    ['the price, against the window before', `txt('content').includes('Price') && txt('content').includes('¥20') && txt('content').includes('same as before')`],
+    ['what else was in the bag', `txt('content').includes('With Hummus') && txt('content').includes('24 of 38')`],
+    ['which shop, and wholesale on its own', `txt('content').includes('Tianhe') && txt('content').includes('Wholesale')`],
+    ['what the recipe left', `txt('content').includes('Food cost') && txt('content').includes('¥980') && txt('content').includes('Kept') && txt('content').includes('¥1,820')`],
+    ['how often a returning buyer comes back', `txt('content').includes('A returning buyer orders every') && txt('content').includes('9 days')`],
+    ['who bought then and not now', `txt('content').includes('Bought then, none now') && txt('content').includes('Chen') && txt('content').includes('16 days ago') && txt('content').includes('2 more')`],
+    ['a zero on a day that product sells', `txt('content').includes('Out on a day it sells') && txt('content').includes('Saturday')`],
+    ['a refund, with the words written on the order', `txt('content').includes('Greens') && txt('content').includes('Short')`],
+  ]],
+  ['a cheaper price is why the money fell, and a loss is said', DEEPER + `APP.cmd('push','trend'); APP.cmd('trendSection','products');
+    state.prodOpen=4; render();`, [
+    ['the pieces rose and the money fell', `txt('content').includes('More pieces, less money')`],
+    ['the old price is named', `txt('content').includes('Price') && txt('content').includes('¥7') && txt('content').includes('was') && txt('content').includes('¥16')`],
+    ['both orders were that product alone', `txt('content').includes('On its own') && txt('content').includes('both orders')`],
+    ['the loss is the figure', `txt('content').includes('−¥120')`],
+  ]],
+  ['a warehouse account still sees no money on the open row',
+   `state.pos='warehouse'; ` + DEEPER + `APP.cmd('push','trend'); APP.cmd('trendSection','products');
+    state.prodOpen=4; render();`, [
+    ['not a yen anywhere', `!txt('content').includes('¥')`],
+    ['not the price, the money line, or what was kept', `!txt('content').includes('Price') && !txt('content').includes('More pieces') && !txt('content').includes('Food cost') && !txt('content').includes('Kept')`],
+    ['the orders and the shops stay', `txt('content').includes('On its own') && txt('content').includes('Out on a day it sells')`],
   ]],
   ['the product ranking no longer claims wholesale is excluded', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','products');`, [
     // §185 put the mirror's lines in this ranking. The note that said they were
