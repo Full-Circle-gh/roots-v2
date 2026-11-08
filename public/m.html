@@ -1026,6 +1026,9 @@ const state = {
   roles:[],            /* the tenant's own roles, so a role is named the way its shop names it */
   caps:null,           /* the signed-in operator's effective permissions; null = unknown, treated as allowed */
   trend:null, trendFull:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
+  /* Product bars on Trend. Units lands first because the change is units.
+     20 is the cut until 10, 50, or all is picked. */
+  prodMeasure:'units', prodN:'20', prodOpen:null, prodDays:null,
   /* §300 F5 — Reports on the phone: the custom days, the store picked, whether
      the stores were asked for, the AI read (per window key) and the Ask log. */
   trendFrom:null, trendTo:null, trendStore:'', trendStoresTried:false,
@@ -4227,13 +4230,21 @@ function qyDayPanel(o){
   const q=qyOf(o), from=escAttr((o.shipFrom&&o.shipFrom.promised_date)||'');
   const dis=state.orderBusy?' disabled':'';
   const pick=q&&q.day;
+  const slots=(q&&q.slots)||[];
+  const needTime=!!(pick&&q&&!q.loading&&!q.dayOnly);
+  const dest=q&&q.slotLabel?pick+' '+q.slotLabel:pick;
+  const show=!!(pick&&q&&!q.loading&&(q.dayOnly||q.slot));
   return `<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
     <div style="display:flex;flex-wrap:wrap;gap:8px">${qyDays().map(d=>
       `<button class="chip ${pick===d.iso?'on':''}"${dis} onclick="APP.cmd('qyDayPick','${d.iso}')"><span class="num">${d.iso}</span>${d.rel?` <span style="color:var(--text-secondary)">${d.rel}</span>`:''}</button>`).join('')}</div>
     <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.6">${T('The rider is called on the morning of the day you pick. Nothing is dispatched before then.','所选日期当天才会呼叫骑手,在此之前不会发单。')}</div>
-    ${pick?`<div style="padding:10px 12px;border-radius:12px;background:var(--surface-raised);font-size:13.5px;line-height:1.55">${T(
-        'Move this delivery from '+from+' to '+pick+'? The customer is told the new day.',
-        '将配送日期由 '+from+' 改为 '+pick+'？系统会告知顾客新的日期。')}
+    ${q&&q.loading?qyNote(T('Loading…','加载中…')):''}
+    ${q&&q.err&&!q.loading?qyNote(q.err):''}
+    ${needTime?`<div style="display:flex;flex-wrap:wrap;gap:8px">${slots.map(s=>
+      `<button class="chip ${q.slot===s.slot_id?'on':''}"${(s.passed||dis)?' disabled':''} onclick="APP.cmd('qyDayTime','${escAttr(s.slot_id)}')"><span class="num">${escAttr(s.label_en)}</span></button>`).join('')}</div>`:''}
+    ${show?`<div style="padding:10px 12px;border-radius:12px;background:var(--surface-raised);font-size:13.5px;line-height:1.55">${T(
+        'Move this delivery from '+from+' to '+dest+'? The customer is told the new day.',
+        '将配送日期由 '+from+' 改为 '+dest+'？系统会告知顾客新的日期。')}
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="cta" style="flex:1"${dis} onclick="APP.cmd('qyDayGo')">${state.orderBusy==='qyday'?T('Moving…','处理中…'):T('Move the delivery','确认改期')}</button>
         <button class="btn2" style="flex:1"${dis} onclick="APP.cmd('qyClose')">${T('Keep the current date','保持原日期')}</button></div></div>`:''}
@@ -4303,18 +4314,37 @@ reg('qyDayOpen', ()=>{
 reg('qyDayPick', iso=>{
   const o=currentOrder(), q=qyOf(o); if(!q||q.panel!=='day') return;
   if(!qyDays().some(d=>d.iso===iso)) return;
-  q.day=iso; render();
+  q.day=iso; q.slot=null; q.slotLabel=null; q.slots=null; q.dayOnly=false; q.loading=true; q.err=null; render();
+  api('/orders/'+o._id+'/qingyun/day-slots?date='+encodeURIComponent(iso)).then(d=>{
+    if(state.qy!==q||q.day!==iso) return;
+    q.loading=false;
+    // A read that names no windows (the tests' empty object, a day-only zone)
+    // still moves by the day. A real time-slot zone sends day_only:false.
+    q.dayOnly=!d||d.day_only!==false;
+    q.slots=q.dayOnly?[]:(Array.isArray(d.slots)?d.slots:[]);
+    render();
+  }).catch(e=>{
+    if(state.qy!==q||String(e.message)==='auth') return;
+    q.loading=false; q.err=e.refused?T(...e.words):T('Load failed','加载失败'); render();
+  });
+});
+reg('qyDayTime', id=>{
+  const o=currentOrder(), q=qyOf(o); if(!q||q.panel!=='day'||q.loading) return;
+  const s=(q.slots||[]).find(x=>x&&x.slot_id===id&&!x.passed);
+  if(!s) return;
+  q.slot=id; q.slotLabel=s.label_en; render();
 });
 reg('qyDayGo', ()=>{
   if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
-  const o=currentOrder(), q=qyOf(o); if(!qyCanEdit(o)||!q||q.panel!=='day'||!q.day) return;
+  const o=currentOrder(), q=qyOf(o); if(!qyCanEdit(o)||!q||q.panel!=='day'||!q.day||q.loading) return;
+  if(!q.dayOnly&&!q.slot) return;
   const iso=q.day;
   // Beijing day, the server's gzDateStr — the two must agree about "today".
   const today=iso===qyDays()[0].iso;
   const when=today?'today':iso, whenCn=today?'今天':' '+iso;
-  qyWrite(o,'qyday','/orders/'+o._id+'/qingyun/reschedule',{date:iso},{_:['Could not move it','改期失败']},
+  qyWrite(o,'qyday','/orders/'+o._id+'/qingyun/reschedule',q.slot?{date:iso,slot:q.slot}:{date:iso},{waiting_copy:['Could not remove it — do it in the Qingyun app','删除失败 — 请在青云 App 中删除'],_:['Could not move it','改期失败']},
     j=>j.already_created?T('A courier is already on this one — cancel it in the Qingyun app first','已呼叫运力。请先在青云 App 取消该单。')
-      :j.requeued?(today?T('Moved to today — it goes back in the queue now','已改期至今天 — 已重新排队')
+      :(j.requeued||j.kept_waiting)?(today?T('Moved to today — it goes back in the queue now','已改期至今天 — 已重新排队')
         :T('Moved to '+iso+' — the rider is called that morning','已改期至 '+iso+' — 当天呼叫骑手'))
       :j.stale_copy?T('Moved to '+when+'. The old courier order may still be live — cancel it in the Qingyun app, then call another courier.',
         '已改期至'+whenCn+'。运单可能仍在,请先在青云 App 取消该单,再叫一家运力。')
@@ -6444,6 +6474,33 @@ reg('trendRange', v=>{
   state.trendRange=v; state.trendFrom=null; state.trendTo=null; render(); loadTrend(); });
 reg('trendMetric', v=>{ state.trendMetric=v; render(); });
 reg('trendSection', k=>{ state.trendOpen[k]=!state.trendOpen[k]; render(); });
+reg('prodMeasure', v=>{ state.prodMeasure=v; render(); });
+reg('prodN', v=>{ state.prodN=v; render(); });
+reg('prodDays', id=>{
+  id=Number(id);
+  const key=trendReadKey();
+  if(state.prodOpen===id && state.prodDays && state.prodDays.key===key && !state.prodDays.loading){
+    state.prodOpen=null; render(); return;
+  }
+  state.prodOpen=id;
+  if(state.prodDays && state.prodDays.id===id && state.prodDays.key===key && state.prodDays.points){
+    render(); return;
+  }
+  state.prodDays={id, key, loading:true};
+  render();
+  const win=trendWindow();
+  const seq=id+'|'+key;
+  state.prodDaysSeq=seq;
+  api('/dashboard/product-days?product_id='+id+'&from='+encodeURIComponent(win.from)+'&to='+encodeURIComponent(win.to)+trendStoreQS()).then(d=>{
+    if(state.prodDaysSeq!==seq) return;
+    state.prodDays={id, key, granularity:d.granularity, points:d.points||[]};
+    render();
+  }).catch(()=>{
+    if(state.prodDaysSeq!==seq) return;
+    state.prodDays={id, key, err:true};
+    render();
+  });
+});
 reg('openChannel', k=>{ state.chanSheet=k; state.chanErr=null; render(); });
 reg('closeChannel', ()=>{ state.chanSheet=null; state.chanErr=null; render(); });
 /* §325 S2m — WHAT CLOSING ELEME ACTUALLY DOES. Closing Eleme at a store writes
@@ -35416,7 +35473,8 @@ function x7PrnSeed(p){
     shop_name:p.shop_name||'', kitchen_sn:p.kitchen_sn||'', kitchen_vendor:p.kitchen_vendor||'feie',
     kitchen_print_on:p.kitchen_print_on||'sent', kitchen_copies:String(Number(p.kitchen_copies)||1),
     transfer_print_on:p.transfer_print_on||'sent',
-    out_of_city_store_id:p.out_of_city_store_id==null?'':String(p.out_of_city_store_id), by_store:{}};
+    out_of_city_store_id:p.out_of_city_store_id==null?'':String(p.out_of_city_store_id),
+    keep_out_of_city_when_closed:p.keep_out_of_city_when_closed===true, by_store:{}};
   (p.stores||[]).forEach(s=>{ d.by_store[s.id]={sn:s.sn||'', vendor:s.vendor||'feie', template:s.template||'receipt', copies:String(Number(s.copies)||1)}; });
   return d;
 }
@@ -35447,10 +35505,11 @@ function x7PrnBody(){
     transfer_print_on:d.transfer_print_on||'sent',
     by_store:x7ByStore(),
     out_of_city_store_id:d.out_of_city_store_id||null,
+    keep_out_of_city_when_closed:!!d.keep_out_of_city_when_closed,
   };
 }
 reg('x7Prn', (k,v)=>{ const d=x7().prnD; if(!d) return;
-  if(['auto_print','auto_print_addon','auto_print_refund'].includes(k)){ d[k]=!d[k]; render(); return; }
+  if(['auto_print','auto_print_addon','auto_print_refund','keep_out_of_city_when_closed'].includes(k)){ d[k]=!d[k]; render(); return; }
   if(['shop_name','kitchen_sn','kitchen_copies'].includes(k)){ d[k]=String(v==null?'':v); return; }
   if(k==='kitchen_vendor'){ if(x7PrnVendors().some(x=>x.id===v)) d[k]=v; render(); return; }
   if(k==='kitchen_print_on'){ if(X7_KITCHEN_WHEN.some(x=>x[0]===v)) d[k]=v; render(); return; }
@@ -35568,7 +35627,8 @@ function screenPrinters(){
     <div>${cfgHead(T('Stock requests','补货申请'),T('A stock request prints at the shop that has to fill it, the moment it is sent. It uses that shop\'s own printer — the one set above — so there is nothing extra to configure.','补货申请发出时,在供货门店自动打印,使用该门店上方设置的打印机,无需另行配置。'))}
       ${sel("APP.cmd('x7Prn','transfer_print_on',this.value)",d.transfer_print_on,X7_TRANSFER_WHEN,T('When a stock request prints','补货申请何时打印'))}</div>
     <div>${cfgHead(T('Out-of-Guangzhou orders','广州以外订单'),T('Orders shipping outside Guangzhou always print at this store\'s printer (the warehouse that ships them). In-Guangzhou orders print at their own store.','广州以外的订单始终在此门店出单;市内订单仍在各自门店打印。'))}
-      ${sel("APP.cmd('x7Prn','out_of_city_store_id',this.value)",d.out_of_city_store_id,[['','— Use each order’s own store —','— 按订单所属门店 —']].concat(stores.map(x=>[String(x.id),x.name_cn||x.name_en||x.code||('Store '+x.id),x.name_cn||x.name_en||x.code||('Store '+x.id)])),T('Which printer prints out-of-city orders','市外订单的打印门店'))}</div>
+      ${sel("APP.cmd('x7Prn','out_of_city_store_id',this.value)",d.out_of_city_store_id,[['','— Use each order’s own store —','— 按订单所属门店 —']].concat(stores.map(x=>[String(x.id),x.name_cn||x.name_en||x.code||('Store '+x.id),x.name_cn||x.name_en||x.code||('Store '+x.id)])),T('Which printer prints out-of-city orders','市外订单的打印门店'))}
+      ${sw('keep_out_of_city_when_closed','When this store is closed, orders outside Guangzhou still come here. Orders in Guangzhou go to a store that is open.','此门店关闭时，广州以外的订单仍发到这里。广州市内的订单改派到仍在营业的门店。')}</div>
     ${x7Note('printer')}
     ${x7Btn('x7PrnSave',T('Save all','全部保存'),'printer',{primary:true})}</div>`;
 }
@@ -45270,6 +45330,7 @@ function loadTrend(force){
   const key=trendReadKey();
   if(state.trendKey===key&&!force) return;
   state.trendKey=key; state.trend=null; state.trendFull=null; state.trendErr=null;
+  state.prodOpen=null; state.prodDays=null;
   /* THE WINDOW WAS ONE DAY TOO LONG IN GUANGZHOU, which is to say everywhere it
      actually runs. `new Date(to+'T00:00:00')` is LOCAL midnight and setDate
      steps back in LOCAL days — but the result was serialised with
@@ -45384,6 +45445,132 @@ function trendBestDow(vals){
   let b=-1;
   for(let w=0;w<7;w++){ if(!n[w]) continue; if(b<0||sum[w]/n[w]>sum[b]/n[b]) b=w; }
   return b<0?null:T(TREND_DOW[b][0],TREND_DOW[b][1]);
+}
+
+/* One product's days, drawn under the bar that was tapped. Ink, not a status
+   colour: the line is the shape, and the green number above it is the change. */
+function trendProdSpark(vals){
+  const n=vals.length; if(!n) return '';
+  const W=1000,H=160,pad=6;
+  const max=Math.max(1,...vals);
+  const x=i=>pad+(n===1?(W-2*pad)/2:(i/(n-1))*(W-2*pad));
+  const y=v=>pad+(H-2*pad)-(v/max)*(H-2*pad);
+  const pts=vals.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1));
+  const area='M'+x(0).toFixed(1)+','+(H-pad)+' L'+pts.join(' L')+' L'+x(n-1).toFixed(1)+','+(H-pad)+' Z';
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;width:100%;height:72px" aria-hidden="true">
+    <path d="${area}" fill="var(--surface-raised)"></path>
+    <path d="M${pts.join(' L')}" fill="none" stroke="var(--text-primary)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+    <circle cx="${x(n-1).toFixed(1)}" cy="${y(vals[n-1]).toFixed(1)}" r="6" fill="var(--text-primary)"></circle></svg>`;
+}
+function trendProdDaysHtml(p){
+  const id=Number(p.product_id);
+  if(state.prodOpen!==id) return '';
+  const d=state.prodDays, key=trendReadKey();
+  if(!d||d.id!==id||d.key!==key) return '';
+  if(d.loading) return `<div style="margin:8px 0 0 26px;font-size:12px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(d.err||!d.points||!d.points.length) return `<div style="margin:8px 0 0 26px;font-size:12px;color:var(--text-secondary)">${T('Could not load these days.','无法加载这几天。')}</div>`;
+  const cap=d.granularity==='hour'?T('Each hour','每小时'):d.granularity==='week'?T('Each week','每一周'):T('Each day','每一天');
+  const lab=x=>d.granularity==='hour'?(x.bucket+':00'):fmtDateOnly(x.bucket);
+  const a=d.points[0], b=d.points[d.points.length-1];
+  return `<div style="margin:8px 0 0 26px">
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${cap}</div>
+    ${trendProdSpark(d.points.map(x=>Number(x.units)||0))}
+    <div class="num" style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary);padding-top:4px">
+      <span>${escAttr(lab(a))}</span><span>${escAttr(lab(b))}</span></div></div>`;
+}
+/* The running-low card's words, and only beside a rise. Sold out and "N left"
+   are that card's own pairs. */
+function trendShelfLine(p){
+  const s=p.shelf; if(!s) return '';
+  if(!((Number(p.units)||0)>(Number(p.prior_units)||0))) return '';
+  const word=s.kind==='out'?T('Sold out','售罄'):T((Number(s.qty)||0)+' left','剩 '+(Number(s.qty)||0));
+  return `<div style="margin:4px 0 0 26px;font-size:12px;color:var(--amber-ink)">${word}</div>`;
+}
+function trendStoppedHtml(rows, num){
+  if(!rows||!rows.length) return '';
+  const pname=p=>((LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||'');
+  const body=rows.map(p=>`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:10px">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pname(p))}</span>
+      <span class="num" style="color:var(--amber-ink);flex:none">−${num(Math.round(Number(p.prior_units)||0))}</span></div>`).join('');
+  return `<div style="border-top:1px solid var(--border-default);padding-top:12px;margin-top:4px">
+    <div style="font-size:12.5px;color:var(--text-secondary)">${T('Sold then, none now','上一时段有售，本时段无')}</div>${body}</div>`;
+}
+
+/* The product bars. One bar per product that sold. The length is this window
+   in the measure picked (units, or revenue when the account may see money).
+   The mark is the window before, on the same scale. The figure on the right
+   of the name is always the unit change: a first sale in the window reads
+   "0 → n", not a percent. The server list stays in revenue order; this
+   re-sorts and cuts. Tap a row for that product's days. Under the bars, the
+   products that sold in the window before and none in this one. */
+function trendProductChart(rows, noMoney, mn, num){
+  const all=(rows||[]).filter(p=>Number(p.units)||Number(p.revenue));
+  const stopped=(state.trendFull&&state.trendFull.stopped)||[];
+  if(!all.length){
+    if(!stopped.length) return null;
+    return {summary:{t:T('Sold then, none now','上一时段有售，本时段无'), v:String(stopped.length)},
+      html:trendStoppedHtml(stopped, num)};
+  }
+  const measure=noMoney?'units':(state.prodMeasure||'units');
+  const n=state.prodN||'20';
+  const val=p=>measure==='revenue'?(Number(p.revenue)||0):(Number(p.units)||0);
+  const priorOf=p=>{
+    if(measure==='revenue') return p.prior_revenue==null?null:(Number(p.prior_revenue)||0);
+    return p.prior_units==null?null:(Number(p.prior_units)||0);
+  };
+  const sorted=all.slice().sort((a,b)=>val(b)-val(a));
+  const shown=n==='all'?sorted:sorted.slice(0, Number(n)||20);
+  const max=Math.max(1, ...shown.map(p=>Math.max(val(p), priorOf(p)||0)));
+  const pname=p=>((LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||'');
+  const move=p=>{
+    if(p.prior_units==null) return '';
+    const prev=Number(p.prior_units)||0, cur=Number(p.units)||0;
+    if(!prev) return `<span class="num" style="color:var(--text-secondary);min-width:4.2em;text-align:right;flex:none">0 → ${num(cur)}</span>`;
+    const d=cur-prev;
+    if(!d) return `<span class="num" style="color:var(--text-secondary);min-width:4.2em;text-align:right;flex:none">0</span>`;
+    const up=d>0;
+    return `<span class="num" style="color:var(--${up?'sage':'amber'}-ink);min-width:4.2em;text-align:right;flex:none">${up?'+':'−'}${num(Math.abs(d))}</span>`;
+  };
+  const chip=(list,cur,cmd)=>`<div style="display:flex;gap:6px;flex-wrap:wrap">${list.map(([k,en,zh])=>
+    `<button type="button" onclick="APP.cmd('${cmd}','${k}')" style="padding:4px 10px;border-radius:999px;border:1px solid var(--border-default);font:inherit;font-size:12.5px;cursor:pointer;background:${String(cur)===k?'var(--text-primary)':'transparent'};color:${String(cur)===k?'var(--surface-card)':'var(--text-secondary)'}">${T(en,zh)}</button>`).join('')}</div>`;
+  const measures=[['units','Units','件数']];
+  if(!noMoney) measures.push(['revenue','Revenue','营收']);
+  const counts=[['10','10','10'],['20','20','20'],['50','50','50'],['all','All','全部']];
+  const body=shown.map((p,i)=>{
+    const v=val(p), pr=priorOf(p);
+    const w=v<=0?0:Math.max(2, Math.round(v/max*100));
+    const mark=pr==null?'':`<div style="position:absolute;left:${Math.round(pr/max*100)}%;top:-4px;width:0;height:0;transform:translateX(-4px);border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid var(--text-secondary)"></div>`;
+    const big=(measure==='revenue'&&!noMoney)?mn(p.revenue):num(p.units);
+    const quiet=noMoney?'':(measure==='revenue'?num(p.units):mn(p.revenue));
+    return `<div style="padding-top:11px;border-top:1px solid var(--border-default)">
+      <button type="button" onclick="APP.cmd('prodDays',${Number(p.product_id)||0})" style="display:block;width:100%;padding:0;border:none;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <span class="num" style="width:18px;flex:none;font-size:12px;color:var(--text-secondary)">${i+1}</span>
+        <span style="flex:1;min-width:0">
+          <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pname(p))}</span>
+          ${quiet?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${quiet}</span>`:''}
+        </span>
+        <span class="num" style="font-weight:500;flex:none">${big}</span>
+        ${move(p)}
+      </div></button>
+      <div style="position:relative;height:8px;margin:6px 0 0 26px;background:var(--surface-raised);border-radius:4px">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:${w}%;background:var(--text-primary);border-radius:4px"></div>
+        ${mark}
+      </div>
+      ${trendShelfLine(p)}
+      ${trendProdDaysHtml(p)}
+    </div>`;
+  }).join('');
+  const knows=shown.some(p=>p.prior_units!=null);
+  const legend=knows?`<div style="display:flex;gap:14px;align-items:center;font-size:12px;color:var(--text-secondary);padding-top:4px">
+    <span><i style="display:inline-block;width:18px;height:8px;border-radius:4px;background:var(--text-primary);margin-right:6px;vertical-align:middle"></i>${T('This window','本时段')}</span>
+    <span><i style="display:inline-block;width:0;height:0;margin-right:6px;vertical-align:-1px;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid var(--text-secondary)"></i>${T('The one before','上一时段')}</span>
+  </div>`:'';
+  const top=shown[0];
+  return {
+    summary:{t:pname(top), v:noMoney?num(top.units):(num(top.units)+' · '+mn(top.revenue))},
+    html:`<div style="display:flex;flex-direction:column;gap:8px">${chip(measures,measure,'prodMeasure')}${chip(counts,n,'prodN')}<div>${body}</div>${legend}${trendStoppedHtml(stopped, num)}</div>`,
+  };
 }
 
 /* The four sections, built from the payload and from nothing else. A row whose
@@ -45562,20 +45749,7 @@ function trendSections(){
 
   // ── Products & traffic ──
   const prod=[];
-  const tp=(d.topProducts||[])[0];
-  const tpName=tp?((LANG==='en'?(tp.name_en||tp.name_cn):(tp.name_cn||tp.name_en))||''):'';
-  if(tpName){
-    /* NOT THE MOST UNITS — THE MOST MONEY. topProducts comes back
-       `ORDER BY revenue DESC` (routes/retail.js), so row one is the product that
-       EARNED most, and its unit count can be lower than the row below it. Called
-       "Top seller" it read as a volume ranking and was not one; a costly product
-       shifting seventeen units outranked a cheap one shifting four hundred. The
-       desktop's own Top products panel carries the same fault and is renamed
-       with this (03-dashboard.js / retail-admin.html). Renamed rather than
-       re-sorted: the ranking is useful, it was only ever named wrong. */
-    prod.push({t:T('Top earner','营收最高'),v:tpName});
-    prod.push({t:T('Units sold','销量'),v:noMoney?num(tp.units):num(tp.units)+' · '+mn(tp.revenue)});
-  }
+  const chart=trendProductChart(d.topProducts, noMoney, mn, num);
   const k=d.kpis||{};
   /* The mini app's own conversion, and the server says so: kpis.conversion_rate
      divides mini_app_orders by sessions, never the all-channel order count. */
@@ -45583,13 +45757,10 @@ function trendSections(){
     v:Number(k.conversion_rate).toFixed(1)+'%'});
   const co=d.checkout||{};
   if(co.abandoned) prod.push({t:T('Started checkout, did not pay','进入结算但未付款'),v:num(co.abandoned)});
-  /* The wholesale channel's REVENUE is in the headline and its ITEMS are not in
-     this ranking — topProducts filters channel='gzgrocery' out. The exclusion is
-     there to stop its takings being counted twice (they arrive by their own
-     ledger), and it catches the order lines on the way past. Said out loud here
-     rather than left for somebody to discover by adding the rows up. */
-  if(prod.length) out.push({key:'products',icon:'package',tone:'amber',title:T('Products & traffic','商品与流量'),rows:prod,
-    note:T('Wholesale pickups are not counted here.','不含批发提货。')});
+  /* Wholesale lines are in this ranking (§185). The old note said they were
+     not, which was the exclusion before that decision. */
+  if(chart||prod.length) out.push({key:'products',icon:'package',tone:'amber',title:T('Products & traffic','商品与流量'),
+    summary:chart?chart.summary:null, chart:chart?chart.html:'', rows:prod});
 
   // ── Stores ──
   /* The breakdown the old note sent people to a desktop for. Six at most: a
@@ -45698,6 +45869,7 @@ function screenTrend(){
   const sections=trendSections();
   const section=s=>{
     const open=!!state.trendOpen[s.key];
+    const sum=s.summary||(s.rows&&s.rows[0]);
     return `<div class="card" style="overflow:hidden">
       <button onclick="APP.cmd('trendSection','${s.key}')" style="display:flex;align-items:center;gap:12px;width:100%;padding:15px 16px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
         <span style="flex:none;width:32px;height:32px;border-radius:9px;background:var(--${s.tone}-tint);color:var(--${s.tone}-ink);display:flex;align-items:center;justify-content:center">${ic(s.icon,17)}</span>
@@ -45714,11 +45886,12 @@ function screenTrend(){
                 carrying no figure, worse than none at all. Laid out like the rows
                 it summarises instead: label truncates from the right, value never
                 does. */''}
-          ${open?'':`<span style="display:flex;align-items:baseline;gap:8px;margin-top:1px">
-            <span style="font-size:12.5px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(s.rows[0].t)}</span>
-            <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${escAttr(s.rows[0].v)}</span></span>`}</span>
+          ${open||!sum?'':`<span style="display:flex;align-items:baseline;gap:8px;margin-top:1px">
+            <span style="font-size:12.5px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(sum.t)}</span>
+            <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${escAttr(sum.v)}</span></span>`}</span>
         <span style="flex:none;color:var(--text-secondary);display:flex">${ic(open?'chevron-down':'chevron-right')}</span></button>
       ${open?`<div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:11px">
+        ${s.chart||''}
         ${s.rows.map(r=>`<div style="border-top:1px solid var(--border-default);padding-top:11px">
           <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
             <span style="font-size:14px;color:var(--text-secondary);min-width:0">${escAttr(r.t)}</span>
@@ -45967,7 +46140,10 @@ function trendDigest(){
     wallet:D.topups?{topups_received:r2(D.topups.received),store_credit_redeemed:r2(D.topups.redeemed)}:null,
     busiest_hours:(D.heat||[]).slice().sort((a,b)=>b.orders-a.orders).slice(0,3)
       .map(h=>({weekday:TREND_DOW_EN[h.dow],hour:h.hour,orders:h.orders})),
-    top_products:(D.topProducts||[]).slice(0,8).map(p=>({name:p.name_en||p.name_cn,units:p.units,revenue:r2(p.revenue)})),
+    top_products:(D.topProducts||[]).slice(0,8).map(p=>({name:p.name_en||p.name_cn,units:p.units,revenue:r2(p.revenue),
+      prior_units:p.prior_units==null?null:p.prior_units, prior_revenue:p.prior_revenue==null?null:r2(p.prior_revenue),
+      shelf:p.shelf?p.shelf.kind:null, shelf_qty:p.shelf?p.shelf.qty:null})),
+    stopped:(D.stopped||[]).slice(0,8).map(p=>({name:p.name_en||p.name_cn, prior_units:p.prior_units})),
     top_customers:(D.topCustomers||[]).slice(0,5).map(c=>({name:c.nickname||('#'+c.customer_id),orders:c.orders,revenue:r2(c.revenue)})),
     buyers_by_channel:trendDigestBuyers(D),
     top_cities:(D.geoCities||[]).slice(0,6).map(g=>({city:g.city_en||g.city,city_cn:g.city,orders:g.orders,revenue:r2(g.revenue)})),

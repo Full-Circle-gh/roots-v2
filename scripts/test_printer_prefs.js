@@ -72,6 +72,7 @@ it('everything prints by itself, slips name the brand, no shop printers, no out-
     shop_name: 'Roots',
     by_store: {},
     out_of_city_store_id: null,
+    keep_out_of_city_when_closed: false,
   });
 });
 
@@ -141,6 +142,15 @@ it('blank, unset, negative, decimal or text means no out-of-city shop (null), ne
     set('printer.out_of_city_store_id', v);
     assert.strictEqual(loadPrinterPrefs().out_of_city_store_id, null, JSON.stringify(v));
   }
+});
+it('keeping out-of-city orders at a closed shop is off until stored as true', () => {
+  assert.strictEqual(loadPrinterPrefs().keep_out_of_city_when_closed, false);
+  for (const v of [false, 0, 'true', 'yes', null]) {
+    set('printer.keep_out_of_city_when_closed', v);
+    assert.strictEqual(loadPrinterPrefs().keep_out_of_city_when_closed, false, JSON.stringify(v));
+  }
+  set('printer.keep_out_of_city_when_closed', true);
+  assert.strictEqual(loadPrinterPrefs().keep_out_of_city_when_closed, true);
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

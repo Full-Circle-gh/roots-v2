@@ -225,12 +225,13 @@ section('2 · receipt printing');
     const t = h.text(h.ctx.SUBS.printers.render());
     for (const w of ['Feie', 'On', 'Shangpeng', 'Not set', 'Auto-print every paid order at its store', 'Receipt header',
       'Printers by store', 'Tianhe', 'Yuexiu', 'Printer SN', 'Template', 'Copies', 'Print preview', 'Roots', 'Order 1', 'Sample data',
-      'Save & test this store', 'Kitchen printer', 'Stock requests', 'Out-of-Guangzhou orders', 'Save all']) assert.ok(t.includes(w), w);
+      'Save & test this store', 'Kitchen printer', 'Stock requests', 'Out-of-Guangzhou orders',
+      'When this store is closed, orders outside Guangzhou still come here', 'Save all']) assert.ok(t.includes(w), w);
     assert.ok(h.ctx.SUBS.printers.render().includes('uk•••• — leave blank to keep'), 'a saved key shows only its mask');
   });
   it('the printer body is _savePrinter\'s, key for key and in its order', async () => {
     const h = await open('printers');
-    assert.ok(DESK_PRN_KEYS.length === 11, 'read the desktop body: ' + DESK_PRN_KEYS.join(','));
+    assert.ok(DESK_PRN_KEYS.length === 12, 'read the desktop body: ' + DESK_PRN_KEYS.join(','));
     assert.deepStrictEqual(plain(Object.keys(fn(h, 'x7PrnBody')())), DESK_PRN_KEYS);
   });
   it('Save all sends each brand\'s account, a blank secret kept, then the printer settings', async () => {
@@ -256,7 +257,7 @@ section('2 · receipt printing');
       auto_print: true, auto_print_addon: true, auto_print_refund: true, shop_name: 'Roots Kitchen',
       kitchen_sn: ' 9988 ', kitchen_vendor: 'feie', kitchen_print_on: 'both', kitchen_copies: '2', transfer_print_on: 'off',
       by_store: { 3: { sn: '550540977', vendor: 'feie', template: 'receipt', copies: 1 }, 4: { sn: '123', vendor: 'feie', template: 'packing', copies: 3 } },
-      out_of_city_store_id: '4' });
+      out_of_city_store_id: '4', keep_out_of_city_when_closed: false });
     w.res({ success: true }); await tick();
     assert.deepStrictEqual(h.calls.toasts, ['Printer settings saved']);
     assert.strictEqual(h.s.d['spyun.appsecret'], '', 'the typed secret is not kept in the field');
@@ -562,7 +563,7 @@ section('6 · in Chinese');
   it('the five screens read in Chinese', async () => {
     const p = await open('printers', { lang: 'zh' });
     const t = p.text(p.ctx.SUBS.printers.render());
-    for (const w of ['飞鹅', '已启用', '商鹏', '付款后在对应门店自动打印', '小票抬头', '各门店打印机', '编号', '模板', '份数', '厨房打印机', '补货申请', '广州以外订单', '全部保存']) assert.ok(t.includes(w), w);
+    for (const w of ['飞鹅', '已启用', '商鹏', '付款后在对应门店自动打印', '小票抬头', '各门店打印机', '编号', '模板', '份数', '厨房打印机', '补货申请', '广州以外订单', '仍发到这里', '全部保存']) assert.ok(t.includes(w), w);
     const k = await open('kd100cfg', { lang: 'zh' });
     assert.ok(k.text(k.ctx.SUBS.kd100cfg.render()).includes('快递100轨迹订阅'));
     const j = await open('jdcfg', { lang: 'zh' });

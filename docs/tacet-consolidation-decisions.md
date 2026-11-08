@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.629
+# Tacet shared-core consolidation — decisions record, v4.630
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-08 · v4.630 — **§524 · WHEN THE OUT-OF-GUANGZHOU STORE IS CLOSED, ORDERS FROM OUTSIDE GUANGZHOU CAN STILL GO THERE — ASH.** A Beijing order landed on Yuexiu because Tianhe was closed, and had to be moved back by hand. The switch is off until saved. With it on, only an order in Guangzhou leaves a closed Tianhe for the shop that is still open. No schema, no change to `.gitignore` or CI. See §524.
 
 2026-11-07 · v4.629 — **§523 · A PAID ORDER TAKES ITS FRESH LINE AS SOON AS THE SHELF CAN COVER IT, EVEN BEFORE THE SHIP DAY (§58 AND §478 AMENDED) — ASH:** *"build"*, on TC002576. Two tofu wraps sat on the Tianhe shelf for a paid order leaving tomorrow, still sellable until someone pressed Start preparing. A covered fresh line is now taken at payment, on a restock, and by the reservation tick for stock already there. A short shelf is left for the kitchen. No new words. No schema, no change to `.gitignore` or CI. See §523.
 
@@ -34056,5 +34058,21 @@ TC002576 was paid, WeChat, Shenzhen, fulfilled from Tianhe, leaving the next day
 - A shop transfer still does not read open orders. Once this claim has run, the count the picker sees is already down.
 
 **The consequence.** A paid order for tomorrow takes wraps that are still in the fridge tonight. Today's shopper sees what is left after that order's line. Those wraps are already sold.
+
+No schema change. No change to `.gitignore` or CI.
+
+## §524 — WHEN THE OUT-OF-GUANGZHOU STORE IS CLOSED, ORDERS FROM OUTSIDE GUANGZHOU CAN STILL GO THERE
+
+**2026-11-08 · DECIDED BY ASH.** A Beijing order (TC002631) was fulfilled from Yuexiu while Tianhe was closed, and had to be moved back by hand. Tianhe is the store that ships orders outside Guangzhou. Closing it was sending those orders to Yuexiu along with the Guangzhou ones.
+
+**The rule.** A setting, off until it is saved on. With it on, and the store chosen for orders outside Guangzhou closed:
+
+1. **An order from outside Guangzhou still goes to that store.** The parcel and the receipt already leave from there. Closing the shop does not move them.
+2. **An order in Guangzhou goes to a store that is open.** That includes an outer district of Guangzhou that did not buy same-day. Those were pinned to the same store; while it is closed they follow the Guangzhou rule and leave it.
+3. **With the setting off, a closed store drops out of routing**, which is what happened before this switch existed. Every new order, including one from outside Guangzhou, goes to a store that is open.
+
+"Closed" is the same set routing already uses: the shop-wide switch, or the channel closed for this order. The quote and the order use the same answer. An order already placed is left where it is.
+
+The switch is on Settings → Store, under Open for business, and again under Settings → Printing next to the store that ships orders outside Guangzhou. The phone's receipt-printing screen has the same switch. One saved value.
 
 No schema change. No change to `.gitignore` or CI.

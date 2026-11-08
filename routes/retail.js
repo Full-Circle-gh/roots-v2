@@ -235,7 +235,7 @@ const sameDayBands = require('../lib/same-day-bands');
 const {
   hhmmToMinutes, batchScheduleCfg, deliveryTz, parseYmdLocal, toYmdLocal, tzNowParts, nextBatchShipDate,
   batchItemsInCart, todaysBatchStillComing, slotWindowEnd, freshLinesCoveredToday, expressEarliestIso,
-  computeDeliverySlots, logSlotKindMismatch, resolveDeliverySlot,
+  computeDeliverySlots, staffDayWindows, logSlotKindMismatch, resolveDeliverySlot,
 } = require('../lib/delivery-calendar');
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
@@ -10685,7 +10685,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // The pin itself lives in fulfillingStoreFor() so the checkout quote and the
   // reschedule picker resolve the SAME store this handler ships from; the
   // conditions it folds in (pickup, in-GZ, unset id, already-that-store, closed
-  // for this channel) are the ones this block used to spell out inline.
+  // for this channel) are the ones this block used to spell out inline. A
+  // closed out-of-city store still receives orders from outside Guangzhou when
+  // printer.keep_out_of_city_when_closed is on; Guangzhou orders reroute.
   {
     const pinned = fulfillingStoreFor({
       address, channel: orderChannel, isPickup,
@@ -14576,7 +14578,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       JOIN retail_orders o ON o.id = i.order_id
       LEFT JOIN store_products p ON p.id = i.product_id
      WHERE ${PAIDO_ALL} AND ${PDATEO} BETWEEN ? AND ?
-     GROUP BY i.product_id ORDER BY revenue DESC LIMIT 15`).all(from, to).map(r => {
+     GROUP BY i.product_id ORDER BY revenue DESC`).all(from, to).map(r => {
     let image_url = r.oi_image_url || r.p_image_url || '';
     if (!image_url && r.has_image) {
       image_url = `/api/retail-admin/products/${r.product_id}/image?v=${encodeURIComponent(r.p_updated_at || '')}`;
@@ -14586,6 +14588,84 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       sku: r.sku, image_url, units: r.units, revenue: r.revenue, orders: r.orders,
     };
   });
+  // The window immediately before this one, same predicate. Row 0 above
+  // stays the top earner (revenue order) for the fact line. The screen
+  // re-sorts and cuts to 10, 20, 50, or every row; the cut is not done here,
+  // because All is this list. A product that sold only in the previous window
+  // is not a bar — it is the "sold then, none now" list under them.
+  const priorByProduct = new Map(tdb().prepare(`
+    SELECT i.product_id, i.name_en, i.name_cn,
+           COALESCE(SUM(i.qty), 0) AS units,
+           COALESCE(SUM(i.line_total), 0) AS revenue
+      FROM retail_order_items i
+      JOIN retail_orders o ON o.id = i.order_id
+     WHERE ${PAIDO_ALL} AND ${PDATEO} BETWEEN ? AND ?
+     GROUP BY i.product_id`).all(prevFrom, prevTo).map(r => [r.product_id, r]));
+  for (const row of topProducts) {
+    const prev = priorByProduct.get(row.product_id);
+    row.prior_units = prev ? prev.units : 0;
+    row.prior_revenue = prev ? prev.revenue : 0;
+  }
+  const soldNow = new Set(topProducts.map(r => r.product_id));
+  const stopped = [];
+  for (const [id, prev] of priorByProduct) {
+    if (soldNow.has(id)) continue;
+    if (!(Number(prev.units) || Number(prev.revenue))) continue;
+    stopped.push({
+      product_id: id, name_en: prev.name_en, name_cn: prev.name_cn,
+      prior_units: prev.units, prior_revenue: prev.revenue,
+    });
+  }
+  stopped.sort((a, b) => (Number(b.prior_units) - Number(a.prior_units))
+    || (Number(b.prior_revenue) - Number(a.prior_revenue)));
+
+  // The shelf note is the running-low card's own rule, and only on a product
+  // that sold MORE units than the window before. A drop that is also short
+  // is a different question; this note is "the green number has nothing left
+  // to sell". Same populations as the card: published and active, out at
+  // <= 0, low while still positive and at or under the threshold. One store
+  // uses that store's shelf and its own default; every store (or a scoped
+  // operator's stores) uses the sum, which is what the card counts.
+  const risingIds = topProducts
+    .filter(r => Number(r.units) > Number(r.prior_units || 0))
+    .map(r => Number(r.product_id))
+    .filter(id => Number.isInteger(id) && id > 0);
+  if (risingIds.length && !(SCOPED && dashStores.length === 0)) {
+    const lowDefault = lowStockDefault();
+    const oneStore = SCOPED && dashStores.length === 1 ? dashStores[0] : null;
+    let storeDefault = null;
+    if (oneStore) {
+      const srow = tdb().prepare('SELECT low_stock_threshold FROM retail_stores WHERE id = ?').get(oneStore);
+      storeDefault = srow ? srow.low_stock_threshold : null;
+    }
+    const inList = SCOPED ? dashStores.join(',') : '';
+    const stockExpr = oneStore
+      ? `COALESCE((SELECT rss.physical_qty FROM retail_store_stock rss WHERE rss.product_id = p.id AND rss.store_id = ${oneStore}), 0)`
+      : `COALESCE((SELECT SUM(rss.physical_qty) FROM retail_store_stock rss JOIN retail_stores rs ON rs.id = rss.store_id WHERE rss.product_id = p.id AND rs.is_active = 1${inList ? ` AND rss.store_id IN (${inList})` : ''}), p.stock_qty, 0)`;
+    const carried = oneStore
+      ? `AND EXISTS (SELECT 1 FROM retail_store_stock rss WHERE rss.product_id = p.id AND rss.store_id = ${oneStore})`
+      : '';
+    const thresh = oneStore ? 'COALESCE(p.low_stock_threshold, ?, ?)' : 'COALESCE(p.low_stock_threshold, ?)';
+    const binds = oneStore ? [storeDefault, lowDefault] : [lowDefault];
+    const shelfRows = tdb().prepare(`
+      SELECT p.id AS product_id, ${stockExpr} AS stock_qty, ${thresh} AS threshold
+        FROM store_products p
+       WHERE p.id IN (${risingIds.map(() => '?').join(',')})
+         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1 AND p.is_published = 1
+         ${carried}
+    `).all(...binds, ...risingIds);
+    const shelfById = new Map();
+    for (const s of shelfRows) {
+      const qty = Number(s.stock_qty) || 0;
+      const threshold = Number(s.threshold);
+      if (qty <= 0) shelfById.set(s.product_id, { kind: 'out', qty: 0 });
+      else if (Number.isFinite(threshold) && qty <= threshold) shelfById.set(s.product_id, { kind: 'low', qty });
+    }
+    for (const row of topProducts) {
+      const shelf = shelfById.get(row.product_id);
+      if (shelf) row.shelf = shelf;
+    }
+  }
 
   // ── Top customers (by spend in window) ──
   const topCustomers = tdb().prepare(`
@@ -15012,7 +15092,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         rows: channelRows,
         topups_unassigned: tuSales.received || 0,
       },
-      topProducts, topCustomers, tiers,
+      topProducts, stopped, topCustomers, tiers,
       geoCities, geoDistricts,
       marketing: { vouchers, points, manualDiscounts },
       traffic: { scenes },
@@ -15040,6 +15120,72 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     for (const [k, v] of _dashMemo) if (Date.now() - v.at >= DASH_MEMO_TTL) _dashMemo.delete(k);
   }
   res.json(dashBody);
+});
+
+// One product's units across the dashboard's own window. The bars say how
+// many and whether that moved; this is the shape — one Saturday, or every
+// day. Same predicate as the bars (PAIDO_ALL, store scope included) so the
+// points add up to the bar. A single day is hours. Longer than a quarter
+// rolls up to weeks, the same cut the product Sales card uses, because a
+// day per point stops being a shape past that.
+router.get('/api/retail-admin/dashboard/product-days', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.query.product_id, 10);
+  const from = String(req.query.from || '');
+  const to = String(req.query.to || '');
+  if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+    return res.status(400).json({ success: false, error: 'bad_window' });
+  }
+  const span = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
+  if (!Number.isFinite(span) || span > 800) return res.status(400).json({ success: false, error: 'bad_window' });
+
+  const TZ = shopSqlShift();
+  const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
+  const PHOUR = `strftime('%H', COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
+  const dashStores = dashStoreScope(req);
+  const SCOPED = dashStores !== null;
+  const scopedPO = (w) => (SCOPED ? `(${w}) AND ${dashStores.length ? `o.store_id IN (${dashStores.join(',')})` : '0'}` : w);
+  const PAIDO_ALL = scopedPO(financeWindow.PAID_O);
+
+  if (from === to) {
+    const productHourRows = tdb().prepare(`
+      SELECT CAST(${PHOUR} AS INTEGER) AS h, COALESCE(SUM(i.qty), 0) AS units
+        FROM retail_order_items i
+        JOIN retail_orders o ON o.id = i.order_id
+       WHERE i.product_id = ? AND ${PAIDO_ALL} AND ${PDATEO} = ?
+       GROUP BY h`).all(id, from);
+    const byH = new Map(productHourRows.map(r => [Number(r.h), r.units]));
+    const points = [];
+    for (let h = 0; h < 24; h++) points.push({ bucket: String(h).padStart(2, '0'), units: byH.get(h) || 0 });
+    return res.json({ success: true, data: { product_id: id, from, to, granularity: 'hour', points } });
+  }
+
+  const productDayRows = tdb().prepare(`
+    SELECT ${PDATEO} AS d, COALESCE(SUM(i.qty), 0) AS units
+      FROM retail_order_items i
+      JOIN retail_orders o ON o.id = i.order_id
+     WHERE i.product_id = ? AND ${PAIDO_ALL} AND ${PDATEO} BETWEEN ? AND ?
+     GROUP BY d`).all(id, from, to);
+  const byDay = new Map(productDayRows.map(r => [r.d, r.units]));
+  const days = [];
+  for (let d = new Date(from + 'T00:00:00Z'); d <= new Date(to + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+    const key = d.toISOString().slice(0, 10);
+    days.push({ bucket: key, units: byDay.get(key) || 0 });
+  }
+  const granularity = days.length <= 92 ? 'day' : 'week';
+  let points = days;
+  if (granularity === 'week') {
+    const buckets = new Map();
+    for (const row of days) {
+      const dt = new Date(row.bucket + 'T00:00:00Z');
+      const dow = (dt.getUTCDay() + 6) % 7;
+      dt.setUTCDate(dt.getUTCDate() - dow);
+      const key = dt.toISOString().slice(0, 10);
+      buckets.set(key, (buckets.get(key) || 0) + row.units);
+    }
+    points = [...buckets.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)
+      .map(([bucket, units]) => ({ bucket, units }));
+  }
+  res.json({ success: true, data: { product_id: id, from, to, granularity, points } });
 });
 
 // ── Catalogue highlights — the "Your catalogue" summary's second band ──────
@@ -28968,6 +29114,25 @@ router.post('/api/retail-admin/orders/:id/qingyun/set-place', requireRetailAdmin
 // today. That is a silent no-op wearing a success response, so the endpoint
 // refuses it rather than accepting a move it cannot honour. The gate lives
 // here and not only in the UI: an API caller gets the same answer as a button.
+// The windows Change delivery day can offer for one day. The customer's
+// calendar is the wrong source: it starts three days out and hides a window
+// once it has started. Staff are moving an order that already exists.
+router.get('/api/retail-admin/orders/:id/qingyun/day-slots', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const date = String(req.query.date || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'bad_date' });
+  const o = tdb().prepare(
+    'SELECT id, delivery_zone_id, address_json, store_id FROM retail_orders WHERE id = ?'
+  ).get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({
+    success: true,
+    data: staffDayWindows(zoneForOrder(o), date, new Date(), {
+      storeHours: deliveryStoreHours(o.store_id ?? null),
+    }),
+  });
+});
+
 router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const date = String(req.body?.date || '').trim();
@@ -29040,14 +29205,27 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   const STALE_COPY_MS = 10 * 60 * 1000;   // matches the drawer's COURIER_STALE_MS
   let cancelledCopy = null;
   let staleCopy = false;
+  // A Qingyun id is not a rider. Auto-push creates a 待配送 copy before anyone
+  // is called, and the daemon keeps that row fresh, so the test below used to
+  // read it as a courier on the road. TC002621 (2026-11-08) showed the result:
+  // the drawer said "Rider not sent yet" and still offered Change, and this
+  // endpoint answered "a courier is already on this one". The same reading the
+  // ship-from line uses — _qingyunMoveBlockedBy, null when the stage is
+  // scheduled or the copy is not tracked yet — is the one that means nobody
+  // has been sent.
+  let unsentCopy = null;
+  let jobsReadable = false;
   if (q.qingyun_order_id) {
     let job = null;
     try {
       job = tdb().prepare('SELECT cancelled_at, updated_at FROM delivery_jobs WHERE qingyun_order_id = ?')
         .get(String(q.qingyun_order_id));
+      jobsReadable = true;
     } catch (_) { job = null; }        // pre-migration — fail safe, treat as live
     if (job && job.cancelled_at) {
       cancelledCopy = String(q.qingyun_order_id);
+    } else if (jobsReadable && !_qingyunMoveBlockedBy(q.qingyun_order_id)) {
+      unsentCopy = String(q.qingyun_order_id);
     } else {
       // Naive-UTC tolerant, same normalisation as the drawer's courierAgeMs and
       // lib/qingyun-cancel's parseStamp: SQLite hands back a zoneless stamp and a
@@ -29060,7 +29238,9 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
       if (!staleCopy) {
         // A copy the platform is still reporting on — a rider really is holding
         // this order. Refused outright, and reported as its own outcome rather
-        // than as a move it did not make.
+        // than as a move it did not make. A missing delivery_jobs table takes
+        // this branch too: we cannot see that nobody was sent, and the costly
+        // mistake is re-dispatching over a rider who is actually on the road.
         return res.json({
           success: true, already_created: true, requeued: false, moved: false,
           qingyun_order_id: String(q.qingyun_order_id),
@@ -29070,7 +29250,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   }
 
   const o = tdb().prepare(
-    'SELECT id, order_no, status, scheduled_for, delivery_slot_kind FROM retail_orders WHERE id = ?'
+    'SELECT id, order_no, status, scheduled_for, delivery_slot_kind, delivery_zone_id, address_json, store_id FROM retail_orders WHERE id = ?'
   ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (qingyunQueue.isClosedOrderStatus(o.status)) {
@@ -29090,10 +29270,54 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   // A later day takes a null kind, which is the "scheduled / legacy" path: the
   // disposition then compares scheduled_for against today and parks the row.
   const kind = date === today ? 'today' : null;
-  // NO NETWORK CALL HERE EITHER, for the same reason as confirm-point above:
-  // the requeue only marks the row, and the drain does the remote work on its
-  // own poll. An await on Qingyun inside this block would hold the shared handle
-  // and stall every other writer. Every statement runs on `tx` — §24.
+  // A time-slot zone has to name a window. The bare day is only enough where
+  // the zone itself has no windows. Checked BEFORE the delete below: a window
+  // the kitchen does not have must not remove the waiting Qingyun order.
+  const slotRaw = String(req.body?.slot || '').trim();
+  let scheduledFor = date;
+  let slotLabel = date;
+  const windows = staffDayWindows(zoneForOrder(o), date, new Date(), {
+    storeHours: deliveryStoreHours(o.store_id ?? null),
+  });
+  if (slotRaw) {
+    const mSlot = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(slotRaw);
+    const hit = mSlot && mSlot[1] === date
+      ? windows.slots.find((s) => s.slot_id === slotRaw && !s.passed)
+      : null;
+    if (!hit) return res.status(400).json({ success: false, error: 'slot_unavailable' });
+    scheduledFor = businessDate.dateInZone(deliveryTz(), date, Number(mSlot[2]), Number(mSlot[3])).toISOString();
+    slotLabel = hit.label_en;
+  } else if (!windows.day_only) {
+    return res.status(400).json({ success: false, error: 'slot_required' });
+  }
+  // A waiting copy is not a rider. Today keeps it: staff dispatch that copy, and
+  // deleting it would only put the order back in line for the same day. A later
+  // day cannot keep it. The copy sits in 待配送, and anyone at the store can send
+  // a rider for it today — no longer the day the customer is about to be told.
+  // Delete it first, the same delete the ship-from move uses, which is valid only
+  // while nobody has been sent. A dispatch that landed since the read above is
+  // refused here, before that delete. The delete is OUTSIDE the transaction: an
+  // await on Qingyun inside it would hold the shared handle and stall every
+  // other writer. The transaction itself stays local. Every statement in it runs
+  // on `tx` — §24.
+  let keptWaiting = false;
+  if (unsentCopy && date === today) {
+    keptWaiting = true;
+  } else if (unsentCopy) {
+    const lateBlock = _qingyunMoveBlockedBy(unsentCopy);
+    if (lateBlock) {
+      return res.json({
+        success: true, already_created: true, requeued: false, moved: false,
+        qingyun_order_id: unsentCopy,
+      });
+    }
+    const removed = await _qingyunDeleteCopy(q.store_code, unsentCopy);
+    if (!removed.ok) {
+      // The date stays. Clearing the id without the delete would leave the
+      // waiting order in Qingyun and let the drain grow a second one.
+      return res.json({ success: false, error: 'waiting_copy' });
+    }
+  }
   let requeued = false;
   try {
     requeued = await withTransaction(tdb(), (tx) => {
@@ -29102,7 +29326,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
             SET scheduled_for = ?, delivery_slot_label = ?, delivery_slot_kind = ?,
                 seen_at = NULL, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`
-      ).run(date, date, kind, id);                     // ← the date, FIRST
+      ).run(scheduledFor, slotLabel, kind, id);       // ← the day, and its window when the zone has one
       // A cancelled copy takes the compare-and-swap that clears its dead id; every
       // other row takes the ordinary manual-retry statement, whose own guard
       // (qingyun_order_id IS NULL) is untouched. Both return 0 rows rather than
@@ -29111,6 +29335,20 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
       // second rider for one order; the operator cancels the old copy by hand and
       // presses "Call another courier" when they have.
       if (staleCopy) return false;
+      // The waiting copy was deleted above. Retire its row so a poll cannot
+      // re-link it by the order number, then hand the queue back. The drain
+      // parks a later day until that morning and does not create a second copy
+      // before then. Today never reaches this: the copy is the one staff send.
+      if (unsentCopy && !keptWaiting) {
+        tx.prepare(
+          `INSERT INTO delivery_jobs (qingyun_order_id, store_code, retail_order_id, superseded)
+           VALUES (?, ?, NULL, 1)
+           ON CONFLICT(qingyun_order_id) DO UPDATE SET
+             superseded = 1, retail_order_id = NULL, updated_at = CURRENT_TIMESTAMP`
+        ).run(unsentCopy, q.store_code);
+        return tx.prepare(qingyunQueue.REQUEUE_AFTER_UNSENT_SQL).run(id, unsentCopy).changes > 0;
+      }
+      if (keptWaiting) return false;
       return cancelledCopy
         ? tx.prepare(qingyunQueue.REQUEUE_AFTER_CANCEL_SQL).run(id, cancelledCopy).changes > 0
         : tx.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id).changes > 0;       // ← then the queue
@@ -29121,14 +29359,16 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   }
 
   logActivity(req.user.id, req.user.username, 'qingyun_reschedule', 'retail_order', id,
-    { from: wasDate, to: date, requeued, after_cancel: !!cancelledCopy, stale_copy: staleCopy }, req.ip);
+    { from: wasDate, to: date, slot: slotRaw || null, requeued, after_cancel: !!cancelledCopy, stale_copy: staleCopy,
+      kept_waiting: keptWaiting }, req.ip);
   // `moved` is the date write, which always happens once we get here; `requeued`
   // is the queue, which can legitimately be false (another writer won the swap).
-  // The client words its toast off BOTH — see qpDoReschedule — because "moved to
-  // today" over a row that was not re-queued is the half-truth this endpoint has
-  // been telling.
-  res.json({ success: true, moved: true, requeued, after_cancel: !!cancelledCopy,
-             stale_copy: staleCopy, from: wasDate, to: date });
+  // `kept_waiting` is the today case: the date moved and the undispatched copy
+  // stayed, so there was nothing to re-queue. The client words its toast off
+  // these — see qpDoReschedule — because "moved to today" over a row that was
+  // not re-queued is the half-truth this endpoint has been telling.
+  res.json({ success: true, moved: true, requeued, kept_waiting: keptWaiting, after_cancel: !!cancelledCopy,
+             stale_copy: staleCopy, from: wasDate, to: date, slot: slotRaw || null });
 });
 
 // Retry deleting the leftover copy a move couldn't remove. Powers the drawer's
@@ -29820,6 +30060,7 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
     templates:  _feie.TEMPLATE_IDS,
     stores,
     out_of_city_store_id: oocStore,
+    keep_out_of_city_when_closed: prefs.keep_out_of_city_when_closed === true,
   }});
 });
 
@@ -29889,6 +30130,10 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), asyn
       const v = b.out_of_city_store_id;
       const ooc = (v != null && /^\d+$/.test(String(v))) ? String(parseInt(v, 10)) : null;
       upsert.run('printer.out_of_city_store_id', JSON.stringify(ooc), req.user.id);
+    }
+    if (b.keep_out_of_city_when_closed !== undefined) {
+      upsert.run('printer.keep_out_of_city_when_closed',
+        JSON.stringify(!!b.keep_out_of_city_when_closed), req.user.id);
     }
   });
   logActivity(req.user.id, req.user.username, 'printer_settings_update', 'storefront_config', null, {}, req.ip);

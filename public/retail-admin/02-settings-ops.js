@@ -479,6 +479,13 @@ function ocStayedLine(list) {
     + r.channels.map(csName).join(cuT(', ', '、')));
   return cuT('Still closed — closed at the shop with its own switch: ', '仍关闭 — 在门店单独关闭: ') + shops.join(cuT('; ', ';'));
 }
+function _ocApplyKeepOoc(on) {
+  const checked = !!on;
+  const a = document.getElementById('oc-keep-ooc');
+  const b = document.getElementById('feie-keep-ooc');
+  if (a) a.checked = checked;
+  if (b) b.checked = checked;
+}
 async function loadOpenClose() {
   const box = document.getElementById('oc-body');
   if (!box) return;
@@ -486,6 +493,13 @@ async function loadOpenClose() {
     const j = await api('/api/retail-admin/store-status');
     _ocState = j;
     paintOpenClose();
+    // The closed-store routing option lives on this card and on Printing.
+    // A failure here leaves the checkbox as last read; the open/close list
+    // above has already painted.
+    try {
+      const pr = await api('/api/retail-admin/printer');
+      _ocApplyKeepOoc(pr.data && pr.data.keep_out_of_city_when_closed);
+    } catch (e) { /* the option stays as last read */ }
   } catch (e) {
     // A shop that cannot READ its own open/closed state must not render a
     // control that looks live. Say so, and offer the retry.
@@ -586,6 +600,20 @@ window.ocSetOnline = (open) => _ocWrite('/api/retail-admin/store-status/online',
 window.ocSetStore = (code, open) => _ocWrite('/api/retail-admin/store-status/store/' + encodeURIComponent(code), { open },
   open ? 'Queued — the shop reopens within about a minute' : 'Queued — the shop closes within about a minute',
   open ? '已排队 — 门店约一分钟内恢复营业' : '已排队 — 门店约一分钟内关闭');
+// The checkbox under the open/close list. One field on the printer settings,
+// so Printing's copy of the same switch stays in step. A failed write puts
+// the tick back.
+async function ocSaveKeepOoc(on) {
+  try {
+    await api('/api/retail-admin/printer', { method: 'PUT', body: { keep_out_of_city_when_closed: !!on } });
+    _ocApplyKeepOoc(on);
+    toast(cuT('Saved', '已保存'), 'ok');
+  } catch (e) {
+    _ocApplyKeepOoc(!on);
+    toast(cuT('Could not save that option', '该选项没有保存成功') + ': ' + (e.message || ''), 'err');
+  }
+}
+window.ocSaveKeepOoc = ocSaveKeepOoc;
 
 let _opsStores = [];
 async function loadOpsStores() {
@@ -1280,6 +1308,10 @@ async function loadPrinterPrefs() {
           : '') + panels;
         stores.forEach(s => _previewStore(s.id));
       }
+      const keepOoc = document.getElementById('feie-keep-ooc');
+      if (keepOoc) keepOoc.checked = p.keep_out_of_city_when_closed === true;
+      const keepStore = document.getElementById('oc-keep-ooc');
+      if (keepStore) keepStore.checked = p.keep_out_of_city_when_closed === true;
       const ooc = document.getElementById('feie-ooc');
       if (ooc) {
         const sel = p.out_of_city_store_id;
@@ -1359,6 +1391,7 @@ async function _savePrinter() {
       transfer_print_on: document.getElementById('feie-transfer-when')?.value || 'sent',
       by_store:   _collectPrinterByStore(),
       out_of_city_store_id: document.getElementById('feie-ooc')?.value || null,
+      keep_out_of_city_when_closed: !!document.getElementById('feie-keep-ooc')?.checked,
     };
     const r = await fetch('/api/retail-admin/printer', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

@@ -111,6 +111,40 @@ it('a gzgrocery mirror line is IN the ranking', () => {
   assert.strictEqual(top[0].revenue, 1000, '¥100 + ¥900 — pre-§185 this was ¥100');
 });
 
+it('the whole window comes back, and the window before is the same read', () => {
+  // All is a cut the screen makes. Stopping at 15 here would make 50 and All
+  // a shorter list than the operator asked for.
+  assert.ok(!/LIMIT 15/.test(topSql), 'Top products still stops at 15');
+  const at = ROUTE.indexOf('const topProducts = tdb().prepare(');
+  const block = ROUTE.slice(at, ROUTE.indexOf('// ── Top customers', at));
+  assert.ok(/prior_units/.test(block) && /prior_revenue/.test(block),
+    'the previous window is not attached');
+  assert.ok(/\$\{PAIDO_ALL\}/.test(block.match(/priorByProduct[\s\S]*$/)[0]),
+    'the previous window dropped the wholesale predicate');
+});
+
+it('a product that sold only in the window before is kept, and a tapped bar is the same read', () => {
+  const block = ROUTE.slice(ROUTE.indexOf('const topProducts = tdb().prepare('),
+    ROUTE.indexOf('// ── Top customers'));
+  assert.ok(/const stopped/.test(block), 'what stopped is dropped');
+  assert.ok(/name_en/.test(block.match(/priorByProduct[\s\S]*$/)[0]),
+    'the previous window has no name to show');
+  assert.ok(/physical_qty/.test(block) && /is_published = 1/.test(block),
+    'the shelf note is not the running-low card\'s own rule');
+  assert.ok(/prior_units/.test(block.match(/risingIds[\s\S]{0,400}/)[0]),
+    'the shelf note is not limited to a rise');
+  const daySrc = sqlAfter('const productDayRows = tdb().prepare(');
+  assert.ok(/\$\{PAIDO_ALL\}/.test(daySrc), 'the days use a different population than the bars');
+  const daySql = bindDash(daySrc);
+  // After the binder, a query that had slipped back to the storefront predicate
+  // would still be carrying the gzgrocery exclusion. This one must not.
+  assert.ok(!/gzgrocery/.test(daySql), 'the days dropped the wholesale lines');
+  const db = fixture();
+  const row = db.prepare(daySql).get(1, FROM, TO);
+  assert.strictEqual(row.units, 20, '2 storefront + 18 wholesale on the day it sold');
+  assert.strictEqual(row.d, '2026-08-10');
+});
+
 it('it ranks on the MIRROR, so the money is the price of the day', () => {
   // §184 one level down: the ledger carries no price and would have to be valued
   // live, which moves a past month. `line_total` was written at the sale.
