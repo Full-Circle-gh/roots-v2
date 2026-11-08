@@ -29040,14 +29040,27 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   const STALE_COPY_MS = 10 * 60 * 1000;   // matches the drawer's COURIER_STALE_MS
   let cancelledCopy = null;
   let staleCopy = false;
+  // A Qingyun id is not a rider. Auto-push creates a 待配送 copy before anyone
+  // is called, and the daemon keeps that row fresh, so the test below used to
+  // read it as a courier on the road. TC002621 (2026-11-08) showed the result:
+  // the drawer said "Rider not sent yet" and still offered Change, and this
+  // endpoint answered "a courier is already on this one". The same reading the
+  // ship-from line uses — _qingyunMoveBlockedBy, null when the stage is
+  // scheduled or the copy is not tracked yet — is the one that means nobody
+  // has been sent.
+  let unsentCopy = null;
+  let jobsReadable = false;
   if (q.qingyun_order_id) {
     let job = null;
     try {
       job = tdb().prepare('SELECT cancelled_at, updated_at FROM delivery_jobs WHERE qingyun_order_id = ?')
         .get(String(q.qingyun_order_id));
+      jobsReadable = true;
     } catch (_) { job = null; }        // pre-migration — fail safe, treat as live
     if (job && job.cancelled_at) {
       cancelledCopy = String(q.qingyun_order_id);
+    } else if (jobsReadable && !_qingyunMoveBlockedBy(q.qingyun_order_id)) {
+      unsentCopy = String(q.qingyun_order_id);
     } else {
       // Naive-UTC tolerant, same normalisation as the drawer's courierAgeMs and
       // lib/qingyun-cancel's parseStamp: SQLite hands back a zoneless stamp and a
@@ -29060,7 +29073,9 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
       if (!staleCopy) {
         // A copy the platform is still reporting on — a rider really is holding
         // this order. Refused outright, and reported as its own outcome rather
-        // than as a move it did not make.
+        // than as a move it did not make. A missing delivery_jobs table takes
+        // this branch too: we cannot see that nobody was sent, and the costly
+        // mistake is re-dispatching over a rider who is actually on the road.
         return res.json({
           success: true, already_created: true, requeued: false, moved: false,
           qingyun_order_id: String(q.qingyun_order_id),
@@ -29090,10 +29105,34 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   // A later day takes a null kind, which is the "scheduled / legacy" path: the
   // disposition then compares scheduled_for against today and parks the row.
   const kind = date === today ? 'today' : null;
-  // NO NETWORK CALL HERE EITHER, for the same reason as confirm-point above:
-  // the requeue only marks the row, and the drain does the remote work on its
-  // own poll. An await on Qingyun inside this block would hold the shared handle
-  // and stall every other writer. Every statement runs on `tx` — §24.
+  // A waiting copy is not a rider. Today keeps it: staff dispatch that copy, and
+  // deleting it would only put the order back in line for the same day. A later
+  // day cannot keep it. The copy sits in 待配送, and anyone at the store can send
+  // a rider for it today — no longer the day the customer is about to be told.
+  // Delete it first, the same delete the ship-from move uses, which is valid only
+  // while nobody has been sent. A dispatch that landed since the read above is
+  // refused here, before that delete. The delete is OUTSIDE the transaction: an
+  // await on Qingyun inside it would hold the shared handle and stall every
+  // other writer. The transaction itself stays local. Every statement in it runs
+  // on `tx` — §24.
+  let keptWaiting = false;
+  if (unsentCopy && date === today) {
+    keptWaiting = true;
+  } else if (unsentCopy) {
+    const lateBlock = _qingyunMoveBlockedBy(unsentCopy);
+    if (lateBlock) {
+      return res.json({
+        success: true, already_created: true, requeued: false, moved: false,
+        qingyun_order_id: unsentCopy,
+      });
+    }
+    const removed = await _qingyunDeleteCopy(q.store_code, unsentCopy);
+    if (!removed.ok) {
+      // The date stays. Clearing the id without the delete would leave the
+      // waiting order in Qingyun and let the drain grow a second one.
+      return res.json({ success: false, error: 'waiting_copy' });
+    }
+  }
   let requeued = false;
   try {
     requeued = await withTransaction(tdb(), (tx) => {
@@ -29111,6 +29150,20 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
       // second rider for one order; the operator cancels the old copy by hand and
       // presses "Call another courier" when they have.
       if (staleCopy) return false;
+      // The waiting copy was deleted above. Retire its row so a poll cannot
+      // re-link it by the order number, then hand the queue back. The drain
+      // parks a later day until that morning and does not create a second copy
+      // before then. Today never reaches this: the copy is the one staff send.
+      if (unsentCopy && !keptWaiting) {
+        tx.prepare(
+          `INSERT INTO delivery_jobs (qingyun_order_id, store_code, retail_order_id, superseded)
+           VALUES (?, ?, NULL, 1)
+           ON CONFLICT(qingyun_order_id) DO UPDATE SET
+             superseded = 1, retail_order_id = NULL, updated_at = CURRENT_TIMESTAMP`
+        ).run(unsentCopy, q.store_code);
+        return tx.prepare(qingyunQueue.REQUEUE_AFTER_UNSENT_SQL).run(id, unsentCopy).changes > 0;
+      }
+      if (keptWaiting) return false;
       return cancelledCopy
         ? tx.prepare(qingyunQueue.REQUEUE_AFTER_CANCEL_SQL).run(id, cancelledCopy).changes > 0
         : tx.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id).changes > 0;       // ← then the queue
@@ -29121,13 +29174,15 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   }
 
   logActivity(req.user.id, req.user.username, 'qingyun_reschedule', 'retail_order', id,
-    { from: wasDate, to: date, requeued, after_cancel: !!cancelledCopy, stale_copy: staleCopy }, req.ip);
+    { from: wasDate, to: date, requeued, after_cancel: !!cancelledCopy, stale_copy: staleCopy,
+      kept_waiting: keptWaiting }, req.ip);
   // `moved` is the date write, which always happens once we get here; `requeued`
   // is the queue, which can legitimately be false (another writer won the swap).
-  // The client words its toast off BOTH — see qpDoReschedule — because "moved to
-  // today" over a row that was not re-queued is the half-truth this endpoint has
-  // been telling.
-  res.json({ success: true, moved: true, requeued, after_cancel: !!cancelledCopy,
+  // `kept_waiting` is the today case: the date moved and the undispatched copy
+  // stayed, so there was nothing to re-queue. The client words its toast off
+  // these — see qpDoReschedule — because "moved to today" over a row that was
+  // not re-queued is the half-truth this endpoint has been telling.
+  res.json({ success: true, moved: true, requeued, kept_waiting: keptWaiting, after_cancel: !!cancelledCopy,
              stale_copy: staleCopy, from: wasDate, to: date });
 });
 
