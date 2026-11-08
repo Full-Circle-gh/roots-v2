@@ -10685,7 +10685,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // The pin itself lives in fulfillingStoreFor() so the checkout quote and the
   // reschedule picker resolve the SAME store this handler ships from; the
   // conditions it folds in (pickup, in-GZ, unset id, already-that-store, closed
-  // for this channel) are the ones this block used to spell out inline.
+  // for this channel) are the ones this block used to spell out inline. A
+  // closed out-of-city store still receives orders from outside Guangzhou when
+  // printer.keep_out_of_city_when_closed is on; Guangzhou orders reroute.
   {
     const pinned = fulfillingStoreFor({
       address, channel: orderChannel, isPickup,
@@ -29820,6 +29822,7 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
     templates:  _feie.TEMPLATE_IDS,
     stores,
     out_of_city_store_id: oocStore,
+    keep_out_of_city_when_closed: prefs.keep_out_of_city_when_closed === true,
   }});
 });
 
@@ -29889,6 +29892,10 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), asyn
       const v = b.out_of_city_store_id;
       const ooc = (v != null && /^\d+$/.test(String(v))) ? String(parseInt(v, 10)) : null;
       upsert.run('printer.out_of_city_store_id', JSON.stringify(ooc), req.user.id);
+    }
+    if (b.keep_out_of_city_when_closed !== undefined) {
+      upsert.run('printer.keep_out_of_city_when_closed',
+        JSON.stringify(!!b.keep_out_of_city_when_closed), req.user.id);
     }
   });
   logActivity(req.user.id, req.user.username, 'printer_settings_update', 'storefront_config', null, {}, req.ip);

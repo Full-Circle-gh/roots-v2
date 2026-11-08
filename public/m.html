@@ -35376,7 +35376,8 @@ function x7PrnSeed(p){
     shop_name:p.shop_name||'', kitchen_sn:p.kitchen_sn||'', kitchen_vendor:p.kitchen_vendor||'feie',
     kitchen_print_on:p.kitchen_print_on||'sent', kitchen_copies:String(Number(p.kitchen_copies)||1),
     transfer_print_on:p.transfer_print_on||'sent',
-    out_of_city_store_id:p.out_of_city_store_id==null?'':String(p.out_of_city_store_id), by_store:{}};
+    out_of_city_store_id:p.out_of_city_store_id==null?'':String(p.out_of_city_store_id),
+    keep_out_of_city_when_closed:p.keep_out_of_city_when_closed===true, by_store:{}};
   (p.stores||[]).forEach(s=>{ d.by_store[s.id]={sn:s.sn||'', vendor:s.vendor||'feie', template:s.template||'receipt', copies:String(Number(s.copies)||1)}; });
   return d;
 }
@@ -35407,10 +35408,11 @@ function x7PrnBody(){
     transfer_print_on:d.transfer_print_on||'sent',
     by_store:x7ByStore(),
     out_of_city_store_id:d.out_of_city_store_id||null,
+    keep_out_of_city_when_closed:!!d.keep_out_of_city_when_closed,
   };
 }
 reg('x7Prn', (k,v)=>{ const d=x7().prnD; if(!d) return;
-  if(['auto_print','auto_print_addon','auto_print_refund'].includes(k)){ d[k]=!d[k]; render(); return; }
+  if(['auto_print','auto_print_addon','auto_print_refund','keep_out_of_city_when_closed'].includes(k)){ d[k]=!d[k]; render(); return; }
   if(['shop_name','kitchen_sn','kitchen_copies'].includes(k)){ d[k]=String(v==null?'':v); return; }
   if(k==='kitchen_vendor'){ if(x7PrnVendors().some(x=>x.id===v)) d[k]=v; render(); return; }
   if(k==='kitchen_print_on'){ if(X7_KITCHEN_WHEN.some(x=>x[0]===v)) d[k]=v; render(); return; }
@@ -35528,7 +35530,8 @@ function screenPrinters(){
     <div>${cfgHead(T('Stock requests','补货申请'),T('A stock request prints at the shop that has to fill it, the moment it is sent. It uses that shop\'s own printer — the one set above — so there is nothing extra to configure.','补货申请发出时,在供货门店自动打印,使用该门店上方设置的打印机,无需另行配置。'))}
       ${sel("APP.cmd('x7Prn','transfer_print_on',this.value)",d.transfer_print_on,X7_TRANSFER_WHEN,T('When a stock request prints','补货申请何时打印'))}</div>
     <div>${cfgHead(T('Out-of-Guangzhou orders','广州以外订单'),T('Orders shipping outside Guangzhou always print at this store\'s printer (the warehouse that ships them). In-Guangzhou orders print at their own store.','广州以外的订单始终在此门店出单;市内订单仍在各自门店打印。'))}
-      ${sel("APP.cmd('x7Prn','out_of_city_store_id',this.value)",d.out_of_city_store_id,[['','— Use each order’s own store —','— 按订单所属门店 —']].concat(stores.map(x=>[String(x.id),x.name_cn||x.name_en||x.code||('Store '+x.id),x.name_cn||x.name_en||x.code||('Store '+x.id)])),T('Which printer prints out-of-city orders','市外订单的打印门店'))}</div>
+      ${sel("APP.cmd('x7Prn','out_of_city_store_id',this.value)",d.out_of_city_store_id,[['','— Use each order’s own store —','— 按订单所属门店 —']].concat(stores.map(x=>[String(x.id),x.name_cn||x.name_en||x.code||('Store '+x.id),x.name_cn||x.name_en||x.code||('Store '+x.id)])),T('Which printer prints out-of-city orders','市外订单的打印门店'))}
+      ${sw('keep_out_of_city_when_closed','When this store is closed, orders outside Guangzhou still come here. Orders in Guangzhou go to a store that is open.','此门店关闭时，广州以外的订单仍发到这里。广州市内的订单改派到仍在营业的门店。')}</div>
     ${x7Note('printer')}
     ${x7Btn('x7PrnSave',T('Save all','全部保存'),'printer',{primary:true})}</div>`;
 }
