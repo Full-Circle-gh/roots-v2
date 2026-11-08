@@ -195,7 +195,9 @@ console.log('');
   // other way round. Erring that way is the right direction for a gate.
   function wouldMatch(city, district) {
     const blob = [city, district].filter(Boolean).join(' ');
-    if (/香港/.test(blob) || /hong\s*kong/i.test(blob)) {
+    // The city field itself. 香港 in a street is a company name once a
+    // mainland city is set; this blob has no street, so the city is the signal.
+    if (/香港/.test(String(city || '')) || /hong\s*kong/i.test(String(city || ''))) {
       const hk = cityRows.find(z => z.match_city === '香港');
       if (hk) return { matched: true, via: 'hong_kong', zone: hk.id };
     }
