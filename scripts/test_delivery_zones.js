@@ -192,6 +192,25 @@ it('a province zone from the address text alone', () => {
 it('Hong Kong: the one HK zone, from the SAR name or "Hong Kong"', () => {
   assert.strictEqual(match({ province: '香港特别行政区', city: '香港', district: '湾仔区' }), 'hk');
   assert.strictEqual(match({ address: '1 Queen\'s Road, Hong Kong' }), 'hk');
+  assert.strictEqual(match({ address: '香港中西区皇后大道中1号' }), 'hk');
+  // The street mentions 广州; the province is still the SAR.
+  assert.strictEqual(match({ province: '香港特别行政区', city: '香港', address: '广州贸易公司' }), 'hk');
+});
+it('香港 inside a company name on a mainland street is not Hong Kong', () => {
+  // TC002601. The door is 广园东路, Tianhe. The company is 香港百式.
+  assert.strictEqual(match({
+    province: '广东省', city: '广州市', district: '天河区',
+    address: '香港百式实业有限公司广州代表处',
+    detail: '广园东路2193号时代新世界中心北塔508',
+  }), 'tianhe');
+  // The same line dumped into the street, with no separate city field.
+  assert.strictEqual(match({
+    address: '广东省广州市天河区香港百式实业有限公司广州代表处 广园东路2193号时代新世界中心北塔508',
+  }), 'tianhe');
+  assert.strictEqual(match({
+    province: '广东省', city: '深圳市', district: '南山区',
+    address: '香港百式实业有限公司',
+  }), 'shenzhen');
 });
 it('a switched-off zone is never matched', () => {
   assert.strictEqual(match({ province: '广东省', city: '东莞市' }), null);
