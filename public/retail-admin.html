@@ -9392,6 +9392,19 @@
             </div>
 
             <div id="oc-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+              <label for="oc-keep-ooc" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13px;color:var(--text-1);line-height:1.45">
+                <input type="checkbox" id="oc-keep-ooc" onchange="ocSaveKeepOoc(this.checked)" style="width:18px;height:18px;margin-top:2px;flex:none">
+                <span>
+                  <span data-lang-block="en">When the store for orders outside Guangzhou is closed, those orders still go there. Only orders in Guangzhou move to a store that is open.</span>
+                  <span data-lang-block="cn">广州以外订单的发货门店关闭时，这些订单仍发到该门店。只有广州市内的订单改派到仍在营业的门店。</span>
+                </span>
+              </label>
+              <div class="muted" style="font-size:12px;margin:6px 0 0 28px;line-height:1.45">
+                <span data-lang-block="en">The store is the one chosen under Printing → Out-of-Guangzhou orders. With this off, that store's orders move to a store that is still open.</span>
+                <span data-lang-block="cn">该门店在「打印 → 广州以外订单」中选择。此选项关闭时，该门店的订单改派到仍在营业的门店。</span>
+              </div>
+            </div>
           </div>
 
           <!-- ── Stores · 门店 — the online store self-manages its own stores
@@ -11786,9 +11799,16 @@
             </select>
             <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
             <div class="field-label">Out-of-Guangzhou orders · 广州以外订单</div>
-            <select id="feie-ooc" aria-label="Which printer prints out-of-city orders · 市外订单的打印门店" style="margin-bottom:14px">
+            <select id="feie-ooc" aria-label="Which printer prints out-of-city orders · 市外订单的打印门店" style="margin-bottom:10px">
               <option value="">— Use each order's own store · 按订单所属门店 —</option>
             </select>
+            <label for="feie-keep-ooc" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13px;color:var(--text-1);line-height:1.45;margin-bottom:14px">
+              <input type="checkbox" id="feie-keep-ooc" onchange="ocSaveKeepOoc(this.checked)" style="width:18px;height:18px;margin-top:2px;flex:none">
+              <span>
+                <span data-lang-block="en">When this store is closed, orders outside Guangzhou still come here. Orders in Guangzhou go to a store that is open.</span>
+                <span data-lang-block="cn">此门店关闭时，广州以外的订单仍发到这里。广州市内的订单改派到仍在营业的门店。</span>
+              </span>
+            </label>
             <div class="pin-foot" style="display:flex;gap:10px;flex-wrap:wrap">
               <button class="btn" onclick="_savePrinter()">Save all · 全部保存</button>
             </div>

@@ -51,7 +51,7 @@ const cfgValue = (k, d) => (k in CFG ? CFG[k] : d);
 const realInventory = require(path.join(ROOT, 'lib', 'inventory'));
 
 // Stand-ins for the store list the store choice reads.
-const W = { optIn: false, closed: new Set(), stores: [{ id: 1, code: 'tianhe' }, { id: 9, code: 'warehouse' }], ooc: 9 };
+const W = { optIn: false, closed: new Set(), stores: [{ id: 1, code: 'tianhe' }, { id: 9, code: 'warehouse' }], ooc: 9, keep: false };
 const inventory = {
   isGuangzhouAddress: realInventory.isGuangzhouAddress,
   orderChannelKey: realInventory.orderChannelKey,
@@ -68,7 +68,7 @@ const NAMES = ['GZ_CITY_ALIASES', 'normalizeAreaName', 'isGuangzhou',
 const EXPOSE = NAMES.filter((n) => !n.startsWith('_') && n !== 'HK_CN' && n !== 'GZ_CITY_ALIASES');
 const Z = new Function('cfgValue', 'tdb', 'inventory', 'loadPrinterPrefs', 'CHINA_REGIONS',
   `${NAMES.map(declSrc).join('\n')}\nreturn { ${EXPOSE.join(', ')} };`)(
-  cfgValue, () => db, inventory, () => ({ out_of_city_store_id: W.ooc }), CHINA_REGIONS);
+  cfgValue, () => db, inventory, () => ({ out_of_city_store_id: W.ooc, keep_out_of_city_when_closed: !!W.keep }), CHINA_REGIONS);
 
 const zone = db.prepare(`INSERT INTO retail_delivery_zones (zone_type, name_en, name_cn, match_city, match_district, base_fee, is_active)
                          VALUES (?, ?, ?, ?, ?, 10, ?)`);
@@ -277,7 +277,7 @@ const ship = (o) => {
   return r ? [r.store.id, r.reason] : null;
 };
 const GZ = { city: '广州市', district: '番禺区' };
-const reset = () => { W.optIn = false; W.closed = new Set(); W.ooc = 9; W.stores = [{ id: 1, code: 'tianhe' }, { id: 9, code: 'warehouse' }]; };
+const reset = () => { W.optIn = false; W.closed = new Set(); W.ooc = 9; W.keep = false; W.stores = [{ id: 1, code: 'tianhe' }, { id: 9, code: 'warehouse' }]; };
 it('an out-of-city delivery leaves from the warehouse', () => { reset(); assert.deepStrictEqual(ship({}), [9, 'out_of_city']); });
 it('pickup, or an ordinary Guangzhou delivery, keeps the router\'s pick', () => {
   reset();
@@ -296,6 +296,16 @@ it('no warehouse set, the router already picked it, it is closed for the channel
   reset(); assert.deepStrictEqual(ship({ baseStoreId: 1 }), [9, 'out_of_city']);
   reset(); W.closed = new Set(['warehouse']); assert.strictEqual(ship({}), null);
   reset(); W.stores = [{ id: 1, code: 'tianhe' }]; assert.strictEqual(ship({}), null);
+});
+it('the setting keeps an order from outside Guangzhou on a closed warehouse, and a Guangzhou order still leaves it', () => {
+  reset(); W.closed = new Set(['warehouse']); W.keep = true;
+  assert.deepStrictEqual(ship({}), [9, 'out_of_city'], 'Shenzhen still leaves the closed warehouse');
+  assert.strictEqual(ship({ address: { city: '广州市', district: '天河区' } }), null, 'an inner Guangzhou order reroutes');
+  W.optIn = true;
+  assert.strictEqual(ship({ address: GZ, slotKind: 'scheduled' }), null, 'a Guangzhou ship-district reroutes too');
+  assert.strictEqual(ship({ address: GZ, slotKind: 'today' }), null, 'same-day was never pinned');
+  W.optIn = false; W.closed = new Set();
+  assert.deepStrictEqual(ship({}), [9, 'out_of_city'], 'an open warehouse is unchanged');
 });
 
 // ══ 5. how a zone is shown ═════════════════════════════════════════════════

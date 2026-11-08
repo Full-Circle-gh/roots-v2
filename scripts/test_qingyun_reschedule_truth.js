@@ -129,8 +129,43 @@ it('a pre-migration tenant is treated as having a live copy', () => {
 });
 
 it('the success response reports both halves separately', () => {
-  assert.ok(/res\.json\(\{ success: true, moved: true, requeued, after_cancel/.test(ENDPOINT),
+  assert.ok(/res\.json\(\{ success: true, moved: true, requeued, kept_waiting: keptWaiting, after_cancel/.test(ENDPOINT),
     'the response still collapses the date write and the queue write into one word');
+});
+
+it('a waiting 待配送 copy is not read as a rider', () => {
+  // TC002621: the drawer said "Rider not sent yet" and still offered Change,
+  // and this endpoint answered "a courier is already on this one". A Qingyun id
+  // on a scheduled copy means the order was created, not that anyone was sent.
+  // The same reading the ship-from line uses is what decides it.
+  const unsentAt = ENDPOINT.indexOf('unsentCopy = String(q.qingyun_order_id)');
+  const liveAt = ENDPOINT.indexOf('already_created: true');
+  assert.ok(unsentAt > 0 && liveAt > unsentAt,
+    'the waiting copy is classified after the refusal, so it still stops the day');
+  assert.ok(/_qingyunMoveBlockedBy\(q\.qingyun_order_id\)/.test(ENDPOINT),
+    'the endpoint grew its own idea of "nobody sent"');
+});
+
+it('a later day removes that waiting copy before the date is written', () => {
+  // Left in 待配送, anyone at the store can dispatch it today, which is no
+  // longer the day. The delete is the ship-from move's, and it has to finish
+  // before the date write — the other order would be a customer told tomorrow
+  // and a rider sent today.
+  const del = ENDPOINT.indexOf('_qingyunDeleteCopy');
+  const write = ENDPOINT.indexOf('SET scheduled_for');
+  assert.ok(del > 0 && write > del, 'the date moves while the old copy can still be dispatched');
+  assert.ok(/error: 'waiting_copy'/.test(ENDPOINT),
+    'a delete that failed has no refusal, so the id would be cleared over a live copy');
+  assert.ok(/REQUEUE_AFTER_UNSENT_SQL/.test(ENDPOINT),
+    'the cleared id does not go through the compare-and-swap');
+});
+
+it('today keeps the waiting copy', () => {
+  // Deleting it would only make staff wait for another copy of the same day.
+  assert.ok(/unsentCopy && date === today/.test(ENDPOINT),
+    'today removes the copy staff are about to dispatch');
+  assert.ok(/kept_waiting: keptWaiting/.test(ENDPOINT),
+    'the client cannot tell a kept copy from a move that did not re-queue');
 });
 
 it('a day that has GONE is still refused', () => {
@@ -200,6 +235,19 @@ it('it clears the parked fields with the status, like its siblings', () => {
   }
 });
 
+it('the unsent requeue puts the row back only when the id still matches', () => {
+  const db = freshQueue();
+  const n = db.prepare(queue.REQUEUE_AFTER_UNSENT_SQL).run(823, 'QY1').changes;
+  assert.strictEqual(n, 1, 'the waiting copy was not re-queued');
+  assert.strictEqual(qrow(db).status, 'pending');
+  assert.strictEqual(qrow(db).qingyun_order_id, null, 'the removed delivery id was left on the row');
+  const other = freshQueue({ qingyun_order_id: 'QY2' });
+  assert.strictEqual(other.prepare(queue.REQUEUE_AFTER_UNSENT_SQL).run(823, 'QY1').changes, 0,
+    'the swap fired against an id it had not verified');
+  assert.strictEqual(other.prepare('SELECT qingyun_order_id FROM qingyun_push_queue WHERE retail_order_id = 823').get().qingyun_order_id,
+    'QY2', 'a newer delivery id was cleared');
+});
+
 it('the ORDINARY manual retry still refuses a row that has a copy', () => {
   // The guard this change routes around must still hold on its own path, or a
   // plain Retry becomes a way to pay for a second rider.
@@ -218,10 +266,16 @@ console.log('\nC · three outcomes, three sentences\n');
 
 const CLIENT = slice(ORDERS_JS, 'async function qpDoReschedule(orderId, iso, btn)');
 
-it('the success toast is reachable only when the queue actually took it', () => {
+it('the success toast is reachable only when the queue took it, or the waiting copy stayed', () => {
   assert.ok(/if \(j\.already_created\)/.test(CLIENT), 'the client does not check for a live copy');
-  assert.ok(/\} else if \(j\.requeued\) \{[\s\S]*?Moved to today — it goes back in the queue now/.test(CLIENT),
-    'the success wording is not gated on requeued');
+  assert.ok(/\} else if \(j\.requeued \|\| j\.kept_waiting\) \{[\s\S]*?Moved to today — it goes back in the queue now/.test(CLIENT),
+    'the success wording is not gated on requeued or kept_waiting');
+});
+
+it('a waiting copy that could not be removed does not claim a courier', () => {
+  assert.ok(/j\.error === 'waiting_copy'/.test(CLIENT), 'the client has no branch for a delete that failed');
+  assert.ok(/Could not remove it — do it in the Qingyun app/.test(CLIENT),
+    'it tells the operator a rider is on an order nobody was sent for');
 });
 
 it('a live copy gets its own sentence, in both languages', () => {

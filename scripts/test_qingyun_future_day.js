@@ -216,12 +216,12 @@ it('the attempt give-back never goes negative', () => {
   assert.strictEqual(db.prepare('SELECT attempts FROM qingyun_push_queue WHERE id = 1').get().attempts, 0);
 });
 
-it('both requeue statements clear a stale hold', () => {
-  for (const sql of [queue.MANUAL_RETRY_SQL, queue.REQUEUE_AFTER_CANCEL_SQL]) {
-    const cancelled = sql === queue.REQUEUE_AFTER_CANCEL_SQL;
+it('requeue statements clear a stale hold', () => {
+  for (const sql of [queue.MANUAL_RETRY_SQL, queue.REQUEUE_AFTER_CANCEL_SQL, queue.REQUEUE_AFTER_UNSENT_SQL]) {
+    const keyed = sql !== queue.MANUAL_RETRY_SQL;
     const db = freshQueue([{ retail_order_id: 1, status: 'error', hold_until_date: '2026-10-01',
-                             qingyun_order_id: cancelled ? 'QY1' : null }]);
-    const n = cancelled ? db.prepare(sql).run(1, 'QY1').changes : db.prepare(sql).run(1).changes;
+                             qingyun_order_id: keyed ? 'QY1' : null }]);
+    const n = keyed ? db.prepare(sql).run(1, 'QY1').changes : db.prepare(sql).run(1).changes;
     assert.strictEqual(n, 1, 'the statement did not fire');
     assert.strictEqual(db.prepare('SELECT hold_until_date FROM qingyun_push_queue WHERE id = 1').get().hold_until_date,
       null, 'a requeued row stayed parked on the day it left');
