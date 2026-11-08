@@ -111,6 +111,18 @@ it('a gzgrocery mirror line is IN the ranking', () => {
   assert.strictEqual(top[0].revenue, 1000, '¥100 + ¥900 — pre-§185 this was ¥100');
 });
 
+it('the whole window comes back, and the window before is the same read', () => {
+  // All is a cut the screen makes. Stopping at 15 here would make 50 and All
+  // a shorter list than the operator asked for.
+  assert.ok(!/LIMIT 15/.test(topSql), 'Top products still stops at 15');
+  const at = ROUTE.indexOf('const topProducts = tdb().prepare(');
+  const block = ROUTE.slice(at, ROUTE.indexOf('// ── Top customers', at));
+  assert.ok(/prior_units/.test(block) && /prior_revenue/.test(block),
+    'the previous window is not attached');
+  assert.ok(/\$\{PAIDO_ALL\}/.test(block.match(/priorByProduct[\s\S]*$/)[0]),
+    'the previous window dropped the wholesale predicate');
+});
+
 it('it ranks on the MIRROR, so the money is the price of the day', () => {
   // §184 one level down: the ledger carries no price and would have to be valued
   // live, which moves a past month. `line_total` was written at the sale.

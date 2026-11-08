@@ -14576,7 +14576,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       JOIN retail_orders o ON o.id = i.order_id
       LEFT JOIN store_products p ON p.id = i.product_id
      WHERE ${PAIDO_ALL} AND ${PDATEO} BETWEEN ? AND ?
-     GROUP BY i.product_id ORDER BY revenue DESC LIMIT 15`).all(from, to).map(r => {
+     GROUP BY i.product_id ORDER BY revenue DESC`).all(from, to).map(r => {
     let image_url = r.oi_image_url || r.p_image_url || '';
     if (!image_url && r.has_image) {
       image_url = `/api/retail-admin/products/${r.product_id}/image?v=${encodeURIComponent(r.p_updated_at || '')}`;
@@ -14586,6 +14586,24 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       sku: r.sku, image_url, units: r.units, revenue: r.revenue, orders: r.orders,
     };
   });
+  // The window immediately before this one, same products, same predicate.
+  // Row 0 above stays the top earner (revenue order) for the fact line. The
+  // screen re-sorts and cuts to 10, 20, 50, or every row; the cut is not done
+  // here, because All is this list. A product that sold only in the previous
+  // window is absent: this is what sold now, with a mark for where it was.
+  const priorByProduct = new Map(tdb().prepare(`
+    SELECT i.product_id,
+           COALESCE(SUM(i.qty), 0) AS units,
+           COALESCE(SUM(i.line_total), 0) AS revenue
+      FROM retail_order_items i
+      JOIN retail_orders o ON o.id = i.order_id
+     WHERE ${PAIDO_ALL} AND ${PDATEO} BETWEEN ? AND ?
+     GROUP BY i.product_id`).all(prevFrom, prevTo).map(r => [r.product_id, r]));
+  for (const row of topProducts) {
+    const prev = priorByProduct.get(row.product_id);
+    row.prior_units = prev ? prev.units : 0;
+    row.prior_revenue = prev ? prev.revenue : 0;
+  }
 
   // ── Top customers (by spend in window) ──
   const topCustomers = tdb().prepare(`
