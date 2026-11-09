@@ -219,7 +219,7 @@ const COHORTS = FULL + `
 const DEEPER = FULL + `
   state.trendFull.kpis.aov=86; state.trendFull.kpis.aov_change=4;
   state.trendFull.kpis.refunded_orders=6; state.trendFull.kpis.refund_rate=2.7;
-  state.trendFull.money_of={food:15900,delivery_fees:1100,wallet_loads:1400,given_away:480};
+  state.trendFull.money_of={food:15900,delivery_fees:1100,wallet_loads:1400,given_away:480,topup_bonus:140};
   state.trendFull.return_every_days=9;
   state.trendFull.stopped_customer_count=4;
   state.trendFull.stopped_customers=[
@@ -430,6 +430,7 @@ CASES.push(
     ['refunds are a count and a rate', `txt('content').includes('Refunded') && txt('content').includes('6 · 2.7%')`],
     ['the three slices add up to the total', `txt('content').includes('Of the ¥18,400') && txt('content').includes('¥15,900') && txt('content').includes('¥1,100') && txt('content').includes('¥1,400')`],
     ['what was given away sits beside them', `txt('content').includes('Given away') && txt('content').includes('¥480')`],
+    ['the bonus granted with the loads sits under them, and not in the total', `(function(){var t=txt('content');var w=t.indexOf('Wallet loads'),b=t.indexOf('Top-up bonus'),g=t.indexOf('Given away');return w>=0&&b>w&&g>b&&t.includes('¥140')&&t.includes('Of the ¥18,400');})()`],
     ['the open row says how many orders', `txt('content').includes('38 orders')`],
     ['the amount this window, and the change beside it', `txt('content').includes('This window') && txt('content').includes('¥2,800') && txt('content').includes('vs the one before') && txt('content').includes('+¥800')`],
     ['the price, against the window before', `txt('content').includes('Price') && txt('content').includes('¥20') && txt('content').includes('same as before')`],
@@ -440,6 +441,12 @@ CASES.push(
     ['who bought then and not now', `txt('content').includes('Bought then, none now') && txt('content').includes('Chen') && txt('content').includes('16 days ago') && txt('content').includes('2 more')`],
     ['a zero on a day that product sells', `txt('content').includes('Out on a day it sells') && txt('content').includes('Saturday')`],
     ['a refund, with the words written on the order', `txt('content').includes('Greens') && txt('content').includes('Short')`],
+  ]],
+  ['a load that granted no points says nothing about a bonus', DEEPER + `
+    state.trendFull.money_of.topup_bonus=0; APP.cmd('push','trend');`, [
+    ['the loads stay', `txt('content').includes('Wallet loads') && txt('content').includes('¥1,400')`],
+    ['the bonus line does not', `!txt('content').includes('Top-up bonus')`],
+    ['given away is still what the orders did not collect', `txt('content').includes('Given away') && txt('content').includes('¥480')`],
   ]],
   ['a cheaper price is why the money fell, and a loss is said', DEEPER + `APP.cmd('push','trend'); APP.cmd('trendSection','products');
     state.prodOpen=4; render();`, [

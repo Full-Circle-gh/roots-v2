@@ -51,6 +51,12 @@ it('the headline breakdown is a new object, and the old composition stays', () =
   assert.ok(/aov_change:/.test(ROUTE));
   assert.ok(/composition,/.test(ROUTE));
 });
+it('the top-up bonus is the points granted with the same loads, in yuan', () => {
+  const fn = ROUTE.slice(ROUTE.indexOf('function topupCashReceived'), ROUTE.indexOf('function storeCreditRedeemed'));
+  assert.ok(fn.includes('SUM(bonus_points)'), 'the bonus is read off the cash rows');
+  assert.ok(fn.includes("payment_method IN ('wechat','alipay')"), 'a staff adjustment is not a load');
+  assert.ok(/topup_bonus: pointsCashValue\(tuSales\.bonusPoints/.test(ROUTE), 'valued at the redeem rate, once');
+});
 
 if (failed) { console.error('\n' + failed + ' failed'); process.exit(1); }
 console.log('\nall passed');
