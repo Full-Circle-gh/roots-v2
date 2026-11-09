@@ -531,6 +531,10 @@ function fapiaoDownloadHref(url) {
 function renderInvoiceBlock(o) {
   const isCompany = invoiceIsCompany(o);
   const issued = o.invoice_status === 'issued';
+  // Cancelled before a fapiao went out: the request is closed. The details
+  // stay (what was asked) and the issue form does not — there is no sale to
+  // put a document on. Issued stays issued; a later cancel is a 红冲.
+  const closed = !issued && o.status === 'cancelled';
   // Line icons matching the backend's Feather/Lucide set (stroke=currentColor) —
   // replaces the old color emoji so the fapiao block fits the Full Circle chrome.
   const ico = (p) => `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;">${p}</svg>`;
@@ -540,7 +544,7 @@ function renderInvoiceBlock(o) {
   const icoDown = ico('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>');
   const icoClip = ico('<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>');
   const row = (label, val, mono) => `<span style="color: var(--text-3);">${label}</span><span style="color: var(--text-1); font-weight: 600;${mono ? ' font-variant-numeric: tabular-nums;' : ''}">${escapeHtml(val || '—')}</span>`;
-  const badge = `<span style="font-weight: 700; font-size: 11px; padding: 2px 9px; border-radius: 99px; ${issued ? 'background: var(--success); color: #fff;' : 'background: var(--bg-elev-2); color: var(--text-2); border: 1px solid var(--line);'}">${issued ? invT('Issued', '已开') : invT('Requested', '待开')}</span>`;
+  const badge = `<span style="font-weight: 700; font-size: 11px; padding: 2px 9px; border-radius: 99px; ${issued ? 'background: var(--success); color: #fff;' : 'background: var(--bg-elev-2); color: var(--text-2); border: 1px solid var(--line);'}">${issued ? invT('Issued', '已开') : closed ? invT('Cancelled', '已取消') : invT('Requested', '待开')}</span>`;
   const inS = 'background: var(--bg-input); border: 1px solid var(--line); color: var(--text-1); border-radius: var(--r-md); padding: 6px 9px; font-size: 12px; font-family: inherit;';
   const footer = issued
     ? `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px;">
@@ -551,6 +555,7 @@ function renderInvoiceBlock(o) {
           <a href="#" onclick="event.preventDefault(); unissueInvoice(${o.id})" style="color: var(--text-3); font-size: 11px;">${invT('edit', '修改')}</a>
         </div>
       </div>`
+    : closed ? ''
     : `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
         <input id="inv-url-${o.id}" placeholder="${invT('Fapiao link (or attach PDF)', '发票链接(或上传 PDF)')}" style="${inS} flex: 1; min-width: 180px;">
         <input id="inv-no-${o.id}" placeholder="${invT('Invoice no. (optional)', '发票号码(可选)')}" style="${inS} width: 140px;">

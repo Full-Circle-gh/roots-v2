@@ -69,6 +69,7 @@ const CODE = [
   sliceFn('orderNotes'),
   sliceFn('ordNoteLabel'),
   sliceFn('orderBreakdown'),
+  sliceFn('deliveryCompareOf'),
   sliceFn('mapOrderRow'),
   sliceBetween("reg('statusF',", "reg('closeOrder',"),
   // §325 O10 — the header's Drafts door asks the drafts' own gate.
@@ -319,6 +320,10 @@ async function main() {
     is(notes.map((n) => m.ctx.ordNoteLabel(n)), ['下单后加购', '库存待扣', '待开票', '配送逾期 2 天 · 请联系顾客'],
       '…reads Chinese after the switch, without a refetch');
     is(m.ctx.ordNoteLabel({ label: 'plain' }), 'plain', 'a plain-string label still passes through');
+    is(m.ctx.orderNotes({ needs_invoice: 1, invoice_status: 'requested', status: 'cancelled' }), null,
+      'a cancelled order\'s unissued fapiao is not "to issue"');
+    is((m.ctx.orderNotes({ needs_invoice: 1, invoice_status: 'issued', status: 'cancelled' }) || []).map((n) => n.label[0]),
+      ['Invoice issued'], 'an issued fapiao stays on the row after the order is cancelled');
     has(src, '${ic(nt.icon,12)}${ordNoteLabel(nt)}</span>', 'the list row says them at render');
   }
 

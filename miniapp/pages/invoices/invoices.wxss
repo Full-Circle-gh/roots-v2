@@ -16,6 +16,7 @@
   border: 2rpx solid #1a1a17; color: #1a1a17; white-space: nowrap;
 }
 .badge.on { background: #CCD900; }
+.badge.off { color: #8a8275; border-color: #d9d1c4; }
 .inv-meta { font-size: 24rpx; margin-top: 8rpx; }
 .inv-title { font-size: 26rpx; color: #1a1a17; margin-top: 8rpx; font-weight: 600; }
 .inv-no { font-size: 22rpx; margin-top: 4rpx; font-variant-numeric: tabular-nums; }

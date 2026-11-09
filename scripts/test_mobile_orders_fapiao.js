@@ -128,6 +128,15 @@ section('1 · who may issue');
       assert.strictEqual(h.calls.copied.length + h.calls.writes.length, 0);
     });
   }
+  it('a cancelled order: Cancelled, and Mark issued is not offered', () => {
+    const order = ORDER();
+    order.raw = 'cancelled';
+    const h = mk({ order });
+    const html = h.block(); const t = h.text(html);
+    assert.ok(t.includes('Cancelled'), t);
+    assert.ok(!t.includes('Mark issued') && !/mInvUrl/.test(html));
+    assert.ok(t.includes('Guangzhou Bright Tech Co.'));
+  });
   it('Chinese: the desktop\'s Chinese', () => {
     const h = mk({ lang: 'zh' });
     const html = h.block(); const t = h.text(html);

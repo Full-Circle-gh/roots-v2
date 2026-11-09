@@ -13,7 +13,7 @@
     <view wx:for="{{invoices}}" wx:key="id" class="inv">
       <view class="inv-top">
         <view class="inv-order f-bear">{{copy.orderWord}} #{{item.orderNo}}</view>
-        <view class="badge {{item.issued ? 'on' : ''}}">{{item.stateLabel}}</view>
+        <view class="badge {{item.issued ? 'on' : ''}} {{item.closed ? 'off' : ''}}">{{item.stateLabel}}</view>
       </view>
       <view class="inv-meta muted">{{item.date}} · ¥{{item.total}} · {{item.typeLabel}}</view>
       <view wx:if="{{item.title}}" class="inv-title">{{item.title}}</view>

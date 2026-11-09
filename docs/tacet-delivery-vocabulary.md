@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.405 · 2026-11-09 · A CANCELLED ORDER'S FAPIAO IS NOT "PROCESSING" — NOTHING COMPOSED.** The customer's invoice list was calling every unissued request Processing. A cancelled order's request now says `Cancelled · 已取消`, the order-status pair already on the mini app (`miniapp/pages/order/order.js`) and on the phone's own fapiao pill. The web store uses the same pair. Nothing retired. Rules 1 to 7 unchanged.
+
 **v1.404 · 2026-11-09 · A FAPIAO CAN BE SAVED — COPIED, NOTHING COMPOSED.** The order drawer, the phone, the web shop's invoice list and the mini app opened an issued fapiao and stopped at the viewer. Customers asked for the file. **COPIED:** `Download · 下载`, the shop-menu pair, now the button beside View fapiao, View invoice and Open the fapiao. The viewer stays. `查看发票` and `打开发票` are unchanged. Nothing retired. Rules 1 to 7 unchanged.
 
 **v1.403 · 2026-11-08 · THE OPEN BAR'S MONEY IS TWO NUMBERS — COMPOSED.** The change was wearing the word Money, and it was read as the amount taken. Kept is this window minus the food cost, so it can be larger than the change. **COMPOSED:** `vs the one before · 对比上一时段`, the label on the change. `对比` is the headline's own verb (`对比前 N 天`); `上一时段` is the legend's. **COPIED on this row:** `This window · 本时段`, now the label on the amount taken, the same pair as the legend. Price, was, food cost and kept stay on their own lines, each figure the same size. `Money · 营收` is retired from this line. `营收` stays the revenue chip. Nothing else retired. Rules 1 to 7 unchanged.

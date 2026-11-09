@@ -16,6 +16,7 @@ Page({
       title: 'Your invoices.',
       stateIssued: 'Issued',
       stateRequested: 'Processing',
+      stateClosed: 'Cancelled',
       view: 'View invoice',
       download: 'Download',
       noFile: 'Issued — contact us for the file',
@@ -43,6 +44,7 @@ Page({
       title: '我的发票。',
       stateIssued: '已开具',
       stateRequested: '处理中',
+      stateClosed: '已取消',
       view: '查看发票',
       download: '下载',
       noFile: '已开具 — 请联系客服获取',
@@ -68,7 +70,10 @@ Page({
         date: fmtDate(o.placed_at),
         total: Number(o.total || 0).toFixed(2),
         issued: o.invoice_state === 'issued',
-        stateLabel: o.invoice_state === 'issued' ? c.stateIssued : c.stateRequested,
+        closed: o.invoice_state === 'closed',
+        stateLabel: o.invoice_state === 'issued' ? c.stateIssued
+          : o.invoice_state === 'closed' ? c.stateClosed
+          : c.stateRequested,
         typeLabel: o.invoice_type === 'company' ? c.typeCompany : c.typePersonal,
         title: o.invoice_title || '',
         number: o.invoice_number || '',

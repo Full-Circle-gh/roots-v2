@@ -41047,12 +41047,16 @@ function fapiaoDownloadHref(url) {
 function invoiceBlock(o){
   const v=o.invoice; if(!v) return '';
   const issued=v.status==='issued';
+  // Same rule as the customer's list and the desktop block: a cancelled
+  // order's unissued request is closed. No Mark issued, and the pill does
+  // not say the work is still waiting.
+  const closed=!issued && o.raw==='cancelled';
   const can=invCanIssue();
   const row=(l,val)=>val?`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:13.5px;margin-top:6px">
     <span style="color:var(--text-secondary);flex:none">${l}</span><span class="num" style="min-width:0;text-align:right;word-break:break-all">${escAttr(val)}</span></div>`:'';
   const d=can?invDraft(o):null;
   const busy=!!(d&&d.busy)||!!state.orderBusy;
-  const issue=can&&!issued?`<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-default)">
+  const issue=can&&!issued&&!closed?`<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-default)">
       <input id="mInvUrl" autocomplete="off" value="${escAttr(d.url)}" placeholder="${T('Fapiao link (or attach PDF)','发票链接(或上传 PDF)')}" style="width:100%" oninput="APP.cmd('invSet','url',this.value)">
       <input id="mInvNo" autocomplete="off" value="${escAttr(d.number)}" placeholder="${T('Invoice no. (optional)','发票号码(可选)')}" style="width:100%" oninput="APP.cmd('invSet','number',this.value)">
       ${d.err?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(d.err)}</div>`:''}
@@ -41063,7 +41067,7 @@ function invoiceBlock(o){
   return `<div class="card" style="padding:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span class="eyebrow">${T('Fapiao','发票')}</span>
-      ${pill(issued?'delivered':'restock',issued?T('Issued','已开票'):T('To issue','待开票'))}</div>
+      ${pill(issued?'delivered':closed?'off':'restock',issued?T('Issued','已开票'):closed?T('Cancelled','已取消'):T('To issue','待开票'))}</div>
     ${row(T('Type','类型'),v.type==='company'?T('Company','企业'):v.type==='personal'?T('Personal','个人'):v.type)}
     ${row(T('Title','抬头'),v.title)}
     ${row(T('Tax ID','税号'),v.taxId)}
@@ -52130,7 +52134,10 @@ function orderNotes(r){
   if(r.stock_pending) out.push({sev:'amber',icon:'box',label:['Stock not deducted yet','库存待扣']});
   if(Number(r.needs_invoice)){
     const issued=r.invoice_status==='issued';
-    out.push({sev:issued?'muted':'amber',icon:'receipt',label:issued?['Invoice issued','已开票']:['Invoice to issue','待开票']});
+    // Cancelled and not yet issued: the request is closed. "To issue" on that
+    // row is the same lie the customer's list was telling. An issued fapiao
+    // stays — the document is the thing a 红冲 has to find.
+    if(issued || r.status!=='cancelled') out.push({sev:issued?'muted':'amber',icon:'receipt',label:issued?['Invoice issued','已开票']:['Invoice to issue','待开票']});
   }
   if(r.air_delivery_delayed) out.push({sev:'brick',icon:'truck',label:['Delivery delayed · call the customer','配送延误 · 请联系顾客']});
   if(r.no_contact_open) out.push({sev:'brick',icon:'phone',label:["Courier can't reach them · call the customer",'快递员联系不上顾客 · 请联系顾客']});

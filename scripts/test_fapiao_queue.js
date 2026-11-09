@@ -33,6 +33,10 @@ const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8
 const M_SRC      = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
 
 const fq = require('../lib/fapiao-queue');
+const MINI_SRC = fs.readFileSync(path.join(ROOT, 'miniapp', 'pages', 'invoices', 'invoices.js'), 'utf8');
+const SHOP_SRC = fs.readFileSync(path.join(ROOT, 'public', 'shop.html'), 'utf8');
+const ORD_SRC  = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '04-orders.js'), 'utf8');
+const BILL_SRC = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '07-content-billing.js'), 'utf8');
 
 let pass = 0, fail = 0;
 const ok = (cond, msg, got) => {
@@ -149,6 +153,55 @@ ok(/\(!v\.issued&&!v\.dead\)/.test(M_SRC),
    + 'under it are one number');
 ok(/\(c\.requested\|\|0\)\+\(c\.issued\|\|0\)\+\(c\.blocked\|\|0\)/.test(M_SRC),
    'and All sums three, not two');
+
+// ── The customer's own list ──────────────────────────────────────────────────
+// THE DEFECT THIS ROUND. Operator screens already refused to call a cancelled
+// order's request pending. "Your invoices" did not: it mapped every unissued
+// row to requested, and the mini app printed that as Processing. TCO01436 was
+// cancelled and still sat on that list as work in progress.
+const stateOf = (row) => db.prepare(
+  `SELECT ${fq.customerStateSql('o')} AS invoice_state FROM retail_orders o WHERE o.id = ?`
+).get(row).invoice_state;
+ok(stateOf(1) === 'requested',
+   'a live unissued request is still requested — the customer sees Processing');
+ok(stateOf(6) === 'closed',
+   "the cancelled order's unissued request is closed, not requested");
+ok(stateOf(7) === 'requested',
+   'an unpaid order that has not been cancelled is still a request — cancel is what closes it');
+ok(stateOf(5) === 'issued',
+   'a fapiao issued and then cancelled stays issued');
+ok(fq.isActiveRequest({ needs_invoice: 1, invoice_status: 'requested', status: 'paid' }),
+   'isActiveRequest passes a live unissued request');
+ok(!fq.isActiveRequest({ needs_invoice: 1, invoice_status: 'requested', status: 'cancelled' }),
+   'isActiveRequest refuses the cancelled one — there is nothing to issue');
+ok(!fq.isActiveRequest({ needs_invoice: 1, invoice_status: 'issued', status: 'paid' }),
+   'and an issued fapiao is not an open request');
+
+const custBlock = RETAIL_SRC.slice(RETAIL_SRC.indexOf("router.get('/api/retail/invoices'"));
+ok(/fapiaoQueue\.customerStateSql\(/.test(custBlock.slice(0, 1200)),
+   "the customer's invoice list takes its state from customerStateSql");
+ok(!/CASE WHEN invoice_status = 'issued' THEN 'issued' ELSE 'requested'/.test(custBlock.slice(0, 1200)),
+   'and no longer folds every unissued row into requested');
+
+const issueBlock = RETAIL_SRC.slice(RETAIL_SRC.indexOf("router.put('/api/retail-admin/orders/:id/invoice'"));
+ok(/fapiao_closed/.test(issueBlock.slice(0, 1800)),
+   'mark-issued refuses a cancelled order — the request cannot be completed after the cancel');
+ok(/action !== 'unissue'/.test(issueBlock.slice(0, 1800)),
+   'un-issue is still allowed, so a fapiao written by mistake can come back off');
+
+ok(/stateClosed: 'Cancelled'/.test(MINI_SRC) && /stateClosed: '已取消'/.test(MINI_SRC),
+   "the mini app's invoice badge says Cancelled / 已取消 for a closed request — the live order-status pair");
+ok(/invoice_state === 'closed' \? c\.stateClosed/.test(MINI_SRC),
+   'and it only uses that pair when the server says closed, not for every unissued row');
+ok(/invoice_state==='closed'/.test(SHOP_SRC) && /已取消/.test(SHOP_SRC),
+   'the web store reads the same state and the same pair');
+ok(/!issued && o\.status === 'cancelled'/.test(ORD_SRC),
+   'the desktop orders list does not mark a cancelled request as still to issue');
+ok(/const closed = !issued && o\.status === 'cancelled'/.test(BILL_SRC)
+   && /closed \? ''/.test(BILL_SRC),
+   'the desktop drawer keeps the request and drops Mark issued once the order is cancelled');
+ok(/o\.raw==='cancelled'/.test(M_SRC) && /closed\?T\('Cancelled','已取消'\)/.test(M_SRC),
+   "the phone's order sheet uses the same closed pill and does not offer Mark issued");
 
 console.log(`\n${fail ? '✗ ' + fail + ' failed' : '✓ ' + pass + ' passed, 0 failed'}`);
 process.exit(fail ? 1 : 0);
