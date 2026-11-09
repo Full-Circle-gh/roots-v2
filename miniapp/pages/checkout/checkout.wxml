@@ -479,10 +479,10 @@
 
     <!-- Points as a discount toggle ABOVE the radios — not a payment method
          peer. Stacks with whichever method is picked below (WeChat / Alipay).
-         When pointsAffordable is true AND toggle is on, the total goes to
-         ¥0 and the residual-charge step is skipped server-side; the chosen
-         radio is then just the "fallback rail" in case the math changes
-         on submit. Hidden entirely when the customer has 0 points.
+         pointsAffordable (client) means residual cash due is ¥0 — NOT the
+         server's points_affordable flag, which only gates goods coverage.
+         When pointsAffordable is true, no gateway charge; otherwise WeChat
+         pays the residual (often shipping). Hidden when balance is 0.
 
          Subtitle states (avoid the "save ¥0.00" worthless-looking copy
          that confused users — only surface a money figure when it's

@@ -1654,17 +1654,15 @@ Page({
         this.applyQuoteTax(data.tax);
         const tax = this.taxOn(srvSubtotal, effectiveDelivery, packingFee, voucherDiscount, 0);
         const grossTotal = Math.max(0, srvSubtotal + effectiveDelivery + packingFee - voucherDiscount) + tax.added;
-        const payingWithPoints = !!this.data.usePoints && data.points_affordable;
         // Partial-points stack: server clamped points_to_use → applied amount + discount.
         const pointsMaxUsable    = Number(data.points_max_usable) || 0;
         const pointsToUseApplied = Number(data.points_to_use_applied) || 0;
         const pointsDiscount     = Number(data.points_discount) || 0;
         // Wallet balance applied by the server (already clamped to the
-        // non-shipping remainder after points). 0 when the toggle is off or
-        // points already covered the goods.
-        const balanceDiscount    = payingWithPoints ? 0 : (Number(data.balance_discount) || 0);
+        // non-shipping remainder after points).
+        const balanceDiscount    = Number(data.balance_discount) || 0;
         const balanceMaxUsable   = Number(data.balance_max_usable) || 0;
-        const total = payingWithPoints ? 0 : Math.max(0, grossTotal - pointsDiscount - balanceDiscount);
+        const total = Math.max(0, grossTotal - pointsDiscount - balanceDiscount);
         // Group slots by date for the UI. Server returns a flat list; we
         // bucket by date_iso so the wxml can render a "day → slots" tree.
         const sch = data.scheduling || null;
@@ -1711,6 +1709,10 @@ Page({
         const taxWithSurcharge = this.taxOn(srvSubtotal, effectiveDelivery, packingFee, voucherDiscount, nextSlotSurcharge);
         const totalWithSurcharge = Math.max(0, (Number(total) || 0) + nextSlotSurcharge
           + (taxWithSurcharge.added - tax.added));
+        // `points_affordable` from the server only means "balance covers the
+        // redeemable base" (goods + packing, not shipping). For UI copy and
+        // client_total, "covers the bill" means residual cash due is zero.
+        const pointsAffordable = !!usingPoints && totalWithSurcharge < 0.005;
         // Routing info — drives both the simple yes/no fallback modal
         // (legacy) and the new 5-option modal (GZ + non-excluded district
         // + right_away slot). Server tells us which via `routing.gate`.
@@ -1752,7 +1754,7 @@ Page({
           freeShipping: !!data.free_shipping,
           pointsEarnedPreview: Number(data.points_earned_preview) || 0,
           pointsRequired:    Number(data.points_required) || 0,
-          pointsAffordable:  !!data.points_affordable,
+          pointsAffordable,
           pointsRedeemRate:  Number(data.points_redeem_rate) || 100,
           pointsBalance:     Number(data.points_balance) || this.data.pointsBalance || 0,
           pointsMaxUsable,
@@ -2280,13 +2282,13 @@ Page({
     const packingFee  = Number(this.data.packingFee)  || 0;
     const voucherDiscount = this.effectiveVoucher().discount;  // best of {manual, auto-apply}
     const pointsDiscount  = Number(this.data.pointsDiscount)  || 0;
-    const payingWithPoints = !!this.data.usePoints && this.data.pointsAffordable;
-    const balanceDiscount = payingWithPoints ? 0 : (Number(this.data.balanceDiscount) || 0);
+    const balanceDiscount = Number(this.data.balanceDiscount) || 0;
     // Tax on the same base, surcharge included — the server taxes what the
     // customer is charged, and a slot surcharge is part of that (audit I-03).
     const tax = this.taxOn(subtotal, deliveryFee, packingFee, voucherDiscount, surcharge);
     const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge) + tax.added;
-    const total = payingWithPoints ? 0 : Math.max(0, gross - pointsDiscount - balanceDiscount);
+    const total = Math.max(0, gross - pointsDiscount - balanceDiscount);
+    const pointsAffordable = !!this.data.usePoints && total < 0.005;
     // Re-quote on a change of slot identity OR of slot KIND. The kind matters
     // even when the id is unchanged: when the kitchen is open the server only
     // emits the surcharged "today" chip, so Express defaults onto that very
@@ -2303,6 +2305,7 @@ Page({
       deliverySurcharge: surcharge,
       taxShown: tax.amount ? tax.amount.toFixed(2) : '',
       total: total.toFixed(2),
+      pointsAffordable,
     });
     // Re-quote when the slot identity/kind changes — slot affects server-side
     // stock-gating + fallback detection (right_away triggers stock check,
@@ -2333,13 +2336,13 @@ Page({
     const packingFee  = Number(this.data.packingFee)  || 0;
     const voucherDiscount = this.effectiveVoucher().discount;  // best of {manual, auto-apply}
     const pointsDiscount  = Number(this.data.pointsDiscount)  || 0;
-    const payingWithPoints = !!this.data.usePoints && this.data.pointsAffordable;
-    const balanceDiscount = payingWithPoints ? 0 : (Number(this.data.balanceDiscount) || 0);
+    const balanceDiscount = Number(this.data.balanceDiscount) || 0;
     // Tax on the same base, surcharge included — the server taxes what the
     // customer is charged, and a slot surcharge is part of that (audit I-03).
     const tax = this.taxOn(subtotal, deliveryFee, packingFee, voucherDiscount, surcharge);
     const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge) + tax.added;
-    const total = payingWithPoints ? 0 : Math.max(0, gross - pointsDiscount - balanceDiscount);
+    const total = Math.max(0, gross - pointsDiscount - balanceDiscount);
+    const pointsAffordable = !!this.data.usePoints && total < 0.005;
     const slotChanged = id !== this.data.deliverySlotId;
     // Mutually-exclusive radio state: the Schedule-for-later option keys
     // its filled "on" state off `selectedSlotKind === 'schedule'` (set by
@@ -2357,6 +2360,7 @@ Page({
       selectedSlotKind: '',
       taxShown: tax.amount ? tax.amount.toFixed(2) : '',
       total: total.toFixed(2),
+      pointsAffordable,
     });
     if (slotChanged) this.refreshQuote();
   },
@@ -2846,9 +2850,9 @@ Page({
   },
 
   // Toggle: "Use my points". Flips usePoints, which becomes the trigger
-  // for the partial-stack server path (points_to_use = balance). When
-  // pointsAffordable is true on the resulting quote, the total drops to
-  // 0 and the picked radio is skipped at /payment/create.
+  // for the partial-stack server path (points_to_use = balance). When the
+  // residual total is ¥0, /payment/create skips the gateway; delivery is
+  // often still due when points do not cover shipping.
   onTogglePoints(e) {
     const on = !!e.detail.value;
     if (on === this.data.usePoints) return;
