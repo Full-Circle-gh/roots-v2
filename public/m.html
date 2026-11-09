@@ -20255,7 +20255,7 @@ const SUBS={
           <span style="display:flex;align-items:center;gap:9px;min-width:0;flex-wrap:wrap;row-gap:6px">${pill(v.kind,T(...v.status))}
             <span style="font-size:12px;color:var(--text-secondary)">${v.company?T('Company','企业'):T('Personal','个人')}</span>
             ${v.when?`<span class="num" style="font-size:12px;color:var(--text-secondary)">${fmtDay(v.when)}</span>`:''}</span>
-          ${v.file?`<a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;flex:none;text-decoration:none">${ic('download',15)} ${T('Open','打开')}</a>`
+          ${v.file?`<span style="display:inline-flex;gap:8px;flex:none"><a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;flex:none;text-decoration:none">${ic('download',15)} ${T('Open','打开')}</a><a href="${escAttr(fapiaoDownloadHref(v.file))}" download style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;flex:none;text-decoration:none">${ic('download',15)} ${T('Download','下载')}</a></span>`
             /* "NOT TODAY" — the one way to quiet the chase without issuing.
                Deliberately NOT the notification banner: swiping that away
                writes nothing and must keep writing nothing. This is the
@@ -41034,6 +41034,16 @@ function invDraft(o){
   if(!d||d.orderId!==o.id) state.inv={orderId:o.id,url:'',number:'',busy:'',err:''};
   return state.inv;
 }
+// Same function as lib/media-disposition.js — this page cannot require it.
+// scripts/test_fapiao_download.js checks the copies still match.
+function fapiaoDownloadHref(url) {
+  const u = String(url || '').trim();
+  const m = u.match(/^(https?:\/\/[^/?#]+)?(\/api\/retail\/media\/\d+)(\?[^#]*)?(#.*)?$/);
+  if (!m) return u;
+  const q = m[3] || '';
+  if (/(?:^|[?&])download=1(?:&|$)/.test(q)) return u;
+  return (m[1] || '') + m[2] + (q ? q + '&download=1' : '?download=1') + (m[4] || '');
+}
 function invoiceBlock(o){
   const v=o.invoice; if(!v) return '';
   const issued=v.status==='issued';
@@ -41059,7 +41069,7 @@ function invoiceBlock(o){
     ${row(T('Tax ID','税号'),v.taxId)}
     ${row(T('Send to','发送至'),v.email)}
     ${row(T('Number','发票号'),v.number)}
-    ${v.file?`<a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;text-decoration:none">${ic('download',15)} ${T('Open the fapiao','打开发票')}</a>`:''}
+    ${v.file?`<span style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"><a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;text-decoration:none">${ic('download',15)} ${T('Open the fapiao','打开发票')}</a><a href="${escAttr(fapiaoDownloadHref(v.file))}" download style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;text-decoration:none">${ic('download',15)} ${T('Download','下载')}</a></span>`:''}
     ${can?`<button class="btn2" style="width:100%;margin-top:12px;gap:6px" onclick="APP.cmd('invCopy')">${ic('clipboard',16)}${T('Copy for accounting','复制开票信息')}</button>`:''}
     ${issue}
     ${can&&issued?`<div style="display:flex;justify-content:flex-end;margin-top:8px"><button style="border:none;background:none;padding:4px 0;font-family:inherit;font-size:13px;color:var(--text-secondary);cursor:pointer" ${busy?'disabled':''} onclick="APP.cmd('invUnissue')">${T('edit','修改')}</button></div>`:''}

@@ -514,6 +514,8 @@ function sniffVideoMime(buf) {
 // Content-types the media route is allowed to serve inline. Anything else
 // (notably SVG, HTML) is forced to download as an opaque blob so a browser
 // can't execute it. PDF is here so issued fapiao render inline for staff.
+// ?download=1 (lib/media-disposition.js) sends that same PDF as a file: the
+// viewer has no save control in WeChat's browser, and customers need the file.
 const MEDIA_INLINE_MIME = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'application/pdf',
   'video/mp4',
@@ -33680,9 +33682,10 @@ router.post('/api/retail-admin/cms/onboarding-settings/bump', requireRetailAdmin
 // Public GET. Cached aggressively — once an image is uploaded its bytes
 // don't change; if you re-upload, the editor stores a new id and updates
 // the block reference, so cache invalidation is a non-issue.
+const { wantsDownload, mediaContentDisposition } = require('../lib/media-disposition');
 router.get('/api/retail/media/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const row = tdb().prepare('SELECT mime_type, data FROM retail_media WHERE id = ?').get(id);
+  const row = tdb().prepare('SELECT mime_type, filename, data FROM retail_media WHERE id = ?').get(id);
   if (!row) return res.status(404).end();
   // data is "data:image/jpeg;base64,..." — strip prefix and stream bytes
   const m = /^data:[^;]+;base64,(.+)$/.exec(row.data);
@@ -33690,13 +33693,16 @@ router.get('/api/retail/media/:id', (req, res) => {
   // Never let the browser MIME-sniff our blob into something executable, and
   // only serve known-safe types inline. Anything else (legacy SVG, mislabeled
   // upload) is handed back as an opaque download so it can't run as a page.
+  // A fapiao link with ?download=1 keeps the real type and asks the browser
+  // (and WeChat) to save the file instead of only showing it.
+  const asFile = wantsDownload(req.query);
   res.set('X-Content-Type-Options', 'nosniff');
   if (MEDIA_INLINE_MIME.has(row.mime_type)) {
     res.set('Content-Type', row.mime_type);
-    res.set('Content-Disposition', 'inline');
+    res.set('Content-Disposition', asFile ? mediaContentDisposition(row.mime_type, row.filename) : 'inline');
   } else {
     res.set('Content-Type', 'application/octet-stream');
-    res.set('Content-Disposition', 'attachment');
+    res.set('Content-Disposition', asFile ? mediaContentDisposition(row.mime_type, row.filename) : 'attachment');
   }
   res.set('Cache-Control', 'public, max-age=2592000, immutable');  // 30d
   const buf = Buffer.from(m[1], 'base64');

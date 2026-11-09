@@ -2,6 +2,7 @@
 // an invoice was requested; shows its state (issued vs processing) and, once
 // issued, a button to open the fapiao PDF/link. Reads GET /api/retail/invoices.
 const api = require('../../utils/api');
+const { openCustomerFapiao } = require('../../utils/fapiao-file');
 
 function fmtDate(s) { return s ? String(s).slice(0, 10) : ''; }
 
@@ -16,6 +17,7 @@ Page({
       stateIssued: 'Issued',
       stateRequested: 'Processing',
       view: 'View invoice',
+      download: 'Download',
       noFile: 'Issued — contact us for the file',
       emptyTitle: 'No invoices yet.',
       emptySub: 'Request an invoice at checkout — it appears here once issued.',
@@ -42,6 +44,7 @@ Page({
       stateIssued: '已开具',
       stateRequested: '处理中',
       view: '查看发票',
+      download: '下载',
       noFile: '已开具 — 请联系客服获取',
       emptyTitle: '暂无发票',
       emptySub: '结算时申请发票,开具后会显示在这里。',
@@ -78,20 +81,16 @@ Page({
     }
   },
 
-  onViewInvoice(e) {
+  onViewInvoice(e) { this.openFapiao(e, false); },
+  onDownloadInvoice(e) { this.openFapiao(e, true); },
+
+  openFapiao(e, download) {
     const url = e.currentTarget.dataset.url;
     if (!url) return;
-    const full = /^https?:\/\//.test(url) ? url : (api.BASE + url);
-    wx.showLoading({ title: '' });
-    wx.downloadFile({
-      url: full,
-      success: (res) => {
-        wx.hideLoading();
-        if (res.statusCode === 200) {
-          wx.openDocument({ filePath: res.tempFilePath, fileType: 'pdf', fail: () => this.copyLink(full) });
-        } else { this.copyLink(full); }
-      },
-      fail: () => { wx.hideLoading(); this.copyLink(full); },
+    openCustomerFapiao(url, {
+      download,
+      base: api.BASE,
+      onFail: (full) => this.copyLink(full || url),
     });
   },
 

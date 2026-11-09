@@ -4439,13 +4439,23 @@ async function renderCoupons(){
   show('active');
 }
 
+// Same function as lib/media-disposition.js — this page cannot require it.
+// scripts/test_fapiao_download.js checks the copies still match.
+function fapiaoDownloadHref(url) {
+  const u = String(url || '').trim();
+  const m = u.match(/^(https?:\/\/[^/?#]+)?(\/api\/retail\/media\/\d+)(\?[^#]*)?(#.*)?$/);
+  if (!m) return u;
+  const q = m[3] || '';
+  if (/(?:^|[?&])download=1(?:&|$)/.test(q)) return u;
+  return (m[1] || '') + m[2] + (q ? q + '&download=1' : '?download=1') + (m[4] || '');
+}
 async function renderInvoices(){
   const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
   document.title=(cn?'发票':'Invoices')+' · '+state.brand;
   v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'发票':'Invoices','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
   let list; try{ list=await api('/api/retail/invoices')||[]; }catch(e){ list=[]; }
   const box=v.querySelector('.sp');
-  const rows=(list||[]).map(i=>{const issued=i.invoice_state==='issued';return `<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(i.invoice_title||i.order_no||'')} <span class="sp-chip">${i.invoice_type==='company'?(cn?'企业':'Company'):(cn?'个人':'Personal')}</span></div><div class="sp-d">${esc(i.order_no||'')} · ${String(i.placed_at||'').slice(0,10)} · ${money(i.total)}</div><div class="sp-d">${issued?(cn?'已开具':'Issued'):(cn?'处理中':'Processing')}${i.invoice_number?' · '+esc(i.invoice_number):''}</div>${issued&&i.invoice_file_url?`<div style="margin-top:8px"><a class="me-legal-a" href="${escAttr(i.invoice_file_url)}" target="_blank" rel="noopener">${cn?'查看发票 →':'View invoice →'}</a></div>`:''}</div></div>`;}).join('');
+  const rows=(list||[]).map(i=>{const issued=i.invoice_state==='issued';const file=i.invoice_file_url||'';return `<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(i.invoice_title||i.order_no||'')} <span class="sp-chip">${i.invoice_type==='company'?(cn?'企业':'Company'):(cn?'个人':'Personal')}</span></div><div class="sp-d">${esc(i.order_no||'')} · ${String(i.placed_at||'').slice(0,10)} · ${money(i.total)}</div><div class="sp-d">${issued?(cn?'已开具':'Issued'):(cn?'处理中':'Processing')}${i.invoice_number?' · '+esc(i.invoice_number):''}</div>${issued&&file?`<div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap"><a class="me-legal-a" href="${escAttr(file)}" target="_blank" rel="noopener">${cn?'查看发票 →':'View invoice →'}</a><a class="me-legal-a" href="${escAttr(fapiaoDownloadHref(file))}" download>${cn?'下载':'Download'}</a></div>`:''}</div></div>`;}).join('');
   box.innerHTML=spBack()+spHead(cn?'我的':'MY',cn?'发票':'Invoices','')+(rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'暂无发票':'No invoices yet'}</div>`);
 }
 

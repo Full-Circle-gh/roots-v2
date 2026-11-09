@@ -376,7 +376,11 @@
 
     <!-- Invoice (发票) — request post-purchase, or show its state. Paid orders only. -->
     <view wx:if="{{order.status !== 'pending_payment' && order.status !== 'cancelled'}}" class="cust-actions">
-      <view wx:if="{{order.invoice_status === 'issued'}}" class="inv-state muted">{{copy.invoiceIssued}}</view>
+      <view wx:if="{{order.invoice_status === 'issued'}}" class="inv-issued">
+        <view class="inv-state muted">{{copy.invoiceIssued}}</view>
+        <button wx:if="{{order.invoice_file_url}}" class="btn ghost f-toni" data-url="{{order.invoice_file_url}}" bindtap="onViewFapiao">{{copy.invoiceView}}</button>
+        <button wx:if="{{order.invoice_file_url}}" class="btn ghost f-toni" data-url="{{order.invoice_file_url}}" bindtap="onDownloadFapiao">{{copy.invoiceDownload}}</button>
+      </view>
       <view wx:elif="{{order.needs_invoice}}" class="inv-state muted">{{copy.invoiceProcessing}}</view>
       <button wx:else class="btn ghost f-toni" bindtap="openInvoiceSheet">{{copy.invoiceBtn}}</button>
     </view>

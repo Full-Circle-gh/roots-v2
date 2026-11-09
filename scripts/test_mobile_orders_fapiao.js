@@ -267,7 +267,8 @@ section('5 · un-issue');
   it('an issued fapiao: its number, Open the fapiao, and the desktop\'s "edit"; no issuing controls', () => {
     const h = mk({ order: issued() });
     const html = h.block(); const t = h.text(html);
-    assert.ok(t.includes('Issued') && t.includes('Number 044001') && t.includes('Open the fapiao') && t.includes('edit'));
+    assert.ok(t.includes('Issued') && t.includes('Number 044001') && t.includes('Open the fapiao') && t.includes('Download') && t.includes('edit'));
+    assert.ok(html.includes('href="/api/retail/media/77?download=1"') && /<a href="\/api\/retail\/media\/77\?download=1" download/.test(html));
     assert.ok(!html.includes('mInvUrl') && !html.includes("APP.cmd('invIssue')"));
   });
   it('asks first, then PUTs the desktop\'s unissue', async () => {
