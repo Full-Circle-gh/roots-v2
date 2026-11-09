@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.630
+# Tacet shared-core consolidation — decisions record, v4.631
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-09 · v4.631 — **§525 · ASKING ANOTHER LOCATION FOR STOCK IS NOT OPERATING THAT LOCATION (§520 AMENDED FOR THIS ONE ACT) — ASH.** A Tianhe warehouse login, pinned to Tianhe, opened Ask for stock and was told there was nowhere else to ask. The pin is which store the login operates. Naming who sends the goods is not that. The goods still arrive only at a store the login holds. No new words. No schema, no change to `.gitignore` or CI. See §525.
 
 2026-11-08 · v4.630 — **§524 · WHEN THE OUT-OF-GUANGZHOU STORE IS CLOSED, ORDERS FROM OUTSIDE GUANGZHOU CAN STILL GO THERE — ASH.** A Beijing order landed on Yuexiu because Tianhe was closed, and had to be moved back by hand. The switch is off until saved. With it on, only an order in Guangzhou leaves a closed Tianhe for the shop that is still open. No schema, no change to `.gitignore` or CI. See §524.
 
@@ -34076,3 +34078,18 @@ No schema change. No change to `.gitignore` or CI.
 The switch is on Settings → Store, under Open for business, and again under Settings → Printing next to the store that ships orders outside Guangzhou. The phone's receipt-printing screen has the same switch. One saved value.
 
 No schema change. No change to `.gitignore` or CI.
+
+## §525 — ASKING ANOTHER LOCATION FOR STOCK IS NOT OPERATING THAT LOCATION
+
+**2026-11-09 · DECIDED BY ASH.** A warehouse login pinned to Tianhe opened Ask for stock to ask Yuexiu, and the screen said there was nowhere else to ask — the login holds only Tianhe. Ash: the pin is the rule, and it has nothing to do with a stock request.
+
+§520 still hides every other store on waste, counts, orders, Add stock and the rest, and the server still refuses those. This is the one act it does not cover.
+
+**The rule.** A stock request has two ends, and they are not the same kind of choice.
+
+1. **Where the goods arrive is a store this login holds.** That is the pin. A Tianhe login receives at Tianhe. One store means no picker: the name is already known. A destination outside the pin is refused.
+2. **Where the goods come from is any other location.** Asking Yuexiu to send stock is not operating Yuexiu. The list is every active location except the one receiving, including locations this login cannot open. The same split applies when the asker later changes the two ends of a request nobody has started picking.
+3. **The count on the ask list is part of asking.** The row shows what is on the shelf at the location being asked, the same way it shows the destination. That read is the count only. Add stock, the inventory grid and every other shelf read stay inside the pin.
+4. **One location in the business is still a wall.** The "nowhere else to ask" sentence stays for a business that has a single location. It no longer appears because the login is pinned to one of several.
+
+No new words. No schema change. No change to `.gitignore` or CI.

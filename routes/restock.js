@@ -14,7 +14,8 @@ const inventory = require('../lib/inventory');
 // isolation is switched on.
 const { tdb, currentTenantId, getTenantDb } = require('../lib/tenant-db');
 // §520's lock: a transfer touches both its ends, and a scoped caller acts
-// only on one that touches their own stores.
+// only on one that touches their own stores. §525 excepts the SUPPLIER of a
+// stock request — asking a location is not operating it. See askableFromStore.
 const { storeAllowed, storeIdsOf } = require('../lib/operator-caps');
 // The shop's own day (decisions §82). This file took "today" as the UTC day
 // and numbered requests off the host's clock, so between midnight and 08:00 in
@@ -1488,6 +1489,56 @@ function _attachRecorded(order, items) {
  *
  * DECLARED BEFORE /:id, because /:id would otherwise match the word and answer
  * 404 for a row whose id is 'mine'. */
+
+/* §525 — WHO A STOCK REQUEST MAY NAME.
+ *
+ * The pin decides where the goods ARRIVE. Asking another location to send
+ * them is not operating that location: a Tianhe warehouse login asks Yuexiu
+ * without being handed Yuexiu. An active location is askable. A location
+ * inside the pin is askable even when the active flag would say otherwise,
+ * which is the old behaviour for a login's own stores and is left alone.
+ * Anything else — a missing id, a location switched off — is not. */
+function askableFromStore(req, storeId) {
+  if (storeAllowed(req, storeId)) return true;
+  const n = Number(storeId);
+  if (!Number.isInteger(n) || n <= 0) return false;
+  const row = tdb().prepare(
+    'SELECT id FROM retail_stores WHERE id = ? AND COALESCE(is_active, 1) = 1'
+  ).get(n);
+  return !!row;
+}
+
+/* Names only. The admin store list carries addresses and phones and is
+ * filtered to the pin; this one exists so Ask for stock can name a location
+ * the login does not hold. */
+router.get('/api/restock/ask-locations', requireRestockAccess, tacetOnly, (req, res) => {
+  const rows = tdb().prepare(`
+    SELECT id, code, name_en, name_cn
+      FROM retail_stores
+     WHERE COALESCE(is_active, 1) = 1
+     ORDER BY sort_order, id
+  `).all();
+  res.json({ success: true, data: rows });
+});
+
+/* THE COUNT ON THE ASK LIST, AND NOTHING ELSE (§525 rule 3).
+ * Add stock's /stores/:id/stock stays inside the pin and returns the whole
+ * shelf row. This returns physical_qty only, for a location the caller is
+ * allowed to ask, so the row can say what that shelf holds. */
+router.get('/api/restock/shelf/:storeId', requireRestockAccess, tacetOnly, (req, res) => {
+  const id = parseInt(req.params.storeId, 10);
+  if (!askableFromStore(req, id)) return res.status(403).json({ error: 'forbidden_store' });
+  if (!tdb().prepare('SELECT id FROM retail_stores WHERE id = ?').get(id)) {
+    return res.status(404).json({ error: 'store_not_found' });
+  }
+  const rows = tdb().prepare(`
+    SELECT p.id AS product_id, COALESCE(s.physical_qty, 0) AS physical_qty
+      FROM store_products p
+      LEFT JOIN retail_store_stock s ON s.product_id = p.id AND s.store_id = ?
+     WHERE COALESCE(p.is_active, 1) = 1
+  `).all(id);
+  res.json({ success: true, data: rows });
+});
 /* ── IS THERE ANYTHING FOR ME TO PICK (§198) ────────────────────────────────
  *
  * THE MARK THE PICK ROW NEVER CARRIED. A request reaching a supplier announced
@@ -1776,9 +1827,10 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
       error: 'A transfer cannot leave from and arrive at the same location · 调拨的发出与接收地点不能相同',
     });
   }
-  // §520: naming an end outside the caller's pin is refused, not rerouted.
-  if (fromStoreId != null && !storeAllowed(req, fromStoreId)) return res.status(403).json({ error: 'forbidden_store' });
+  // §525: the destination is a store this login holds. The supplier is any
+  // other location — asking it is not operating it.
   if (toStoreId != null && !storeAllowed(req, toStoreId)) return res.status(403).json({ error: 'forbidden_store' });
+  if (fromStoreId != null && !askableFromStore(req, fromStoreId)) return res.status(403).json({ error: 'forbidden_store' });
 
   // One handle for both statements and the transaction they run in.
   const conn = tdb();
@@ -2455,8 +2507,9 @@ router.put('/api/restock/:id/ends', requireRestockAccess, tacetOnly, (req, res) 
   }
   const known = conn.prepare('SELECT id FROM retail_stores WHERE id IN (?, ?)').all(from, to);
   if (known.length !== 2) return res.status(400).json({ error: 'unknown_shop', message: 'Unknown shop' });
-  // §520: moving a transfer's ends is an act on both new ends as well.
-  if (!storeAllowed(req, from) || !storeAllowed(req, to)) return res.status(403).json({ error: 'forbidden_store' });
+  // §525: the new destination stays inside the pin. The new supplier may be
+  // any location, same as on create.
+  if (!storeAllowed(req, to) || !askableFromStore(req, from)) return res.status(403).json({ error: 'forbidden_store' });
   if (from === order.from_store_id && to === order.to_store_id) return res.json({ success: true, unchanged: true });
 
   // The free-text names describe the OLD destination; clear them so the slip

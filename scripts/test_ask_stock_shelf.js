@@ -14,7 +14,9 @@
  *
  * Cases:
  *   1. the catalogue load is still names-only; the shelf is a second fetch
- *   2. that fetch is the same /stores/:id/stock Add stock already reads
+ *   2. that fetch is /api/restock/shelf/:id — the count only, so a login
+ *      pinned to one store can still read the location it is asking (§525).
+ *      Add stock's /stores/:id/stock stays inside the pin.
  *   3. the map is physical_qty keyed by product_id (id as fallback)
  *   4. a row with no physical_qty is dropped, so add-mode never draws 0s
  *   5. Ask the kitchen, with the same picker, shows no counts
@@ -95,8 +97,10 @@ function sandbox(over) {
   };
   vm.createContext(sb);
   for (const n of ['rcvSkuKey', 'rcvSkuCmp', 'rqKindOf', 'rqLines', 'rqKindSeg', 'rqCountCell',
-                   'rqShelfMap', 'rqShelfNote', 'rqStoreName', 'rqBodyHtml', 'rqPicker',
-                   'rqChosen', 'rqUnits', 'loadRqShelf', 'rqReset', 'askDraftSnapshot']) {
+                   'rqShelfMap', 'rqShelfNote', 'rqAskLocs', 'rqAskReady', 'rqSuppliers', 'rqStoreName',
+                   'rqBodyHtml', 'rqPicker', 'rqChosen', 'rqUnits', 'rqTypeBad', 'rqFootReady', 'rqFoot',
+                   'askRestoredHtml', 'loadRqProducts', 'loadRqAskLocations', 'loadRqShelf',
+                   'rqReset', 'askDraftSnapshot', 'screenAskStock']) {
     vm.runInContext(sliceFn(n), sb, { filename: `slice#${n}` });
   }
   const run = (js) => vm.runInContext(js, sb);
@@ -114,8 +118,10 @@ console.log('\n══ the catalogue stays names-only ══');
 console.log('\n══ the shelf fetch ══');
 {
   const load = sliceFn('loadRqShelf');
-  ok(/api\('\/stores\/'\+id\+'\/stock'\)/.test(load),
-     'the count is /stores/:id/stock, the same Add stock reads');
+  ok(/api\('\/api\/restock\/shelf\/'\+id\)/.test(load),
+     'the count is /api/restock/shelf/:id, so a location outside the pin can be read');
+  ok(!/api\('\/stores\/'\+id\+'\/stock'\)/.test(load),
+     'Add stock\'s shelf read stays off this screen — that one is inside the pin');
   ok(/r\.shelfTried\[id\]/.test(load) && /if\(r\.shelfTried\[id\]\) return/.test(load),
      'and a shop is asked once this visit');
   const screen = sliceFn('screenAskStock');
@@ -243,10 +249,10 @@ async function asyncCases() {
     const { run, calls, pending } = sandbox({ shelf: {}, shelfTried: {}, from: null, to: 2 });
     run('loadRqShelf(2)');
     run('loadRqShelf(2)');
-    ok(calls.api.length === 1 && calls.api[0] === '/stores/2/stock',
+    ok(calls.api.length === 1 && calls.api[0] === '/api/restock/shelf/2',
        'a second ask for the same shop this visit is a no-op');
     run('loadRqShelf(1)');
-    ok(calls.api[1] === '/stores/1/stock', 'a different shop is asked');
+    ok(calls.api[1] === '/api/restock/shelf/1', 'a different shop is asked');
     pending[0].resolve([{ product_id: 7, physical_qty: 2 }, { product_id: 8, physical_qty: 0 }]);
     await tick();
     ok(run('state.rq.shelf[2][7]') === 2, 'the answer lands under that shop');
@@ -293,7 +299,41 @@ async function asyncCases() {
     ok(!('shelf' in snap) && !('shelfTried' in snap), 'the counts are not — they are re-read');
   }
 
-  console.log('\n══ the label is a live pair ══');
+  console.log('\n══ a pinned login can still ask the other location (§525) ══');
+{
+  const { sb, run } = sandbox({
+    to: null, from: null, tried: true, locsTried: true,
+    locs: [
+      { id: 1, name_en: 'Tianhe', name_cn: '天河' },
+      { id: 2, name_en: 'Yuexiu', name_cn: '越秀' },
+    ],
+    shelfTried: { 1: true },
+  });
+  sb.state.stores = [{ id: 1, name_en: 'Tianhe', name_cn: '天河' }];
+  const html = run('screenAskStock()');
+  ok(!/nowhere else to ask/.test(html) && !/没有其他地点可申请/.test(html),
+     'one store on the pin is not the wall');
+  ok(/Ask which location\?/.test(html) && /Yuexiu/.test(html),
+     'Ask which location offers Yuexiu');
+  ok(!/送到哪家门店/.test(html), 'the destination is not a picker when they hold one store');
+  ok(run('state.rq.to') === 1, 'and that store is where the goods arrive');
+
+  sb.LANG = 'zh';
+  const zh = run('screenAskStock()');
+  ok(/越秀/.test(zh) && /向哪个地点申请/.test(zh), 'the Chinese chip is the location\'s own name');
+
+  sb.state.rq.locs = [{ id: 1, name_en: 'Tianhe', name_cn: '天河' }];
+  sb.LANG = 'en';
+  ok(/nowhere else to ask/.test(run('screenAskStock()')),
+     'the wall stays when the business really has one location');
+
+  sb.state.rq.locs = null;
+  sb.state.rq.locsTried = false;
+  ok(/Loading/.test(run('screenAskStock()')) && !/nowhere else to ask/.test(run('screenAskStock()')),
+     'before the ask list lands, a one-store pin waits instead of saying there is nowhere to ask');
+}
+
+console.log('\n══ the label is a live pair ══');
   {
     const note = sliceFn('rqShelfNote');
     const pair = "T('On the shelf','在架')";

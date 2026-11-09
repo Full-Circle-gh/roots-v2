@@ -36,9 +36,13 @@
  *                                                          backend-team.js,
  *                                                          eleme-admin.js
  *   phone pickers  Add stock pills, orders chips, waste chips, ask-stock
- *                  pills, sent-request edit, pick chips, transfers, PO
- *                  deliver-to, kitchen-request sheet, coupon select
- *                                                          public/m.html
+ *                  DESTINATION pills, sent-request edit, pick chips,
+ *                  transfers, PO deliver-to, kitchen-request sheet, coupon
+ *                  select                                      public/m.html
+ *   §525 exception the supplier of a stock request is every active
+ *                  location, not the pin. The destination stays inside it.
+ *                  GET /api/restock/ask-locations and /api/restock/shelf/:id
+ *                  are that list and that count. /stores/:id/stock stays locked.
  *   desk pickers   orders filter, waste filter + record modal, purchasing
  *                  selects + wizard, products switcher, till switcher
  *                                                          public/retail-admin/*,
@@ -142,6 +146,7 @@ function operator(name, { role = 'staff', stores = null } = {}) {
 }
 operator('owner', { role: 'owner' });
 operator('yuexiu', { stores: [YUEXIU] });
+operator('tianhe', { stores: [TIANHE] });
 operator('nowhere', { stores: [] });
 
 (async () => {
@@ -176,7 +181,12 @@ operator('nowhere', { stores: [] });
     ok(M.includes('stores.length>1?`<div style="height:8px"></div>${chipRow(st,state.storeF,\'storeF\')}`:\'\''),
       'the orders chips hide at one store');
     ok(M.includes('const storeChips = stores.length>1'), 'the waste chips hide at one store');
-    ok(M.includes('if(stores.length<2) return') , 'ask-stock says nowhere-else-to-ask at one store');
+    ok(!M.includes('if(stores.length<2) return'),
+      'one store on the pin is not "nowhere else to ask"');
+    ok(M.includes('if(rqAskLocs().length<2) return') && M.includes("api('/api/restock/ask-locations')"),
+      'the wall is the business having one location, and the ask list is every location');
+    ok(RST.includes('function askableFromStore') && RST.includes('toStoreId != null && !storeAllowed'),
+      'the supplier of a stock request may sit outside the pin; the destination may not');
     ok(M.includes('§520 — a picker that can pick one thing is not a choice: the store\'s\n           own name stands where the select was'),
       'the PO deliver-to picker becomes the store\'s name at one store');
     ok(M.includes('§520 — one store means no picker; the name stands instead'),
@@ -227,15 +237,18 @@ operator('nowhere', { stores: [] });
     const j = await r.json().catch(() => null);
     return { status: r.status, j };
   };
-  const patch = async (who, url, body) => {
+  const send = async (method, who, url, body) => {
     const r = await fetch(base + url, {
-      method: 'PATCH',
+      method,
       headers: { 'x-op': String(ops[who]), 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {}),
     });
     const j = await r.json().catch(() => null);
     return { status: r.status, j };
   };
+  const patch = (who, url, body) => send('PATCH', who, url, body);
+  const post = (who, url, body) => send('POST', who, url, body);
+  const put = (who, url, body) => send('PUT', who, url, body);
 
   try {
     section('1 · the list every picker builds from is the pin');
@@ -336,6 +349,43 @@ operator('nowhere', { stores: [] });
       const rOwnJ = await rOwn.json().catch(() => null);
       ok(rOwn.status !== 403 || (rOwnJ && rOwnJ.error !== 'forbidden_store'),
         '…while a transfer touching their store passes the gate', String(rOwn.status));
+    }
+
+    section('4b · asking another location for stock is not operating it (§525)');
+    {
+      const locs = await get('tianhe', '/api/restock/ask-locations');
+      is(locs.status, 200, 'a Tianhe-only login reads the ask list');
+      is((locs.j.data || []).map(s => s.id).sort(), [TIANHE, YUEXIU],
+        '…and it names Yuexiu, which the pin does not');
+      ok(!('address' in ((locs.j.data || [])[0] || {})), '…names only, not the admin store row');
+      const shelf = await get('tianhe', `/api/restock/shelf/${YUEXIU}`);
+      is(shelf.status, 200, 'the count at the location being asked is readable');
+      const carrot = ((shelf.j && shelf.j.data) || []).find(r => r.product_id === PROD);
+      is(carrot && carrot.physical_qty, 7, '…and it is Yuexiu\'s physical count, nothing else');
+      ok(carrot && !('retail_price' in carrot) && !('wechat_quota' in carrot),
+        '…not the rest of the shelf row Add stock returns');
+      const locked = await get('tianhe', `/api/retail-admin/stores/${YUEXIU}/stock`);
+      is(locked.status, 403, 'Add stock\'s own shelf read of Yuexiu stays refused');
+      const line = { product_id: PROD || null, product_name: 'Carrot', qty_requested: 2, unit: 'pc' };
+      const asked = await post('tianhe', '/api/restock', {
+        status: 'sent', from_store_id: YUEXIU, to_store_id: TIANHE, items: [line],
+      });
+      is(asked.status, 200, 'Tianhe can ask Yuexiu to send stock to Tianhe');
+      const wrongWay = await post('tianhe', '/api/restock', {
+        status: 'sent', from_store_id: TIANHE, to_store_id: YUEXIU, items: [line],
+      });
+      is([wrongWay.status, wrongWay.j && wrongWay.j.error], [403, 'forbidden_store'],
+        'the goods still have to arrive at a store this login holds');
+      const same = await post('tianhe', '/api/restock', {
+        status: 'sent', from_store_id: TIANHE, to_store_id: TIANHE, items: [line],
+      });
+      is(same.status, 400, 'a location still cannot send to itself');
+      const id = asked.j && asked.j.id;
+      const moved = await put('tianhe', `/api/restock/${id}/ends`, { from_store_id: YUEXIU, to_store_id: YUEXIU });
+      is(moved.status, 400, 'changing both ends onto the other store is still the same shop');
+      const redirect = await put('tianhe', `/api/restock/${id}/ends`, { from_store_id: TIANHE, to_store_id: YUEXIU });
+      is([redirect.status, redirect.j && redirect.j.error], [403, 'forbidden_store'],
+        'and moving the destination off the pin is refused');
     }
 
     section('5 · the owner and the unscoped are unchanged');

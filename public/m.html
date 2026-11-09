@@ -21062,9 +21062,18 @@ function askDraftLoad(route){
   if(route==='askkitchen'){
     if(['order','shelf','urgent'].indexOf(d.purpose)!==-1) r.purpose=d.purpose;
   } else {
-    const ids=(state.stores||[]).map(s=>s.id);
-    if(d.to!=null&&ids.indexOf(d.to)!==-1) r.to=d.to;
-    if(d.from!=null&&ids.indexOf(d.from)!==-1&&d.from!==r.to) r.from=d.from;
+    // The destination is a store this login holds. The supplier is any
+    // location (§525): with one store on the pin the supplier is not in
+    // that list, and dropping it here would throw away a request the
+    // screen can still send. Once the ask list has landed, a supplier
+    // that is not on it is dropped — that is a location that is gone.
+    const mine=(state.stores||[]).map(s=>s.id);
+    const ask=Array.isArray(r.locs)?r.locs.map(s=>s.id):null;
+    if(d.to!=null&&mine.indexOf(d.to)!==-1) r.to=d.to;
+    if(d.from!=null&&d.from!==r.to){
+      const known=ask||(mine.length>=2?mine:null);
+      if(!known||known.indexOf(d.from)!==-1) r.from=d.from;
+    }
   }
   r.restored=true;
 }
@@ -21130,7 +21139,9 @@ function loadRqShelf(storeId){
   if(!r.shelfTried) r.shelfTried={};
   if(r.shelfTried[id]) return;
   r.shelfTried[id]=true;
-  api('/stores/'+id+'/stock').then(rows=>{
+  // §525 — the count at a location being ASKED, which /stores/:id/stock
+  // refuses when that location is outside the pin. Physical qty only.
+  api('/api/restock/shelf/'+id).then(rows=>{
     if(!r.shelf) r.shelf={};
     r.shelf[id]=rqShelfMap(rows);
     if(r.to===id||r.from===id) render();
@@ -21291,10 +21302,40 @@ function rqSync(id){
   const send=document.getElementById('mRqSend');
   if(send){ if(rqFootReady(send.getAttribute('data-base')==='1')) send.removeAttribute('disabled'); else send.setAttribute('disabled',''); }
 }
+/* §525 — EVERY LOCATION, NOT THE PIN. state.stores is which store this
+   login operates, and that is where a request may ARRIVE. Asking is a
+   different list: Yuexiu is a place Tianhe can ask even when the login
+   cannot open Yuexiu. Until that list lands, a login that already holds
+   every location (two or more on the pin) can draw from the pin. */
+function loadRqAskLocations(){
+  const r=state.rq;
+  if(Array.isArray(r.locs)||r.locsTried) return;
+  r.locsTried=true;
+  api('/api/restock/ask-locations').then(rows=>{
+    r.locs=(Array.isArray(rows)?rows:[]).filter(s=>s&&s.id!=null);
+    if(r.from!=null&&!r.locs.some(s=>s.id===r.from)) r.from=null;
+    if(r.from===r.to) r.from=null;
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    r.locs=(state.stores||[]).slice();
+    if(r.from!=null&&!r.locs.some(s=>s.id===r.from)) r.from=null;
+    render();
+  });
+}
+function rqAskLocs(){
+  const locs=state.rq&&state.rq.locs;
+  if(Array.isArray(locs)) return locs;
+  return state.stores||[];
+}
+function rqAskReady(){
+  if(Array.isArray(state.rq&&state.rq.locs)) return true;
+  return (state.stores||[]).length>=2;
+}
 // Everywhere except the location doing the asking.
-function rqSuppliers(){ return (state.stores||[]).filter(s=>s.id!==state.rq.to); }
+function rqSuppliers(){ return rqAskLocs().filter(s=>s.id!==state.rq.to); }
 function rqStoreName(id){
-  const s=(state.stores||[]).find(x=>x.id===id);
+  const s=rqAskLocs().find(x=>x.id===id)||(state.stores||[]).find(x=>x.id===id);
   return s ? (LANG==='en'?(s.name_en||s.name_cn||s.code||''):(s.name_cn||s.name_en||s.code||'')) : '';
 }
 // One line per chosen product, in the shape the restock API takes.
@@ -21879,6 +21920,7 @@ function rqsActions(r){
     </div>${fixLine}`;
   if(m.edit===r.id){
     const stores=state.stores||[];
+    const ask=rqAskLocs();
     const chip=(id,on,cmd)=>`<button class="row" style="min-height:44px;padding:8px 14px;border-radius:999px;
       border:1px solid ${on?'var(--text-primary)':'var(--border-default)'};
       background:${on?'var(--text-primary)':'var(--surface-card)'};color:${on?'var(--surface-card)':'var(--text-primary)'};
@@ -21888,7 +21930,7 @@ function rqsActions(r){
       ${stores.length>1?`<div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${T('For which store?','送到哪家门店？')}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${stores.map(st=>chip(st.id,m.et===st.id,'rqsTo')).join('')}</div>`:''}
       <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${T('Ask which location?','向哪个地点申请？')}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${stores.filter(st=>st.id!==m.et).map(st=>chip(st.id,m.ef===st.id,'rqsFrom')).join('')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${ask.filter(st=>st.id!==m.et).map(st=>chip(st.id,m.ef===st.id,'rqsFrom')).join('')}</div>
       <div style="display:flex;gap:8px">
         <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" ${ok?'':'disabled'} onclick="APP.cmd('rqsSave',${r.id})">${T('Save','保存')}</button>
         <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('rqsClose')">${T('Cancel','取消')}</button>
@@ -21901,6 +21943,7 @@ function rqsActions(r){
 }
 function screenAskStockSent(){
   loadRqSent();
+  loadRqAskLocations();
   const m=state.rqs;
   if(!m.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(m.err) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--brick-ink)">${escAttr(m.err)}</div>`;
@@ -24463,16 +24506,25 @@ function screenAskKitchen(){
 }
 function screenAskStock(){
   loadRqProducts();
+  loadRqAskLocations();
   const r=state.rq;
+  // One store on the pin is the destination, not a question. Set before the
+  // shelf read so the counts start on the same paint.
+  const mine=state.stores||[];
+  if(mine.length===1&&(r.to==null||!mine.some(s=>s.id===r.to))) r.to=mine[0].id;
+  if(r.from===r.to) r.from=null;
   if(r.to!=null) loadRqShelf(r.to);
   if(r.from!=null) loadRqShelf(r.from);
   if(r.sent) return rqSentHtml(T('Sent','已发送'),
     T('They pick it and send it. Count it in when it arrives.','对方拣货发出后，到货时清点入库。'));
-  const stores=state.stores||[];
-  /* A DOOR INTO A WALL IS WORSE THAN NO DOOR. With one location there is
-     nowhere to ask, and the screen says so instead of drawing a picker with a
-     single disabled option. */
-  if(stores.length<2) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--text-secondary);line-height:1.6">${
+  const stores=mine;
+  /* A DOOR INTO A WALL IS WORSE THAN NO DOOR. The wall is the BUSINESS having
+     one location. A login pinned to one of several used to hit this too,
+     which is what stopped Tianhe asking Yuexiu (§525). Until the ask list
+     has landed, wait — the pin alone cannot say whether another location
+     exists. */
+  if(!rqAskReady()) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(rqAskLocs().length<2) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--text-secondary);line-height:1.6">${
     T('There is nowhere else to ask — this is the only location.','没有其他地点可申请 — 当前仅此一个门店。')}</div>`;
   const chip=(id,on,cmd)=>`<button class="row" style="min-height:44px;padding:8px 14px;border-radius:999px;
     border:1px solid ${on?'var(--text-primary)':'var(--border-default)'};
