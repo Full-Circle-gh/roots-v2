@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.406 · 2026-11-09 · THE TOP-UP BONUS UNDER THE WALLET LOADS — COPIED, NOTHING COMPOSED.** Phone Trend, under the total, directly under `Wallet loads · 钱包充值`. The figure is the yuan value of the points those loads granted. **COPIED:** `Top-up bonus · 充值赠送`, the desktop points-ledger pair (`public/retail-admin/08-customers.js`, `topup_bonus`). The phone's own points ledger uses the same Chinese with a lowercase English fragment (`top-up bonus`); that fragment stays a ledger row. The title-case pair is the label. Nothing retired. Rules 1 to 7 unchanged.
+
 **v1.405 · 2026-11-09 · A CANCELLED ORDER'S FAPIAO IS NOT "PROCESSING" — NOTHING COMPOSED.** The customer's invoice list was calling every unissued request Processing. A cancelled order's request now says `Cancelled · 已取消`, the order-status pair already on the mini app (`miniapp/pages/order/order.js`) and on the phone's own fapiao pill. The web store uses the same pair. Nothing retired. Rules 1 to 7 unchanged.
 
 **v1.404 · 2026-11-09 · A FAPIAO CAN BE SAVED — COPIED, NOTHING COMPOSED.** The order drawer, the phone, the web shop's invoice list and the mini app opened an issued fapiao and stopped at the viewer. Customers asked for the file. **COPIED:** `Download · 下载`, the shop-menu pair, now the button beside View fapiao, View invoice and Open the fapiao. The viewer stays. `查看发票` and `打开发票` are unchanged. Nothing retired. Rules 1 to 7 unchanged.

@@ -13723,17 +13723,23 @@ function guanyiLegacyPickupSales(db, from, to, opts) {
 // the SAME instant order.total and gzgrocery takings are booked. The wallet is
 // then spent later via balance_used on an order; that spend is deliberately
 // NOT re-counted as revenue (order.total already excludes balance_used), so the
-// same yuan is recognised exactly once. Returns { received, byBucket } bucketed
-// by day (or hour, opts.hourly), the shape the deleted reader had, so callers fold it
-// in the same way. No-op (zeros) for a tenant without the top-up table.
+// same yuan is recognised exactly once. Returns { received, bonusPoints, byBucket }
+// bucketed by day (or hour, opts.hourly), the shape the deleted reader had, so
+// callers fold the cash the same way. `bonusPoints` is the points those same
+// loads granted (§526). It is not cash and is never added to `received`. A
+// redemption does not say which points were spent, so this count is taken on
+// the day the points were granted, over the same rows as the cash. No-op
+// (zeros) for a tenant without the top-up table.
 function topupCashReceived(db, from, to, opts) {
-  const out = { received: 0, byBucket: {} };
+  const out = { received: 0, bonusPoints: 0, byBucket: {} };
   try {
     const TZ = shopSqlShift();
     const hourly = !!(opts && opts.hourly);
     const bk = hourly ? `strftime('%H', paid_at, '${TZ}')` : `date(paid_at, '${TZ}')`;
     const rows = db.prepare(`
-      SELECT ${bk} AS bucket, COALESCE(SUM(amount), 0) AS received
+      SELECT ${bk} AS bucket,
+             COALESCE(SUM(amount), 0) AS received,
+             COALESCE(SUM(bonus_points), 0) AS bonus_points
         FROM retail_topup_transactions
        WHERE status = 'success' AND amount > 0
          AND payment_method IN ('wechat','alipay')
@@ -13742,11 +13748,14 @@ function topupCashReceived(db, from, to, opts) {
        GROUP BY bucket`).all(from, to);
     for (const r of rows) {
       const rev = Number(r.received) || 0;
-      if (!rev) continue;
+      const bonus = Number(r.bonus_points) || 0;
+      if (!rev && !bonus) continue;
       out.received += rev;
-      out.byBucket[r.bucket] = { revenue: rev };
+      out.bonusPoints += bonus;
+      if (rev) out.byBucket[r.bucket] = { revenue: rev };
     }
     out.received = +out.received.toFixed(2);
+    out.bonusPoints = Math.round(out.bonusPoints);
   } catch (e) { /* tenant without the topup ledger → zeros */ }
   return out;
 }
@@ -14174,7 +14183,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // storefront order). Store credit later spent on an order is NOT re-counted
   // (order.total already excludes balance_used). See topupCashReceived.
   // §325: nor a wallet top-up — it is paid to the shop, not to a store.
-  const NO_TU = { received: 0, byBucket: {} };
+  const NO_TU = { received: 0, bonusPoints: 0, byBucket: {} };
   const tuSales     = SCOPED ? NO_TU : topupCashReceived(tdb(), from, to, { hourly });
   const tuSalesPrev = SCOPED ? NO_TU : topupCashReceived(tdb(), prevFrom, prevTo, { hourly: false });
   kpi.revenue     = +(Number(kpi.revenue || 0) + tuSales.received).toFixed(2);
@@ -15213,6 +15222,12 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // discount already sits inside it. Given away is that discount, named
   // beside the slices rather than subtracted a second time. A store's answer
   // has no wallet loads: a top-up is paid to the shop, not to one store.
+  //
+  // The top-up bonus is the points those loads granted, valued at the rate a
+  // point redeems for (§526). It sits under the loads and is not a fourth
+  // slice. Points spent on an order stay inside Given away: a redemption does
+  // not record whether the point came from a top-up. A store's answer leaves
+  // the bonus out with the cash.
   const shipAll = tdb().prepare(`
     SELECT COALESCE(SUM(shipping_fee), 0) AS delivery,
            COALESCE(SUM(voucher_amount), 0) + COALESCE(SUM(points_amount), 0)
@@ -15226,6 +15241,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     delivery_fees: +deliveryFees.toFixed(2),
     wallet_loads: +walletLoads.toFixed(2),
     given_away: +(Number(shipAll.given) || 0).toFixed(2),
+    topup_bonus: pointsCashValue(tuSales.bonusPoints || 0),
   };
 
   const dashBody = {

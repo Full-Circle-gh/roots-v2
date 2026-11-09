@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.631
+# Tacet shared-core consolidation — decisions record, v4.632
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-09 · v4.632 — **§526 · THE TOP-UP BONUS SITS UNDER THE WALLET LOADS, AND GIVEN AWAY STAYS WHAT THE ORDERS DID NOT COLLECT — ASH.** On the phone's 30-day total, Given away was read as including points a customer had paid for by topping up. The cash is already in Wallet loads. The bonus points are the extra the package added, shown in yuan under those loads, on the day they were granted. Points spent on an order stay inside Given away. No schema, no change to `.gitignore` or CI. See §526.
 
 2026-11-09 · v4.631 — **§525 · ASKING ANOTHER LOCATION FOR STOCK IS NOT OPERATING THAT LOCATION (§520 AMENDED FOR THIS ONE ACT) — ASH.** A Tianhe warehouse login, pinned to Tianhe, opened Ask for stock and was told there was nowhere else to ask. The pin is which store the login operates. Naming who sends the goods is not that. The goods still arrive only at a store the login holds. No new words. No schema, no change to `.gitignore` or CI. See §525.
 
@@ -34093,3 +34095,18 @@ No schema change. No change to `.gitignore` or CI.
 4. **One location in the business is still a wall.** The "nowhere else to ask" sentence stays for a business that has a single location. It no longer appears because the login is pinned to one of several.
 
 No new words. No schema change. No change to `.gitignore` or CI.
+
+## §526 — THE TOP-UP BONUS SITS UNDER THE WALLET LOADS, AND GIVEN AWAY STAYS WHAT THE ORDERS DID NOT COLLECT
+
+**2026-11-09 · DECIDED BY ASH:** *"ok do it"*, after the phone's Given away line on a 30-day total.
+
+Given away is coupons, a manager's discount at the till, and points spent on an order. It is already inside the food figure. Points spent were being read as cash the customer had paid, because a top-up grants bonus points at the same time it takes the cash.
+
+**The rule.**
+
+1. **Given away stays what an order in the window did not collect.** Coupons, the till discount, and points spent. A redemption does not record where the point was earned, and the line does not invent that split.
+2. **The bonus is shown under Wallet loads, for the same days, in yuan.** It is the points those loads granted, valued at the rate a point redeems for. The rows are the same rows as the cash: a successful WeChat or Alipay top-up. A pending charge and a staff adjustment are not loads, and their points are not in this figure.
+3. **It is not a slice of the total.** The cash is already in the total. The bonus is the extra that was not paid for. Points granted now are often spent later, so this figure and the points inside Given away are not the same number and are not meant to be.
+4. **A store's answer leaves it out, with the cash.** A top-up is paid to the shop, not to one store.
+
+No schema change. No change to `.gitignore` or CI.

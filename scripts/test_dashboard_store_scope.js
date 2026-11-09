@@ -66,8 +66,13 @@ order(YUEXIU, 55, 502, { status: 'refunded' });
 // ¥200 of wallet top-up cash, paid to the shop, not to a store.
 let hasTopups = true;
 try {
-  db.prepare(`INSERT INTO retail_topup_transactions (customer_id, amount, status, payment_method, paid_at)
-              VALUES (501, 200, 'success', 'wechat', datetime('now','-1 hour'))`).run();
+  db.prepare(`INSERT INTO retail_topup_transactions (customer_id, amount, bonus_points, status, payment_method, paid_at)
+              VALUES (501, 200, 40, 'success', 'wechat', datetime('now','-1 hour'))`).run();
+  // Neither of these is a load. A pending charge has not landed, and a staff
+  // adjustment is not cash. Their points must not sit under the ¥200.
+  db.prepare(`INSERT INTO retail_topup_transactions (customer_id, amount, bonus_points, status, payment_method, paid_at)
+              VALUES (501, 999, 80, 'pending', 'wechat', datetime('now','-1 hour')),
+                     (501, 50, 15, 'success', 'admin_adjust', datetime('now','-1 hour'))`).run();
 } catch (e) { hasTopups = false; console.log("  (no top-up table: " + e.message + ")"); }
 const TOPUP = hasTopups ? 200 : 0;
 // A mini-app session, shop-wide.
@@ -122,6 +127,11 @@ operator('nowhere', { role: 'store_manager', stores: [] });
     ok(!('store_scope' in all), 'no store_scope block on the every-store answer');
     is(all.stores.map((s) => s.store_id).sort(), [TIANHE, YUEXIU], 'the store breakdown lists both');
     near(all.topups.received, TOPUP, 'top-up cash is reported');
+    near(all.money_of.wallet_loads, TOPUP, 'wallet loads are that same cash');
+    near(all.money_of.topup_bonus, 40, 'the 40 points granted with it are ¥40 at 1 point = ¥1');
+    near(all.money_of.given_away, 0, 'given away is what orders did not collect, and these orders collected everything');
+    near(all.money_of.food + all.money_of.delivery_fees + all.money_of.wallet_loads, all.kpis.revenue,
+      'food, delivery and the loads add up to the total; the bonus is not a slice');
     const allAgain = await dash('owner', 'store_id=all');
     is(allAgain.kpis, all.kpis, 'store_id=all is every store');
 
@@ -133,6 +143,8 @@ operator('nowhere', { role: 'store_manager', stores: [] });
     is(th.stores.map((s) => s.store_id), [TIANHE], 'the store breakdown is Tianhe alone');
     is(th.kpis.refunded_orders, 0, 'Yuexiu\'s refund is not Tianhe\'s');
     near(th.topups.received, 0, 'top-up cash is left out of a store');
+    near(th.money_of.wallet_loads, 0, 'a store has no wallet loads');
+    near(th.money_of.topup_bonus, 0, '…and no bonus beside them');
     is(th.kpis.conversion_rate, null, 'conversion is null: a store\'s orders over the shop\'s sessions would mix populations');
     is(th.mini_app.conversion_rate, null, '…in the mini-app block too');
     is(th.store_scope && th.store_scope.store_ids, [TIANHE], 'store_scope names the store covered');

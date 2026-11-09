@@ -45976,15 +45976,21 @@ function trendRefundCell(){
 function trendMoneyOf(){
   const m=state.trendFull&&state.trendFull.money_of;
   if(!m) return '';
-  const food=Number(m.food)||0, del=Number(m.delivery_fees)||0, wallet=Number(m.wallet_loads)||0, given=Number(m.given_away)||0;
+  const food=Number(m.food)||0, del=Number(m.delivery_fees)||0, wallet=Number(m.wallet_loads)||0, given=Number(m.given_away)||0, bonus=Number(m.topup_bonus)||0;
   const sum=food+del+wallet;
   if(!sum && !given) return '';
   const line=(en,zh,v,quiet)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding-top:6px;font-size:14px"><span${quiet?' style="color:var(--text-secondary)"':''}>${T(en,zh)}</span><span class="num"${quiet?' style="color:var(--amber-ink)"':''}>${money0(CUR,v)}</span></div>`;
+  /* The points those loads granted, in yuan, on the day the cash landed. Not a
+     slice of the total — the cash is already in it — and not Given away, which
+     is what orders in this window did not collect. A sub-yuan bonus rounds to
+     nothing on this card, the same way every other figure here does. */
+  const bonusLine=wallet&&Math.round(bonus)?`<div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0 0 12px;font-size:12.5px;color:var(--text-secondary)"><span>${T('Top-up bonus','充值赠送')}</span><span class="num">${money0(CUR,bonus)}</span></div>`:'';
   return `<div style="border-top:1px solid var(--border-default);margin-top:4px;padding-top:10px">
     <div style="font-size:12px;color:var(--text-secondary)">${T('Of the '+money0(CUR,sum), '这 '+money0(CUR,sum)+' 里')}</div>
     ${line('Food','商品',food)}
     ${line('Delivery fees','运费',del)}
     ${wallet?line('Wallet loads','钱包充值',wallet):''}
+    ${bonusLine}
     ${given?line('Given away','让利',given,true):''}
   </div>`;
 }
