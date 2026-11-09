@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.631
+# Tacet shared-core consolidation — decisions record, v4.632
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-09 · v4.632 — **§526 · A TILL SALE HAS A CODE THE CUSTOMER SCANS TO TYPE THE FAPIAO — ASH.** People at the counter ask for a fapiao after the sale, and the order has no title. The code is that order only. A QR-menu sale does not get one. The page writes the same columns checkout already stores. The tax document is still issued by hand. One new column, `fapiao_token`. No change to `.gitignore` or CI. See §526.
 
 2026-11-09 · v4.631 — **§525 · ASKING ANOTHER LOCATION FOR STOCK IS NOT OPERATING THAT LOCATION (§520 AMENDED FOR THIS ONE ACT) — ASH.** A Tianhe warehouse login, pinned to Tianhe, opened Ask for stock and was told there was nowhere else to ask. The pin is which store the login operates. Naming who sends the goods is not that. The goods still arrive only at a store the login holds. No new words. No schema, no change to `.gitignore` or CI. See §525.
 
@@ -34093,3 +34095,17 @@ No schema change. No change to `.gitignore` or CI.
 4. **One location in the business is still a wall.** The "nowhere else to ask" sentence stays for a business that has a single location. It no longer appears because the login is pinned to one of several.
 
 No new words. No schema change. No change to `.gitignore` or CI.
+
+## §526 — A TILL SALE HAS A CODE THE CUSTOMER SCANS TO TYPE THE FAPIAO
+
+**2026-11-09 · DECIDED BY ASH.** People come to the Yuexiu counter after a till sale and ask for a fapiao. The order has no title and no tax ID. Ash: a button on till orders only. One tap opens a QR. The customer scans it and types the fapiao details. Those details are then on that order.
+
+**The rule.**
+
+1. **The button is a till sale, and nothing else.** `shop_entry_method` is `till`. A QR-menu sale, a mini-app order and a hand-keyed delivery do not get the button. A cancelled sale, an unpaid sale and a sale whose fapiao is already issued do not get it either.
+2. **The code is that order.** It carries an unguessable token, minted the first time the code is shown and kept after that, so a second tap shows the same code. The page does not ask for an order number. A token that is not a live till sale says the link is not an open order, and does not say which order it was.
+3. **What the customer types is what checkout already stores.** Personal or company, the title, the tax ID for a company, and an email. The order then sits in the fapiao queue the shop already works from. Scanning again before the fapiao is issued replaces those details.
+4. **The code does not issue the fapiao.** The shop's provider still issues none for us (§99 addendum 2). Staff issue it on the tax site, then mark it issued, the same as every other request.
+5. **Where the button is.** On the till, after that sale is paid. On the order, phone and desktop, when the sale was a till sale and the customer comes back later.
+
+One column, `retail_orders.fapiao_token`. No change to `.gitignore` or CI.

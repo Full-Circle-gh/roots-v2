@@ -949,6 +949,12 @@ button{font:inherit;color:inherit;margin:0}
   font-size:15px;font-weight:500;
 }
 .dsec[disabled]{color:var(--td-text2)}
+/* §526 — the fapiao code, shown after a till sale and only then. */
+.fq{position:fixed;inset:0;z-index:40;background:rgba(26,26,23,.45);display:flex;align-items:center;justify-content:center;padding:24px}
+.fq .card{background:var(--td-paper);border-radius:20px;padding:22px 20px;width:min(360px,100%);display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
+.fq img{width:240px;height:240px;background:#fff}
+.fq p{margin:0;font-size:14px;color:var(--td-text2);line-height:1.45}
+.fq .got{color:var(--td-text);font-size:16px;font-weight:500}
 
 /* ---- boot / signed out ---- */
 .boot{
@@ -1322,6 +1328,15 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        The sheet's close row is the locked `cancel` below; every key is a
        numeral or a symbol and needs no pair. */
     calculator:   ['Calculator', '计算器'],            // composed, §510
+    /* §526 — the code a till customer scans to type their own fapiao details.
+       `Close` is the phone's own pair. The rest are composed and declared in
+       docs/tacet-delivery-vocabulary.md v1.406. */
+    fapiaoCode:   ['Fapiao code', '发票码'],
+    fapiaoScan:   ['Show this. The customer scans it and types the fapiao.', '出示此码。顾客扫码填写发票。'],
+    fapiaoGot:    ['Received', '已收到'],
+    fapiaoClose:  ['Close', '关闭'],
+    fapiaoNoDomain: ['This shop has no public address for the code.', '此门店没有可扫的公开地址。'],
+    fapiaoFail:   ['Could not open the code.', '打不开此码。'],
     /* §475 — a manager approves with their PIN on a till signed in as staff.
        `manager` is the Manager role's own name (lib/roles.js); `pinLocked` is
        the admin's own lockout sentence, copied whole. Three COMPOSED, declared
@@ -1635,7 +1650,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        here: a counter sale ships nothing. */
     useP: false, useB: false,
     pts: { rate: 1, coverShipping: false },
-    done: null, printState: 'idle',
+    done: null, printState: 'idle', fapiao: null, fapiaoTimer: null,
     // The shop's tax settings, or null for a shop that charges none (audit
     // I-03). Null is the state every shop starts in and the only one that
     // existed before this, so every line that reads it falls through to what
@@ -4241,9 +4256,25 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
             : '')
       +   '<div class="drow">'
       +     '<button class="dsec" type="button" data-print="1"' + (S.printState === 'busy' ? ' disabled' : '') + '>' + esc(printLabel) + '</button>'
+      +     (d.till ? '<button class="dsec" type="button" data-fapiao="open">' + esc(T('fapiaoCode')) + '</button>' : '')
       +     '<button class="dprim" type="button" data-go="reset">' + esc(T('newOrder')) + '</button>'
       +   '</div>'
-      + '</div></div><div class="sfoot"></div>';
+      + '</div></div><div class="sfoot"></div>'
+      + fapiaoLayer();
+  }
+  function fapiaoLayer() {
+    var f = S.fapiao;
+    if (!f) return '';
+    var inner = f.busy
+      ? '<p>' + esc(T('fapiaoScan')) + '</p>'
+      : (f.err
+          ? '<p>' + esc(f.err) + '</p>'
+          : (f.png ? '<img alt="" src="' + esc(f.png) + '">' : '')
+            + '<p>' + esc(T('fapiaoScan')) + '</p>'
+            + (f.title ? '<p class="got">' + esc(T('fapiaoGot')) + ' · ' + esc(f.title) + '</p>' : ''));
+    return '<div class="fq" id="fq-scrim"><div class="card">' + inner
+      + '<button class="dsec" type="button" data-fapiao="close">' + esc(T('fapiaoClose')) + '</button>'
+      + '</div></div>';
   }
 
   /* ---- actions --------------------------------------------------------- */
@@ -4497,6 +4528,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // what it actually took off in credit. A done screen quoting the till's
       // own arithmetic would hide exactly the disagreement worth seeing.
       S.done = { id: j.data.id, order_no: j.data.order_no, total: j.data.total,
+                 till: true,
                  wallet: S.wallet, tender: body.payment_method,
                  pointsAmount: Number(j.data.points_amount) || 0,
                  balanceUsed: Number(j.data.balance_used) || 0,
@@ -4669,8 +4701,48 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     });
   }
 
+  function closeFapiao() {
+    if (S.fapiaoTimer) { clearInterval(S.fapiaoTimer); S.fapiaoTimer = null; }
+    S.fapiao = null;
+    render();
+  }
+  function openFapiao() {
+    var d = S.done;
+    if (!d || !d.till || !d.id || (S.fapiao && S.fapiao.busy)) return;
+    S.fapiao = { busy: true, err: '', png: '', url: '', title: '' };
+    render();
+    api('/api/retail-admin/orders/' + d.id + '/fapiao-link', { method: 'POST' }).then(function (j) {
+      if (!S.fapiao || !S.done || S.done.id !== d.id) return;
+      S.fapiao.busy = false;
+      if (!j || !j.success || !j.data || !j.data.qr_png) {
+        S.fapiao.err = T(j && j.error === 'no_public_domain' ? 'fapiaoNoDomain' : 'fapiaoFail');
+        render();
+        return;
+      }
+      S.fapiao.png = j.data.qr_png;
+      S.fapiao.url = j.data.url || '';
+      render();
+      if (S.fapiaoTimer) clearInterval(S.fapiaoTimer);
+      S.fapiaoTimer = setInterval(function () {
+        if (!S.fapiao || !S.done || S.done.id !== d.id) return closeFapiao();
+        api('/api/retail-admin/orders/' + d.id + '/fapiao-link').then(function (r) {
+          if (!S.fapiao || !r || !r.success || !r.data || !r.data.linked) return;
+          if (S.fapiao.title === r.data.title) return;
+          S.fapiao.title = r.data.title || '';
+          render();
+        }).catch(function () { /* a missed poll asks again in two seconds */ });
+      }, 2000);
+    }).catch(function (e) {
+      if (!S.fapiao) return;
+      S.fapiao.busy = false;
+      S.fapiao.err = e && e.auth ? T('noPermission') : T('fapiaoFail');
+      render();
+    });
+  }
   function reset() {
     S.lines = []; S.sel = null; S.customer = null; S.heldId = null; S.heldLast = '';
+    if (S.fapiaoTimer) { clearInterval(S.fapiaoTimer); S.fapiaoTimer = null; }
+    S.fapiao = null;
     S.wallet = null; S.useP = false; S.useB = false; S.cashIn = ''; S.err = ''; S.done = null; S.disc = null;
     S.view = 'till'; S.printState = 'idle';
     S.q = ''; $('q').value = '';
@@ -5294,7 +5366,8 @@ function askWhat(choices, qEn, qCn) {
       if (S.discOpen && ev.target.id === 'discpick') return closeDiscAsk();
       // §510 — tapping away from the calculator is only putting a tool down.
       if (S.calcOpen && ev.target.id === 'calcpick') return closeCalc();
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-cash],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-so-c],[data-hold],[data-held],[data-disc],[data-disc-pct],[data-disc-why],[data-disc-mgr],[data-calc],[data-ck]');
+      if (S.fapiao && ev.target.id === 'fq-scrim') return closeFapiao();
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-cash],[data-confirm],[data-go],[data-print],[data-fapiao],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-so-c],[data-hold],[data-held],[data-disc],[data-disc-pct],[data-disc-why],[data-disc-mgr],[data-calc],[data-ck]');
       if (!t) return;
       // §183 — the question sheet. Answered before anything else on the screen:
       // while it is up it is the only thing the cashier is being asked.
@@ -5401,6 +5474,9 @@ function askWhat(choices, qEn, qCn) {
       if (t.hasAttribute('data-cash'))  { S.cashIn = t.getAttribute('data-cash'); return render(); }
       if (t.hasAttribute('data-confirm')) return confirm();
       if (t.hasAttribute('data-print')) return reprint();
+      if (t.hasAttribute('data-fapiao')) {
+        return t.getAttribute('data-fapiao') === 'close' ? closeFapiao() : openFapiao();
+      }
       if (t.hasAttribute('data-go'))    {
         var g = t.getAttribute('data-go');
         if (g === 'reset') return reset();

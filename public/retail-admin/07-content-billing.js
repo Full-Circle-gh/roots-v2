@@ -528,6 +528,61 @@ function fapiaoDownloadHref(url) {
   return (m[1] || '') + m[2] + (q ? q + '&download=1' : '?download=1') + (m[4] || '');
 }
 
+// §526 — the code for a till sale. Hidden on every other door, and once the
+// fapiao is already issued. The overlay stays on document.body so a drawer
+// refresh, when the details arrive, does not take the code down.
+function tillFapiaoCodeRow(o) {
+  if (!o || o.shop_entry_method !== 'till') return '';
+  if (o.status === 'cancelled' || o.status === 'pending_payment') return '';
+  if (o.invoice_status === 'issued') return '';
+  return `<div style="margin-bottom: var(--s4);">
+    <button type="button" class="db-btn" onclick="openTillFapiaoCode(${Number(o.id)})">${invT('Fapiao code', '发票码')}</button>
+  </div>`;
+}
+function openTillFapiaoCode(id) {
+  const n = Number(id);
+  if (!Number.isInteger(n) || n <= 0) return;
+  let host = document.getElementById('fapiao-code-host');
+  if (host) host.remove();
+  host = document.createElement('div');
+  host.id = 'fapiao-code-host';
+  host.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(26,26,23,.45);display:flex;align-items:center;justify-content:center;padding:24px;';
+  document.body.appendChild(host);
+  let timer = null;
+  const close = () => { if (timer) clearInterval(timer); host.remove(); };
+  host.addEventListener('click', (e) => { if (e.target === host) close(); });
+  const paint = (inner) => {
+    host.innerHTML = `<div style="background:var(--bg-elev-1, #fff);color:var(--text-1, #1a1a17);border-radius:18px;padding:22px 20px;width:min(360px,100%);text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px">${inner}</div>`;
+    const b = host.querySelector('[data-fapiao-close]');
+    if (b) b.addEventListener('click', close);
+  };
+  const closeBtn = `<button type="button" class="db-btn" data-fapiao-close>${invT('Close', '关闭')}</button>`;
+  paint(`<p style="margin:0">${invT('Loading…', '加载中…')}</p>`);
+  api('/api/retail-admin/orders/' + n + '/fapiao-link', { method: 'POST', body: {} }).then((j) => {
+    const d = j && j.data;
+    if (!host.isConnected || !d || !d.qr_png) return;
+    paint(`<img alt="" src="${d.qr_png}" style="width:240px;height:240px;background:#fff">
+      <p style="margin:0;font-size:14px;line-height:1.45">${invT('Show this. The customer scans it and types the fapiao.', '出示此码。顾客扫码填写发票。')}</p>
+      <p data-fapiao-got style="margin:0;font-weight:600"></p>
+      ${closeBtn}`);
+    timer = setInterval(() => {
+      api('/api/retail-admin/orders/' + n + '/fapiao-link').then((r) => {
+        const s = r && r.data;
+        if (!s || !s.linked || !host.isConnected) return;
+        const got = host.querySelector('[data-fapiao-got]');
+        const label = invT('Received', '已收到') + ' · ' + (s.title || '');
+        if (!got || got.textContent === label) return;
+        got.textContent = label;
+        if (typeof openOrder === 'function') openOrder(n);
+      }).catch(() => { /* a missed poll asks again in two seconds */ });
+    }, 2000);
+  }).catch((e) => {
+    if (!host.isConnected) return;
+    const msg = (e && e.message) || invT('Could not open the code.', '打不开此码。');
+    paint(`<p style="margin:0">${escapeHtml(msg)}</p>${closeBtn}`);
+  });
+}
+
 function renderInvoiceBlock(o) {
   const isCompany = invoiceIsCompany(o);
   const issued = o.invoice_status === 'issued';

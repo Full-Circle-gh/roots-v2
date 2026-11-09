@@ -316,6 +316,13 @@ const TD_ERR = {
   alipay_not_configured:  ['Alipay is not set up yet — finish it in Settings → Integrations.', '支付宝尚未配置,请在设置 → 集成中完成。'],
   aliyun_sms_not_configured: ['Text messaging is not set up yet.', '短信服务尚未配置。'],
   nuonuo_not_configured:  ['Invoicing is not set up yet.', '开票服务尚未配置。'],
+  /* §526 — the till's fapiao code. Declared in the vocabulary, v1.406. */
+  no_public_domain:   ['This shop has no public address for the code.', '此门店没有可扫的公开地址。'],
+  not_till:           ['Only a till sale has this code.', '只有前台销售有此码。'],
+  not_open:           ['This order is not open for a fapiao.', '此订单现在不能开发票。'],
+  already_issued:     ['Invoice issued', '已开票'],
+  fapiao_url_too_long:['The address is too long for a code.', '地址过长，无法生成二维码。'],
+  fapiao_token:       ['Could not open the code.', '打不开此码。'],
   jd_not_configured:      ['JD Logistics is not set up yet — finish it in Settings → Delivery.', '京东物流尚未配置,请在设置 → 配送中完成。'],
   kd100_not_configured:   ['Tracking is not set up yet.', '物流查询尚未配置。'],
   ai_not_configured:      ['The writing assistant is not set up yet.', 'AI 助手尚未配置。'],

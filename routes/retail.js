@@ -213,6 +213,7 @@ const { costAtSale, optionsCostAtSale } = require('../lib/cost-at-sale');
 // The dormant Nuonuo 发票 auto-issue (settings, the invoice sent, issue once,
 // finish), moved to lib/ (decisions §477).
 const { fapiaoSettings, finalizeInvoiceResult, maybeAutoIssueInvoice } = require('../lib/fapiao');
+const fapiaoLink = require('../lib/fapiao-link');
 // What a product row looks like for the shop: the column sets, the sold-out
 // policy, and the row clean-up (photo link, nutrition, borrowed variant photo),
 // moved to lib/ (decisions §477).
@@ -25812,6 +25813,75 @@ router.post('/api/retail-admin/orders/:id/meituan-action', requireRetailAdmin, e
     return res.status(500).json({ success: false, error: 'enqueue_failed' });
   }
   res.json({ success: true, data: { queued: action, writeback_enabled: process.env.MEITUAN_WRITEBACK === '1' } });
+});
+
+// ── Till fapiao code (§526) ─────────────────────────────────────────────────
+// A cashier shows a QR for one till sale. The customer scans it and types the
+// title, tax ID and email. Those land on the order. The tax document is still
+// issued by hand afterwards.
+function fapiaoLinkOrder(req) {
+  return fapiaoLink.loadById(tdb(), parseInt(req.params.id, 10));
+}
+router.get('/api/retail-admin/orders/:id/fapiao-link', requireRetailAdmin, (req, res) => {
+  const order = fapiaoLinkOrder(req);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  const why = fapiaoLink.staffBlock(order);
+  if (why && why !== 'already_issued') {
+    const status = why === 'not_found' ? 404 : 409;
+    return res.status(status).json({ success: false, error: why });
+  }
+  res.json({ success: true, data: fapiaoLink.statusOf(order) });
+});
+router.post('/api/retail-admin/orders/:id/fapiao-link', requireRetailAdmin, (req, res) => {
+  const order = fapiaoLinkOrder(req);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  const why = fapiaoLink.staffBlock(order);
+  if (why) {
+    const status = why === 'not_found' ? 404 : 409;
+    return res.status(status).json({ success: false, error: why });
+  }
+  let token;
+  try { token = fapiaoLink.ensureToken(tdb(), order); }
+  catch (e) { return res.status(500).json({ success: false, error: 'fapiao_token' }); }
+  const url = fapiaoLink.publicUrl(currentTenantId(), token);
+  if (!url) return res.status(409).json({ success: false, error: 'no_public_domain' });
+  let qrPng = null;
+  try { qrPng = qrpng.qrPngDataUrl(url, { scale: 8, quiet: 4 }); }
+  catch (e) { return res.status(422).json({ success: false, error: 'fapiao_url_too_long' }); }
+  res.json({ success: true, data: { url, qr_png: qrPng, order_no: order.order_no } });
+});
+
+// The page the code opens. No login: the token is the order. A token that is
+// not a live till sale says so without naming any other order.
+router.get('/fapiao/:token', (req, res) => {
+  const view = fapiaoLink.publicView(fapiaoLink.loadByToken(tdb(), req.params.token));
+  res.set('Cache-Control', 'no-store');
+  if (view.kind === 'missing') res.status(404);
+  res.type('html').send(fapiaoLink.pageHtml(view, {
+    saved: req.query.saved === '1',
+    edit: req.query.edit === '1',
+  }));
+});
+router.post('/fapiao/:token', (req, res) => {
+  const token = String(req.params.token || '');
+  const order = fapiaoLink.loadByToken(tdb(), token);
+  const view = fapiaoLink.publicView(order);
+  res.set('Cache-Control', 'no-store');
+  if (view.kind !== 'open' || !order) {
+    const status = view.kind === 'missing' ? 404 : 200;
+    return res.status(status).type('html').send(fapiaoLink.pageHtml(view, {}));
+  }
+  const result = fapiaoLink.applyDetails(tdb(), order.id, req.body || {});
+  if (!result.ok) {
+    if (result.error === 'not_open') {
+      const again = fapiaoLink.publicView(fapiaoLink.loadByToken(tdb(), token));
+      const status = again.kind === 'missing' ? 404 : 200;
+      return res.status(status).type('html').send(fapiaoLink.pageHtml(again, {}));
+    }
+    return res.status(400).type('html').send(fapiaoLink.pageHtml(view, { error: result.error, draft: req.body }));
+  }
+  maybeAutoIssueInvoice(order.id).catch((e) => console.warn('[fapiao-link]', e.message));
+  res.redirect(303, '/fapiao/' + token + '?saved=1');
 });
 
 // ── Fapiao issuance (Phase 3a) ──────────────────────────────────────────────

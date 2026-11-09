@@ -7362,6 +7362,7 @@ function renderOpenOrder(o) {
         <!-- Fapiao still owed = work the operator has to do, so it rides at the
              top where the eye lands. Once issued it is just a record: it drops
              back into the details grid below and logistics keeps the top. -->
+        ${tillFapiaoCodeRow(o)}
         ${(o.needs_invoice && o.invoice_status !== 'issued' && o.status !== 'cancelled')
           ? `<div style="margin-bottom: var(--s4);">${renderInvoiceBlock(o)}</div>` : ''}
 

@@ -1603,7 +1603,7 @@ const state = {
   ordSel:null, ordBulkBusy:false, btrk:null, drafts:null, draftCount:null,
   liveKpis:null, liveBaseline:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
-  invSnoozeBusy:null,
+  invSnoozeBusy:null, invCode:null,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
   /* §325 X1 — Change history (chl), What was sent (nlg), Eleme (elm), and
      Home's "browsing now" count. One key per screen, so none can collide with
@@ -2864,6 +2864,8 @@ reg('ordViewDel', id=>{
    one-line copy here from the mock-data days was overwritten by that later
    registration before anybody could tap, so it never ran and is gone. */
 reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null; state.qy=null; state.jd=null; if(state.qyPlace) clearTimeout(state.qyPlace.timer); state.qyPlace=null; state.rr=null;
+  if(state.invCode&&state.invCode.timer) clearInterval(state.invCode.timer);
+  state.invCode=null;
   /* An editor opened and left empty is not a note. Clearing it here is what
      stops a drawer reopened later from showing a box nobody asked for twice. */
   state.ordNoteOpen=null;
@@ -41096,6 +41098,74 @@ function fapiaoDownloadHref(url) {
   if (/(?:^|[?&])download=1(?:&|$)/.test(q)) return u;
   return (m[1] || '') + m[2] + (q ? q + '&download=1' : '?download=1') + (m[4] || '');
 }
+/* §526 — a till sale has no fapiao details until the customer types them.
+   The button is this order's code, and only this order's. A QR-menu sale,
+   a mini-app order and an issued or cancelled sale have nothing to show. */
+function fapiaoCodeCard(o){
+  if(!o||!o.tillSale||o._id==null) return '';
+  if(o.raw==='cancelled'||o.raw==='pending_payment') return '';
+  if(o.invoice&&o.invoice.status==='issued') return '';
+  if(!mCan('orders:edit')) return '';
+  const d=state.invCode&&state.invCode.orderId===o._id?state.invCode:null;
+  const open=!!(d&&d.open);
+  const err=d&&d.err?`<div style="font-size:13.5px;color:var(--brick-ink);margin-top:8px">${escAttr(d.err)}</div>`:'';
+  const img=d&&d.png?`<img alt="" src="${escAttr(d.png)}" style="display:block;width:min(240px,100%);height:auto;margin:12px auto 0;background:#fff">`:'';
+  const hint=`<div style="font-size:13.5px;color:var(--text-secondary);margin-top:8px;line-height:1.45">${T('Show this. The customer scans it and types the fapiao.','出示此码。顾客扫码填写发票。')}</div>`;
+  const got=d&&d.title?`<div style="font-size:15px;font-weight:500;margin-top:8px">${T('Received','已收到')} · ${escAttr(d.title)}</div>`:'';
+  return `<div class="card" style="padding:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span class="eyebrow">${T('Fapiao','发票')}</span>
+      ${open?`<button class="btn2" style="padding:4px 12px;min-height:34px" onclick="APP.cmd('invCodeClose')">${T('Close','关闭')}</button>`:''}
+    </div>
+    ${open?img+hint+got+err:`<button class="btn2" style="width:100%;margin-top:12px" ${d&&d.busy?'disabled':''} onclick="APP.cmd('invCodeOpen')">${d&&d.busy?T('Loading…','加载中…'):T('Fapiao code','发票码')}</button>${err}`}
+  </div>`;
+}
+function invCodeStop(){
+  if(state.invCode&&state.invCode.timer) clearInterval(state.invCode.timer);
+}
+function invCodeFail(code){
+  if(code==='no_public_domain') return T('This shop has no public address for the code.','此门店没有可扫的公开地址。');
+  if(code==='not_till') return T('Only a till sale has this code.','只有前台销售有此码。');
+  if(code==='not_open') return T('This order is not open for a fapiao.','此订单现在不能开发票。');
+  if(code==='already_issued') return T('Invoice issued','已开票');
+  return T('Could not open the code.','打不开此码。');
+}
+reg('invCodeClose', ()=>{ invCodeStop(); state.invCode=null; render(); });
+reg('invCodeOpen', ()=>{
+  const o=currentOrder();
+  if(!o||!o.tillSale||o._id==null||!mCan('orders:edit')) return;
+  if(state.invCode&&state.invCode.orderId===o._id&&state.invCode.busy) return;
+  invCodeStop();
+  state.invCode={orderId:o._id, open:true, busy:true, png:'', title:'', err:'', timer:null};
+  render();
+  const sheetId=o.id;
+  apiWrite('/orders/'+o._id+'/fapiao-link',{},'POST').then(j=>{
+    const d=state.invCode;
+    if(!d||d.orderId!==o._id) return;
+    const data=j&&j.data;
+    d.busy=false;
+    if(!data||!data.qr_png){ d.err=invCodeFail(j&&j.error); render(); return; }
+    d.png=data.qr_png;
+    d.timer=setInterval(()=>{
+      api('/orders/'+o._id+'/fapiao-link').then(r=>{
+        const cur=state.invCode;
+        if(!cur||cur.orderId!==o._id||!r||!r.linked) return;
+        if(cur.title===r.title) return;
+        cur.title=r.title||'';
+        api('/orders/'+o._id).then(row=>{
+          if(state.detailId===sheetId) state.liveDetail=mapDetail(row);
+          render();
+        }).catch(()=>render());
+      }).catch(()=>{ /* a missed poll asks again in two seconds */ });
+    },2000);
+    render();
+  }).catch(e=>{
+    const d=state.invCode;
+    if(!d||d.orderId!==o._id) return;
+    if(String(e.message)==='auth') return;
+    d.busy=false; d.err=invCodeFail(e.code); render();
+  });
+});
 function invoiceBlock(o){
   const v=o.invoice; if(!v) return '';
   const issued=v.status==='issued';
@@ -41364,6 +41434,7 @@ function sheetOrderDetail(){
          <button onclick="APP.cmd('reprint')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${T('Reprint','重打')}</button></div>
          <div style="display:flex;align-items:center;gap:7px;margin-top:8px"><span style="display:flex;color:var(--sage-ink)">${ic('check',16,2.25)}</span><span style="font-size:14.5px">${T(...o.receipt)}</span></div></div>`:''}`}
        ${shipByTile(o)}
+       ${fapiaoCodeCard(o)}
        ${invoiceBlock(o)}
        ${splitSuggestionCard(o)}
        ${orderItemsBlock(o)}
@@ -52709,6 +52780,7 @@ function mapDetail(o){
   }));
   base.addonTotal=Number(o.addon_total)||0;
   base.proof=o.alipay_proof_image||null;                    // the screenshot itself
+  base.tillSale=o.shop_entry_method==='till';
   base.invoice=Number(o.needs_invoice)?{
     status:o.invoice_status||'requested', type:o.invoice_type||'',
     title:o.invoice_title||'', taxId:o.invoice_tax_id||'', email:o.invoice_email||'',

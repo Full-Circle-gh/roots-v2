@@ -4843,6 +4843,11 @@ addColumn('retail_orders', 'fulfillment_type', "TEXT DEFAULT 'delivery'");
 // these add the e-general invoice extras the mini-app fapiao form collects.
 addColumn('retail_orders', 'invoice_type',  'TEXT');   // 'personal' | 'company'
 addColumn('retail_orders', 'invoice_email', 'TEXT');   // recipient for the 电子发票 (e-fapiao)
+// The till's fapiao code (§526). One unguessable token per till sale, minted
+// the first time a cashier shows the code. Null on every other order.
+addColumn('retail_orders', 'fapiao_token', 'TEXT');
+try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_orders_fapiao_token ON retail_orders(fapiao_token) WHERE fapiao_token IS NOT NULL"); }
+catch (e) { /* the index is already there, or this build cannot add one */ }
 // Fapiao issuance workflow (Phase 3a). Status is DERIVED: a NULL invoice_status
 // with needs_invoice reads as 'requested' (so legacy invoice orders show as
 // requested); staff "mark issued" flips it to 'issued' and fills the rest.

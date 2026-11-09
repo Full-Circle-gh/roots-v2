@@ -371,6 +371,9 @@ app.use('/api/retail', require('./middleware/public-tenant').publicTenantScope);
 // so tdb() reads the right tenant's order.
 app.use('/pay', require('./middleware/public-tenant').publicTenantScope);
 app.use('/api/pay', require('./middleware/public-tenant').publicTenantScope);
+// Till fapiao code (§526). The customer scans a per-order token and types
+// the title. Same host-scoped tenant resolution as guest pay.
+app.use('/fapiao', require('./middleware/public-tenant').publicTenantScope);
 app.use(require('./routes/retail'));
 app.use(require('./routes/retail-inventory'));
 app.use(require('./routes/retail-purchasing')); // online store buying dept: suppliers + retail POs
