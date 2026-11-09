@@ -12,8 +12,9 @@
 
 .PARAMETER Path
   Path to your local clone of roots-v2 — the same folder WeChat Developer
-  Tools has open on the miniapp/ subfolder. Defaults to the current directory,
-  so `cd` into your clone and just run the script with no arguments.
+  Tools has open (repo root `tacetapp/` with miniprogramRoot, or `miniapp/`
+  directly). Defaults to the current directory, so `cd` into your clone and
+  just run the script with no arguments.
 
 .PARAMETER Branch
   Branch to sync to. Defaults to main, which is what deploy.yml ships from
