@@ -155,6 +155,7 @@ const {
   DEFAULT_ROOTS_CLUB_TIERS, tierMultiplierFor, reconcileTier,
   pointsEarnedFor, pointsEarnBaseAmount, nextEarnExpiry, sweepExpiredPoints, pointsRedeemRate,
   pointsCashValue, pointsRequiredFor, pointsCoverShipping, pointsRedeemableBase,
+  pointsRedeemCredit,
   awardOrderPoints, reverseOrderPoints,
 } = require('../lib/loyalty');
 // The voucher rules: pricing, who and where, the per-customer cap, auto-apply,
@@ -11242,12 +11243,6 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     const cust = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
     const have = cust?.points_balance || 0;
     const requested = Math.floor(Number(body.points_to_use));
-    // Cap at the customer's balance AND at the points needed to fully
-    // cover the redeemable base — extra points beyond that would just be
-    // burned (and can't reach the shipping line when policy excludes it).
-    const maxByOrder = pointsRequiredFor(redeemBase);
-    pointsUsed = Math.min(requested, have, maxByOrder);
-    pointsAmount = pointsCashValue(pointsUsed);
     if (requested > have) {
       return res.status(409).json({
         success: false,
@@ -11256,25 +11251,17 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         available: have,
       });
     }
-    // Policy residual on a maxed-out redemption. When the customer has spent
-    // every point this order allows (pointsUsed hit maxByOrder) and cash is
-    // STILL due, the gap isn't a balance shortfall — it's the redeemable base
-    // excluding shipping, i.e. exactly the condition the full-redeem path
-    // refuses above. It matters because /quote decides `points_affordable`
-    // off the same base (pointsBalance >= pointsRequiredFor(redeemBase)), so
-    // in this state the client was told the points cover the bill and shows
-    // PAY ¥0.00 — then this path would clamp and silently charge the residual.
-    // Refuse instead, with the same error the full-redeem path returns, so a
-    // client has one condition to handle rather than two. A customer whose
-    // balance is simply too small never reaches here (pointsUsed < maxByOrder)
-    // and keeps the honest partial stack with its "¥X left to pay" line.
-    if (redeemBase < grossTotal && pointsUsed >= maxByOrder) {
-      return res.status(400).json({
-        success: false,
-        error: 'points_cannot_cover_shipping',
-        shipping_due: +(grossTotal - redeemBase).toFixed(2),
-      });
-    }
+    // Same credit the till applies. The cash stops at the redeemable base, so
+    // a delivery the points are not allowed to pay stays in cash and is
+    // collected by WeChat or Alipay — the residual the checkout already shows
+    // as "¥X left to pay". Refusing this used to be how a client that drew
+    // PAY ¥0 (points cover the goods, so it pretended they covered the bill)
+    // was stopped from being charged a delivery it had hidden. That client is
+    // gone. The client_total check below is what still refuses a declared
+    // figure that is not this residual, including a stale ¥0.
+    const credit = pointsRedeemCredit(requested, have, redeemBase);
+    pointsUsed = credit.pointsUsed;
+    pointsAmount = credit.pointsAmount;
   }
   // ── Wallet balance redemption (stacks AFTER points) ─────────────────
   // Opt-in via body.use_balance. Points apply first (operator choice — they
@@ -35060,8 +35047,9 @@ function manualOrderCredit({ customerId, pointsToUse, useBalance,
       out.error = { status: 409, code: 'insufficient_points', requested, available: have };
       return out;
     }
-    out.pointsUsed   = Math.min(requested, pointsRequiredFor(pointsBase));
-    out.pointsAmount = Math.min(pointsCashValue(out.pointsUsed), pointsBase);
+    const credit = pointsRedeemCredit(requested, have, pointsBase);
+    out.pointsUsed   = credit.pointsUsed;
+    out.pointsAmount = credit.pointsAmount;
   }
   if (wantsBalance) {
     const have = Math.max(0, Number(tdb().prepare(
@@ -35354,8 +35342,9 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     total = pointsAffordable ? Math.max(0, grossTotal - redeemBase) : grossTotal;
   } else {
     const reqPts = Math.max(0, Math.floor(Number(body.points_to_use) || 0));
-    pointsToUseApplied = Math.min(reqPts, pointsMaxUsable);
-    pointsDiscount     = pointsCashValue(pointsToUseApplied);
+    const credit = pointsRedeemCredit(reqPts, pointsBalance, redeemBase);
+    pointsToUseApplied = credit.pointsUsed;
+    pointsDiscount     = credit.pointsAmount;
     total = Math.max(0, grossTotal - pointsDiscount);
   }
 
@@ -35613,8 +35602,9 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
         pointsDiscount = 0;
       } else {
         const reqPts = Math.max(0, Math.floor(Number(body.points_to_use) || 0));
-        pointsToUseApplied = Math.min(reqPts, pointsMaxUsable);
-        pointsDiscount = pointsCashValue(pointsToUseApplied);
+        const credit = pointsRedeemCredit(reqPts, pointsBalance, redeemBase);
+        pointsToUseApplied = credit.pointsUsed;
+        pointsDiscount = credit.pointsAmount;
         total = Math.max(0, grossTotal - pointsDiscount);
       }
       balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount,
