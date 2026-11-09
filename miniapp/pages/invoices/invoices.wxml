@@ -19,7 +19,10 @@
       <view wx:if="{{item.title}}" class="inv-title">{{item.title}}</view>
       <view wx:if="{{item.number}}" class="inv-no muted">No. {{item.number}}</view>
       <view wx:if="{{item.issued}}" class="inv-actions">
-        <view wx:if="{{item.fileUrl}}" class="btn" data-url="{{item.fileUrl}}" bindtap="onViewInvoice">{{copy.view}} →</view>
+        <view wx:if="{{item.fileUrl}}" class="inv-btns">
+          <view class="btn" data-url="{{item.fileUrl}}" bindtap="onViewInvoice">{{copy.view}}</view>
+          <view class="btn ghost" data-url="{{item.fileUrl}}" bindtap="onDownloadInvoice">{{copy.download}}</view>
+        </view>
         <view wx:else class="muted sm">{{copy.noFile}}</view>
       </view>
     </view>

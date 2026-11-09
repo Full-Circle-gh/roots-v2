@@ -262,6 +262,7 @@
   color: var(--olive);
   border: 3rpx solid rgba(0, 0, 0, 0.15);
 }
+.inv-issued { display: flex; flex-direction: column; gap: 16rpx; }
 
 /* Refund banners */
 /* Partial-shipment notice — "X of Y items shipped, rest to follow" */

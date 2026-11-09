@@ -20,6 +20,8 @@
 .inv-title { font-size: 26rpx; color: #1a1a17; margin-top: 8rpx; font-weight: 600; }
 .inv-no { font-size: 22rpx; margin-top: 4rpx; font-variant-numeric: tabular-nums; }
 .inv-actions { margin-top: 16rpx; }
+.inv-btns { display: flex; gap: 12rpx; flex-wrap: wrap; }
 .btn { display: inline-block; background: #1a1a17; color: #fff; font-size: 24rpx; padding: 12rpx 26rpx; }
+.btn.ghost { background: transparent; color: #1a1a17; border: 2rpx solid #1a1a17; }
 .sm { font-size: 22rpx; }
 .muted { color: #8a8275; }

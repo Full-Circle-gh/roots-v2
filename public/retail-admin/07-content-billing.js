@@ -517,6 +517,17 @@ function invoiceAccountingText(o) {
   return L.join('\n');
 }
 
+// Same function as lib/media-disposition.js — the admin page cannot require it.
+// scripts/test_fapiao_download.js checks the copies still match.
+function fapiaoDownloadHref(url) {
+  const u = String(url || '').trim();
+  const m = u.match(/^(https?:\/\/[^/?#]+)?(\/api\/retail\/media\/\d+)(\?[^#]*)?(#.*)?$/);
+  if (!m) return u;
+  const q = m[3] || '';
+  if (/(?:^|[?&])download=1(?:&|$)/.test(q)) return u;
+  return (m[1] || '') + m[2] + (q ? q + '&download=1' : '?download=1') + (m[4] || '');
+}
+
 function renderInvoiceBlock(o) {
   const isCompany = invoiceIsCompany(o);
   const issued = o.invoice_status === 'issued';
@@ -526,6 +537,7 @@ function renderInvoiceBlock(o) {
   const icoReceipt = ico('<path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1-2-1z"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="13" y2="13"/>');
   const icoClipboard = ico('<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>');
   const icoFile = ico('<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>');
+  const icoDown = ico('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>');
   const icoClip = ico('<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>');
   const row = (label, val, mono) => `<span style="color: var(--text-3);">${label}</span><span style="color: var(--text-1); font-weight: 600;${mono ? ' font-variant-numeric: tabular-nums;' : ''}">${escapeHtml(val || '—')}</span>`;
   const badge = `<span style="font-weight: 700; font-size: 11px; padding: 2px 9px; border-radius: 99px; ${issued ? 'background: var(--success); color: #fff;' : 'background: var(--bg-elev-2); color: var(--text-2); border: 1px solid var(--line);'}">${issued ? invT('Issued', '已开') : invT('Requested', '待开')}</span>`;
@@ -534,7 +546,7 @@ function renderInvoiceBlock(o) {
     ? `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px;">
         ${o.invoice_number ? `<div style="margin-bottom: 4px;"><span style="color: var(--text-3);">${invT('Invoice no.', '发票号码')}</span> <b>${escapeHtml(o.invoice_number)}</b></div>` : ''}
         <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-          ${o.invoice_file_url ? `<a href="${escapeAttr(o.invoice_file_url)}" target="_blank" rel="noopener" class="db-btn primary" style="text-decoration: none;">${icoFile}${invT('View fapiao', '查看发票')}</a>` : `<span style="color: var(--text-3);">${invT('No file attached', '未附文件')}</span>`}
+          ${o.invoice_file_url ? `<a href="${escapeAttr(o.invoice_file_url)}" target="_blank" rel="noopener" class="db-btn primary" style="text-decoration: none;">${icoFile}${invT('View fapiao', '查看发票')}</a><a href="${escapeAttr(fapiaoDownloadHref(o.invoice_file_url))}" download class="db-btn" style="text-decoration: none;">${icoDown}${invT('Download', '下载')}</a>` : `<span style="color: var(--text-3);">${invT('No file attached', '未附文件')}</span>`}
           <span style="color: var(--text-3);">${o.invoice_issued_at ? invT('Issued ', '开票于 ') + escapeHtml(String(o.invoice_issued_at).slice(0, 10)) : ''}</span>
           <a href="#" onclick="event.preventDefault(); unissueInvoice(${o.id})" style="color: var(--text-3); font-size: 11px;">${invT('edit', '修改')}</a>
         </div>

@@ -2,6 +2,7 @@
 // Reads /api/retail/orders/:id which returns items + timeline events.
 
 const api  = require('../../utils/api');
+const { openCustomerFapiao } = require('../../utils/fapiao-file');
 const lang = require('../../utils/lang');
 const optionText = require('../../utils/options');
 const { createPoller } = require('../../utils/livepoll');
@@ -141,6 +142,8 @@ Page({
       invoiceSubmit: 'Submit request',
       invoiceProcessing: '🧾 Invoice requested — we\'ll email it once issued.',
       invoiceIssued: '✓ Invoice issued',
+      invoiceView: 'View invoice',
+      invoiceDownload: 'Download',
       rescheduleBtnDelivery: 'Change delivery time',
       rescheduleBtnPickup: 'Change pickup time',
       rescheduleTitleDelivery: 'Change delivery time',
@@ -319,6 +322,8 @@ Page({
         invoiceSubmit: '提交申请',
         invoiceProcessing: '🧾 发票已申请 — 开具后将发送至您的邮箱。',
         invoiceIssued: '✓ 发票已开具',
+        invoiceView: '查看发票',
+        invoiceDownload: '下载',
         rescheduleBtnDelivery: '修改配送时间',
         rescheduleBtnPickup: '修改取货时间',
         rescheduleTitleDelivery: '修改配送时间',
@@ -1266,6 +1271,21 @@ Page({
   onInvTitleInput(e) { this.setData({ invoiceTitle: e.detail.value }); },
   onInvTaxInput(e)   { this.setData({ invoiceTaxId: e.detail.value }); },
   onInvEmailInput(e) { this.setData({ invoiceEmail: e.detail.value }); },
+  onViewFapiao(e) { this.openFapiao(e, false); },
+  onDownloadFapiao(e) { this.openFapiao(e, true); },
+  openFapiao(e, download) {
+    const url = e.currentTarget.dataset.url;
+    if (!url) return;
+    const cn = this.data.lang === 'cn';
+    openCustomerFapiao(url, {
+      download,
+      base: api.BASE,
+      onFail: (full) => wx.setClipboardData({
+        data: full || url,
+        success: () => wx.showToast({ title: cn ? '链接已复制' : 'Link copied', icon: 'none' }),
+      }),
+    });
+  },
   async submitInvoice() {
     const cn = this.data.lang === 'cn';
     const title = (this.data.invoiceTitle || '').trim();
