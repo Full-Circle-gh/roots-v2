@@ -97,7 +97,7 @@ function grab(name) {
 const LIFTED = [
   'cfgValue',
   'pointsRedeemRate', 'pointsCashValue', 'pointsRequiredFor', 'pointsCoverShipping',
-  'pointsRedeemableBase', 'walletSpendableBase', 'walletSpendForOrder',
+  'pointsRedeemableBase', 'pointsRedeemCredit', 'walletSpendableBase', 'walletSpendForOrder',
   'sweepExpiredPoints',
   'manualOrderCredit',
 ];
@@ -133,6 +133,7 @@ const sandbox = { console, tdb: () => db };
 vm.createContext(sandbox);
 vm.runInContext(SRC + '\nthis.manualOrderCredit = manualOrderCredit;'
                     + '\nthis.pointsRedeemableBase = pointsRedeemableBase;'
+                    + '\nthis.pointsRedeemCredit = pointsRedeemCredit;'
                     + '\nthis.walletSpendForOrder = walletSpendForOrder;', sandbox);
 const { manualOrderCredit } = sandbox;
 
@@ -238,6 +239,41 @@ it('the wallet never pays shipping, and no setting lets it', () => {
     customerId: id, useBalance: true, shippingFee: 15, total: 115 }));
   assert.strictEqual(r.balanceUsed, 100);
   setCfg('points.coverShipping', false);
+});
+
+it('a fractional yuan of goods does not come off the delivery', () => {
+  setCfg('points.redeemRate', 1);
+  setCfg('points.coverShipping', false);
+  // ¥55.50 of goods takes 56 points, and 56 points are worth ¥56. The extra
+  // ¥0.50 must not reduce the ¥10 delivery. That is the checkout that showed
+  // ¥56 off and ¥9.50 left, then refused the order as ¥10 still due.
+  const id = customer({ points: 200 });
+  const r = manualOrderCredit(Object.assign(counter(), {
+    customerId: id, pointsToUse: 200, subtotal: 55.5, shippingFee: 10, total: 65.5 }));
+  assert.strictEqual(r.pointsUsed, 56, 'the last point is still taken — a point cannot be split');
+  assert.strictEqual(r.pointsAmount, 55.5, 'but only ¥55.50 comes off the bill');
+  assert.strictEqual(+(65.5 - r.pointsAmount).toFixed(2), 10, 'the ¥10 delivery is paid in cash');
+});
+
+it('the checkout quotes and charges that same credit', () => {
+  const ordersAt = RETAIL_SRC.indexOf("router.post('/api/retail/orders'");
+  const quoteAt = RETAIL_SRC.indexOf("router.post('/api/retail/checkout/quote'");
+  assert.ok(ordersAt > 0 && quoteAt > ordersAt, 'order route then quote route');
+  const orders = RETAIL_SRC.slice(ordersAt, quoteAt);
+  const partialAt = orders.indexOf('} else if (Number(body.points_to_use) > 0)');
+  const walletAt = orders.indexOf('Wallet balance redemption');
+  assert.ok(partialAt > 0 && walletAt > partialAt, 'partial-points branch is findable');
+  const partial = orders.slice(partialAt, walletAt);
+  assert.ok(/pointsRedeemCredit\(/.test(partial), 'the partial stack uses the shared credit');
+  assert.ok(!/points_cannot_cover_shipping/.test(partial),
+    'a delivery left over is collected in cash, not refused');
+  const full = orders.slice(orders.indexOf("if (paymentMethod === 'points')"), partialAt);
+  assert.ok(/points_cannot_cover_shipping/.test(full),
+    'paying with points alone still cannot settle a delivery');
+  const quoteEnd = RETAIL_SRC.indexOf("router.get('/api/retail/topup-packages'", quoteAt);
+  const quote = RETAIL_SRC.slice(quoteAt, quoteEnd);
+  assert.strictEqual((quote.match(/pointsRedeemCredit\(/g) || []).length, 2,
+    'the quote and the same-day recompute both use the shared credit');
 });
 
 it('points pay shipping only where the shop says so', () => {
@@ -585,8 +621,8 @@ function handlerFor(d) {
     // The subject. Real, with its whole chain.
     manualOrderCredit: new Function('tdb', mutate([
       'cfgValue', 'pointsRedeemRate', 'pointsCashValue', 'pointsRequiredFor',
-      'pointsCoverShipping', 'pointsRedeemableBase', 'walletSpendableBase',
-      'walletSpendForOrder', 'sweepExpiredPoints',
+      'pointsCoverShipping', 'pointsRedeemableBase', 'pointsRedeemCredit',
+      'walletSpendableBase', 'walletSpendForOrder', 'sweepExpiredPoints',
     ].map(extractFunction).join('\n') + '\n' + grab('manualOrderCredit'))
       + '\nreturn manualOrderCredit;')(() => d),
     tax: taxLib, money,

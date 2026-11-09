@@ -1341,7 +1341,10 @@ Page({
     let pointsToUse = 0, pointsDiscount = 0;
     if (this.data.usePoints && this.data.pointsBalance > 0) {
       pointsToUse = Math.min(this.data.pointsBalance, Math.ceil(grossTotal * rate));
-      pointsDiscount = pointsToUse / rate;
+      // A whole point can be worth more than the cents left on the bill. The
+      // cash credited stops at the bill — the same cap the server applies —
+      // so the "off" figure is never larger than the amount due.
+      pointsDiscount = Math.min(pointsToUse / rate, grossTotal);
     }
     const pointsAffordable = grossTotal > 0 && pointsDiscount >= grossTotal;
     // Wallet balance stacks after points on the non-shipping bill (this local
@@ -1764,7 +1767,14 @@ Page({
           // when it isn't right now. Used as the "potential savings" copy
           // in the Use-points toggle subtitle so the customer sees their
           // points have value before flipping the switch.
-          pointsPotentialDiscount: (pointsMaxUsable / (Number(data.points_redeem_rate) || 100)).toFixed(2),
+          // Capped at the redeemable part of this quote. pointsMaxUsable is
+          // the points needed to cover that part, rounded UP to a whole
+          // point, so dividing it by the rate can overstate the cash by
+          // almost ¥1 — and that extra must not be promised against delivery.
+          pointsPotentialDiscount: Math.min(
+            pointsMaxUsable / (Number(data.points_redeem_rate) || 100),
+            Math.max(0, grossTotal - (data.points_cover_shipping ? 0 : effectiveDelivery))
+          ).toFixed(2),
           // Wallet balance — mirror of the points fields above. balanceMaxUsable
           // already excludes shipping + nets out points, so it doubles as the
           // "potential" figure for the toggle subtitle before it's flipped.
