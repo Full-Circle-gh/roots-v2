@@ -43,7 +43,10 @@ miniapp/
    - `shop.png` + `shop-active.png`
    - `cart.png` + `cart-active.png`
    - `me.png` + `me-active.png`
-6. **Open the `miniapp/` folder in WeChat Developer Tools** → Project → Import. The preview window should boot to the Home tab.
+6. **Open the repo in WeChat Developer Tools** → Project → Import:
+   - **Recommended:** select your `tacetapp` clone folder (repo root). Root `project.config.json` sets `miniprogramRoot` to `miniapp/` so DevTools finds `app.json` there.
+   - **Also fine:** select `miniapp/` directly (same app; uses `miniapp/project.config.json`).
+   The preview window should boot to the Home tab.
 
 ## Publishing a new version
 
