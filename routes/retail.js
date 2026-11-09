@@ -12991,11 +12991,14 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
 // profile. Lists every order where an invoice was requested, with its derived
 // state (issued vs requested) and the fapiao link/number once issued.
 router.get('/api/retail/invoices', requireRetailAuth, (req, res) => {
+  // invoice_state comes from lib/fapiao-queue.js. A cancelled order's unissued
+  // request is `closed`, not `requested`: the old CASE called every unissued
+  // row requested, so "Your invoices" kept saying Processing after the cancel.
   const rows = tdb().prepare(
-    `SELECT id, order_no, total, placed_at,
+    `SELECT id, order_no, total, placed_at, status,
             invoice_type, invoice_title, invoice_tax_id, invoice_email,
             invoice_number, invoice_file_url, invoice_issued_at,
-            CASE WHEN invoice_status = 'issued' THEN 'issued' ELSE 'requested' END AS invoice_state
+            ${fapiaoQueue.customerStateSql('')} AS invoice_state
        FROM retail_orders
       WHERE customer_id = ? AND needs_invoice = 1
       ORDER BY placed_at DESC LIMIT 100`
@@ -25830,9 +25833,18 @@ router.post('/api/retail-admin/orders/:id/meituan-action', requireRetailAdmin, e
 // which then surfaces in the customer's profile. `unissue` reverts a mistake.
 router.put('/api/retail-admin/orders/:id/invoice', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const o = tdb().prepare('SELECT id, needs_invoice FROM retail_orders WHERE id = ?').get(id);
+  const o = tdb().prepare(
+    'SELECT id, status, needs_invoice, invoice_status FROM retail_orders WHERE id = ?'
+  ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!o.needs_invoice) return res.status(400).json({ success: false, error: 'no_invoice_requested' });
+  // A cancelled order's request is closed. Marking it issued would put a
+  // fiscal document on a sale that did not happen. Un-issue stays available:
+  // that is how a fapiao written by mistake comes back off. An already-issued
+  // fapiao on a live order can still be written again (a corrected number).
+  if (req.body?.action !== 'unissue' && String(o.status || '').toLowerCase() === 'cancelled') {
+    return res.status(409).json({ success: false, error: 'fapiao_closed' });
+  }
   if (req.body?.action === 'unissue') {
     tdb().prepare("UPDATE retail_orders SET invoice_status = 'requested', invoice_issued_at = NULL WHERE id = ?").run(id);
     return res.json({ success: true });

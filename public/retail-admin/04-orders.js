@@ -530,6 +530,9 @@ const ICON_PRINT_FAILED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentC
 function invoiceLine(o) {
   if (!Number(o.needs_invoice)) return '';
   const issued = o.invoice_status === 'issued';
+  // A cancelled order owes no fapiao. The brass "to issue" line is a promise
+  // of work; lib/fapiao-queue.js already keeps that request out of the queue.
+  if (!issued && o.status === 'cancelled') return '';
   const label = issued ? cuT('Invoice issued', '已开票') : cuT('Invoice to issue', '待开票');
   const title = issued
     ? cuT('Invoice issued for this order', '此订单已开票')
@@ -7359,7 +7362,7 @@ function renderOpenOrder(o) {
         <!-- Fapiao still owed = work the operator has to do, so it rides at the
              top where the eye lands. Once issued it is just a record: it drops
              back into the details grid below and logistics keeps the top. -->
-        ${(o.needs_invoice && o.invoice_status !== 'issued')
+        ${(o.needs_invoice && o.invoice_status !== 'issued' && o.status !== 'cancelled')
           ? `<div style="margin-bottom: var(--s4);">${renderInvoiceBlock(o)}</div>` : ''}
 
         <!-- Order total — full-width hero banner above the info grid. -->
@@ -7436,7 +7439,7 @@ function renderOpenOrder(o) {
           ${staffNoteBlock(o)}
           ${wasCustomerToldBlock(o)}
           ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
-          ${(o.needs_invoice && o.invoice_status === 'issued') ? renderInvoiceBlock(o) : ''}
+          ${(o.needs_invoice && (o.invoice_status === 'issued' || o.status === 'cancelled')) ? renderInvoiceBlock(o) : ''}
         </div>
 
         <div class="order-items">
