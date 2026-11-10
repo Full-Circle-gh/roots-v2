@@ -68,6 +68,25 @@ function lineSaveFields(it, L) {
   };
 }
 
+// "Thu, Nov 12". Built from the date's own fields. Checkout runs in WeChat's
+// iOS JavaScriptCore, where toLocaleDateString(locale, options) throws because
+// Intl.DateTimeFormat is absent. That throw was caught as a failed quote: the
+// When section lost its times and the pay button snapped back to the cart
+// total from before the server reprice (a ¥15 line sitting under ¥442).
+const EN_WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const EN_MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtEnDay(dt) {
+  if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return '';
+  return EN_WD[dt.getDay()] + ', ' + EN_MO[dt.getMonth()] + ' ' + dt.getDate();
+}
+
+// A discount below zero is not a discount: Number(-427) || 0 stays -427, and
+// subtotal minus that number inflates the pay button.
+function moneyOff(v) {
+  const n = Number(v);
+  return n > 0 ? n : 0;
+}
+
 Page({
   data: {
     items: [],
@@ -1046,7 +1065,7 @@ Page({
           ...this.voucherPlace(),
         });
         const data = v?.data || v;
-        this.setData({ voucherDiscount: Number(data.discount) || 0, voucherFreeShip: !!data.free_shipping });
+        this.setData({ voucherDiscount: moneyOff(data.discount), voucherFreeShip: !!data.free_shipping });
       } catch (e) {
         if (e && e.message === 'not_applicable') {
           this.setData({ voucherCode: '', voucherDiscount: 0, voucherFreeShip: false });
@@ -1136,14 +1155,14 @@ Page({
   effectiveVoucher() {
     const manual = {
       code: this.data.voucherCode,
-      discount: Number(this.data.voucherDiscount) || 0,
+      discount: moneyOff(this.data.voucherDiscount),
       freeShip: !!this.data.voucherFreeShip,
       auto: false,
       title: '',
     };
     const a = this.data.autoVoucher;
     if (a) {
-      const autoDisc = Number(a.discount) || 0;
+      const autoDisc = moneyOff(a.discount);
       // ¥/% auto promo wins on its discount; free-ship-vs-fee ties defer to the
       // server (we don't know the fee here). Manual keeps the win on a tie.
       if (autoDisc > manual.discount) {
@@ -1263,7 +1282,7 @@ Page({
     const isToday = dt.getTime() === today.getTime();
     if (this.data.lang === 'cn') return isToday ? '今天' : `${m}月${d}日`;
     if (isToday) return 'Today';
-    return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return fmtEnDay(dt);
   },
 
   // Delivery ⇄ Pickup toggle. Re-derives totals through refreshQuote, which
@@ -1812,6 +1831,13 @@ Page({
           missingItems,
           acceptedFallback: keepAccepted,
         });
+        // Slots, fees, and the server total are already on the page. Labelling
+        // a day or opening a notice stays inside this try, so a throw there
+        // leaves the times on screen. iOS WeChat throws from toLocaleDateString,
+        // and that used to land in the catch below: the When section went blank
+        // and the pay button snapped back to the cart total from before the
+        // server reprice.
+        try {
         // Eligibility just changed, so the rider-phone notice may have to appear
         // or disappear (switching to an out-of-city address retires it).
         this.syncRiderPhoneWarn();
@@ -1876,11 +1902,17 @@ Page({
           if (picked && minDate && maxDate && picked >= minDate && picked <= maxDate) {
             const [y, m, d] = picked.split('-').map(Number);
             const dt = new Date(y, m - 1, d);
-            const labelEn = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            const labelEn = fmtEnDay(dt);
             const labelCn = `${m}月${d}日`;
             scheduledSlots = this.buildWindowsForDate(picked, labelEn, labelCn, sch);
           }
           this.setData({ scheduleMinDate: minDate, scheduleMaxDate: maxDate, scheduledSlots });
+        }
+        } catch (renderErr) {
+          console.warn('[checkout] quote render failed:', renderErr && renderErr.message);
+          diag.reportError('checkout_quote_render: ' + (renderErr && renderErr.message), renderErr && renderErr.stack, {
+            delivery_mode: this.data.deliveryMethod || null,
+          });
         }
       })
       .catch(err => {
@@ -1915,8 +1947,9 @@ Page({
           // server-side /orders endpoint will refuse on its own if invalid.
           console.warn('[checkout] /quote failed:', code);
           // Leave a trail on the server: the customer's phone is the only place
-          // this reason ever lived. A throw inside the .then above lands here
-          // too, so `code` is then the JS error message and `stack` says where.
+          // this reason ever lived. A throw before the quote is committed lands
+          // here too, so `code` is then the JS error message and `stack` says
+          // where. Rendering after the commit is isolated above.
           diag.reportError('checkout_quote_failed: ' + code, err && err.stack, {
             status: (err && err.status) || null,
             delivery_mode: this.data.deliveryMethod || null,
@@ -1936,9 +1969,16 @@ Page({
     const L = this.data.lang;
     const isDayOnly = sch.mode === 'day_only';
     const byDate = new Map();
+    // A missing label is an empty chip, not a throw. `.split` on null aborts
+    // the quote handler and the catch then clears every slot.
+    const label = (s, cn) => {
+      const raw = s && (cn ? s.label_cn : s.label_en);
+      return typeof raw === 'string' ? raw : '';
+    };
     for (const s of sch.slots) {
-      const dayLabel = L === 'cn' ? s.label_cn : s.label_en;
-      const dayHead  = L === 'cn' ? s.label_cn.split(' ')[0] : s.label_en.split(' ')[0];
+      if (!s) continue;
+      const dayLabel = label(s, L === 'cn');
+      const dayHead  = label(s, L === 'cn').split(' ')[0];
       if (!byDate.has(s.date_iso)) {
         byDate.set(s.date_iso, {
           date_iso: s.date_iso,
@@ -2114,11 +2154,22 @@ Page({
   prettyExpressSlot() {
     const es = this.data.scheduling?.express_slot;
     if (!es || !es.date_iso) return null;
-    const [y, m, d] = es.date_iso.split('-').map(Number);
+    const [y, m, d] = String(es.date_iso).split('-').map(Number);
     const dt = new Date(y, m - 1, d);
+    const labelEn = fmtEnDay(dt);
+    // A date we cannot read keeps the server's own labels. The Chinese form
+    // below is the one the fresh-batch helper lifts (`M月D日`), so it stays
+    // written out here.
+    if (!(Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) || !labelEn) {
+      return {
+        ...es,
+        label_en: typeof es.label_en === 'string' ? es.label_en : '',
+        label_cn: typeof es.label_cn === 'string' ? es.label_cn : '',
+      };
+    }
     return {
       ...es,
-      label_en: dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+      label_en: labelEn,
       label_cn: `${m}月${d}日`,
     };
   },
@@ -2139,7 +2190,7 @@ Page({
     if (!min) return;
     const [y, m, d] = min.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
-    const labelEn = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const labelEn = fmtEnDay(dt);
     const labelCn = `${m}月${d}日`;
     this.applyDayOnlySlot({
       slot_id: min,
@@ -2183,7 +2234,7 @@ Page({
     // used elsewhere on the checkout page.
     const [y, m, d] = picked.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
-    const labelEn = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const labelEn = fmtEnDay(dt);
     const labelCn = `${m}月${d}日`;
 
     // Time-slot zones (Guangzhou same-city): a scheduled future day also gets
@@ -2380,6 +2431,11 @@ Page({
   // `failed` is true only when a quote was sent and errored, so the When section
   // says "tap to retry" rather than asking for an area the customer already gave.
   applyQuoteFallback(subtotal, failed) {
+    // The cart may already have been repriced by a quote whose rendering then
+    // threw. Bill the lines now in the cart, not the subtotal captured before
+    // the request — that stale figure is what put ¥442 on a ¥15 line.
+    const live = Number(cart.subtotal());
+    const base = Number.isFinite(live) ? live : (Number(subtotal) || 0);
     const voucherDiscount = this.effectiveVoucher().discount;  // best of {manual, auto-apply}
     this.setData({
       zone: null,
@@ -2398,7 +2454,7 @@ Page({
       // against a base the server has not agreed to would be a number nobody
       // could stand behind; the row returns with the next successful quote.
       taxShown: '',
-      total: Math.max(0, subtotal - voucherDiscount).toFixed(2),
+      total: Math.max(0, base - voucherDiscount).toFixed(2),
       quoting: false,
     });
   },
@@ -2541,7 +2597,7 @@ Page({
       const data = v?.data || v;
       this.setData({
         voucherCode: data.code,
-        voucherDiscount: Number(data.discount) || 0,
+        voucherDiscount: moneyOff(data.discount),
         voucherFreeShip: !!data.free_shipping,
         voucherInput: '',
       });
@@ -3023,6 +3079,14 @@ Page({
       return;
     }
     if (!this.data.deliverySlotId) {
+      // The times never arrived, so there is nothing on screen to pick. Say
+      // that and ask again. "Please pick a delivery time" is for a quote that
+      // loaded and is waiting on a tap.
+      if (this.data.quoteFailed) {
+        wx.showToast({ title: this.data.copy.quoteFailed, icon: 'none' });
+        this.refreshQuote();
+        return;
+      }
       wx.showToast({ title: this.data.lang === 'cn' ? '请选择配送时间' : 'Please pick a delivery time', icon: 'none' });
       return;
     }
