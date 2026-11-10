@@ -32,10 +32,20 @@ function set(lang) {
   } catch {}
 }
 
+// A bilingual field is a string. A non-zero number is its digits (0 stays
+// empty, as the old `value || ''` did). An object or an array is empty.
+// `(value || '').trim()` throws on a number or an object, and a throw inside
+// the checkout quote handler blanks the delivery times.
+function text(v) {
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number' && Number.isFinite(v) && v !== 0) return String(v);
+  return '';
+}
+
 // Pick the right side of a bilingual {en, cn} pair, with fallback to the
 // other language when the chosen one is empty.
 function pick(en, cn, lang) {
-  const a = (en || '').trim(), b = (cn || '').trim();
+  const a = text(en), b = text(cn);
   if (lang === 'cn') return b || a;
   return a || b;
 }
@@ -74,7 +84,7 @@ function pickLabel(raw, lang) {
 // both sides are present, return the one matching the language; otherwise fall
 // back to pickLabel() to split a legacy combined / mixed string.
 function pickVariantLabel(en, cn, lang) {
-  const a = (en || '').trim(), b = (cn || '').trim();
+  const a = text(en), b = text(cn);
   if (a && b) return lang === 'cn' ? b : a;
   return pickLabel(a || b, lang);
 }
