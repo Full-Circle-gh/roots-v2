@@ -373,7 +373,11 @@ app.use('/pay', require('./middleware/public-tenant').publicTenantScope);
 app.use('/api/pay', require('./middleware/public-tenant').publicTenantScope);
 // Till fapiao code (§526). The customer scans a per-order token and types
 // the title. Same host-scoped tenant resolution as guest pay.
+// /s/fapiao is the address the QR carries: the filed domain forwards /s/
+// and 404s /fapiao before the app ever sees it (§496 rule 7). /fapiao stays
+// for a host that reaches this process directly.
 app.use('/fapiao', require('./middleware/public-tenant').publicTenantScope);
+app.use('/s/fapiao', require('./middleware/public-tenant').publicTenantScope);
 app.use(require('./routes/retail'));
 app.use(require('./routes/retail-inventory'));
 app.use(require('./routes/retail-purchasing')); // online store buying dept: suppliers + retail POs

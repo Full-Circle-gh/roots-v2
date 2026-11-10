@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.632
+# Tacet shared-core consolidation — decisions record, v4.633
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-10 · v4.633 — **§526 AMENDED · THE CODE OPENS UNDER /s/ — ASH.** A scan of the till's fapiao code showed nginx's 404. The filed domain forwards `/s/` and answers 404 for `/fapiao` before the app sees it. The code's address is `/s/fapiao/`. No new words. No schema, no change to `.gitignore` or CI. See §526.
 
 2026-11-09 · v4.632 — **§526 · A TILL SALE HAS A CODE THE CUSTOMER SCANS TO TYPE THE FAPIAO — ASH.** People at the counter ask for a fapiao after the sale, and the order has no title. The code is that order only. A QR-menu sale does not get one. The page writes the same columns checkout already stores. The tax document is still issued by hand. One new column, `fapiao_token`. No change to `.gitignore` or CI. See §526.
 
@@ -34109,3 +34111,5 @@ No new words. No schema change. No change to `.gitignore` or CI.
 5. **Where the button is.** On the till, after that sale is paid. On the order, phone and desktop, when the sale was a till sale and the customer comes back later.
 
 One column, `retail_orders.fapiao_token`. No change to `.gitignore` or CI.
+
+**2026-11-10 · AMENDED.** Ash scanned the code and got nginx's 404. The filed customer domain forwards `/s/` and nothing else that would carry this page (§496 rule 7), so `/fapiao` never reaches the app. The address in the code is `/s/fapiao/` plus the same token. A scan that is not a live till sale still says the link is not an open order, and it answers 200, because a 404 status is what WeChat replaces with its own page.

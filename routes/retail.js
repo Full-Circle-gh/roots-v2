@@ -25853,36 +25853,40 @@ router.post('/api/retail-admin/orders/:id/fapiao-link', requireRetailAdmin, (req
 
 // The page the code opens. No login: the token is the order. A token that is
 // not a live till sale says so without naming any other order.
-router.get('/fapiao/:token', (req, res) => {
-  const view = fapiaoLink.publicView(fapiaoLink.loadByToken(tdb(), req.params.token));
+// Both paths: /s/fapiao is what the QR carries, because the filed domain
+// forwards /s/ and 404s anything else. /fapiao is the same page on a host
+// that reaches this process directly. Always 200 — a 404 status is what
+// WeChat replaces with its own "404 Not Found", so the words never show.
+function fapiaoPagePrefix(req) {
+  return String(req.path || '').indexOf('/s/fapiao/') === 0 ? '/s/fapiao/' : '/fapiao/';
+}
+function sendFapiaoPage(req, res, view, opts) {
   res.set('Cache-Control', 'no-store');
-  if (view.kind === 'missing') res.status(404);
-  res.type('html').send(fapiaoLink.pageHtml(view, {
-    saved: req.query.saved === '1',
-    edit: req.query.edit === '1',
-  }));
-});
-router.post('/fapiao/:token', (req, res) => {
+  res.status(200).type('html').send(fapiaoLink.pageHtml(view, opts || {}));
+}
+function fapiaoPageGet(req, res) {
+  const view = fapiaoLink.publicView(fapiaoLink.loadByToken(tdb(), req.params.token));
+  sendFapiaoPage(req, res, view, { saved: req.query.saved === '1', edit: req.query.edit === '1' });
+}
+function fapiaoPagePost(req, res) {
   const token = String(req.params.token || '');
   const order = fapiaoLink.loadByToken(tdb(), token);
   const view = fapiaoLink.publicView(order);
-  res.set('Cache-Control', 'no-store');
-  if (view.kind !== 'open' || !order) {
-    const status = view.kind === 'missing' ? 404 : 200;
-    return res.status(status).type('html').send(fapiaoLink.pageHtml(view, {}));
-  }
+  if (view.kind !== 'open' || !order) return sendFapiaoPage(req, res, view, {});
   const result = fapiaoLink.applyDetails(tdb(), order.id, req.body || {});
   if (!result.ok) {
     if (result.error === 'not_open') {
-      const again = fapiaoLink.publicView(fapiaoLink.loadByToken(tdb(), token));
-      const status = again.kind === 'missing' ? 404 : 200;
-      return res.status(status).type('html').send(fapiaoLink.pageHtml(again, {}));
+      return sendFapiaoPage(req, res, fapiaoLink.publicView(fapiaoLink.loadByToken(tdb(), token)), {});
     }
     return res.status(400).type('html').send(fapiaoLink.pageHtml(view, { error: result.error, draft: req.body }));
   }
   maybeAutoIssueInvoice(order.id).catch((e) => console.warn('[fapiao-link]', e.message));
-  res.redirect(303, '/fapiao/' + token + '?saved=1');
-});
+  res.redirect(303, fapiaoPagePrefix(req) + token + '?saved=1');
+}
+router.get('/s/fapiao/:token', fapiaoPageGet);
+router.post('/s/fapiao/:token', fapiaoPagePost);
+router.get('/fapiao/:token', fapiaoPageGet);
+router.post('/fapiao/:token', fapiaoPagePost);
 
 // ── Fapiao issuance (Phase 3a) ──────────────────────────────────────────────
 // The fapiao is issued at the accounting company; this is the system of record.

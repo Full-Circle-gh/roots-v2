@@ -148,27 +148,27 @@ const link = require('../lib/fapiao-link');
   ok(opened.status === 200 && opened.json.data && opened.json.data.qr_png,
      'a till sale returns a picture of the code', opened.status);
   const url = opened.json.data && opened.json.data.url;
-  ok(/^https:\/\/shop\.example\.test\/fapiao\/[a-f0-9]{36}$/.test(url || ''),
-     'the address is this shop\'s own domain plus one token', url);
+  ok(/^https:\/\/shop\.example\.test\/s\/fapiao\/[a-f0-9]{36}$/.test(url || ''),
+     'the address is under /s/, which is the path the filed domain forwards', url);
   const again = await send('POST', '/api/retail-admin/orders/1/fapiao-link', {});
   ok(again.json.data && again.json.data.url === url,
      'a second tap shows the same code, so a scan already in progress still lands');
 
   console.log('\n3 · the customer types, and it lands on that order');
   const token = url.split('/').pop();
-  const page = await send('GET', '/fapiao/' + token);
+  const page = await send('GET', '/s/fapiao/' + token);
   ok(page.status === 200 && page.text.includes('TC900001') && page.text.includes('¥48.00'),
      'the page names this order and what was paid', page.status);
-  const bad = await send('POST', '/fapiao/' + token,
+  const bad = await send('POST', '/s/fapiao/' + token,
     'invoice_type=company&invoice_title=&invoice_email=nope',
     { 'Content-Type': 'application/x-www-form-urlencoded' });
   ok(bad.status === 400 && bad.text.includes('请填写发票抬头'),
      'an empty title is refused in the words the mini app already uses');
-  const saved = await send('POST', '/fapiao/' + token,
+  const saved = await send('POST', '/s/fapiao/' + token,
     'invoice_type=company&invoice_title=' + encodeURIComponent('越秀咖啡有限公司')
       + '&invoice_tax_id=91440101MA5EXAMPLE&invoice_email=ap@example.com',
     { 'Content-Type': 'application/x-www-form-urlencoded' });
-  ok(saved.status === 303 && saved.location === '/fapiao/' + token + '?saved=1',
+  ok(saved.status === 303 && saved.location === '/s/fapiao/' + token + '?saved=1',
      'a complete form saves and comes back to the same order', saved.location);
   const row = handle.prepare('SELECT needs_invoice, invoice_type, invoice_title, invoice_tax_id, invoice_email FROM retail_orders WHERE id = 1').get();
   ok(row.needs_invoice === 1 && row.invoice_type === 'company'
@@ -183,8 +183,8 @@ const link = require('../lib/fapiao-link');
      'the till can see that the details arrived', seen.json);
 
   console.log('\n4 · a token is not a way to reach some other order');
-  const ghost = await send('GET', '/fapiao/' + 'a'.repeat(36));
-  ok(ghost.status === 404 && ghost.text.includes('此链接没有可开的订单') && !ghost.text.includes('TC900'),
+  const ghost = await send('GET', '/s/fapiao/' + 'a'.repeat(36));
+  ok(ghost.status === 200 && ghost.text.includes('此链接没有可开的订单') && !ghost.text.includes('TC900'),
      'an unknown token says the link is not an open order, and names nobody');
 
   console.log('\n5 · the button is a till sale, on each surface that opens one');
