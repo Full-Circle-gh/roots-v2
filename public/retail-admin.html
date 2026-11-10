@@ -11609,6 +11609,31 @@
             </div>
           </div>
 
+          <!-- §527. Invoice requests go to their own group, not the order group. -->
+          <div class="group-card" id="notif-invoice-card">
+            <div class="group-card-head">
+              <div class="gch-row"><h3>Invoice request · 开票申请</h3><button type="button" class="help-q" aria-expanded="false">?</button></div>
+              <div class="muted card-lead"><span data-lang-block="en">When a customer asks for a 发票, the title, tax ID and email go to this group.</span><span data-lang-block="cn">顾客申请发票时,把抬头、税号和邮箱发到这个群。</span></div>
+              <div class="card-help" hidden><p><span data-lang-block="en">Use a different group from the new-order alerts. Only qyapi.weixin.qq.com URLs are accepted. Leave blank to turn it off. A request made at checkout is sent when the order is paid.</span><span data-lang-block="cn">请使用与新订单提醒不同的群。仅接受 qyapi.weixin.qq.com 地址。留空则关闭。结账时的申请在订单付款后发送。</span></p></div>
+            </div>
+
+            <div class="illus-row">
+              <div class="ctrl">
+                <div class="field" style="margin: 0;">
+                  <label for="cfg-notifications-wecom_invoice_webhook" class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
+                  <input type="text" id="cfg-notifications-wecom_invoice_webhook"
+                         placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
+                         style="width: 100%; font-family: monospace;">
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="testWecomInvoice()">Send a test · 发送测试</button>
+                  <span id="wecom-invoice-test-status" class="muted" style="font-size: 11px;"></span>
+                </div>
+                <div data-as-foot="notifications.invoice_group"></div>
+              </div>
+            </div>
+          </div>
+
           <!-- §432. The evening to-make message: the next morning's kitchen list,
                posted to its OWN WeCom group (not the new-order one above). Saved
                by its own button through its own endpoint — the webhook is under

@@ -64,6 +64,7 @@ const CASES = [
   ['/printer/test', SETTINGS, { store_id: 999999 }, 'shop', 'orders', 'the printer card, Settings → Operations'],
   ['/integrations/aliyun_sms/test', SETTINGS, { phone: '13800000000' }, 'push', 'orders', 'SMS, Settings → Push'],
   ['/wecom/test', SETTINGS, { webhook: '' }, 'push', 'orders', 'the WeCom webhook, Settings → Push'],
+  ['/wecom/invoice-test', SETTINGS, { webhook: '' }, 'push', 'orders', 'the invoice-group webhook, Settings → Push'],
   ['/system-alerts/test', SETTINGS, { webhook: '' }, 'push', 'orders', 'system alerts, Settings → Push'],
   ['/integrations/kd100/test', DELIVERY, null, 'delivery', 'push', 'kd100, the Delivery panel'],
   ['/integrations/jd/test', DELIVERY, null, 'shipping', 'push', 'JD, the Delivery panel'],
@@ -116,6 +117,7 @@ const CASES = [
       return { at, sub: (html.slice(p, p + 60).match(/id="(sub-[a-z]+)"/) || [])[1], dlv: v > p ? (html.slice(v, v + 80).match(/data-dlv="([a-z]+)"/) || [])[1] : null };
     };
     is(panelOf('onclick="testWecomWebhook()"').sub, 'sub-push', 'the WeCom test sits in Settings → Notifications');
+    is(panelOf('onclick="testWecomInvoice()"').sub, 'sub-push', 'the invoice-group test sits in Settings → Notifications');
     is(panelOf('onclick="_testAliyunSms()"').sub, 'sub-push', 'the SMS test sits in Settings → Notifications');
     is(panelOf('onclick="_testSystemAlert()"').sub, 'sub-push', 'the system-alert test sits in Settings → Notifications');
     is(panelOf('onclick="_testKd100()"').sub, 'sub-delivery', 'the kd100 test sits on the Delivery panel');
@@ -143,6 +145,7 @@ const CASES = [
     for (const [cmd, route, p, what] of [
       ['x7PrnTest', 'printers', '/printer/test', 'test print'],
       ['x7WecomTest', 'pushcfg', '/wecom/test', 'WeCom test'],
+      ['x7InvoiceTest', 'pushcfg', '/wecom/invoice-test', 'invoice-group test'],
       ['x7SmsTest', 'pushcfg', '/integrations/aliyun_sms/test', 'SMS test'],
       ['x7AlertTest', 'pushcfg', '/system-alerts/test', 'system-alert test'],
       ['x7SvcTest', 'kd100cfg', '/integrations/kd100/test', 'kd100 test'],
@@ -157,9 +160,9 @@ const CASES = [
       ok(Array.isArray(keys) && keys.every((k) => (Array.isArray(need) ? need : [need]).includes(k)),
         `…and every key that opens '${route}' (${(keys || []).join(' | ')}) is admitted by the server`);
     }
-    ok(/apiWrite\('\/printer\/test'/.test(M) && /apiWrite\('\/wecom\/test'/.test(M) && /apiWrite\('\/integrations\/aliyun_sms\/test'/.test(M)
+    ok(/apiWrite\('\/printer\/test'/.test(M) && /apiWrite\('\/wecom\/test'/.test(M) && /apiWrite\('\/wecom\/invoice-test'/.test(M) && /apiWrite\('\/integrations\/aliyun_sms\/test'/.test(M)
       && /apiWrite\('\/system-alerts\/test'/.test(M) && /apiWrite\('\/integrations\/'\+svc\+'\/test'/.test(M),
-      'the phone sends all six (kd100 and JD through one command)');
+      'the phone sends all seven (kd100 and JD through one command)');
   } finally {
     server.close();
   }

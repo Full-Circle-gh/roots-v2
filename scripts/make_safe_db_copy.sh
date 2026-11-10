@@ -78,11 +78,13 @@ sqlite3 "$DEST" <<'SQL'
 PRAGMA foreign_keys=OFF;
 BEGIN;
 
--- Both WeCom webhooks. The order group is not a lesser target than the alert
+-- The WeCom webhooks. The order group is not a lesser target than the alert
 -- group: a harness that walks an order flow pages the people who pack the food.
+-- The invoice group is the same kind of channel, for the people who issue 发票.
 DELETE FROM storefront_config WHERE key IN (
   'system_alerts.wecom_webhook',
   'notifications.wecom_order_webhook',
+  'notifications.wecom_invoice_webhook',
   'integrations.aliyun_sms.ak_secret',
   'integrations.feie.ukey',
   'integrations.jd.access_token',
@@ -123,6 +125,7 @@ LEFT=$(sqlite3 "$DEST" "
   SELECT COALESCE(SUM(n),0) FROM (
     SELECT COUNT(*) n FROM storefront_config WHERE key IN (
       'system_alerts.wecom_webhook','notifications.wecom_order_webhook',
+      'notifications.wecom_invoice_webhook',
       'integrations.aliyun_sms.ak_secret','integrations.feie.ukey',
       'integrations.jd.access_token','integrations.jd.app_key','integrations.jd.app_secret',
       'integrations.kd100.key','integrations.kd100.secret','integrations.kd100.callback')

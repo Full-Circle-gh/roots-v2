@@ -1802,6 +1802,7 @@ async function loadConfig() {
     $('#cfg-shop-lockLayout').checked       = !!c.shop?.lockLayout;
     $('#cfg-notifications-order_status_template_id').value = c.notifications?.order_status_template_id || '';
     $('#cfg-notifications-wecom_order_webhook').value = c.notifications?.wecom_order_webhook || '';
+    $('#cfg-notifications-wecom_invoice_webhook').value = c.notifications?.wecom_invoice_webhook || '';
     $('#cfg-system_alerts-enabled').checked = !!c.system_alerts?.enabled;
     $('#cfg-system_alerts-wecom_webhook').value = c.system_alerts?.wecom_webhook || '';
     loadWecomApp();
@@ -1904,6 +1905,22 @@ async function saveWecomApp() {
 // Send a test alert. Server prefers the saved app; if no app is configured it
 // falls back to the webhook URL currently in the box (so it can be tested
 // before the main Save).
+// The invoice group's own test. The button above prefers the WeCom app, which
+// is the new-order channel, so it cannot prove this group.
+async function testWecomInvoice() {
+  const status = $('#wecom-invoice-test-status');
+  const url = $('#cfg-notifications-wecom_invoice_webhook').value.trim();
+  status.textContent = cuT('Sending…', '发送中…');
+  try {
+    await api('/api/retail-admin/wecom/invoice-test', { method: 'POST', body: { webhook: url } });
+    status.textContent = cuT('Sent — check the group', '已发送,请查看该群');
+  } catch (e) {
+    status.textContent = (e.code === 'no_valid_webhook'
+      ? cuT('Only qyapi.weixin.qq.com URLs are accepted', '仅接受 qyapi.weixin.qq.com 地址')
+      : (e.message || 'failed'));
+  }
+}
+
 async function testWecomWebhook() {
   const status = $('#wecom-test-status');
   const url = $('#cfg-notifications-wecom_order_webhook').value.trim();
@@ -2096,6 +2113,12 @@ const NOTIF_WEBHOOK_CARD = autosaveCard({
   apply: (b) => { $('#cfg-notifications-wecom_order_webhook').value = b['notifications.wecom_order_webhook'] || ''; },
   hold: (b) => _wecomHookHold(b['notifications.wecom_order_webhook']),
 });
+const NOTIF_INVOICE_CARD = autosaveCard({
+  card: 'notifications.invoice_group', root: '#notif-invoice-card',
+  read: () => ({ 'notifications.wecom_invoice_webhook': $('#cfg-notifications-wecom_invoice_webhook').value.trim() }),
+  apply: (b) => { $('#cfg-notifications-wecom_invoice_webhook').value = b['notifications.wecom_invoice_webhook'] || ''; },
+  hold: (b) => _wecomHookHold(b['notifications.wecom_invoice_webhook']),
+});
 const SYSALERT_CARD = autosaveCard({
   card: 'system_alerts', root: '#sysalert-card',
   read: () => ({
@@ -2287,7 +2310,7 @@ const LEGAL_CARD = autosaveCard({
 });
 // The cards loadConfig fills. A function, so it is read when called — by then
 // every card below has been made.
-function CFG_CARDS() { return [LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD, SHOP_CARD, CS_CARD, PICKUP_CARD, NOTIF_TEMPLATE_CARD, NOTIF_WEBHOOK_CARD, SYSALERT_CARD]; }
+function CFG_CARDS() { return [LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD, SHOP_CARD, CS_CARD, PICKUP_CARD, NOTIF_TEMPLATE_CARD, NOTIF_WEBHOOK_CARD, NOTIF_INVOICE_CARD, SYSALERT_CARD]; }
 const SOCIAL_CARD = autosaveCard({
   card: 'social_proof', root: '#tab-social',
   read: () => ({ 'social_proof': buildSocialProof() }),

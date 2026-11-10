@@ -35836,6 +35836,7 @@ function x7LoadCfg(){
     state.cfg=c||{};
     const n=(state.cfg.notifications)||{}, a=(state.cfg.system_alerts)||{}, d=s.d;
     d['cfg.template']=n.order_status_template_id||''; d['cfg.webhook']=n.wecom_order_webhook||'';
+    d['cfg.invoice_webhook']=n.wecom_invoice_webhook||'';
     d['cfg.alerts_on']=!!a.enabled; d['cfg.alerts_webhook']=a.wecom_webhook||'';
     x7CfgAutoStart();
     render();
@@ -35855,6 +35856,10 @@ const X7_CFG_CARDS={
     read:d=>({'notifications.wecom_order_webhook':String(d['cfg.webhook']||'').trim()}),
     apply:(d,b)=>{ d['cfg.webhook']=b['notifications.wecom_order_webhook']||''; },
     hold:b=>x7HookHold(b['notifications.wecom_order_webhook'])},
+  invoice:{card:'notifications.invoice_group', keys:['cfg.invoice_webhook'],
+    read:d=>({'notifications.wecom_invoice_webhook':String(d['cfg.invoice_webhook']||'').trim()}),
+    apply:(d,b)=>{ d['cfg.invoice_webhook']=b['notifications.wecom_invoice_webhook']||''; },
+    hold:b=>x7HookHold(b['notifications.wecom_invoice_webhook'])},
   alerts:{card:'system_alerts', keys:['cfg.alerts_on','cfg.alerts_webhook'],
     read:d=>({'system_alerts.enabled':!!d['cfg.alerts_on'],'system_alerts.wecom_webhook':String(d['cfg.alerts_webhook']||'').trim()}),
     apply:(d,b)=>{ d['cfg.alerts_on']=!!b['system_alerts.enabled']; d['cfg.alerts_webhook']=b['system_alerts.wecom_webhook']||''; },
@@ -35977,6 +35982,21 @@ reg('x7SmsTest', ()=>{
     render();
   }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.sms=e&&e.x7save?x7Fail(e):x6Words(e,'Failed','失败'); render(); });
 });
+reg('x7InvoiceTest', ()=>{
+  const s=x7(); if(s.busy||!canRoute('pushcfg')) return;
+  x7Begin('invoice');
+  const webhook=x7d('cfg.invoice_webhook').trim();
+  if(!webhook){ s.err.invoice=E('Paste a webhook first','请先填入 Webhook'); render(); return; }
+  s.busy='invoice'; render();
+  apiWrite('/wecom/invoice-test',{webhook},'POST').then(j=>{
+    s.busy=null;
+    if(j&&j.success){ showToast(T('Sent — check the group','已发送,请查看该群')); render(); return; }
+    const c=j&&j.error;
+    s.err.invoice=c==='no_valid_webhook'?E('Only qyapi.weixin.qq.com URLs are accepted','仅接受 qyapi.weixin.qq.com 地址')
+      :E('Failed: '+(c||'failed'),'失败: '+(c||'failed'));
+    render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.invoice=x6Words(e,'Failed','失败'); render(); });
+});
 reg('x7AlertTest', ()=>{
   const s=x7(); if(s.busy||!canRoute('pushcfg')) return;
   x7Begin('alert');
@@ -36030,6 +36050,13 @@ function screenPushCfg(){
         '仅当你使用国内企业微信且有内部群时。填入群机器人的 Webhook,卡片会发到群里。若用上面的 App 方式,请留空。'))+
       x7In('cfg.webhook',T('Group-bot webhook URL','群机器人 Webhook 地址'),{mono:true,ph:'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…'})+
       x7CfgFoot('webhook'))}
+    ${x7Card(x7Head(T('Invoice request','开票申请'),''),
+      x7Help(T('When a customer asks for a 发票, the title, tax ID and email go to this group. Use a different group from the new-order alerts. Only qyapi.weixin.qq.com URLs are accepted. Leave blank to turn it off. A request made at checkout is sent when the order is paid.',
+        '顾客申请发票时,把抬头、税号和邮箱发到这个群。请使用与新订单提醒不同的群。仅接受 qyapi.weixin.qq.com 地址。留空则关闭。结账时的申请在订单付款后发送。'))+
+      x7In('cfg.invoice_webhook',T('Group-bot webhook URL','群机器人 Webhook 地址'),{mono:true,ph:'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…'})+
+      x7Note('invoice')+
+      btns(x7Btn('x7InvoiceTest',T('Send a test','发送测试'),'invoice',{busyLabel:T('Sending…','发送中…')}))+
+      x7CfgFoot('invoice'))}
     ${x7Card(x7Head(T('System alerts','系统告警'),''),
       x7Help(T('Sends operational alerts — a channel (Meituan/闪购) disconnecting, the proxy going down, or the storefront not responding — to a dedicated WeCom group. Keep this separate from your order group so ops noise doesn\'t bury orders.',
         '把运营告警(渠道掉线、代理中断、店铺无响应等)发到一个专用企业微信群,与订单群分开,避免淹没订单。'))+

@@ -60,6 +60,7 @@ const CODE = slice(OPS, '// ── Manual-Alipay (静态收款码) fallback card
 const IDS = ['alipay-manual-enabled', 'alipay-manual-account', 'alipay-manual-preview', 'alipay-manual-ocr', 'alipay-manual-autoflip',
   'alipay-manual-payee', 'alipay-manual-window', 'alipay-manual-proof-age', 'alipay-manual-key', 'alipay-manual-status', 'alipay-manual-chip',
   'alipay-ocr-fields', 'cfg-status', 'cfg-notifications-order_status_template_id', 'cfg-notifications-wecom_order_webhook',
+  'cfg-notifications-wecom_invoice_webhook',
   'cfg-system_alerts-enabled', 'cfg-system_alerts-wecom_webhook'];
 const GOOD = { success: true, data: { enabled: true, account: '收款 Roots', qr: 'data:image/png;base64,AA', ocrEnabled: true, autoFlip: true,
   payeeMatch: 'Roots', timeWindowMin: 30, proofAgeMin: 20, hasKey: true, keyMasked: 'sk-…9', serverKeyAvailable: false } };

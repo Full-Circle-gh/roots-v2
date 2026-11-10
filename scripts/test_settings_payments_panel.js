@@ -96,13 +96,13 @@ section('4 · money keeps its button; the rest of Push saves itself');
   yes(!/Save settings/.test(pay) && !/保存设置/.test(pay), 'and neither points at a bar that is not there');
   yes(!/class="save-bar"/.test(CFG) && !/saveConfig/.test(CFG), 'the shared Save bar is gone from Settings');
   yes(!/async function saveConfig\(/.test(MKT), 'and so is the function it drove');
-  for (const [card, foot] of [['notif-template-card', 'notifications.order_status'], ['notif-webhook-card', 'notifications.group_bot'], ['sysalert-card', 'system_alerts']]) {
+  for (const [card, foot] of [['notif-template-card', 'notifications.order_status'], ['notif-webhook-card', 'notifications.group_bot'], ['notif-invoice-card', 'notifications.invoice_group'], ['sysalert-card', 'system_alerts']]) {
     is(panelOf('id="' + card + '"'), 'sub-push', card + ' is a Push card');
     yes(new RegExp('data-as-foot="' + foot.replace('.', '\\.') + '"').test(CFG), '…with a foot for its saved / Undo / history line');
     yes(new RegExp("card: '" + foot.replace('.', '\\.') + "', root: '#" + card + "'").test(MKT), '…and an autosave card whose root is the card, so its inputs are heard');
   }
-  yes(/NOTIF_TEMPLATE_CARD, NOTIF_WEBHOOK_CARD, SYSALERT_CARD\]/.test(MKT.slice(MKT.indexOf('function CFG_CARDS()'), MKT.indexOf('function CFG_CARDS()') + 300)),
-    'all three start once loadConfig has filled their fields (§279: nothing is sent before start)');
+  yes(/NOTIF_TEMPLATE_CARD, NOTIF_WEBHOOK_CARD, NOTIF_INVOICE_CARD, SYSALERT_CARD\]/.test(MKT.slice(MKT.indexOf('function CFG_CARDS()'), MKT.indexOf('function CFG_CARDS()') + 400)),
+    'all four start once loadConfig has filled their fields (§279: nothing is sent before start)');
   yes(/qyapi\.weixin\.qq\.com/.test(MKT.slice(MKT.indexOf('function _wecomHookHold'), MKT.indexOf('const NOTIF_TEMPLATE_CARD'))),
     'a webhook on any other host is held with a sentence, not sent for the server to refuse');
   yes(!/Save settings/.test(CFG.slice(CFG.indexOf('id="sub-push"'), CFG.indexOf('id="sub-printing"'))),
