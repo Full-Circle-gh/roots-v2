@@ -164,6 +164,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['tax.rateMicro', ['settings:payments'], 'desktop Settings → tax card'],
       ['system_alerts.enabled', settings, 'desktop Settings → Notifications save'],
       ['notifications.wecom_order_webhook', settings, 'desktop Settings → Notifications save'],
+      ['notifications.wecom_invoice_webhook', settings, 'desktop Settings → Notifications, the invoice group'],
       ['inventory.lowStockThreshold', settings, 'desktop Settings → Operations'],
       ['product_page.sections', settings, 'desktop Settings → Operations'],
       ['features.waste', settings, 'desktop Settings → Operations'],
@@ -263,7 +264,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     rows.push(['customer_service.fab_bottom', phoneSettings, 'phone Settings → Customer service (§325 X5)']);
     // §325 X7 — the phone's Push notifications screen saves the desktop
     // Notifications panel's four keys under one Save, as saveConfig does.
-    for (const k of ['notifications.order_status_template_id', 'notifications.wecom_order_webhook', 'system_alerts.enabled', 'system_alerts.wecom_webhook']) {
+    for (const k of ['notifications.order_status_template_id', 'notifications.wecom_order_webhook', 'notifications.wecom_invoice_webhook', 'system_alerts.enabled', 'system_alerts.wecom_webhook']) {
       rows.push([k, list(route('pushcfg')), 'phone Settings → Push notifications (§325 X7)']);
     }
     // §325 X10 — the phone's Payments screen writes the display currency and
@@ -462,10 +463,10 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       is(x7Sites.length, 1, 'the Notifications cards write through one site');
       const x7Block = M.slice(M.indexOf('const X7_CFG_CARDS={'), M.indexOf('\n};', M.indexOf('const X7_CFG_CARDS={')));
       is([...new Set((x7Block.match(/(?<!card:)'(notifications\.[a-z_]+|system_alerts\.[a-z_]+)'/g) || []).map((k) => k.slice(1, -1)))].sort(),
-        ['notifications.order_status_template_id', 'notifications.wecom_order_webhook', 'system_alerts.enabled', 'system_alerts.wecom_webhook'],
-        'the phone\'s three cards write the desktop\'s four keys, under the desktop\'s history names (§494)');
-      ok(/card:'notifications\.order_status'/.test(x7Block) && /card:'notifications\.group_bot'/.test(x7Block) && /card:'system_alerts'/.test(x7Block),
-        '…notifications.order_status, notifications.group_bot, system_alerts');
+        ['notifications.order_status_template_id', 'notifications.wecom_invoice_webhook', 'notifications.wecom_order_webhook', 'system_alerts.enabled', 'system_alerts.wecom_webhook'],
+        'the phone\'s four cards write the desktop\'s five keys, under the desktop\'s history names (§494, §527)');
+      ok(/card:'notifications\.order_status'/.test(x7Block) && /card:'notifications\.group_bot'/.test(x7Block) && /card:'notifications\.invoice_group'/.test(x7Block) && /card:'system_alerts'/.test(x7Block),
+        '…notifications.order_status, notifications.group_bot, notifications.invoice_group, system_alerts');
       const famSites = sites.filter((i) => !dlvSites.includes(i) && i !== prSite && !x7Sites.includes(i));
       // §325 X2/X3: the phone's Operations screen adds four families —
       // inventory.lowStockThreshold, inventory.lowStockDigest, support.hidden

@@ -237,11 +237,11 @@ const run = (src) => vm.runInContext(src, sandbox);
     yes(!/_saveBar/.test(CORE2) && !/class="save-bar"/.test(H.slice(H.indexOf('<section id="tab-config">'), H.indexOf('</section>', H.indexOf('<section id="tab-config">')))),
       'and so is the bar — no panel shows one');
     yes(/onclick="_saveAlipayManual\(this\)"/.test(H), 'the manual-Alipay card has its own Save, pinned to the card');
-    for (const c of ['shop.display', 'customer_service', 'pickup', 'notifications.order_status', 'notifications.group_bot', 'system_alerts']) {
+    for (const c of ['shop.display', 'customer_service', 'pickup', 'notifications.order_status', 'notifications.group_bot', 'notifications.invoice_group', 'system_alerts']) {
       yes(H.includes('data-as-foot="' + c + '"') && MK.includes("card: '" + c + "'"), c + ' saves itself');
     }
-    yes(/function CFG_CARDS\(\) \{ return \[LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD, SHOP_CARD, CS_CARD, PICKUP_CARD, NOTIF_TEMPLATE_CARD, NOTIF_WEBHOOK_CARD, SYSALERT_CARD\]; \}/.test(MK),
-      'and all six start only when loadConfig has filled them');
+    yes(/function CFG_CARDS\(\) \{ return \[LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD, SHOP_CARD, CS_CARD, PICKUP_CARD, NOTIF_TEMPLATE_CARD, NOTIF_WEBHOOK_CARD, NOTIF_INVOICE_CARD, SYSALERT_CARD\]; \}/.test(MK),
+      'and all seven start only when loadConfig has filled them');
     const df = DV.slice(DV.indexOf('async function saveDeliveryFees() {'), DV.indexOf('\n}\n', DV.indexOf('async function saveDeliveryFees() {')));
     yes(!/pickup\.window|pickup\.leadMinutes/.test(df) && /fees\.pickupPackingFee/.test(df), 'the fees Save sends money only — the pickup hours left it');
     yes(/CS_CARD\.touch\(\)/.test(MK), 'a customer-service QR upload or clear counts as an edit');

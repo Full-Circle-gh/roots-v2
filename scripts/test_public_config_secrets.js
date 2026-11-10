@@ -42,12 +42,14 @@ const { ok, eq, section, done } = F.counters();
 const ORDER_KEY = '11111111-aaaa-4bbb-8ccc-000000000001';
 const ALERT_KEY = '22222222-aaaa-4bbb-8ccc-000000000002';
 const GZG_KEY   = '33333333-aaaa-4bbb-8ccc-000000000003';   // stored BARE, the form the gzgrocery reader accepts
+const INV_KEY   = '44444444-aaaa-4bbb-8ccc-000000000004';
 const hook = (k) => `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${k}`;
 
 const put = db.prepare(`INSERT INTO storefront_config (key, value_json) VALUES (?, ?)
                         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`);
 const seed = {
   'notifications.wecom_order_webhook': hook(ORDER_KEY),
+  'notifications.wecom_invoice_webhook': hook(INV_KEY),
   'notifications.order_status_template_id': 'TPL-public-by-design',
   'notifications.categories': { order: true },
   'system_alerts.enabled': true,
@@ -73,7 +75,7 @@ function get(routePath, query = {}) {
   return { status, body };
 }
 
-const SECRETS = [ORDER_KEY, ALERT_KEY, GZG_KEY];
+const SECRETS = [ORDER_KEY, ALERT_KEY, GZG_KEY, INV_KEY];
 function leaks(text) {
   const out = [];
   if (/qyapi\.weixin\.qq\.com/i.test(text)) out.push('a qyapi.weixin.qq.com URL');
@@ -109,6 +111,7 @@ section('3. GET /api/retail-admin/config — the settings screens still load the
 const adm = get('/api/retail-admin/config');
 const a = (adm.body && adm.body.data) || {};
 eq(a.notifications && a.notifications.wecom_order_webhook, hook(ORDER_KEY), 'new-order webhook is in the admin read');
+eq(a.notifications && a.notifications.wecom_invoice_webhook, hook(INV_KEY), 'invoice webhook is in the admin read');
 eq(a.system_alerts && a.system_alerts.wecom_webhook, hook(ALERT_KEY), 'system-alert webhook is in the admin read');
 eq(a.gzgrocery_orders && a.gzgrocery_orders.wecom_webhook, GZG_KEY, 'gzgrocery webhook is in the admin read');
 
@@ -135,7 +138,7 @@ const prefMatch = RETAIL.match(/const PRIVATE_CONFIG_PREFIXES = \[([^\]]*)\]/);
 const PRIVATE = prefMatch ? [...prefMatch[1].matchAll(/'([^']+)'/g)].map(m => m[1]) : [];
 ok(PRIVATE.length > 0, 'PRIVATE_CONFIG_PREFIXES read from the retail source');
 // m.html form-draft field names, not storefront_config keys.
-const NOT_CONFIG_KEYS = new Set(['cfg.webhook', 'cfg.alerts_webhook']);
+const NOT_CONFIG_KEYS = new Set(['cfg.webhook', 'cfg.alerts_webhook', 'cfg.invoice_webhook']);
 const files = [];
 const walk = (rel) => {
   const abs = path.join(ROOT, rel);

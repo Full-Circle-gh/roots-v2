@@ -454,13 +454,14 @@ section('4 · Qingyun riders');
 
 section('5 · Push notifications');
 {
-  const CFG = { notifications: { order_status_template_id: 'TPL', wecom_order_webhook: '' }, system_alerts: { enabled: false, wecom_webhook: '' } };
+  const CFG = { notifications: { order_status_template_id: 'TPL', wecom_order_webhook: '', wecom_invoice_webhook: '' }, system_alerts: { enabled: false, wecom_webhook: '' } };
   it('opens on the stored values and the keys\' state', async () => {
     const h = await open('pushcfg', { cfg: plain(CFG) });
     const t = h.text(h.ctx.SUBS.pushcfg.render());
     // §494 rule 6: the pills read On / Not set up, sentence case, as on the desktop.
     for (const w of ['New-order alert to your phone', 'On', 'SMS when delivered (out-of-Guangzhou orders)', 'Not set up',
-      'Order-status subscribe-message template', 'Alternative: group-bot webhook', 'System alerts', 'Enable system alerts', 'All changes saved']) assert.ok(t.includes(w), w);
+      'Order-status subscribe-message template', 'Alternative: group-bot webhook', 'Invoice request',
+      'title, tax ID and email', 'System alerts', 'Enable system alerts', 'All changes saved']) assert.ok(t.includes(w), w);
     assert.ok(!t.includes('Save settings') && !t.includes('LIVE'), 'no shared Save, no shouting pill');
     assert.strictEqual(h.s.d['cfg.template'], 'TPL');
   });
@@ -468,22 +469,24 @@ section('5 · Push notifications');
   // history cards, so a version written on the phone reads on the desktop.
   it('an edit saves itself: three cards, the desktop\'s keys and history names, nothing else', async () => {
     const h = await open('pushcfg', { cfg: plain(CFG) });
-    assert.ok(h.s.cfgAuto && h.s.cfgAuto.template && h.s.cfgAuto.webhook && h.s.cfgAuto.alerts, 'three engines start once the config is read');
+    assert.ok(h.s.cfgAuto && h.s.cfgAuto.template && h.s.cfgAuto.webhook && h.s.cfgAuto.invoice && h.s.cfgAuto.alerts, 'four engines start once the config is read');
     assert.strictEqual(h.calls.writes.length, 0, 'nothing is sent before an edit');
     h.CMD.x7In('cfg.template', ' TPL2 '); h.CMD.x7In('cfg.webhook', ' https://qyapi.weixin.qq.com/x ');
+    h.CMD.x7In('cfg.invoice_webhook', ' https://qyapi.weixin.qq.com/inv ');
     h.CMD.x7Flip('cfg.alerts_on'); h.CMD.x7In('cfg.alerts_webhook', 'https://qyapi.weixin.qq.com/y');
     assert.strictEqual(h.s.cfgAuto.template.state, 'pending');
     // The engines' writes settle only when the server answers, so the flush is
     // awaited after the three answers, not before.
     const flushed = fn(h, 'x7CfgFlush')();
     await tick();
-    assert.strictEqual(h.calls.writes.length, 3, 'one write per card');
+    assert.strictEqual(h.calls.writes.length, 4, 'one write per card');
     const bodies = {}; const keys = [];
-    for (let i = 0; i < 3; i++) { const w = W(h, i); assert.strictEqual(w.method, 'PUT'); bodies[w.p] = w.body; keys.push(...Object.keys(w.body)); w.res({ success: true }); }
+    for (let i = 0; i < 4; i++) { const w = W(h, i); assert.strictEqual(w.method, 'PUT'); bodies[w.p] = w.body; keys.push(...Object.keys(w.body)); w.res({ success: true }); }
     await flushed; await tick();
     assert.deepStrictEqual(keys, DESK_CFG_KEYS, 'the desktop\'s keys, in the desktop\'s order');
     assert.deepStrictEqual(bodies['/config?history=notifications.order_status'], { 'notifications.order_status_template_id': 'TPL2' });
     assert.deepStrictEqual(bodies['/config?history=notifications.group_bot'], { 'notifications.wecom_order_webhook': 'https://qyapi.weixin.qq.com/x' });
+    assert.deepStrictEqual(bodies['/config?history=notifications.invoice_group'], { 'notifications.wecom_invoice_webhook': 'https://qyapi.weixin.qq.com/inv' });
     assert.deepStrictEqual(bodies['/config?history=system_alerts'], { 'system_alerts.enabled': true, 'system_alerts.wecom_webhook': 'https://qyapi.weixin.qq.com/y' });
     assert.strictEqual(h.s.cfgAuto.template.state, 'saved');
     assert.deepStrictEqual(h.calls.toasts, [], 'saving itself is not announced');

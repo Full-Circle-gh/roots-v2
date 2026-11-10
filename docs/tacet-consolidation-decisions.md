@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.633
+# Tacet shared-core consolidation — decisions record, v4.634
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,6 +23,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 2026-11-10 · v4.633 — **§526 AMENDED · THE CODE OPENS UNDER /s/ — ASH.** A scan of the till's fapiao code showed nginx's 404. The filed domain forwards `/s/` and answers 404 for `/fapiao` before the app sees it. The code's address is `/s/fapiao/`. No new words. No schema, no change to `.gitignore` or CI. See §526.
+
+2026-11-10 · v4.634 — **§527 · AN INVOICE REQUEST GOES TO ITS OWN WECOM GROUP — ASH.** Every invoice request's details go to a WeCom group bot, and that group is a new one, not the new-order group. The address is `notifications.wecom_invoice_webhook`. A checkout request is sent when the order is paid. A later request, including the till's fapiao code, is sent when it is saved. No schema change. No change to `.gitignore` or CI. See §527.
 
 2026-11-09 · v4.632 — **§526 · A TILL SALE HAS A CODE THE CUSTOMER SCANS TO TYPE THE FAPIAO — ASH.** People at the counter ask for a fapiao after the sale, and the order has no title. The code is that order only. A QR-menu sale does not get one. The page writes the same columns checkout already stores. The tax document is still issued by hand. One new column, `fapiao_token`. No change to `.gitignore` or CI. See §526.
 
@@ -34113,3 +34115,16 @@ No new words. No schema change. No change to `.gitignore` or CI.
 One column, `retail_orders.fapiao_token`. No change to `.gitignore` or CI.
 
 **2026-11-10 · AMENDED.** Ash scanned the code and got nginx's 404. The filed customer domain forwards `/s/` and nothing else that would carry this page (§496 rule 7), so `/fapiao` never reaches the app. The address in the code is `/s/fapiao/` plus the same token. A scan that is not a live till sale still says the link is not an open order, and it answers 200, because a 404 status is what WeChat replaces with its own page.
+
+## §527 — AN INVOICE REQUEST GOES TO ITS OWN WECOM GROUP
+
+**2026-11-10 · DECIDED BY ASH.** Every time there is an invoice request, the details for the invoice go to a WeCom group, through a group bot. Ash: a new group, specially for invoices.
+
+**The rule.**
+
+1. **The group is its own address.** `notifications.wecom_invoice_webhook`, on Settings → Push, desktop and phone. Blank means nothing is sent. Only a `qyapi.weixin.qq.com` address is used. It is not the new-order webhook, and it is not the WeCom app.
+2. **The card is what the office types into the tax site.** Order number, amount, personal or company, the title, the tax ID when it is a company, and the email. A second save, before the fapiao is issued, says the details changed and carries the new ones.
+3. **A checkout request is sent when the order is paid.** A 发票 is issued against payment, so an unpaid checkout does not page the group. A request made later on an order that is already paid — the order page, or the till's fapiao code — is sent when it is saved. A Meituan poll is not a request: the group hears once when the platform first asks, and again only when a title or tax ID arrives that the first card did not carry.
+4. **The address is a staff secret.** It is left out of the public config, and a safe database copy cuts it, the same as the new-order webhook.
+
+No schema change. No change to `.gitignore` or CI.

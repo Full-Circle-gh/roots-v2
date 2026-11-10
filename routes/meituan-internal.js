@@ -802,6 +802,13 @@ router.post('/update-order-status', (req, res) => {
       const rider = ch.rider    || {};
       const cust  = ch.customer || {};
       const inv   = ch.invoice  || {};
+      // Read before the write. A later poll of the same order must not page
+      // the invoice group again; invoiceNotifyReason sends only on the change.
+      const invBefore = db.prepare(
+        `SELECT needs_invoice, invoice_title, invoice_tax_id, invoice_email,
+                invoice_status, status
+           FROM retail_orders WHERE id = ?`
+      ).get(imp.retail_order_id);
       db.prepare(`
         UPDATE retail_orders
            SET channel_rider_name        = COALESCE(?, channel_rider_name),
@@ -838,6 +845,16 @@ router.post('/update-order-status', (req, res) => {
         ftext(cust.name), ftext(inv.title), ftext(inv.taxId), inv.wanted ? 1 : 0,
         imp.retail_order_id
       );
+      try {
+        const wecomInv = require('../lib/wecom-invoice');
+        const invAfter = db.prepare(
+          `SELECT needs_invoice, invoice_title, invoice_tax_id, invoice_email,
+                  invoice_status, status
+             FROM retail_orders WHERE id = ?`
+        ).get(imp.retail_order_id);
+        const reason = wecomInv.invoiceNotifyReason(invBefore, invAfter);
+        if (reason) wecomInv.notifyOrder(db, imp.retail_order_id, { updated: reason === 'updated' });
+      } catch (e) { console.warn('[meituan invoice wecom]', e.message); }
       // Per-line price + listing id for an order mirrored before the structured
       // rows were read. Matched by name against the lines already stored, and
       // only ever fills a zero — a line somebody has since edited is left alone.

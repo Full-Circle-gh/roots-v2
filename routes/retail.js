@@ -4773,6 +4773,13 @@ function wecomWebhookUrl() {
   } catch { return null; }
 }
 
+// The invoice group's own bot (§527). Not the order group, and not the WeCom
+// app: a blank address, or any host other than qyapi.weixin.qq.com, sends
+// nothing. Fire-and-forget; notifyOrder never throws.
+function sendWecomInvoiceRequest(orderId, opts) {
+  require('../lib/wecom-invoice').notifyOrder(tdb(), orderId, opts || {});
+}
+
 // POST a markdown message to a WeCom group-bot webhook. Best-effort; resolves to
 // {ok,msg} and never throws so callers can fire-and-forget.
 async function postWecomMarkdown(url, content) {
@@ -5423,6 +5430,11 @@ function markOrderPaid(orderId) {
     // Best-effort; reaches the owner's phone even with the backend closed.
     try { sendWecomOrderAlert(orderId, { awaitingRestock: isWait }); }
     catch (e) { console.warn('[markOrderPaid wecom]', e.message); }
+
+    // A checkout request is told to the invoice group now, when the money is
+    // in. Unpaid requests stay quiet: a 发票 is issued against payment.
+    try { sendWecomInvoiceRequest(orderId); }
+    catch (e) { console.warn('[markOrderPaid wecom invoice]', e.message); }
 
     // Auto-print to the store's Feie cloud printer. Best-effort + fire-and-
     // forget (records the outcome on the order); see autoPrintOrder.
@@ -13325,7 +13337,7 @@ router.get('/api/retail-admin/orders/:id/delivery-track', requireRetailAdmin, (r
 router.post('/api/retail/orders/:id/invoice-request', requireRetailAuth, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = tdb().prepare(
-    'SELECT id, status, invoice_status FROM retail_orders WHERE id = ? AND customer_id = ?'
+    'SELECT id, status, invoice_status, needs_invoice FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(id, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   if (order.status === 'pending_payment' || order.status === 'cancelled') {
@@ -13349,6 +13361,9 @@ router.post('/api/retail/orders/:id/invoice-request', requireRetailAuth, express
   // Dormant unless Nuonuo + fapiao.autoIssue are configured; falls back to the
   // manual office queue otherwise. Fire-and-forget so the request returns fast.
   maybeAutoIssueInvoice(id).catch((e) => console.warn('[invoice-request fapiao]', e.message));
+  // Already paid (guarded above). A first request is a new card; a second
+  // save, including one that only corrects the title, says the details changed.
+  sendWecomInvoiceRequest(id, { updated: !!Number(order.needs_invoice) });
   res.json({ success: true });
 });
 
@@ -25881,6 +25896,7 @@ function fapiaoPagePost(req, res) {
     return res.status(400).type('html').send(fapiaoLink.pageHtml(view, { error: result.error, draft: req.body }));
   }
   maybeAutoIssueInvoice(order.id).catch((e) => console.warn('[fapiao-link]', e.message));
+  sendWecomInvoiceRequest(order.id, { updated: !!Number(order.needs_invoice) });
   res.redirect(303, fapiaoPagePrefix(req) + token + '?saved=1');
 }
 router.get('/s/fapiao/:token', fapiaoPageGet);
@@ -29768,6 +29784,18 @@ router.post('/api/retail-admin/wecom/test', requireRetailAdmin, express.json(), 
   res.json({ success: r.ok, channel: 'webhook', error: r.ok ? undefined : r.msg });
 });
 
+// The invoice group's own test. The new-order test above prefers the WeCom
+// app, which would land in the wrong place. This posts only to the invoice
+// webhook — the address in the box, so it can be tried before Save, else the
+// saved one. Same host allowlist.
+router.post('/api/retail-admin/wecom/invoice-test', requireRetailAdmin, express.json(), async (req, res) => {
+  const winv = require('../lib/wecom-invoice');
+  const url = winv.validWebhook(req.body?.webhook) || winv.readSavedWebhook();
+  if (!url) return res.json({ success: false, error: 'no_valid_webhook' });
+  const r = await winv.postMarkdown(url, winv.testCard());
+  res.json({ success: r.ok, error: r.ok ? undefined : r.msg });
+});
+
 /* §432 — THE EVENING TO-MAKE MESSAGE: its group, its time, and a test.
    Its own endpoint rather than PUT /config, because the webhook lives under
    the private `kitchen.` prefix (PRIVATE_CONFIG_PREFIXES), which loadConfig()
@@ -32266,6 +32294,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // so re-saving a paid order doesn't re-alert.
     if (o.status !== 'paid') {
       try { sendWecomOrderAlert(id); } catch (e) { console.warn('[admin mark-paid wecom]', e.message); }
+      try { sendWecomInvoiceRequest(id); } catch (e) { console.warn('[admin mark-paid wecom invoice]', e.message); }
       try {
         if (_push && _push.sendPushToTenantOperators) {
           const op = tdb().prepare('SELECT order_no, total FROM retail_orders WHERE id = ?').get(id);

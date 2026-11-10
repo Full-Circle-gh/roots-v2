@@ -113,8 +113,8 @@ section('4 · pills and words (§494 rule 6)');
 
 section('5 · the Notifications keys save themselves (§494 rule 3)');
 {
-  yes(/const X7_CFG_CARDS=\{/.test(M) && /card:'notifications\.order_status'/.test(M) && /card:'notifications\.group_bot'/.test(M) && /card:'system_alerts'/.test(M),
-    'three cards, the desktop\'s three history names');
+  yes(/const X7_CFG_CARDS=\{/.test(M) && /card:'notifications\.order_status'/.test(M) && /card:'notifications\.group_bot'/.test(M) && /card:'notifications\.invoice_group'/.test(M) && /card:'system_alerts'/.test(M),
+    'four cards, the desktop\'s four history names');
   yes(!/reg\('x7CfgSave'/.test(M) && !/x7Btn\('x7CfgSave'/.test(M), 'the one shared Save is gone');
   yes(/x7CfgAutoStart\(\);\n    render\(\);/.test(M), 'the engines start once the config is read, never before');
   yes(/reg\('x7In', \(k,v\)=>\{[^\n]*x7CfgTouch\(k\)/.test(M) && /reg\('x7Flip', k=>\{[^\n]*x7CfgTouch\(k\)/.test(M), 'a typed key or a flipped switch touches its card');
