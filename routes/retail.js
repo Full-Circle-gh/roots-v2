@@ -1640,6 +1640,17 @@ function answersRefusal(answers) {
   };
 }
 
+// THE CART IS NOT A COPY OF THE PRODUCT.
+// A line remembers which product she asked for and which answers she gave.
+// Checkout reads the product again. What changed since she added it is settled
+// on that line, and it never takes the rest of the basket down with it:
+//   • no longer for sale — that line is removed, the rest is ordered
+//   • price, name, size, shipping, option prices — today's row is what she
+//     sees and what the order stores. A change here is not a refusal.
+//   • the saved answers no longer fit — the quote still opens and names the
+//     question. Place Order waits until she picks again or removes that line.
+//     The kitchen is not left to guess, and the other lines stay in the cart.
+
 
 // ── Per-product options (customer choices: dressing, spice level, cutlery…) ──
 // Stored in retail_product_options + retail_product_option_choices, keyed by the
@@ -35140,7 +35151,7 @@ function priceCart(items, customerId) {
     const qty = Number(it.qty);
     if (!pid || !(qty > 0)) return { error: 'invalid_item', subtotal: 0, totalQty: 0 };
     const p = tdb().prepare(
-      `SELECT id, sell_price AS price, compare_at_price, weight AS size,
+      `SELECT id, name_en, name_cn, sell_price AS price, compare_at_price, weight AS size,
               flash_price, flash_starts_at, flash_ends_at,
               flash_stock_limit, flash_sold, no_coupon_on_flash, ship_from_supplier
          FROM store_products
@@ -35182,6 +35193,8 @@ function priceCart(items, customerId) {
     // so the client can key-match each line to its cart row.
     lines.push({
       product_id: pid,
+      name_en: p.name_en || null,
+      name_cn: p.name_cn || null,
       choice_ids: (Array.isArray(it.choices) ? it.choices : []).map(Number).filter(Boolean).sort((a, b) => a - b),
       unit_price: Math.round(unit * 100) / 100,
       is_flash: !!eff.is_flash,
@@ -35512,7 +35525,8 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
 
   // §433 — the answer check /orders will refuse on, asked NOW and reported
   // rather than refused: the customer still sees their prices, and the client
-  // names the line that needs a pick before they reach Place Order.
+  // names the line that needs a pick before they reach Place Order. A new
+  // question, or an answer that was deleted, does not fail the quote.
   const quoteAnswers = customerOrderAnswers(items);
   const needsChoice = quoteAnswers.error ? answersRefusal(quoteAnswers) : null;
 

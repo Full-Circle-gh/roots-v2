@@ -30,6 +30,9 @@ const it = (label, fn) => { fn(); pass++; console.log('  ok  ' + label); };
 const P_BREAD = 9741;
 const P_MANGO = 9742;   // unpublished — "not for sale"
 const P_OFF   = 9743;   // is_active = 0 — switched off
+const P_SOUP  = 9744;   // gains a required question after it is "in the cart"
+const OPT_HEAT = 9751;
+const CH_YES   = 9752;
 const CUSTOMER = 9746;
 const ADDRESS  = 9747;
 const TOKEN    = 'checkoutunavailable9746';
@@ -44,8 +47,15 @@ function cleanup() {
     }
     db.prepare(`DELETE FROM retail_orders WHERE id IN (${ph})`).run(...oids);
   }
-  const pids = [P_BREAD, P_MANGO, P_OFF];
+  const pids = [P_BREAD, P_MANGO, P_OFF, P_SOUP];
   const pph = pids.map(() => '?').join(',');
+  try {
+    db.prepare(
+      `DELETE FROM retail_product_option_choices
+        WHERE option_id IN (SELECT id FROM retail_product_options WHERE product_id IN (${pph}))`
+    ).run(...pids);
+  } catch { /* optional */ }
+  try { db.prepare(`DELETE FROM retail_product_options WHERE product_id IN (${pph})`).run(...pids); } catch { /* optional */ }
   try { db.prepare('DELETE FROM retail_checkout_quotes WHERE customer_id = ?').run(CUSTOMER); } catch { /* optional */ }
   db.prepare('DELETE FROM retail_auth_tokens        WHERE customer_id = ?').run(CUSTOMER);
   db.prepare('DELETE FROM retail_customer_addresses WHERE customer_id = ?').run(CUSTOMER);
@@ -69,6 +79,20 @@ function seed() {
     `INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, weight, is_active, is_published, oos_policy)
      VALUES (?,?,?,?,?,?,?,?, 'strict')`
   ).run(P_OFF, 'Switched Off Spread', '已下架酱', 'unav-3', 12, '100g', 0, 1);
+  db.prepare(
+    `INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, weight, is_active, is_published, oos_policy)
+     VALUES (?,?,?,?,?,?,?,?, 'strict')`
+  ).run(P_SOUP, 'Pumpkin Soup', '南瓜汤', 'unav-4', 37, '400g', 1, 1);
+  db.prepare(
+    `INSERT INTO retail_product_options
+       (id, product_id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order)
+     VALUES (?,?,?,?, 'single', 1, 0, 0, 0)`
+  ).run(OPT_HEAT, P_SOUP, 'Heat up?', '加热？');
+  db.prepare(
+    `INSERT INTO retail_product_option_choices
+       (id, option_id, label_en, label_cn, price_delta, is_default, sort_order)
+     VALUES (?,?,?,?,0,1,0)`
+  ).run(CH_YES, OPT_HEAT, 'Yes', '加热');
 
   db.prepare(
     `INSERT INTO retail_customers (id, nickname, phone, openid, is_blocked, lifetime_spend, points_balance)
@@ -204,6 +228,54 @@ function order(items) {
         assert.ok(lines.some(l => l.product_id === P_BREAD), 'the bread was not written');
         assert.ok(!lines.some(l => l.product_id === P_MANGO), 'the off-sale mango was written onto the order');
       }
+    });
+
+    console.log('\nC · the catalog changed after the line was added');
+
+    db.prepare('UPDATE store_products SET sell_price = 22, name_en = ? WHERE id = ?')
+      .run('Buckwheat Bread (new name)', P_BREAD);
+    const repriced = await quote([{ product_id: P_BREAD, qty: 1 }]);
+    it('a price change is what she is quoted, and the order is not refused for it', () => {
+      assert.strictEqual(repriced.status, 200, JSON.stringify(repriced.body));
+      assert.strictEqual(repriced.body.data.subtotal, 22);
+      assert.strictEqual(repriced.body.data.lines[0].name_en, 'Buckwheat Bread (new name)');
+      assert.strictEqual(repriced.body.data.lines[0].unit_price, 22);
+    });
+
+    const mixedChoice = await quote([
+      { product_id: P_BREAD, qty: 1 },
+      { product_id: P_SOUP, qty: 1 },
+    ]);
+    it('a new required question is named, and the quote still opens', () => {
+      assert.strictEqual(mixedChoice.status, 200, JSON.stringify(mixedChoice.body));
+      assert.strictEqual(mixedChoice.body.success, true);
+      assert.strictEqual(mixedChoice.body.data.subtotal, 59);
+      assert.strictEqual(mixedChoice.body.data.needs_choice.error, 'choice_required');
+      assert.strictEqual(mixedChoice.body.data.needs_choice.product_id, P_SOUP);
+      assert.strictEqual(mixedChoice.body.data.needs_choice.question_en, 'Heat up?');
+    });
+
+    const soupOnly = await order([{ product_id: P_SOUP, qty: 1 }]);
+    it('a basket that is only the unanswered line is still refused', () => {
+      assert.strictEqual(soupOnly.status, 400, JSON.stringify(soupOnly.body));
+      assert.strictEqual(soupOnly.body.error, 'choice_required');
+      assert.strictEqual(soupOnly.body.product_id, P_SOUP);
+    });
+
+    const soupAnswered = await order([{ product_id: P_SOUP, qty: 1, choices: [CH_YES] }]);
+    it('answering the new question lets that line through this gate', () => {
+      assert.notStrictEqual(soupAnswered.body && soupAnswered.body.error, 'choice_required',
+        JSON.stringify(soupAnswered.body));
+    });
+
+    const withSoup = await order([
+      { product_id: P_BREAD, qty: 1 },
+      { product_id: P_SOUP, qty: 1 },
+    ]);
+    it('place order names the soup, not the bread', () => {
+      assert.strictEqual(withSoup.body && withSoup.body.error, 'choice_required',
+        JSON.stringify(withSoup.body));
+      assert.strictEqual(withSoup.body.product_id, P_SOUP);
     });
 
     console.log('\n' + pass + ' passed');

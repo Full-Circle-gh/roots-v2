@@ -1863,6 +1863,42 @@ function coDropUnavailable(list){
   if(place&&!left)place.disabled=true;
   return true;
 }
+// A line whose saved answers no longer fit the product (a question added, or
+// the answer deleted, after she put it in the cart). Same rule as an off-sale
+// line: it comes out, the rest of the order stays.
+function coDropOmitted(list){
+  const rows=Array.isArray(list)?list:[];
+  if(!rows.length)return false;
+  const cart=cartGet();
+  const drop=new Set();
+  const names=[];
+  const keyOf=l=>l.key||lineKey(l.product_id,l.choices);
+  for(const row of rows){
+    const pid=Number(row&&row.product_id);
+    const want=(row.choice_ids||[]).map(Number).filter(Boolean).sort((a,b)=>a-b).join(',');
+    const hit=cart.find(l=>!drop.has(keyOf(l))&&Number(l.product_id)===pid&&((l.choices||[]).map(Number).filter(Boolean).sort((a,b)=>a-b).join(',')===want))
+      ||cart.find(l=>!drop.has(keyOf(l))&&Number(l.product_id)===pid);
+    if(!hit)continue;
+    drop.add(keyOf(hit));
+    if(hit.name&&names.indexOf(hit.name)<0)names.push(hit.name);
+  }
+  if(!drop.size)return false;
+  cartSave(cart.filter(l=>!drop.has(keyOf(l))));
+  const cn=state.lang==='cn';
+  const label=names.length?names.join(cn?'、':', '):(cn?'该商品':'An item');
+  const q=rows[0]&&(cn?(rows[0].question_cn||rows[0].question_en):(rows[0].question_en||rows[0].question_cn));
+  const left=cartGet().length;
+  coMsg(cn
+    ?(label+(q?('需要重新选择（'+q+'）'):'的选项已变化')+'，已从本次订单拿出。'+(left?'其余商品可以继续下单。':'购物车已空。'))
+    :(label+(q?(' needs a new choice ('+q+')'):' changed and the old choice no longer fits')+', so we left it out.'+(left?' The rest of your order is ready.':' Your cart is empty.')));
+  coRenderItems();
+  const n=cartGet().reduce((s,l)=>s+(Number(l.qty)||0),0);
+  const count=$('#coItemCount');
+  if(count)count.textContent=(cn?'你的订单':'YOUR ORDER')+' · '+n+' '+(cn?'件':'ITEMS');
+  const place=$('#coPlace');
+  if(place&&!left)place.disabled=true;
+  return true;
+}
 function coMsg(m){const e=$('#coMsg');if(e)e.textContent=m||'';}
 // Online storefront closed (server flag store_status.online_open=false). Browse
 // still works; checkout is blocked here AND server-side at POST /api/retail/orders,
@@ -2643,14 +2679,19 @@ async function coQuote(){
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
   if(j&&j.success===false){
     if(j.error==='product_unavailable'){ coDropUnavailable(j.unavailable||[]); return; }
+    if(['choice_required','too_few_answers','too_many_answers','bad_choice','choice_wrong_product','too_many_choices'].indexOf(j.error)>=0){
+      coDropOmitted(j.omitted||(j.product_id?[{product_id:j.product_id,question_en:j.question_en,question_cn:j.question_cn}]:[]));
+      return;
+    }
     if(j.error==='no_zone_match'){renderNoZone(j);} else {coMsg(coErrMsg(j.error));} return;
   }
   const d=(j&&j.data)||j||{}; co.quote=d;
   // A follow-up quote after we already told her which line came off sale must
   // not wipe that sentence when it returns a clean basket.
   const keepMsg=co._keepMsg; co._keepMsg=false;
-  if(Array.isArray(d.unavailable)&&d.unavailable.length) coDropUnavailable(d.unavailable);
-  else if(!keepMsg) coMsg('');
+  const droppedUn=Array.isArray(d.unavailable)&&d.unavailable.length&&coDropUnavailable(d.unavailable);
+  const droppedOm=Array.isArray(d.omitted)&&d.omitted.length&&coDropOmitted(d.omitted);
+  if(!droppedUn&&!droppedOm&&!keepMsg) coMsg('');
   renderCoSlots(d); renderCoPoints(d); renderCoBalance(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d); renderCoLocalFresh(d); renderCoStoreMove(d); renderCoRiderPhone(d);
   coLoadOffers();   // keep the pre-pay upsell warm for the current cart
 }
