@@ -13,7 +13,9 @@
 // is sage, and a zero balance is the only amber on the table. Channels have no
 // colours — a channel is a filter, not a traffic light.
 
-const ACT = { from: null, to: null, source: '', q: '', offset: 0, limit: 200, rows: [], total: 0, loading: false };
+const ACT = { from: null, to: null, source: '', store_id: '', q: '', offset: 0, limit: 200, rows: [], total: 0, loading: false };
+let _actStoreList = [];
+let _actStoresFetched = false;
 
 // Source tokens come from the server (reason-derived). Meituan is split per
 // storefront — Tianhe (外卖) and Yuexiu (闪购). The front-end owns every label;
@@ -88,6 +90,8 @@ async function actAdminInit() {
   const f = document.getElementById('act-from'), t = document.getElementById('act-to');
   if (f && !f.value) f.value = ACT.from;
   if (t && !t.value) t.value = ACT.to;
+  actRenderStoreTabs();
+  actEnsureStores();
   actLoad(true);
   actStartPolling();
 }
@@ -102,9 +106,28 @@ function actReadFilters() {
 function actQueryString(extra) {
   const p = new URLSearchParams({ from: ACT.from, to: ACT.to });
   if (ACT.source) p.set('source', ACT.source);
+  if (ACT.store_id) p.set('store_id', String(ACT.store_id));
   if (ACT.q) p.set('q', ACT.q);
   Object.entries(extra || {}).forEach(([k, v]) => p.set(k, v));
   return p.toString();
+}
+function actStoreOptions() {
+  if (typeof PA_STORES !== 'undefined' && PA_STORES.length) return PA_STORES;
+  return _actStoreList;
+}
+function actStoreName(storeId) {
+  const s = actStoreOptions().find(x => Number(x.id) === Number(storeId));
+  return s ? actT(s.name_en || s.code, s.name_cn || s.name_en || s.code) : '';
+}
+async function actEnsureStores() {
+  if (actStoreOptions().length >= 2) return;
+  if (_actStoresFetched) return;
+  _actStoresFetched = true;
+  try {
+    const j = await api('/api/retail-admin/stores');
+    _actStoreList = (j.data || []).filter(s => s.is_active == null || s.is_active);
+    actRenderStoreTabs();
+  } catch { _actStoreList = []; }
 }
 
 // `silent` = a background auto-refresh: skip the "Loading…" placeholder so the
@@ -119,6 +142,7 @@ async function actLoad(reset, silent) {
     const j = await api('/api/retail-admin/activity?' + actQueryString({ limit: ACT.limit, offset: ACT.offset }));
     ACT.rows = reset ? j.rows : ACT.rows.concat(j.rows);
     ACT.total = j.total;
+    actRenderStoreTabs();
     actRenderTabs(j.summary);
     actRenderDigest(j.digest, j.summary);
     actRenderCaption(j.summary);
@@ -161,6 +185,24 @@ const ACT_TABS = [
   ['eleme',          () => actSourceName('eleme')],
   ['manual',         () => actSourceName('manual')],
 ];
+
+// Store filter — same quiet tabs as channels. Hidden when this login only
+// sees one store; counts are not shown (the picker scopes the view, not traffic).
+function actRenderStoreTabs() {
+  const el = document.getElementById('act-store-tabs');
+  if (!el) return;
+  const stores = actStoreOptions();
+  if (stores.length < 2) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.style.display = '';
+  const active = ACT.store_id ? String(ACT.store_id) : '';
+  const tabs = [['', () => actT('All stores', '全部门店')]]
+    .concat(stores.map(s => [String(s.id), () => actStoreName(s.id)]));
+  el.innerHTML = tabs.map(([id, label]) => {
+    const cls = 'act-tab' + (active === id ? ' on' : '');
+    return `<button type="button" class="${cls}" onclick="actPickStore('${id}')">`
+      + `<span>${escapeHtml(label())}</span></button>`;
+  }).join('');
+}
 
 // Quiet text tabs — active = ink underline; every tab shows its event count
 // for the current date range (counts come from the server's unfiltered
@@ -236,12 +278,14 @@ function actRenderCaption(summary) {
   const active = ACT.source || '';
   const s = (summary || []).find(x => x.source === active);
   const name = active ? actSourceName(active) : actT('All channels', '全部渠道');
+  const storeName = ACT.store_id ? actStoreName(ACT.store_id) : '';
   const grand = (summary || []).reduce((a, x) => a + (x.events || 0), 0);
   const events = active ? (s ? s.events : 0) : grand;
   let out = 0, inn = 0;
   if (active) { out = s ? (s.units_out || 0) : 0; inn = s ? (s.units_in || 0) : 0; }
   else (summary || []).forEach(x => { out += x.units_out || 0; inn += x.units_in || 0; });
-  el.innerHTML = `<b>${escapeHtml(name)}</b> · `
+  const storeLead = storeName ? `<b>${escapeHtml(storeName)}</b> · ` : '';
+  el.innerHTML = `${storeLead}<b>${escapeHtml(name)}</b> · `
     + `<span class="num">${events}</span> ${actT('events', '条')} · `
     + `<span class="num">${out}</span> ${actT('out', '出')} · `
     + `<span class="num">${inn}</span> ${actT('in', '入')}`
@@ -251,6 +295,10 @@ function actRenderCaption(summary) {
 // Switch the active channel (tab) and reload the view + export scope.
 function actPickSource(src) {
   ACT.source = src || '';
+  actLoad(true);
+}
+function actPickStore(storeId) {
+  ACT.store_id = storeId ? (parseInt(storeId, 10) || storeId) : '';
   actLoad(true);
 }
 

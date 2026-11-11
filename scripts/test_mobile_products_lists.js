@@ -139,7 +139,7 @@ const FNS = ['chipRow', 'searchBox', 'searchClearShow', 'searchClearRun', 'noteB
 const CONSTS = ['cfgGet', 'PILL', 'KIND2PILL', 'prodBySize', 'PROD_STATUS_KIND', 'MCAN_MONEY_ONLY', 'ACT_SRC', 'actSrcName', 'ACT_REASON',
   'wstMoney', 'wstShowMoney', 'money'];
 const REGS = ['askRun', 'prodStatus', 'prodCat', 'prodSub', 'prodStore', 'prodExport', 'prodClearQ',
-  'actRange', 'actQ', 'actSearchGo', 'mActClr', 'actExport', 'actSource',
+  'actRange', 'actQ', 'actSearchGo', 'mActClr', 'actExport', 'actStore', 'actSource',
   'wstRange', 'wstReason', 'wstStore', 'wstClear', 'wstRetry'];
 const SRC = [...CONSTS.map(liftConst), ...FNS.map(liftFn), ...REGS.map(liftReg)].join('\n');
 
@@ -539,7 +539,29 @@ it('the placeholder is the desktop’s, in both languages', async () => {
   assert.ok(activity({ lang: 'zh' }).ctx.screenActivity().includes('placeholder="货号 / 名称 / 订单"'));
 });
 
-section('7 · stock activity: Export CSV');
+section('7 · stock activity: store filter');
+it('with two stores, shows All stores chips and reads store_id when one is picked', async () => {
+  const h = activity();
+  h.s.stores = [
+    { id: 1, code: 'tianhe', name_en: 'Tianhe', name_cn: '天河' },
+    { id: 2, code: 'yuexiu', name_en: 'Yuexiu', name_cn: '越秀' },
+  ];
+  h.ctx.screenActivity(); await settle();
+  assert.ok(h.text(h.ctx.screenActivity()).includes('All stores'));
+  h.CMD.actStore('2'); await settle();
+  const q = lastAct(h);
+  assert.strictEqual(q.get('store_id'), '2');
+  h.CMD.actExport();
+  assert.ok(h.calls.href.includes('store_id=2'));
+});
+it('with one store, no store chip row', async () => {
+  const h = activity();
+  h.s.stores = [{ id: 2, code: 'yuexiu', name_en: 'Yuexiu', name_cn: '越秀' }];
+  const html = h.ctx.screenActivity();
+  assert.ok(!h.text(html).includes('All stores'));
+});
+
+section('8 · stock activity: Export CSV');
 it('opens the file of the view: window, channel and search', async () => {
   const h = activity(); h.s.actRange = 'custom'; h.s.actFrom = '2026-09-01'; h.s.actTo = '2026-09-10';
   h.s.actSource = 'miniapp'; h.s.actQ = ' oat ';
@@ -568,7 +590,7 @@ function waste(opts = {}) {
 }
 const lastWst = (h) => new URLSearchParams(h.calls.reads.filter((p) => p.startsWith('/waste?')).slice(-1)[0].split('?')[1]);
 
-section('8 · waste: a free date range');
+section('9 · waste: a free date range');
 it('the week by default, and Custom beside the presets', async () => {
   const h = waste(); h.ctx.screenWaste(); await settle();
   assert.strictEqual(lastWst(h).get('from'), '2026-09-24');
