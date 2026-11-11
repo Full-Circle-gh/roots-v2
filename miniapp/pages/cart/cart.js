@@ -188,8 +188,51 @@ Page({
     try {
       const resp = await api.post('/api/retail/cart/price', body);
       const data = resp && (resp.data || resp) || {};
+      if (Array.isArray(data.unavailable) && data.unavailable.length) this.dropUnavailable(data.unavailable);
       if (Array.isArray(data.lines) && cart.reprice(data.lines)) this.recompute();
-    } catch (e) { /* offline / not yet authed — keep the frozen prices */ }
+    } catch (e) {
+      // The whole basket is off sale. A network failure has no `unavailable`
+      // list and keeps the frozen prices, same as before.
+      const gone = e && e.body && e.body.unavailable;
+      if (e && e.message === 'product_unavailable' && Array.isArray(gone) && gone.length) {
+        this.dropUnavailable(gone);
+      }
+    }
+  },
+
+  // A product switched off while it sat in the basket. Remove those lines and
+  // say which ones, so checkout is not the first place she finds out.
+  dropUnavailable(list) {
+    const rows = Array.isArray(list) ? list : [];
+    const ids = new Set(rows.map(p => Number(p && (p.product_id != null ? p.product_id : p.id))).filter(n => n > 0));
+    if (!ids.size) return;
+    const L = this.data.lang;
+    const names = [];
+    const seen = new Set();
+    let removed = 0;
+    for (const it of (cart.get().items || [])) {
+      const pid = Number(it.product_id);
+      if (!ids.has(pid)) continue;
+      if (!seen.has(pid)) {
+        seen.add(pid);
+        const server = rows.find(p => Number(p.product_id != null ? p.product_id : p.id) === pid) || {};
+        const name = lang.pick(it.name_en, it.name_cn, L) || lang.pick(server.name_en, server.name_cn, L);
+        if (name) names.push(name);
+      }
+      cart.remove(it.key);
+      removed++;
+    }
+    if (!removed) return;
+    const label = names.join(L === 'cn' ? '、' : ', ');
+    wx.showModal({
+      title: L === 'cn' ? '已移除下架商品' : 'No longer for sale',
+      content: L === 'cn'
+        ? `${label}已下架，已从购物车移除。`
+        : `${label} ${names.length > 1 ? 'are' : 'is'} no longer for sale, so we removed ${names.length > 1 ? 'them' : 'it'} from your cart.`,
+      showCancel: false,
+      confirmText: L === 'cn' ? '好的' : 'OK',
+    });
+    this.recompute();
   },
 
   tx(key, fallback) {

@@ -1631,6 +1631,19 @@ Page({
         // A successful quote means the address can receive this cart — clear any
         // prior "Guangzhou only" block.
         if (this.data.localOnlyBlock) this.setData({ localOnlyBlock: false, localOnlyNames: [] });
+        // A line that is no longer for sale (unpublished or switched off) sat
+        // in the phone's cart. The quote priced the rest. Take that line out
+        // before the receipt is drawn, and before a day-only default re-quotes,
+        // so the next request does not send it again.
+        const gone = Array.isArray(data.unavailable) ? data.unavailable : [];
+        if (gone.length) {
+          const drop = this.dropUnavailable(gone);
+          if (drop.removed) this.tellUnavailable(drop);
+          if (drop.emptied) {
+            this.setData({ quoting: false, items: [], itemCount: 0, subtotal: '0.00' });
+            return;
+          }
+        }
         // The endpoint returns { success: false, error: 'no_zone_match', data } when
         // no zone matches. api.js may surface that as a thrown error OR as a
         // resolved value depending on the helper — defensively handle both.
@@ -1665,7 +1678,11 @@ Page({
             ...sf,
           };
         });
-        this.setData({ items: itemRows, subtotal: srvSubtotal.toFixed(2) });
+        this.setData({
+          items: itemRows,
+          itemCount: itemRows.reduce((s, it) => s + (it.qty || 0), 0),
+          subtotal: srvSubtotal.toFixed(2),
+        });
         const deliveryFee = Number(data.delivery_fee) || 0;
         const packingFee  = Number(data.packing_fee)  || 0;
         const ev = this.effectiveVoucher();
@@ -1919,7 +1936,35 @@ Page({
       })
       .catch(err => {
         const code = err?.message || '';
-        if (code === 'local_only_outside_gz') {
+        if (code === 'product_unavailable') {
+          // Every remaining line is off sale, or the quote could not price any
+          // of them. Same removal as the success path — this is not a missing
+          // delivery time.
+          const gone = (err.body && err.body.unavailable) || [];
+          const drop = this.dropUnavailable(gone);
+          this.setData({ quoting: false, quoteFailed: false });
+          if (drop.removed) this.tellUnavailable(drop);
+          else {
+            wx.showToast({
+              title: this.data.lang === 'cn' ? '有商品已下架' : 'An item is no longer for sale',
+              icon: 'none',
+            });
+          }
+          if (drop.emptied) this.setData({ items: [], itemCount: 0, subtotal: '0.00' });
+          return;
+        } else if (['choice_required', 'too_few_answers', 'too_many_answers',
+                    'bad_choice', 'choice_wrong_product', 'too_many_choices'].includes(code)) {
+          // Every remaining line needs an answer the cart does not have. That
+          // is a changed product, not a missing delivery time.
+          const omitted = (err.body && err.body.omitted) || [];
+          const rows = omitted.length ? omitted : (err.body && err.body.product_id ? [{ ...err.body, reason: code }] : []);
+          const drop = this.dropOmitted(rows);
+          this.setData({ quoting: false, quoteFailed: false });
+          if (drop.removed) this.tellOmitted(drop);
+          else this.offerPick({ ...(err.body || {}), error: code });
+          if (drop.emptied) this.setData({ items: [], itemCount: 0, subtotal: '0.00' });
+          return;
+        } else if (code === 'local_only_outside_gz') {
           // Cart has Guangzhou-only item(s) but the address is outside GZ — the
           // order can't ship. Auto-remove them for the customer, then re-quote
           // so the rest of the cart checks out cleanly.
@@ -3248,6 +3293,131 @@ Page({
     this.submitOrder(this._pendingExtra);
   },
 
+  // Take lines the server says are no longer for sale out of the phone's cart.
+  // Names come from the cart row first (that's the name she has been looking
+  // at) and from the server when the row is already gone.
+  dropUnavailable(list) {
+    const rows = Array.isArray(list) ? list : [];
+    const ids = new Set(rows.map(p => Number(p && (p.product_id != null ? p.product_id : p.id))).filter(n => n > 0));
+    if (!ids.size) return { removed: 0, emptied: false, names: [] };
+    const L = this.data.lang;
+    const cartItems = cart.get().items || [];
+    const names = [];
+    const seen = new Set();
+    for (const it of cartItems) {
+      const pid = Number(it.product_id);
+      if (!ids.has(pid) || seen.has(pid)) continue;
+      seen.add(pid);
+      const server = rows.find(p => Number(p.product_id != null ? p.product_id : p.id) === pid) || {};
+      const name = lang.pick(it.name_en, it.name_cn, L) || lang.pick(server.name_en, server.name_cn, L);
+      if (name) names.push(name);
+    }
+    let removed = 0;
+    cartItems
+      .filter(it => ids.has(Number(it.product_id)))
+      .forEach(it => { cart.remove(it.key); removed++; });
+    return { removed, emptied: removed > 0 && !(cart.get().items || []).length, names };
+  },
+
+  // One sentence, then she can place the rest. An empty cart goes back to the shop.
+  tellUnavailable(drop) {
+    const cn = this.data.lang === 'cn';
+    const names = (drop.names || []).filter(Boolean);
+    const label = names.length ? (cn ? names.join('、') : names.join(', ')) : (cn ? '该商品' : 'An item');
+    const many = names.length > 1;
+    const title = cn ? '已移除下架商品' : (many ? 'Items no longer for sale' : 'Item no longer for sale');
+    const content = drop.emptied
+      ? (cn
+        ? `${label}已下架，已从购物车移除。购物车已空，请继续选购。`
+        : `${label} ${many ? 'are' : 'is'} no longer for sale, so we removed ${many ? 'them' : 'it'}. Your cart is empty.`)
+      : (cn
+        ? `${label}已下架，已从购物车移除。其余商品可以继续下单。`
+        : `${label} ${many ? 'are' : 'is'} no longer for sale, so we removed ${many ? 'them' : 'it'}. The rest of your order is ready.`);
+    wx.showModal({
+      title,
+      content,
+      showCancel: false,
+      confirmText: cn ? '好的' : 'OK',
+      success: () => {
+        if (!drop.emptied) return;
+        wx.navigateBack({ delta: 1, fail: () => wx.switchTab({ url: '/pages/shop/shop', fail: () => {} }) });
+      },
+    });
+  },
+
+  // Take out a line whose saved answers no longer match the product. Matches
+  // the exact choice set when the server sent one, otherwise the line of that
+  // product with the fewest answers — the one that is short a pick.
+  dropOmitted(list) {
+    const rows = Array.isArray(list) ? list : [];
+    const L = this.data.lang;
+    const names = [];
+    let removed = 0;
+    const items = (cart.get().items || []).slice();
+    const used = new Set();
+    const choiceKey = (ids) => (ids || []).map(Number).filter(Boolean).sort((a, b) => a - b).join(',');
+    for (const row of rows) {
+      const pid = Number(row && (row.product_id != null ? row.product_id : row.id));
+      if (!pid) continue;
+      const want = choiceKey(row.choice_ids);
+      let match = items.find(it => {
+        if (used.has(it.key) || Number(it.product_id) !== pid) return false;
+        return choiceKey((it.options || []).map(o => o.choice_id)) === want;
+      });
+      if (!match) {
+        match = items
+          .filter(it => !used.has(it.key) && Number(it.product_id) === pid)
+          .sort((a, b) => (a.options || []).length - (b.options || []).length)[0];
+      }
+      const name = (match && lang.pick(match.name_en, match.name_cn, L))
+        || lang.pick(row.name_en, row.name_cn, L);
+      if (name && names.indexOf(name) < 0) names.push(name);
+      if (!match) continue;
+      used.add(match.key);
+      cart.remove(match.key);
+      removed++;
+    }
+    return {
+      removed,
+      emptied: removed > 0 && !(cart.get().items || []).length,
+      names,
+      rows,
+    };
+  },
+
+  tellOmitted(drop) {
+    const cn = this.data.lang === 'cn';
+    const rows = drop.rows || [];
+    const names = (drop.names || []).filter(Boolean);
+    const label = names.length ? (cn ? names.join('、') : names.join(', ')) : (cn ? '该商品' : 'An item');
+    const q = rows[0] && (cn ? (rows[0].question_cn || rows[0].question_en) : (rows[0].question_en || rows[0].question_cn));
+    const one = rows.length === 1 && rows[0] && rows[0].product_id;
+    const title = cn ? '商品信息有变化' : 'An item changed';
+    const rest = drop.emptied
+      ? (cn ? '购物车已空。' : 'Your cart is empty.')
+      : (cn ? '其余商品可以继续下单。' : 'The rest of your order is ready.');
+    const content = q
+      ? (cn ? `${label}需要重新选择（${q}），已从本次订单拿出。${rest}` : `${label} needs a new choice (${q}), so we left it out. ${rest}`)
+      : (cn ? `${label}的选项已变化，已从本次订单拿出。${rest}` : `${label} changed and the old choice no longer fits, so we left it out. ${rest}`);
+    wx.showModal({
+      title,
+      content,
+      confirmText: one ? (cn ? '重新选择' : 'Choose') : (cn ? '好的' : 'OK'),
+      cancelText: drop.emptied ? (cn ? '返回' : 'Back') : (cn ? '继续下单' : 'Continue'),
+      showCancel: true,
+      success: (r) => {
+        if (r.confirm && one) {
+          this._repickPending = true;
+          wx.navigateTo({ url: '/pages/product/product?id=' + rows[0].product_id });
+          return;
+        }
+        if (drop.emptied) {
+          wx.navigateBack({ delta: 1, fail: () => wx.switchTab({ url: '/pages/shop/shop', fail: () => {} }) });
+        }
+      },
+    });
+  },
+
   // Auto-remove Guangzhou-only items from the cart on the customer's behalf,
   // tell them what happened, then re-quote so the remaining cart checks out.
   // `products` is [{id, name_en, name_cn}] from the server. When the list is
@@ -3734,6 +3904,29 @@ Page({
           icon: 'none',
           duration: 2800,
         });
+        return;
+      }
+      // The order still carried a line that is off sale (the quote was skipped,
+      // or the product was switched off between quote and pay). Take it out
+      // and re-price what is left. She taps Place Order again on the new total.
+      if (e?.message === 'product_unavailable') {
+        this.setData({ placing: false });
+        const body = e.body || {};
+        const gone = (Array.isArray(body.unavailable) && body.unavailable.length)
+          ? body.unavailable
+          : (body.product_id ? [body] : []);
+        const drop = this.dropUnavailable(gone);
+        if (drop.removed) {
+          this.tellUnavailable(drop);
+          if (!drop.emptied) this.refreshQuote();
+          else this.setData({ items: [], itemCount: 0, subtotal: '0.00' });
+        } else {
+          wx.showToast({
+            title: this.data.lang === 'cn' ? '有商品已下架，请从购物车移除' : 'An item is no longer for sale — remove it from the cart',
+            icon: 'none',
+            duration: 2800,
+          });
+        }
         return;
       }
       // Guangzhou-only backstop: if the order POST refuses (e.g. the quote was

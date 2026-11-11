@@ -290,6 +290,88 @@ it('the express day reads Thu, Nov 12 / 11月12日 with Intl throwing', () => {
     cart.clear();
   });
 
+  section('3 · AN OFF-SALE LINE IN AN OLD CART DOES NOT BLOCK THE REST');
+
+  await itAsync('checkout removes the off-sale line and keeps the delivery time', async () => {
+    cart.clear();
+    cart.add({ id: 252, name_en: 'Buckwheat Bread', name_cn: '面包', price: 15 }, 1, []);
+    cart.add({ id: 80, name_en: 'Dried Sour Mango', name_cn: '酸芒果干', price: 27 }, 1, []);
+    const modals = [];
+    const origModal = wx.showModal;
+    wx.showModal = (o) => { modals.push(o); };
+    const realPost = api.post;
+    api.post = (url) => {
+      if (String(url).indexOf('/quote') >= 0) {
+        const body = quotePayload();
+        body.unavailable = [{ product_id: 80, name_en: 'Dried Sour Mango', name_cn: '酸芒果干' }];
+        return Promise.resolve(body);
+      }
+      return Promise.resolve({ data: [] });
+    };
+    try {
+      const inst = instance();
+      await inst.refreshQuote();
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+      assert.deepStrictEqual(cart.get().items.map((it) => it.product_id), [252]);
+      assert.ok(inst.data.items.every((it) => it.product_id !== 80));
+      assert.strictEqual(inst.data.quoteFailed, false);
+      assert.strictEqual(inst.data.deliverySlotId, '2026-11-12');
+      assert.strictEqual(modals.length, 1);
+      assert.ok(modals[0].content.indexOf('Dried Sour Mango') >= 0);
+      assert.ok(modals[0].content.indexOf('rest of your order') >= 0);
+    } finally {
+      wx.showModal = origModal;
+      api.post = realPost;
+      cart.clear();
+    }
+  });
+
+  await itAsync('a renamed product shows the current name, and a new question asks her to choose', async () => {
+    cart.clear();
+    cart.add({ id: 252, name_en: 'Old bread name', name_cn: '旧名', price: 15 }, 1, []);
+    cart.add({ id: 81, name_en: 'Pumpkin Soup', name_cn: '南瓜汤', price: 37 }, 1, []);
+    const modals = [];
+    const origModal = wx.showModal;
+    wx.showModal = (o) => { modals.push(o); };
+    const realPost = api.post;
+    api.post = (url) => {
+      if (String(url).indexOf('/quote') >= 0) {
+        const body = quotePayload();
+        body.lines[0].name_en = 'Buckwheat Bread (new name)';
+        body.lines[0].name_cn = '新名';
+        body.lines[0].choice_ids = [];
+        body.needs_choice = {
+          error: 'choice_required',
+          product_id: 81,
+          question_en: 'Heat up?',
+          question_cn: '加热？',
+        };
+        return Promise.resolve(body);
+      }
+      return Promise.resolve({ data: [] });
+    };
+    try {
+      const inst = instance();
+      delete inst.offerPick;
+      const realOffer = inst.offerPick.bind(inst);
+      inst.offerPick = (refusal) => realOffer(refusal);
+      await inst.refreshQuote();
+      await new Promise((r) => setImmediate(r));
+      const left = cart.get().items.map((it) => it.product_id).sort((a, b) => a - b);
+      assert.deepStrictEqual(left, [81, 252]);
+      const bread = cart.get().items.find((it) => it.product_id === 252);
+      assert.strictEqual(bread.name_en, 'Buckwheat Bread (new name)');
+      assert.strictEqual(inst.data.quoteFailed, false);
+      assert.strictEqual(inst.data.deliverySlotId, '2026-11-12');
+      assert.ok(modals.some((m) => (m.content || '').indexOf('Heat up?') >= 0));
+    } finally {
+      wx.showModal = origModal;
+      api.post = realPost;
+      cart.clear();
+    }
+  });
+
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
 })();

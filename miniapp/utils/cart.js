@@ -206,6 +206,10 @@ function reprice(lines) {
     };
     if (ln.coupon_blocked != null) apply('coupon_blocked', !!ln.coupon_blocked);
     if (ln.ship_from_supplier != null) apply('ship_from_supplier', !!ln.ship_from_supplier);
+    // The name on the line is the name from the day she added it. A rename
+    // since then is what the order will store, so the cart shows that name.
+    if (typeof ln.name_en === 'string' && ln.name_en) apply('name_en', ln.name_en);
+    if (typeof ln.name_cn === 'string' && ln.name_cn) apply('name_cn', ln.name_cn);
     if (ln.unit_price != null)     apply('unit_price', Number(ln.unit_price));
     apply('is_flash', !!ln.is_flash);
     apply('regular_price', numOrNull(ln.regular_price));
