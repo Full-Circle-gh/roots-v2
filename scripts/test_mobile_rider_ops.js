@@ -201,7 +201,8 @@ async function main() {
     refused.CMD.qyPickPlace(1); await tick();
     is(String(refused.ctx.state.orderErr), 'That place is the area, not the door. Place the point on the desktop map.', 'a stale client that still posts the hospital is told why');
     const pt = mk({ order: sfo({ awaiting_point: true }) });
-    has(pt.ctx.shipFromCard(pt.order), 'The point is placed on the desktop map.', 'the map surface still points at the desktop');
+    has(pt.ctx.shipFromCard(pt.order), 'Tap the building on the map.', 'the map surface tells staff to tap the building');
+    has(pt.ctx.shipFromCard(pt.order), "APP.cmd('qyPointOpen')", 'Mark on map opens the tap sheet');
     has(pt.ctx.shipFromCard(pt.order), "APP.cmd('shipToOpen','edit')", 'with the desktop\'s Edit ship-to beside it');
   }
 
