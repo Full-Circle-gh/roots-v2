@@ -6032,7 +6032,8 @@ function renderDropPin(o) {
     ? `<div id="dp-map-${o.id}" style="position:relative;height:180px;margin-top:10px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg-elev-1);">
          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-3);">${cuT('Loading map…', '正在加载地图…')}</div>
        </div>
-       <div class="sub" style="margin-top:6px;">${cuT('This is where the rider will go.', '骑手会去这个点。')}</div>`
+       <div class="sub" style="margin-top:6px;">${cuT('This is where the rider will go.', '骑手会去这个点。')}</div>
+       <div class="sub" id="dp-advice-${o.id}" style="margin-top:4px;">${cuT('Checking this dot against the address…', '正在把这个点和地址核对…')}</div>`
     : `<div class="sub" style="margin-top:8px;">${cuT('No point on the map yet.', '地图上还没有配送点。')}</div>`;
   if (locked) {
     return map + `<div class="sub" style="margin-top:6px;">${cuT(
@@ -6100,6 +6101,31 @@ async function dpInit(o) {
     el.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--text-3);">${cuT(
       'The map could not be loaded. You can still search the building below.',
       '地图未能加载。仍可在下方搜索楼栋。')}</div>`;
+  }
+}
+
+async function dpLoadAdvice(o) {
+  const el = document.getElementById('dp-advice-' + (o && o.id));
+  if (!el) return;
+  const gen = _dpGen;
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${o.id}/qingyun/pin-advice`, { method: 'POST' });
+    const j = await r.json();
+    if (gen !== _dpGen) return;
+    const live = document.getElementById('dp-advice-' + o.id);
+    if (!live) return;
+    if (!j || !j.success || j.verdict === 'no_pin') { live.textContent = ''; return; }
+    const label = j.pin_label
+      ? cuT('The map calls this dot ', '地图把这个点标成') + j.pin_label + '. '
+      : '';
+    const say = cuT(j.en || '', j.cn || '');
+    live.textContent = (label + say).trim();
+    live.style.color = j.verdict === 'different' ? 'var(--warn)' : '';
+    live.style.fontWeight = j.verdict === 'different' ? '600' : '';
+  } catch (e) {
+    if (gen !== _dpGen) return;
+    const live = document.getElementById('dp-advice-' + o.id);
+    if (live) live.textContent = '';
   }
 }
 
@@ -6598,6 +6624,7 @@ async function openOrder(id, opts = {}) {
     // container (an on-the-way same-city order). Self-tears-down any prior map.
     try { mountCourierMap(o); } catch (e) { /* map is best-effort */ }
     try { dpInit(o); } catch (e) { /* the address and the search still stand */ }
+    try { dpLoadAdvice(o); } catch (e) { /* the dot is already on the screen */ }
     // Same contract for the delivery-point map: the element has to exist and
     // have a width before any SDK will lay a map into it, so it mounts here
     // rather than inside the template. Only a parked order renders the box.
