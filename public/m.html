@@ -1146,7 +1146,7 @@ const state = {
   /* §286 — Suppliers we owe: the list, and the one account open in its sheet. */
   supOwed:null, supOwedErr:null, supOwedTried:false, supOwedId:null,
   supAcct:null, supAcctErr:null, supAcctBusy:false, supAcctMounted:false,
-  act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
+  act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actStore:'', actMore:false,
   // §325 PD1 — a Custom window's two days, and the ledger's search (desktop's
   // act-from / act-to / act-search). `actQ` is what the box holds; Enter reads it.
   actFrom:null, actTo:null, actQ:'',
@@ -5680,10 +5680,12 @@ reg('actExport', ()=>{
   const {from,to}=actWindow();
   const q=new URLSearchParams({from,to});
   if(state.actSource) q.set('source',state.actSource);
+  if(state.actStore) q.set('store_id',String(state.actStore));
   const term=String(state.actQ||'').trim();
   if(term) q.set('q',term);
   location.href=API+'/activity/export.csv?'+q;
 });
+reg('actStore', v=>{ state.actStore=v; state.act=null; state.actTried=false; render(); loadActivity(); });
 reg('actSource', v=>{ state.actSource=v; state.act=null; state.actTried=false; render(); loadActivity(); });
 reg('actMore', ()=>{ if(state.actMore) return; state.actMore=true; render(); loadActivity(true); });
 /* ── Waste ────────────────────────────────────────────────────────────────
@@ -14496,12 +14498,19 @@ function actWindow(){
   if(state.actRange==='custom'&&state.actFrom&&state.actTo) return {from:state.actFrom,to:state.actTo};
   return actPreset(state.actRange);
 }
+function actStoreLabel(id){
+  const s=(state.stores||[]).find(x=>String(x.id)===String(id));
+  if(!s) return '';
+  const en=s.name_en||s.code||'', cn=s.name_cn||s.name_en||s.code||'';
+  return T(en||cn, cn||en);
+}
 function loadActivity(more){
   const {from,to}=actWindow();
   const offset = more ? ((state.act&&state.act.rows)||[]).length : 0;
   if(!more){ if(state.actTried) return; state.actTried=true; }
   const q=new URLSearchParams({from,to,limit:'60',offset:String(offset)});
   if(state.actSource) q.set('source',state.actSource);
+  if(state.actStore) q.set('store_id',String(state.actStore));
   const term=String(state.actQ||'').trim();
   if(term) q.set('q',term);
   apiRaw('/activity?'+q).then(j=>{
@@ -14557,6 +14566,7 @@ function actDigestCard(title,rows,empty){
     ${rows.length?rows.join(''):`<div style="font-size:13.5px;color:var(--text-secondary)">${empty}</div>`}</div>`;
 }
 function screenActivity(){
+  if(!state.stores) api('/stores').then(x=>{ state.stores=(Array.isArray(x)?x:[]).filter(s=>s.is_active==null||s.is_active); render(); }).catch(()=>{});
   loadActivity();
   const rangeBtn=(k,label)=>`<button onclick="APP.cmd('actRange','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
     background:${state.actRange===k?'var(--surface-card)':'transparent'};color:${state.actRange===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${state.actRange===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label}</button>`;
@@ -14593,6 +14603,11 @@ function screenActivity(){
   const chips=[{key:'',en:'All channels',zh:'全部渠道',count:grand}].concat(
     known.concat(extras).map(k=>{ const sx=summary.find(x=>x.source===k);
       return {key:k,en:(ACT_SRC[k]||[k])[0],zh:(ACT_SRC[k]||[k,k])[1],count:(sx&&sx.events)||0}; }));
+  const stores=state.stores||[];
+  const storeChips=stores.length>1
+    ? chipRow([{key:'',en:'All stores',zh:'全部门店'}].concat(stores.map(s=>
+        ({key:String(s.id),en:s.name_en||s.name_cn||('#'+s.id),zh:s.name_cn||s.name_en||('#'+s.id)}))), String(state.actStore),'actStore')
+    : '';
   // The caption says what this view holds, because the numbers below are
   // scoped to it and nothing else on the screen says so.
   const act=state.actSource;
@@ -14608,12 +14623,14 @@ function screenActivity(){
     return `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
       <span style="font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(b.product||b.sku||'—')} <span style="color:var(--text-secondary);font-size:12.5px">· ${escAttr(who)}</span></span>
       <span style="flex:none;font-size:14px">${actDelta(b.delta)}</span></div>`; });
+  const storeLine=state.actStore?`<b style="color:var(--text-primary);font-weight:500">${escAttr(actStoreLabel(state.actStore))}</b> · `:'';
   return `<div style="padding:14px 0 24px;display:flex;flex-direction:column;gap:12px">
     <div style="padding:0 16px">${ranges}</div>
     ${search}
+    ${storeChips}
     ${chipRow(chips,act,'actSource')}
     <div style="padding:0 16px;font-size:13px;color:var(--text-secondary)">
-      <b style="color:var(--text-primary);font-weight:500">${act?escAttr(actSrcName(act)):T('All channels','全部渠道')}</b> ·
+      ${storeLine}<b style="color:var(--text-primary);font-weight:500">${act?escAttr(actSrcName(act)):T('All channels','全部渠道')}</b> ·
       <span class="num">${events}</span> ${T('events','条')} · <span class="num">${out}</span> ${T('out','出')} · <span class="num">${inn}</span> ${T('in','入')}</div>
     <div style="padding:0 16px;display:flex;flex-direction:column;gap:10px">
       ${actDigestCard(T('Hit zero','已售罄'),zeroed,T('Nothing hit zero.','没有商品售罄。'))}
@@ -23542,6 +23559,7 @@ function pollActivityLedger(){
   _actLiveBusy=true;
   const q=new URLSearchParams({from,to,limit:'60',offset:'0'});
   if(state.actSource) q.set('source',state.actSource);
+  if(state.actStore) q.set('store_id',String(state.actStore));
   fetch('/api/retail-admin/activity?'+q,{credentials:'same-origin',headers:{accept:'application/json'}})
     .then(r=>r.ok?r.json():null)
     .then(j=>{
