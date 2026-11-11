@@ -8860,7 +8860,6 @@ function delayFileClaim(orderId, sid, carrier, ev) {
 
 function delayNoClaim(orderId, sid, ev) {
   const note = (document.getElementById('dcwhy-' + sid)?.value || '').trim();
-  if (!note) { toast(cuT('Give a reason first', '请先填写原因。'), 'err'); return; }
   return delayStep(orderId, sid, 'no_claim', { note }, ev);
 }
 
@@ -8875,11 +8874,9 @@ function delayRemedy(orderId, sid, kind, ev) {
 }
 
 // The make-whole step's third answer: nothing is owed (§125). It reads its
-// reason the way delayNoClaim reads its own, and the server refuses it without
-// one — the same `reason_required` code, so the refusal is worded once.
+// reason the way delayNoClaim reads its own — optional on both.
 function delayNoRemedy(orderId, sid, ev) {
   const note = (document.getElementById('dcnr-' + sid)?.value || '').trim();
-  if (!note) { toast(cuT('Give a reason first', '请先填写原因。'), 'err'); return; }
   return delayStep(orderId, sid, 'remedy', { kind: 'none', note }, ev);
 }
 

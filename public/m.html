@@ -3222,21 +3222,17 @@ reg('dcClaim', sid=>{
 reg('dcNoClaim', sid=>{
   if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   state.ask={title:T('Not claiming','不申请赔偿'),
-    fields:[{id:'note',label:T('Reason','原因'),placeholder:T('Required','必填'),multiline:true}],
-    validate:v=>(v.note||'').trim()?null:T('Give a reason first.','请先填写原因。'),
+    fields:[{id:'note',label:T('Reason (optional)','原因(可选)'),placeholder:T('Optional','可选'),multiline:true}],
     confirmLabel:T('Not claiming','不申请赔偿'),
     run:v=>dcStep(sid,'no_claim',{note:v.note||''})};
   render();
 });
 /* §125. The make-whole step's third answer, asked the way dcNoClaim asks its
-   own — a sheet with one required field. The reason is not decoration: the
-   server refuses `none` without it, with the same `reason_required` the claim
-   track uses, so the refusal is worded in one place. */
+   own — a sheet with an optional reason field. */
 reg('dcNoRemedy', sid=>{
   if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   state.ask={title:T('Nothing needed','无需补发退款'),
-    fields:[{id:'note',label:T('Reason','原因'),placeholder:T('Required','必填'),multiline:true}],
-    validate:v=>(v.note||'').trim()?null:T('Give a reason first.','请先填写原因。'),
+    fields:[{id:'note',label:T('Reason (optional)','原因(可选)'),placeholder:T('Optional','可选'),multiline:true}],
     confirmLabel:T('Nothing needed','无需补发退款'),
     run:v=>dcStep(sid,'remedy',{kind:'none',note:v.note||''})};
   render();

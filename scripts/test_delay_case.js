@@ -178,11 +178,15 @@ it('no carrier at all is allowed — a parcel can be claimed before a waybill is
   assert.strictEqual(c.dispute_carrier, null);
 });
 
-// ── 5. Not claiming is a real answer, and needs a reason ───────────────────
-it('choosing not to claim requires a typed reason', () => {
+// ── 5. Not claiming is a real answer, with or without a reason ─────────────
+it('choosing not to claim works with or without a typed reason', () => {
   const db = fresh();
-  assert.throws(() => step(db, 'no_claim', {}), e => e.code === 'reason_required');
-  assert.throws(() => step(db, 'no_claim', { note: '   ' }), e => e.code === 'reason_required');
+  const c = step(db, 'no_claim', {});
+  assert.strictEqual(c.dispute_state, 'no_claim');
+  assert.strictEqual(c.dispute_note, null);
+  const db2 = fresh();
+  const c2 = step(db2, 'no_claim', { note: 'under ¥50, not worth the paperwork' });
+  assert.strictEqual(c2.dispute_note, 'under ¥50, not worth the paperwork');
 });
 
 it('not claiming finishes the dispute track, so a small spoil can be closed', () => {
@@ -213,13 +217,14 @@ it('nothing needed finishes the make-whole track without goods or money', () => 
     'the make-whole step is ANSWERED — the question is not whether anything was given');
 });
 
-it('nothing needed requires a typed reason, exactly as not claiming does', () => {
+it('nothing needed works with or without a typed reason', () => {
   const db = fresh();
-  assert.throws(() => step(db, 'remedy', { kind: 'none' }), e => e.code === 'reason_required');
-  assert.throws(() => step(db, 'remedy', { kind: 'none', note: '   ' }),
-    e => e.code === 'reason_required');
-  // And the case is untouched by the refusal.
-  assert.strictEqual(dc.readCase(db, 55).remedy, null);
+  const c = step(db, 'remedy', { kind: 'none' });
+  assert.strictEqual(c.remedy, 'none');
+  assert.strictEqual(c.remedy_note, null);
+  const db2 = fresh();
+  const c2 = step(db2, 'remedy', { kind: 'none', note: 'customer confirmed the food was fine' });
+  assert.strictEqual(c2.remedy_note, 'customer confirmed the food was fine');
 });
 
 it('the other two answers still need no reason — they evidence themselves', () => {
