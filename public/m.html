@@ -41273,13 +41273,12 @@ reg('invFile', async input=>{
     d.busy=''; d.err=T('Upload failed: ','上传失败:')+(e.message||''); render();
   }
 });
-/* markInvoiceIssued: a link or a number, at least one, said before the
-   request; then the desktop's body. Marking it issued tells the customer. */
+/* markInvoiceIssued: a link and a number are both optional — no file is
+   required. Then the desktop's body. Marking it issued tells the customer. */
 reg('invIssue', ()=>{
   const o=currentOrder(); const d=state.inv;
   if(!o||!o.invoice||!d||d.orderId!==o.id||d.busy||!invCanIssue()) return;
   const url=String(d.url||'').trim(), number=String(d.number||'').trim();
-  if(!url&&!number){ d.err=T('Add a fapiao link/PDF or invoice number','请填写发票链接或号码'); render(); return; }
   d.err='';
   orderWrite('invoice', async()=>{
     await apiWrite('/orders/'+o._id+'/invoice',{action:'issue',file_url:url,number},'PUT');

@@ -25893,8 +25893,9 @@ router.post('/fapiao/:token', fapiaoPagePost);
 
 // ── Fapiao issuance (Phase 3a) ──────────────────────────────────────────────
 // The fapiao is issued at the accounting company; this is the system of record.
-// Staff "mark issued" + attach the fapiao (a pasted link or an uploaded PDF),
-// which then surfaces in the customer's profile. `unissue` reverts a mistake.
+// Staff "mark issued". A pasted link, an uploaded PDF, and the 发票号码 are
+// all optional; whatever is attached then surfaces in the customer's profile.
+// `unissue` reverts a mistake.
 router.put('/api/retail-admin/orders/:id/invoice', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
@@ -25915,7 +25916,6 @@ router.put('/api/retail-admin/orders/:id/invoice', requireRetailAdmin, express.j
   }
   const fileUrl = (req.body?.file_url || '').trim() || null;
   const number  = (req.body?.number || '').trim() || null;
-  if (!fileUrl && !number) return res.status(400).json({ success: false, error: 'need_file_or_number' });
   tdb().prepare(
     `UPDATE retail_orders
         SET invoice_status = 'issued', invoice_file_url = ?, invoice_number = ?, invoice_issued_at = CURRENT_TIMESTAMP
