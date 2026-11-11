@@ -166,14 +166,12 @@ await itAsync('a geocoder OUTAGE is still a hold, not a request for a point', as
     });
 });
 
-await itAsync('an order with NO coordinates at all is still a plain refusal', async () => {
-  // Out of stage-1 scope on purpose: there is no guessed point to drop on a
-  // map, so the map surface would open on nothing.
+await itAsync('an order with NO coordinates and only a coarse answer waits for a person', async () => {
   await assert.rejects(
     buildCreatePayload(ORDER(VAGUE), SHOP, noPoi, { geocode: stubGeo(COARSE_FAR) }),
     (e) => {
-      assert.notStrictEqual(e.needsPoint, true);
-      assert.match(e.message, /geocode failed/);
+      assert.strictEqual(e.needsPoint, true);
+      assert.ok(e.point, 'the coarse answer is where the map opens');
       return true;
     });
 });

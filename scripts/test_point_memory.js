@@ -124,16 +124,12 @@ it('keyed on the ADDRESS, so it never answers for a customer’s OTHER address',
 
 console.log('\nthe source — what went in is what comes out');
 
-it('a picked NAME stays poi_picked and is never promoted to staff_pin', () => {
-  // staff_pin is exempt from MAX_DROP_KM in lib/qingyun-payload; poi_picked is
-  // not. Promoting one on the way out of the memory would hand a chosen name a
-  // distance exemption nobody earned — the laundering §5 exists to prevent,
-  // arriving a week later through a cache.
+it('a picked NAME is not remembered', () => {
+  // A name off a list is not a point on the building. Remembering it would
+  // send the next order to that pin without asking.
   const db = freshDb();
-  remembered(db, ADDR, { source: 'poi_picked', placeName: '紫山大街小区' });
-  const hit = memory.recall(db, ADDR);
-  assert.strictEqual(hit.source, 'poi_picked');
-  assert.strictEqual(hit.placeName, '紫山大街小区');
+  assert.strictEqual(remembered(db, ADDR, { source: 'poi_picked', placeName: '紫山大街小区' }), false);
+  assert.strictEqual(memory.recall(db, ADDR), null);
 });
 
 it('no other source may be stored, whatever the caller claims', () => {
@@ -343,11 +339,11 @@ it('both endpoints release the twins, and only after their own transaction', () 
 
 console.log('\nthe wiring — the two surfaces that ask, and the one that answers');
 
-it('both confirm endpoints record their answer, each with its own source', () => {
+it('only the map tap is remembered — a picked name is not', () => {
   assert.match(RETAIL, /pointMemory\.remember\(tx, \{\s*\n?\s*addr, lat: pin\.lat, lng: pin\.lng, source: 'staff_pin'/,
     'the map tap is remembered');
-  assert.match(RETAIL, /pointMemory\.remember\(tx, \{\s*\n?\s*addr, lat: pin\.lat, lng: pin\.lng, source: 'poi_picked'/,
-    'the picked place is remembered too — a question asked twice is asked twice either way');
+  assert.doesNotMatch(RETAIL, /pointMemory\.remember\([\s\S]{0,240}source: 'poi_picked'/,
+    'a picked name must not be written into the memory');
 });
 
 it('the drain consults the memory BEFORE it parks either state', () => {
@@ -406,17 +402,30 @@ await itAsync('the SECOND order to the same address ships on the remembered poin
   assert.strictEqual(p._geo.precision, null);
 });
 
-await itAsync('a remembered PICKED name is still measured against MAX_DROP_KM', async () => {
-  // The contrast that proves the source survives the round trip: the same
-  // coordinate, remembered under the other source, is not exempt.
+it('an old picked-name row already in the table is not handed back', () => {
   const db = freshDb();
-  remembered(db, ADDR, { source: 'poi_picked', lat: 23.40, lng: 113.33 });   // ~30km north
-  const warns = [];
-  await assert.rejects(
-    buildCreatePayload(
-      ORDER(memory.pinnedSnapshot(ADDR, memory.recall(db, ADDR))), SHOP, noPoi,
-      { geocode: stubGeo, onWarn: (m) => warns.push(m) }),
-    (e) => { assert.match(e.message, /km/); return true; });
+  remembered(db);
+  db.prepare("UPDATE retail_delivery_point_memory SET source = 'poi_picked', place_name = '紫山大街小区'").run();
+  assert.strictEqual(memory.recall(db, ADDR), null, 'a stored name pick is not a door to reuse');
+});
+
+it('forgetting the pin removes it, and reparks an unsent copy of the same address', () => {
+  const db = freshDb();
+  remembered(db);
+  const snap = JSON.stringify({ ...ADDR, lat: PIN.lat, lng: PIN.lng, geo_source: 'staff_pin' });
+  db.prepare('INSERT INTO retail_orders (id, order_no, status, address_json) VALUES (1, ?, ?, ?)').run('TC1', 'paid', snap);
+  db.prepare('INSERT INTO retail_orders (id, order_no, status, address_json) VALUES (2, ?, ?, ?)').run('TC2', 'paid', snap);
+  db.prepare(`INSERT INTO qingyun_push_queue (retail_order_id, store_code, status, attempts) VALUES (1, 'YX', 'pending', 0)`).run();
+  db.prepare(`INSERT INTO qingyun_push_queue (retail_order_id, store_code, status, attempts, qingyun_order_id) VALUES (2, 'YX', 'pending', 0, 'QY-LIVE')`).run();
+  const out = memory.forget(db, ADDR);
+  assert.strictEqual(out.forgotten, true);
+  assert.strictEqual(memory.recall(db, ADDR), null);
+  assert.deepStrictEqual(out.reparked, ['TC1']);
+  const parked = db.prepare('SELECT status FROM qingyun_push_queue WHERE retail_order_id = 1').get();
+  assert.strictEqual(parked.status, 'needs_point');
+  const live = db.prepare('SELECT status, qingyun_order_id FROM qingyun_push_queue WHERE retail_order_id = 2').get();
+  assert.strictEqual(live.qingyun_order_id, 'QY-LIVE', 'a courier already out is not moved from here');
+  assert.strictEqual(live.status, 'pending');
 });
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} point memory: ${pass} passed, ${fail} failed\n`);

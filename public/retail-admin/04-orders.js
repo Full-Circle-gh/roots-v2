@@ -5951,6 +5951,7 @@ function renderQyShipFrom(o) {
             ${refused
               ? `<button class="btn btn-sm" onclick="qyRetryPush(${o.id}, this)">${cuT('Retry push', '重新发单')}</button>`
               : ''}
+            <button class="btn btn-sm" type="button" onclick="qyForgetPoint(${o.id}, this)">${cuT('Wrong place', '送错地点')}</button>
           </div>
           ${sf.push_error ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;" data-no-i18n>${escapeHtml(sf.push_error)}</div>` : ''}
           ${held
@@ -6005,6 +6006,7 @@ function renderQyShipFrom(o) {
         <span style="font-size:12px; color:var(--text-3);">${cuT('Ships from', '取货门店')}</span>
         <b style="font-size:13px;">${name}</b>
         ${changeBtn}
+        <button class="btn btn-sm" type="button" onclick="qyForgetPoint(${o.id}, this)">${cuT('Wrong place', '送错地点')}</button>
       </div>
       ${movedNote}${blockedNote}${stale}
       <div id="qy-shipfrom-${o.id}" style="margin-top:8px;"></div>
@@ -6016,6 +6018,33 @@ function renderQyShipFrom(o) {
 // Put a refused push back in the queue. The daemon drains 'pending' rows every
 // ~25s, so this hands the order back to the SAME path — and the same address
 // checks — as the automatic push, rather than bypassing them.
+async function qyForgetPoint(orderId, btn) {
+  const ok = confirm(cuT(
+    'Forget this pin for this address? The next order will ask where the door is. A rider already on the way still has to be cancelled in the Qingyun app.',
+    '忘记这个地址的定位点？下一单会重新确认门口。已经在路上的骑手仍需在青云 App 里取消。'));
+  if (!ok) return;
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Forgetting…', '处理中…'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/forget-point`, { method: 'POST' });
+    const j = await r.json();
+    if (j.success) {
+      toast(j.live_copy
+        ? cuT('Pin forgotten for the next order. Cancel this rider in the Qingyun app.', '已忘记定位点，下一单会再问。这一单的骑手请在青云 App 里取消。')
+        : (j.reparked && j.reparked.length)
+          ? cuT('Pin forgotten. This order will ask where the door is before a rider is sent.', '已忘记定位点。发出前会重新确认门口。')
+          : cuT('Pin forgotten. The next order to this address will ask where the door is.', '已忘记定位点。下一单到这个地址会重新确认门口。'),
+        'success');
+      openOrder(orderId, { instant: true });
+      return;
+    }
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Wrong place', '送错地点'); }
+    toast(cuT('Could not forget the pin', '无法忘记定位点'), 'err');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Wrong place', '送错地点'); }
+    toast(cuT('Network error', '网络错误'), 'err');
+  }
+}
+
 async function qyRetryPush(orderId, btn) {
   if (btn) { btn.disabled = true; btn.textContent = cuT('Queuing…', '排队中…'); }
   try {
