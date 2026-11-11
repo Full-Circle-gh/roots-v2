@@ -25810,10 +25810,11 @@ router.post('/api/retail-admin/orders/:id/meituan-action', requireRetailAdmin, e
   res.json({ success: true, data: { queued: action, writeback_enabled: process.env.MEITUAN_WRITEBACK === '1' } });
 });
 
-// ── Till fapiao code (§526) ─────────────────────────────────────────────────
-// A cashier shows a QR for one till sale. The customer scans it and types the
-// title, tax ID and email. Those land on the order. The tax document is still
-// issued by hand afterwards.
+// ── Fapiao code (§526) ──────────────────────────────────────────────────────
+// A till receipt and a Ramada menu receipt carry a QR for that order. The
+// cashier can also open the same code for a paid till sale. The customer
+// scans it and types the title, tax ID and email. Those land on the order.
+// The tax document is still issued by hand afterwards.
 function fapiaoLinkOrder(req) {
   return fapiaoLink.loadById(tdb(), parseInt(req.params.id, 10));
 }
@@ -25847,7 +25848,7 @@ router.post('/api/retail-admin/orders/:id/fapiao-link', requireRetailAdmin, (req
 });
 
 // The page the code opens. No login: the token is the order. A token that is
-// not a live till sale says so without naming any other order.
+// not a live till sale or menu order says so without naming any other order.
 // Both paths: /s/fapiao is what the QR carries, because the filed domain
 // forwards /s/ and 404s anything else. /fapiao is the same page on a host
 // that reaches this process directly. Always 200 — a 404 status is what
@@ -30111,7 +30112,15 @@ function printOrderById(orderId, prefs, pcfg) {
   attachOptionSkus(items);
   const shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(orderId);
   const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
-  const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments, { credit: tenantPrintCredit(), taxNumber: taxSettings().number });
+  // §526 — a till receipt and a menu receipt carry the fapiao code. A shop
+  // with no public address, or a sale that is cancelled or already issued,
+  // prints the slip without one. A dead mint must not drop the receipt.
+  let fapiaoUrl = null;
+  try { fapiaoUrl = fapiaoLink.receiptUrl(tdb(), order, currentTenantId()); }
+  catch (e) { console.warn('[print fapiao]', orderId, e.message); }
+  const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments, {
+    credit: tenantPrintCredit(), taxNumber: taxSettings().number, fapiaoUrl,
+  });
   return _printers.printContent(content, printer, ci);
 }
 

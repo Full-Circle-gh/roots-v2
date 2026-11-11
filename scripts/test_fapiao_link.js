@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// THE TILL'S FAPIAO CODE (§526).
+// THE FAPIAO CODE ON A RECEIPT (§526).
 //
-// A till sale is paid before anyone has a title. The cashier shows a code for
-// that order. The customer types the details. They land on the order. A
-// QR-menu sale, a cancelled sale and an issued sale do not get a code, and a
-// token that is not a live till sale does not name some other order.
+// A till receipt and a Ramada menu receipt carry a code for that order. The
+// customer scans it and types the details. They land on the order. A menu
+// receipt prints before the money arrives, and the page still takes the
+// details. The cashier's button stays a paid till sale. A delivery, a
+// cancelled sale and an issued sale print no code, and a token that is not
+// one of these two doors does not name some other order.
 //
 // USAGE   node scripts/test_fapiao_link.js
 // EXIT    0 every assertion held · 1 an assertion failed · 2 no driver/router
@@ -60,7 +62,9 @@ INSERT INTO retail_orders (id, order_no, status, total, shop_entry_method) VALUE
   (2, 'TC900002', 'paid', 36, 'qr'),
   (3, 'TC900003', 'cancelled', 20, 'till'),
   (4, 'TC900004', 'pending_payment', 20, 'till'),
-  (5, 'TC900005', 'paid', 20, 'till');
+  (5, 'TC900005', 'paid', 20, 'till'),
+  (6, 'QR900006', 'pending_payment', 18, 'qr'),
+  (7, 'DL900007', 'paid', 40, NULL);
 UPDATE retail_orders SET invoice_status = 'issued', needs_invoice = 1, invoice_title = '已开' WHERE id = 5;
 `);
 
@@ -106,7 +110,7 @@ const link = require('../lib/fapiao-link');
   ok(link.staffBlock(handle.prepare('SELECT * FROM retail_orders WHERE id = 1').get()) === null,
      'a paid till sale may show one');
   ok(link.staffBlock(handle.prepare('SELECT * FROM retail_orders WHERE id = 2').get()) === 'not_till',
-     'a QR-menu sale may not — that customer already has a page');
+     'the cashier\'s button stays a till sale; the menu code is on the receipt');
   ok(link.staffBlock(handle.prepare('SELECT * FROM retail_orders WHERE id = 3').get()) === 'not_open',
      'a cancelled till sale may not');
   ok(link.staffBlock(handle.prepare('SELECT * FROM retail_orders WHERE id = 4').get()) === 'not_open',
@@ -187,7 +191,55 @@ const link = require('../lib/fapiao-link');
   ok(ghost.status === 200 && ghost.text.includes('此链接没有可开的订单') && !ghost.text.includes('TC900'),
      'an unknown token says the link is not an open order, and names nobody');
 
-  console.log('\n5 · the button is a till sale, on each surface that opens one');
+  console.log('\n5 · the receipt carries the code, for a till sale and a menu order');
+  const feie = require('../lib/feie');
+  const menu = handle.prepare('SELECT * FROM retail_orders WHERE id = 2').get();
+  const printed = link.receiptUrl(handle, menu, 1);
+  ok(/^https:\/\/shop\.example\.test\/s\/fapiao\/[a-f0-9]{36}$/.test(printed || ''),
+     'a paid menu order gets an address for its receipt', printed);
+  const reprinted = link.receiptUrl(handle, handle.prepare('SELECT * FROM retail_orders WHERE id = 2').get(), 1);
+  ok(reprinted === printed, 'a reprint is the same code');
+  const unpaid = link.receiptUrl(handle, handle.prepare('SELECT * FROM retail_orders WHERE id = 6').get(), 1);
+  ok(/^https:\/\/shop\.example\.test\/s\/fapiao\/[a-f0-9]{36}$/.test(unpaid || ''),
+     'a menu order that has not been paid yet still gets a code, because its receipt prints first', unpaid);
+  ok(link.receiptUrl(handle, handle.prepare('SELECT * FROM retail_orders WHERE id = 3').get(), 1) === null,
+     'a cancelled sale prints no code');
+  ok(link.receiptUrl(handle, handle.prepare('SELECT * FROM retail_orders WHERE id = 5').get(), 1) === null,
+     'an issued fapiao prints no code');
+  ok(link.receiptUrl(handle, handle.prepare('SELECT * FROM retail_orders WHERE id = 7').get(), 1) === null,
+     'a delivery prints no code');
+  const slip = feie.renderOrder('receipt', menu, [], 'Ramada', [], { fapiaoUrl: printed });
+  ok(slip.includes('<QR>' + printed + '</QR>')
+     && slip.includes('扫码填写发票') && slip.includes('Scan and type the fapiao'),
+     'the receipt prints the code and the words under it');
+  const bare = feie.renderOrder('receipt', menu, [], 'Ramada', []);
+  ok(!bare.includes('<QR>'), 'a receipt with no address prints no code');
+  const compact = feie.renderOrder('compact', menu, [], 'Ramada', [], { fapiaoUrl: printed });
+  ok(compact.includes('<QR>' + printed + '</QR>'), 'a compact receipt carries the code too');
+  const packing = feie.renderOrder('packing',
+    Object.assign({}, menu, { fulfillment_type: 'delivery' }), [], 'Ramada', [], { fapiaoUrl: printed });
+  ok(!packing.includes('<QR>'), 'a packing slip does not carry the code');
+  const asReceipt = feie.renderOrder('packing',
+    { order_no: 'TC1', fulfillment_type: 'counter', total: 12 }, [], 'Ramada', [], { fapiaoUrl: printed });
+  ok(asReceipt.includes('<QR>' + printed + '</QR>'),
+     'a counter sale whose store prints a packing slip still comes out as a receipt, with the code');
+  const token6 = unpaid.split('/').pop();
+  const waiting = await send('GET', '/s/fapiao/' + token6);
+  ok(waiting.status === 200 && waiting.text.includes('QR900006') && waiting.text.includes('发票资料'),
+     'scanning the code on an unpaid menu receipt opens the form', waiting.status);
+  const filed = await send('POST', '/s/fapiao/' + token6,
+    'invoice_type=personal&invoice_title=' + encodeURIComponent('王伟') + '&invoice_email=wei@example.com',
+    { 'Content-Type': 'application/x-www-form-urlencoded' });
+  ok(filed.status === 303, 'the form saves before the menu order is paid', filed.status);
+  const row6 = handle.prepare('SELECT needs_invoice, invoice_title, invoice_email FROM retail_orders WHERE id = 6').get();
+  ok(row6.needs_invoice === 1 && row6.invoice_title === '王伟' && row6.invoice_email === 'wei@example.com',
+     'the title and email are on the unpaid menu order', row6);
+  handle.prepare('UPDATE retail_orders SET fapiao_token = ? WHERE id = 7').run('d'.repeat(36));
+  const hidden = await send('GET', '/s/fapiao/' + 'd'.repeat(36));
+  ok(hidden.status === 200 && hidden.text.includes('此链接没有可开的订单') && !hidden.text.includes('DL900007'),
+     'a token on a delivery does not open that order');
+
+  console.log('\n6 · the button is a till sale, on each surface that opens one');
   const till = fs.readFileSync(path.join(ROOT, 'public', 'till.html'), 'utf8');
   const phone = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
   const desk = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '04-orders.js'), 'utf8');
