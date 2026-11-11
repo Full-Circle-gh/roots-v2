@@ -2610,7 +2610,7 @@ async function openMapPicker(){
 async function coQuote(){
   const place=$('#coPlace'); if(place)place.disabled=true;
   if(!co.addrId){ const s=$('#coSummary'); if(s)s.innerHTML='<div class="co-line">'+(state.lang==='cn'?'选择地址后显示总价':'Add an address to see totals')+'</div>'; return; }
-  const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId||null,slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:co.usePoints?99999999:0,use_balance:!!co.useBalance};
+  const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId||null,slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:co.usePoints?99999999:0,use_balance:!!co.useBalance,voucher_code:co.voucher||null,location_vouchers:true};
   let j;
   try{ const r=await fetch('/api/retail/checkout/quote',{method:'POST',headers:authHeaders({'Content-Type':'application/json','Accept':'application/json'}),body:JSON.stringify(body)}); j=await r.json().catch(()=>({})); }
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
