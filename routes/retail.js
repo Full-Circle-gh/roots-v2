@@ -16508,6 +16508,31 @@ function _dashActivitySignature(tenantId) {
         FROM retail_orders`).get();
     parts.push(o.n, o.a, o.b, o.c, o.e, o.f, o.g, o.h);
   } catch (e) { parts.push('o?'); }
+  // "Finding a rider" is a delivery_jobs fact. The Qingyun daemon writes the
+  // stage there and does not touch the order row, so a watermark built only
+  // from retail_orders never moved, the list's refetch looked identical, and
+  // the open drawer kept the previous card until somebody reloaded the page.
+  //
+  // Not updated_at, and not the rider's position. The daemon rewrites those
+  // on every poll, about every 25s, for every live delivery. A signature that
+  // moved on a GPS tick would refetch the whole admin on that cadence. What
+  // deliveryJobStage actually reads is the status pair, whether anyone has
+  // been called, and a cancel. Those are the sums below.
+  try {
+    const j = d.prepare(`
+      SELECT COUNT(*) n,
+             COALESCE(SUM(order_status), 0) os,
+             COALESCE(SUM(delivery_status), 0) ds,
+             COALESCE(SUM(CASE WHEN cancelled_at IS NULL THEN 0 ELSE 1 END), 0) cx,
+             COALESCE(SUM(CASE WHEN delivery_id IS NOT NULL
+                                 OR carrier_name IS NOT NULL
+                                 OR rider_name IS NOT NULL
+                                 OR COALESCE(delivery_status, 0) > 0
+                               THEN 1 ELSE 0 END), 0) live
+        FROM delivery_jobs
+       WHERE COALESCE(superseded, 0) = 0`).get();
+    parts.push(j.n, j.os, j.ds, j.cx, j.live);
+  } catch (e) { parts.push('j?'); }
   try {
     const c = d.prepare(`SELECT COUNT(*) n, MAX(created_at) m FROM retail_customers`).get();
     parts.push(c.n, c.m);
@@ -27946,6 +27971,52 @@ router.get('/api/retail-admin/orders/:id/qingyun/carriers', requireRetailAdmin, 
   }
 });
 
+// The dispatch call has been accepted, but the daemon is what normally writes
+// delivery_jobs, and its next read is up to ~25s away. Until that read, the
+// order still looks "scheduled" — no rider sought — so the drawer the operator
+// is staring at stays on the compare button and "Finding a rider" appears only
+// after a reload. Stamp the 待抢单 pair now (order 30, delivery 10). That is
+// the pair deliveryJobStage maps to awaiting_dispatch, and it is NOT the pair
+// the auto-dispatch sweep treats as picked up (that wants delivery_status >= 30),
+// so this does not mark the order dispatched.
+//
+// A row already further along is left alone: a second click must not drag a
+// rider who is already at the door back to "finding". A cancelled row is left
+// alone for the same reason. The daemon's next real read overwrites both
+// numbers with whatever Qingyun says.
+function _qingyunNoteSeekingRider(qyOrderId, storeCode, retailOrderId, carrierName) {
+  try {
+    tdb().prepare(`
+      INSERT INTO delivery_jobs
+        (qingyun_order_id, retail_order_id, store_code, order_status, delivery_status, carrier_name, updated_at)
+      VALUES (?, ?, ?, 30, 10, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(qingyun_order_id) DO UPDATE SET
+        retail_order_id = COALESCE(delivery_jobs.retail_order_id, excluded.retail_order_id),
+        carrier_name = COALESCE(excluded.carrier_name, delivery_jobs.carrier_name),
+        order_status = CASE
+          WHEN delivery_jobs.cancelled_at IS NOT NULL THEN delivery_jobs.order_status
+          WHEN COALESCE(delivery_jobs.order_status, 0) >= 50 THEN delivery_jobs.order_status
+          -- Already past "nobody has accepted". A missing delivery_status on an
+          -- in-flight order is read as on the way, not as finding a rider, so
+          -- it must not be pulled backwards either.
+          WHEN COALESCE(delivery_jobs.order_status, 0) >= 30
+           AND (delivery_jobs.delivery_status IS NULL OR delivery_jobs.delivery_status >= 20)
+            THEN delivery_jobs.order_status
+          ELSE 30
+        END,
+        delivery_status = CASE
+          WHEN delivery_jobs.cancelled_at IS NOT NULL THEN delivery_jobs.delivery_status
+          WHEN COALESCE(delivery_jobs.order_status, 0) >= 50 THEN delivery_jobs.delivery_status
+          WHEN COALESCE(delivery_jobs.order_status, 0) >= 30
+           AND (delivery_jobs.delivery_status IS NULL OR delivery_jobs.delivery_status >= 20)
+            THEN delivery_jobs.delivery_status
+          ELSE 10
+        END,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(String(qyOrderId), retailOrderId, storeCode, carrierName || null);
+  } catch (e) { console.error('[qingyun dispatch] stage', e.message); }
+}
+
 // Does this Qingyun order already have a courier committed to it? Deliberately NOT
 // _qingyunMoveBlockedBy, which blocks on any tracked job: a rider who accepts and
 // then drops the order reverts it to 待配送 (orderStatus 20), and that MUST stay
@@ -28016,6 +28087,10 @@ router.post('/api/retail-admin/orders/:id/qingyun/dispatch', requireRetailAdmin,
       console.error(`[qingyun dispatch] order ${id} refused: code=${r.code} msg=${r.msg || '(none)'}`);
       return res.json({ success: false, error: r.msg || 'dispatch_failed', insufficient_balance: insufficient });
     }
+    // One carrier: we know the name. Several at once: whoever accepts first
+    // is the carrier, and that is not a name we have yet.
+    const seekingName = chosen.length === 1 ? (chosen[0].serviceName || chosen[0].carrierName || null) : null;
+    _qingyunNoteSeekingRider(ref.qyOrderId, ref.storeCode, id, seekingName);
     res.json({ success: true, carriers: chosen.map(c => ({ name: c.serviceName, fee_yuan: c.feeYuan })) });
   } catch (e) {
     console.error('[qingyun dispatch]', e.message);
