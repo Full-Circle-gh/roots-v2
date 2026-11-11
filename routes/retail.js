@@ -29191,6 +29191,58 @@ router.post('/api/retail-admin/orders/:id/qingyun/forget-point', requireRetailAd
   });
 });
 
+// Advice beside the drop pin. The map names the coordinate; the model only
+// says whether that name and the typed address are the same place. It is
+// never given the coordinate, and nothing here moves the pin or holds the
+// rider. A miss shows the map's own label, which is still something to read.
+const _pinAdviceCache = new Map();
+router.post('/api/retail-admin/orders/:id/qingyun/pin-advice', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare('SELECT id, address_json, address_full FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  let addr = {};
+  try { addr = JSON.parse(o.address_json || '{}') || {}; } catch { addr = {}; }
+  if (addr.pickup) return res.status(422).json({ success: false, error: 'pickup_order' });
+  const drop = _qingyunDropoff(id, _qingyunPushRow(id));
+  if (!drop) return res.json({ success: true, verdict: 'no_pin' });
+  const typed = String(o.address_full || '').trim();
+  const key = `${id}|${Number(drop.lat).toFixed(5)}|${Number(drop.lng).toFixed(5)}|${typed}`;
+  const cached = _pinAdviceCache.get(key);
+  if (cached && cached.until > Date.now()) return res.json({ success: true, ...cached.body });
+
+  let rev = null;
+  try { rev = await geocode.reverseGeocode({ lat: Number(drop.lat), lng: Number(drop.lng) }); }
+  catch { rev = null; }
+  const pinLabel = rev && rev.address ? String(rev.address) : '';
+  const unnamed = {
+    verdict: 'unsure', pin_label: '',
+    en: 'The map did not name this dot. Look at it before a rider is sent.',
+    cn: '地图没有给出这个点的地名。发出骑手前请看一下地图。',
+  };
+  if (!pinLabel) return res.json({ success: true, ...unnamed });
+
+  const labelOnly = {
+    verdict: 'label', pin_label: pinLabel,
+    en: '', cn: '',
+  };
+  const gateway = require('../lib/model-gateway');
+  if (!gateway.isConfigured()) return res.json({ success: true, ...labelOnly });
+  try {
+    const pinAdvice = require('../lib/pin-advice');
+    const said = await pinAdvice.advise({
+      typed, pinLabel, pinDistrict: rev.district || '',
+      call: (args) => gateway.callModel(args),
+    });
+    const body = { verdict: said.verdict, pin_label: pinLabel, en: said.en, cn: said.cn };
+    if (_pinAdviceCache.size > 200) _pinAdviceCache.delete(_pinAdviceCache.keys().next().value);
+    _pinAdviceCache.set(key, { until: Date.now() + 10 * 60 * 1000, body });
+    res.json({ success: true, ...body });
+  } catch (e) {
+    console.warn('[pin-advice]', e && e.message);
+    res.json({ success: true, ...labelOnly });
+  }
+});
+
 // ── None of these is the place — give me a map instead ────────────────────
 // Moves the row from 'awaiting_choice' to 'needs_point' so the existing confirm
 // surface renders. A STATE change and nothing else: no pin, no source, no
