@@ -165,7 +165,7 @@ const {
   customerHoldsVoucher, voucherPlaceOk, pickupPlaceFrom,
   counterVouchersFor, bestCounterVoucher, consumeCounterVoucher,
   counterVoucherTerms, counterHoldersByPhone,
-  voucherCapReached, bestAutoVoucher, nearMissAutoVoucher,
+  voucherCapReached, bestAutoVoucher, nearMissAutoVoucher, resolveCheckoutVoucher,
 } = require('../lib/vouchers');
 // The address helpers: the Chinese-address cleaner, the saved-address map
 // lookup, the city → province table, moved to lib/ (decisions §477).
@@ -35494,17 +35494,47 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     });
   }
 
+  const quoteLineByKey = new Map((priced.lines || []).map((line) => [
+    `${line.product_id}:${(line.choice_ids || []).join(',')}`, line,
+  ]));
+  let couponableSubtotal = 0;
+  for (const it of (items || [])) {
+    const pid = parseInt(it.product_id, 10);
+    const choiceIds = (Array.isArray(it.choices) ? it.choices : [])
+      .map((c) => Number(c)).filter(Boolean).sort((a, b) => a - b);
+    const line = quoteLineByKey.get(`${pid}:${choiceIds.join(',')}`);
+    if (!line || line.coupon_blocked) continue;
+    const qty = Number(it.qty) || 0;
+    couponableSubtotal += (Number(line.unit_price) || 0) * qty;
+  }
+  couponableSubtotal = Math.round(couponableSubtotal * 100) / 100;
+  const quoteVoucherCode = body.voucher_code || null;
+  const quoteVoucherPlace = (body.location_vouchers === true && body.pickup_store_id)
+    ? pickupPlaceFrom(body.pickup_store_id) : null;
+  const quoteVoucher = resolveCheckoutVoucher(
+    req.customer.id, quoteVoucherCode, priced.subtotal, fees.deliveryFee,
+    couponableSubtotal, quoteVoucherPlace,
+  );
+  let quoteVoucherDiscount = quoteVoucher.voucherDiscount;
+  let quoteShippingFee = fees.deliveryFee;
+  if (quoteVoucher.freeShipping) {
+    quoteShippingFee = 0;
+    fees.deliveryFee = 0;
+    fees.freeShipping = true;
+  }
+
   // Tax, on the same base and in the same place the order route computes it
-  // (audit I-03) — before points and wallet, which are tenders. The quote is
-  // what the customer is shown, so a shop that charges tax must show it here or
-  // the pay button says one number and the bill is another.
+  // (audit I-03) — after vouchers, before points and wallet, which are tenders.
+  // The quote is what the customer is shown, so a shop that charges tax must
+  // show it here or the pay button says one number and the bill is another.
   const quoteTaxCfg = taxSettings();
   let quoteTax = tax.taxOn({
     subtotalMinor: money.toMinor(priced.subtotal) || 0,
-    shippingMinor: money.toMinor(fees.deliveryFee) || 0,
+    shippingMinor: money.toMinor(quoteShippingFee) || 0,
     packingMinor: money.toMinor(fees.packingFee) || 0,
+    discountMinor: money.toMinor(quoteVoucherDiscount) || 0,
   }, quoteTaxCfg);
-  let grossTotal = Math.max(0, priced.subtotal + fees.deliveryFee + fees.packingFee)
+  let grossTotal = Math.max(0, priced.subtotal + quoteShippingFee + fees.packingFee - quoteVoucherDiscount)
     + money.fromMinor(quoteTax.addedMinor);
 
   // Points preview — two modes the client uses:
@@ -35523,8 +35553,8 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // When the store excludes shipping from points coverage, the redeemable
   // base is subtotal + packing only; the customer always pays shipping in
   // cash (so residual = shipping when the points side is "full").
-  let redeemBase       = pointsRedeemableBase(priced.subtotal, fees.deliveryFee, fees.packingFee, 0,
-    money.fromMinor(quoteTax.addedMinor));
+  let redeemBase       = pointsRedeemableBase(priced.subtotal, quoteShippingFee, fees.packingFee,
+    quoteVoucherDiscount, money.fromMinor(quoteTax.addedMinor));
   let pointsRequired   = pointsRequiredFor(redeemBase);
   let pointsAffordable = pointsBalance >= pointsRequired;
   let pointsMaxUsable  = Math.min(pointsBalance, pointsRequired);
@@ -35548,12 +35578,11 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
 
   // Wallet balance preview — stacks AFTER points on the non-shipping bill.
   // Store credit never pays shipping, so balance can cover at most
-  // subtotal + packing − points already applied. (Quote doesn't apply
-  // vouchers; the order endpoint re-prices with the real voucher discount.)
+  // subtotal + packing − voucher − points already applied.
   const _wallet = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(req.customer.id);
   const balanceBalance   = Math.max(0, Number(_wallet?.balance) || 0);
-  let balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount,
-    money.fromMinor(quoteTax.addedMinor));
+  let balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, quoteVoucherDiscount,
+    pointsDiscount, money.fromMinor(quoteTax.addedMinor));
   let balanceMaxUsable = Math.round(Math.min(balanceBalance, balanceSpendable) * 100) / 100;
   const useBalance       = !!body.use_balance && paymentMethodPreview !== 'points';
   let balanceApplied   = useBalance ? balanceMaxUsable : 0;
@@ -35786,11 +35815,12 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
         subtotalMinor: money.toMinor(priced.subtotal) || 0,
         shippingMinor: money.toMinor(fees.deliveryFee) || 0,
         packingMinor: money.toMinor(fees.packingFee) || 0,
+        discountMinor: money.toMinor(quoteVoucherDiscount) || 0,
       }, quoteTaxCfg);
-      grossTotal = Math.max(0, priced.subtotal + fees.deliveryFee + fees.packingFee)
+      grossTotal = Math.max(0, priced.subtotal + fees.deliveryFee + fees.packingFee - quoteVoucherDiscount)
         + money.fromMinor(quoteTax.addedMinor);
-      redeemBase = pointsRedeemableBase(priced.subtotal, fees.deliveryFee, fees.packingFee, 0,
-        money.fromMinor(quoteTax.addedMinor));
+      redeemBase = pointsRedeemableBase(priced.subtotal, fees.deliveryFee, fees.packingFee,
+        quoteVoucherDiscount, money.fromMinor(quoteTax.addedMinor));
       pointsRequired = pointsRequiredFor(redeemBase);
       pointsAffordable = pointsBalance >= pointsRequired;
       pointsMaxUsable = Math.min(pointsBalance, pointsRequired);
@@ -35805,8 +35835,8 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
         pointsDiscount = credit.pointsAmount;
         total = Math.max(0, grossTotal - pointsDiscount);
       }
-      balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount,
-        money.fromMinor(quoteTax.addedMinor));
+      balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, quoteVoucherDiscount,
+        pointsDiscount, money.fromMinor(quoteTax.addedMinor));
       balanceMaxUsable = Math.round(Math.min(balanceBalance, balanceSpendable) * 100) / 100;
       balanceApplied = useBalance ? balanceMaxUsable : 0;
       if (balanceApplied > 0) total = Math.max(0, total - balanceApplied);
@@ -35849,6 +35879,9 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       delivery_fee: fees.deliveryFee,
       packing_fee:  fees.packingFee,
       free_shipping: fees.freeShipping,
+      voucher_code: quoteVoucher.voucher ? quoteVoucher.voucher.code : null,
+      voucher_discount: quoteVoucherDiscount,
+      voucher_free_shipping: quoteVoucher.freeShipping,
       total,
       gross_total: grossTotal,
       // NULL on a shop that charges no tax, so a client can tell "there is no

@@ -1584,10 +1584,12 @@ Page({
     // payment_method always sends the picked radio — server treats the
     // residual (or 0) as a charge against that rail.
     const usingPoints = !!this.data.usePoints;
+    const ev = this.effectiveVoucher();
     const body = {
       items: orderItems,
       delivery_mode: this.data.deliveryMethod,
       payment_method: this.data.paymentMethod,
+      voucher_code: this.data.voucherCode || null,
       points_to_use:  usingPoints ? (this.data.pointsBalance || 0) : 0,
       // Wallet balance opt-in. Server clamps to the non-shipping remainder
       // after points and returns balance_applied + balance_discount.
