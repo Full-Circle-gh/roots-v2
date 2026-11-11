@@ -1836,6 +1836,33 @@ var co = { addrId:null, addrs:[], noticeQueue:[], slotId:null, slotKind:'', mode
   addrPickerOpen:false, showCode:false,
   needsCutlery:false, needsInvoice:false, invoiceType:'personal', invoiceTitle:'', invoiceTaxId:'', invoiceEmail:'' };
 function coItems(){return cartGet().map(l=>({product_id:l.product_id,qty:l.qty,choices:l.choices||[]}));}
+// A product taken off sale while it sat in this browser's cart. The quote
+// already priced the rest; this takes the dead line off the receipt so Place
+// order does not send it. Names prefer the line she has been looking at.
+function coDropUnavailable(list){
+  const rows=Array.isArray(list)?list:[];
+  const ids=new Set(rows.map(p=>Number(p&&(p.product_id!=null?p.product_id:p.id))).filter(n=>n>0));
+  if(!ids.size)return false;
+  const cart=cartGet();
+  const gone=cart.filter(l=>ids.has(Number(l.product_id)));
+  if(!gone.length)return false;
+  cartSave(cart.filter(l=>!ids.has(Number(l.product_id))));
+  const cn=state.lang==='cn';
+  const names=gone.map(l=>l.name).filter(Boolean);
+  const label=names.length?names.join(cn?'、':', '):(cn?'该商品':'An item');
+  const many=names.length>1;
+  const left=cartGet().length;
+  coMsg(cn
+    ?(label+'已下架，已从购物车移除。'+(left?'其余商品可以继续下单。':'购物车已空。'))
+    :(label+' '+(many?'are':'is')+' no longer for sale, so we removed '+(many?'them':'it')+'.'+(left?' The rest of your order is ready.':' Your cart is empty.')));
+  coRenderItems();
+  const n=cartGet().reduce((s,l)=>s+(Number(l.qty)||0),0);
+  const count=$('#coItemCount');
+  if(count)count.textContent=(cn?'你的订单':'YOUR ORDER')+' · '+n+' '+(cn?'件':'ITEMS');
+  const place=$('#coPlace');
+  if(place&&!left)place.disabled=true;
+  return true;
+}
 function coMsg(m){const e=$('#coMsg');if(e)e.textContent=m||'';}
 // Online storefront closed (server flag store_status.online_open=false). Browse
 // still works; checkout is blocked here AND server-side at POST /api/retail/orders,
@@ -2072,7 +2099,7 @@ async function renderCheckout(){
     </div>
     <div class="cx-col-side">
     <section class="cx-sec cx-sec--first cx-sec--items">
-      <div class="cx-seclabel">${cn?'你的订单':'YOUR ORDER'} · ${n} ${cn?'件':'ITEMS'}</div>
+      <div class="cx-seclabel" id="coItemCount">${cn?'你的订单':'YOUR ORDER'} · ${n} ${cn?'件':'ITEMS'}</div>
       <div id="coItems"></div>
     </section>
     <section class="cx-sec cx-sec--summary">
@@ -2614,8 +2641,16 @@ async function coQuote(){
   let j;
   try{ const r=await fetch('/api/retail/checkout/quote',{method:'POST',headers:authHeaders({'Content-Type':'application/json','Accept':'application/json'}),body:JSON.stringify(body)}); j=await r.json().catch(()=>({})); }
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
-  if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j);} else {coMsg(coErrMsg(j.error));} return; }
-  const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
+  if(j&&j.success===false){
+    if(j.error==='product_unavailable'){ coDropUnavailable(j.unavailable||[]); return; }
+    if(j.error==='no_zone_match'){renderNoZone(j);} else {coMsg(coErrMsg(j.error));} return;
+  }
+  const d=(j&&j.data)||j||{}; co.quote=d;
+  // A follow-up quote after we already told her which line came off sale must
+  // not wipe that sentence when it returns a clean basket.
+  const keepMsg=co._keepMsg; co._keepMsg=false;
+  if(Array.isArray(d.unavailable)&&d.unavailable.length) coDropUnavailable(d.unavailable);
+  else if(!keepMsg) coMsg('');
   renderCoSlots(d); renderCoPoints(d); renderCoBalance(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d); renderCoLocalFresh(d); renderCoStoreMove(d); renderCoRiderPhone(d);
   coLoadOffers();   // keep the pre-pay upsell warm for the current cart
 }
@@ -3308,6 +3343,11 @@ async function coPlace(){
   if(r.status===409&&j.error==='needs_fallback_confirmation'){ coFallback(); return; }
   // Balance moved between quote and submit — re-quote so the toggle + total resync.
   if(j.error==='insufficient_balance') coQuote();
+  if(j.error==='product_unavailable'){
+    coDropUnavailable(j.unavailable||(j.product_id?[{product_id:j.product_id,name_en:j.name_en,name_cn:j.name_cn}]:[]));
+    if(cartGet().length){ co._keepMsg=true; coQuote(); }
+    return;
+  }
   if(j.error==='no_zone_match'){ const c=coZoneCopy(j); coMsg(c.title+' — '+c.body); return; }
   coMsg(coErrMsg(j.error));
   // Unanswered questions have exactly one fix and it is not on this screen, so

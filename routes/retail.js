@@ -10020,7 +10020,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   }
   // §82 step 3 — before anything is reserved or written.
   if (refuseWithoutShopZone(res)) return;
-  const items       = Array.isArray(body.items) ? body.items : [];
+  let items         = Array.isArray(body.items) ? body.items : [];
   const addressId   = body.address_id;
   const paymentMethod = body.payment_method;
   // delivery_mode: 'standard' (default for everywhere) | 'max' (GZ flat-rate
@@ -10164,10 +10164,38 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
      on that function records the decision. The module takes the verdict as a
      caller-supplied predicate for exactly this reason, so moving onto it does
      not move the shop onto the QR menu's per-location answer. */
-  for (const it of items) {
-    if (!parseInt(it.product_id, 10) || !(Number(it.qty) > 0)) {
-      return res.status(400).json({ success: false, error: 'invalid_item' });
+  // A line that is no longer for sale is dropped here, not charged. The cart
+  // on her phone still has it — it was added before the product was switched
+  // off — and refusing the whole order is what left the other items unbought.
+  // The quote already priced without it, so the pay button and this total
+  // agree. An order of ONLY off-sale lines is still refused.
+  {
+    const sellable = [];
+    const unavailable = [];
+    for (const it of items) {
+      const pid = parseInt(it.product_id, 10);
+      if (!pid || !(Number(it.qty) > 0)) {
+        return res.status(400).json({ success: false, error: 'invalid_item' });
+      }
+      const live = tdb().prepare(
+        `SELECT id FROM store_products
+          WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
+      ).get(pid);
+      if (!live) unavailable.push(unavailableLine(pid));
+      else sellable.push(it);
     }
+    if (!sellable.length) {
+      const first = unavailable[0] || {};
+      return res.status(400).json({
+        success: false,
+        error: 'product_unavailable',
+        product_id: first.product_id || null,
+        name_en: first.name_en || null,
+        name_cn: first.name_cn || null,
+        unavailable,
+      });
+    }
+    items = sellable;
   }
   const answers = customerOrderAnswers(items);
   // product_id is carried so the client can NAME the item rather than showing a
@@ -10195,7 +10223,17 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
          FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
-    if (!p) return res.status(400).json({ success: false, error: 'product_unavailable', product_id: pid });
+    if (!p) {
+      const gone = unavailableLine(pid);
+      return res.status(400).json({
+        success: false,
+        error: 'product_unavailable',
+        product_id: pid,
+        name_en: gone.name_en,
+        name_cn: gone.name_cn,
+        unavailable: [gone],
+      });
+    }
 
     // Resolved above, for every line at once. `options` is the bilingual
     // snapshot that goes onto the order line — stock_product_id carries through
@@ -11740,7 +11778,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
      order. Same discipline as the two stamps above and the reroute pids below. */
   try {
     const preorderNotice = computePreorderNotice(
-      zone, address, noticeProductIds(body.items), deliverySlotId, slotKind,
+      zone, address, noticeProductIds(items), deliverySlotId, slotKind,
     );
     const preorderPids = preorderNotice
       ? (preorderNotice.items || []).map((i) => i.id).filter(Boolean)
@@ -35068,15 +35106,35 @@ async function computeStoreMoveNotice(address, resolvedStoreCode, channel) {
   return { ...text };
 }
 
+// A product the customer can no longer buy: unpublished, switched off, or
+// deleted. The cart lives on the phone, so a line added months ago is still
+// there after the product is taken off sale. Naming it lets checkout remove
+// that one line instead of refusing the whole basket.
+function unavailableLine(pid) {
+  const row = tdb().prepare(
+    'SELECT name_en, name_cn FROM store_products WHERE id = ?'
+  ).get(pid);
+  return {
+    product_id: pid,
+    name_en: row ? row.name_en : null,
+    name_cn: row ? row.name_cn : null,
+  };
+}
+
 // Re-prices a cart's items the same way order-create does, so /quote and
 // /orders agree to the cent. Returns { subtotal, totalQty, error? }.
 // Flash-sale prices apply when active — same window check as the public
 // product API, so what the customer sees IS what they pay.
+//
+// A line that is no longer for sale is reported in `unavailable` and left out
+// of the total. One old line must not make the other nine unorderable. The
+// quote is refused only when NOTHING left is for sale.
 function priceCart(items, customerId) {
   if (!Array.isArray(items) || !items.length) return { error: 'no_items', subtotal: 0, totalQty: 0 };
   const now = Date.now();
   let subtotal = 0, totalQty = 0, totalGrams = 0;
   const lines = [];
+  const unavailable = [];
   for (const it of items) {
     const pid = parseInt(it.product_id, 10);
     const qty = Number(it.qty);
@@ -35088,7 +35146,7 @@ function priceCart(items, customerId) {
          FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
-    if (!p) return { error: 'product_unavailable', subtotal: 0, totalQty: 0 };
+    if (!p) { unavailable.push(unavailableLine(pid)); continue; }
     let optionDelta = 0;
     if (Array.isArray(it.choices) && it.choices.length) {
       const placeholders = it.choices.map(() => '?').join(',');
@@ -35145,7 +35203,10 @@ function priceCart(items, customerId) {
       ship_from_supplier: !!p.ship_from_supplier,
     });
   }
-  return { subtotal: Math.round(subtotal * 100) / 100, totalQty, totalGrams, lines };
+  if (!lines.length) {
+    return { error: 'product_unavailable', unavailable, subtotal: 0, totalQty: 0, totalGrams: 0, lines: [] };
+  }
+  return { subtotal: Math.round(subtotal * 100) / 100, totalQty, totalGrams, lines, unavailable };
 }
 
 // POST /api/retail/cart/price — lightweight cart re-pricing with NO address
@@ -35155,8 +35216,15 @@ function priceCart(items, customerId) {
 // stale price. Returns the same per-line breakdown the checkout quote does.
 router.post('/api/retail/cart/price', requireRetailAuth, express.json(), (req, res) => {
   const priced = priceCart(req.body && req.body.items, req.customer.id);
-  if (priced.error) return res.status(400).json({ success: false, error: priced.error });
-  res.json({ success: true, data: { subtotal: priced.subtotal, total_qty: priced.totalQty, lines: priced.lines || [] } });
+  if (priced.error) {
+    return res.status(400).json({ success: false, error: priced.error, unavailable: priced.unavailable || [] });
+  }
+  res.json({ success: true, data: {
+    subtotal: priced.subtotal,
+    total_qty: priced.totalQty,
+    lines: priced.lines || [],
+    unavailable: priced.unavailable || [],
+  } });
 });
 // Cash base that prepaid wallet BALANCE may be spent against. HARD RULE
 // (operator-stated): store credit — balance OR points — never pays the
@@ -35401,7 +35469,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   if (refuseWithoutShopZone(res)) return;   // §82 step 3 — no slots off Guangzhou's clock
   const body = req.body || {};
   const addressId    = body.address_id;
-  const items        = body.items;
+  let items          = body.items;
   const deliveryMode = body.delivery_mode || 'standard';
   // Accept either address_id (saved address) OR an inline {city,district,…}
   // payload so the new-address form can preview fees before saving.
@@ -35427,7 +35495,20 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   }
 
   const priced = priceCart(items, req.customer.id);
-  if (priced.error) return res.status(400).json({ success: false, error: priced.error });
+  if (priced.error) {
+    return res.status(400).json({
+      success: false,
+      error: priced.error,
+      unavailable: priced.unavailable || [],
+    });
+  }
+  // The rest of this quote — fees, stock, notices — is about what she can
+  // still buy. A disabled line left in `items` would be read as out of stock
+  // and open the shortage modal over a product that is simply off sale.
+  if (priced.unavailable && priced.unavailable.length) {
+    const gone = new Set(priced.unavailable.map((u) => u.product_id));
+    items = (items || []).filter((it) => !gone.has(parseInt(it.product_id, 10)));
+  }
 
   // §433 — the answer check /orders will refuse on, asked NOW and reported
   // rather than refused: the customer still sees their prices, and the client
@@ -35872,6 +35953,9 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     data: {
       subtotal: priced.subtotal,
       lines: priced.lines || [],
+      // Lines no longer for sale. The client takes them out of the cart; the
+      // subtotal above already excludes them.
+      unavailable: priced.unavailable || [],
       // NULL when every line is answered; otherwise the refusal /orders would
       // give, so the mini app can offer the picker before the customer pays.
       needs_choice: needsChoice,

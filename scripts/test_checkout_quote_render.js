@@ -290,6 +290,43 @@ it('the express day reads Thu, Nov 12 / 11月12日 with Intl throwing', () => {
     cart.clear();
   });
 
+  section('3 · AN OFF-SALE LINE IN AN OLD CART DOES NOT BLOCK THE REST');
+
+  await itAsync('checkout removes the off-sale line and keeps the delivery time', async () => {
+    cart.clear();
+    cart.add({ id: 252, name_en: 'Buckwheat Bread', name_cn: '面包', price: 15 }, 1, []);
+    cart.add({ id: 80, name_en: 'Dried Sour Mango', name_cn: '酸芒果干', price: 27 }, 1, []);
+    const modals = [];
+    const origModal = wx.showModal;
+    wx.showModal = (o) => { modals.push(o); };
+    const realPost = api.post;
+    api.post = (url) => {
+      if (String(url).indexOf('/quote') >= 0) {
+        const body = quotePayload();
+        body.unavailable = [{ product_id: 80, name_en: 'Dried Sour Mango', name_cn: '酸芒果干' }];
+        return Promise.resolve(body);
+      }
+      return Promise.resolve({ data: [] });
+    };
+    try {
+      const inst = instance();
+      await inst.refreshQuote();
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+      assert.deepStrictEqual(cart.get().items.map((it) => it.product_id), [252]);
+      assert.ok(inst.data.items.every((it) => it.product_id !== 80));
+      assert.strictEqual(inst.data.quoteFailed, false);
+      assert.strictEqual(inst.data.deliverySlotId, '2026-11-12');
+      assert.strictEqual(modals.length, 1);
+      assert.ok(modals[0].content.indexOf('Dried Sour Mango') >= 0);
+      assert.ok(modals[0].content.indexOf('rest of your order') >= 0);
+    } finally {
+      wx.showModal = origModal;
+      api.post = realPost;
+      cart.clear();
+    }
+  });
+
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
 })();
