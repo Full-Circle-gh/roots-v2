@@ -5180,6 +5180,9 @@ function renderQyPointSurface(o, sf) {
       <p class="qp-sub">${cuT(
         'We could not place this address precisely. Check the point and confirm.',
         '无法精确定位该地址，请核对后确认配送点。')}</p>
+      <p class="qp-sub qp-map-note">${cuT(
+        'Search usually finds the estate name only. Tap the map on the exact building — picking a search result does not place the point.',
+        '搜索一般只能找到小区名。请在地图上点选具体楼栋 — 选中搜索结果不会自动标记配送点。')}</p>
 
       <div class="qp-grid">
         <div class="qp-map-col">
@@ -5416,6 +5419,14 @@ const qpBias = {};
 // types can inject a position.
 const qpFound = {};
 const qpFindTimer = {};
+
+function qpScrollMapIntoView(orderId) {
+  const el = document.getElementById('qp-map-' + orderId);
+  if (!el || typeof el.scrollIntoView !== 'function') return;
+  try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {
+    try { el.scrollIntoView(false); } catch (e2) { /* map node gone mid-scroll */ }
+  }
+}
 // The query each pending request was fired for, so a slow answer to an old
 // keystroke can't paint over a newer one (same guard as the customer search).
 const qpFindQuery = {};
@@ -5448,6 +5459,7 @@ async function qpInitMap(orderId, guess, city) {
   try {
     await qpLoadSdk(cfg);
     qpDrawMap(cfg.provider, el, orderId, guess);
+    queueMicrotask(() => qpScrollMapIntoView(orderId));
   } catch (e) {
     el.className = 'qp-map qp-map-fallback';
     el.innerHTML = cuT('The map could not load. Try again, or correct the address.', '地图加载失败，请重试或修改地址。');
@@ -5645,7 +5657,11 @@ function qpFindPick(orderId, i) {
   const box = document.getElementById('qp-find-out-' + orderId);
   if (box) { box.hidden = true; box.innerHTML = ''; }
   const inp = document.getElementById('qp-find-' + orderId);
-  if (inp) inp.value = p.name || '';
+  if (inp) {
+    inp.value = p.name || '';
+    try { inp.blur(); } catch (e) { /* dismiss the on-screen keyboard */ }
+  }
+  qpScrollMapIntoView(orderId);
   // The hint moves the operator on to the step that remains. Left alone once a
   // point exists, where it already says how to adjust one.
   const hint = document.getElementById('qp-hint-' + orderId);

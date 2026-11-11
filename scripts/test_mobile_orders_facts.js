@@ -389,7 +389,8 @@ async function main() {
     const zsf = (over) => z.ctx.shipFromCard(z.ctx.mapDetail(raw({ qingyun_ship_from: Object.assign({ store_code: 'TH', name_en: 'Tianhe', name_cn: '天河店', qingyun_order_id: null }, over) })));
     has(zsf({ needs_attention: true }), '发单被拒 — 无人接单', 'Chinese refused');
     has(zsf({ awaiting_point: true }), '确认配送点', 'Chinese point');
-    has(zsf({ awaiting_point: true }), '配送点请在电脑端地图上标记。', 'Chinese composed note');
+    has(zsf({ awaiting_point: true }), '搜索一般只能找到小区名。请在地图上点选具体楼栋。', 'Chinese map-tap hint');
+    has(zsf({ awaiting_point: true }), "APP.cmd('qyPointOpen')", 'Mark on map button');
     has(zsf({ awaiting_point: true, date_posture: 'tomorrow', promised_date: 'D' }), '明天(D)送达。', 'Chinese deadline');
   }
 

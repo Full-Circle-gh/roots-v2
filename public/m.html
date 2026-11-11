@@ -1592,7 +1592,7 @@ const state = {
   rf:null,
   /* §325 O6 — "Ship part later": the parcel being split and the lines ticked;
      and the orders whose split suggestion was dismissed this session. */
-  splitPick:null, splitDismissed:[], shipTo:null, qy:null, qyPlace:null, jd:null,
+  splitPick:null, splitDismissed:[], shipTo:null, qy:null, qyPlace:null, qyPoint:null, jd:null,
   rr:null,   // §458 the Change shop panel on the order card: {oid, loading, err, data, pick}
   /* §325 O2 — saved views on Orders. rows: undefined = not read yet, null =
      the read failed, [] = none saved. busy names the write in flight; err is
@@ -2863,7 +2863,7 @@ reg('ordViewDel', id=>{
 /* reg('openOrder') is registered ONCE, with the live orders (§325 T1). A
    one-line copy here from the mock-data days was overwritten by that later
    registration before anybody could tap, so it never ran and is gone. */
-reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null; state.qy=null; state.jd=null; if(state.qyPlace) clearTimeout(state.qyPlace.timer); state.qyPlace=null; state.rr=null;
+reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null; state.qy=null; state.jd=null; if(state.qyPlace) clearTimeout(state.qyPlace.timer); state.qyPlace=null; qyPointTeardown(); state.qyPoint=null; state.rr=null;
   if(state.invCode&&state.invCode.timer) clearInterval(state.invCode.timer);
   state.invCode=null;
   /* An editor opened and left empty is not a note. Clearing it here is what
@@ -4781,6 +4781,126 @@ function ptMapSync(){
     if(st.map){ try{ st.map.setZoomAndCenter(16,[lng,lat]); st.marker&&st.marker.setPosition([lng,lat]); }catch(e){ /* the map is look-only; a missed move is redrawn on the next repaint */ } }
   }
 }
+/* ── Mark the delivery point on a map (needs_point) ─────────────────────────
+   Search on the phone only finds estate-level POIs (poi_picked). The desktop
+   drawer taps the building as staff_pin; this sheet does the same on the phone. */
+const QP_AREA_M=700;
+let _qyPointMap=null;
+function qyPointTeardown(){
+  if(!_qyPointMap) return;
+  try{ _qyPointMap.map&&_qyPointMap.map.destroy(); }catch(e){}
+  _qyPointMap=null;
+}
+function qyPointMapSync(){
+  const s=state.qyPoint, host=document.getElementById('qyPointMapHost');
+  if(!s||!host){
+    if(!s) qyPointTeardown();
+    return;
+  }
+  const g=s.guess||{};
+  const lat=Number(g.lat), lng=Number(g.lng);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)){
+    host.innerHTML=`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--text-secondary);padding:0 16px;text-align:center">${T('No starting point for the map.','地图暂无起始位置。')}</div>`;
+    qyPointTeardown();
+    return;
+  }
+  if(!_qyPointMap||_qyPointMap.oid!==s.oid){
+    qyPointTeardown();
+    const st={oid:s.oid, node:document.createElement('div'), map:null, pin:null, circle:null, guess:{lat,lng}};
+    st.node.style.cssText='position:absolute;inset:0';
+    _qyPointMap=st;
+    host.innerHTML=''; host.appendChild(st.node);
+    mAmapLoad().then(()=>{
+      if(_qyPointMap!==st||!window.AMap) return;
+      const center=[lng,lat];
+      st.map=new AMap.Map(st.node,{zoom:15,center,resizeEnable:true,jogEnable:false});
+      st.circle=new AMap.Circle({
+        center, radius:QP_AREA_M, map:st.map,
+        strokeColor:'#58606E', strokeWeight:1.5, strokeStyle:'dashed',
+        fillColor:'#58606E', fillOpacity:0.07,
+      });
+      st.map.on('click', e=>{
+        const la=e.lnglat.getLat(), ln=e.lnglat.getLng();
+        const pos=[ln,la];
+        if(!st.pin){
+          st.pin=new AMap.Marker({position:pos, draggable:true, map:st.map, zIndex:120});
+          st.pin.on('dragend', ()=>{ const p=st.pin.getPosition(); qyPointPlaced(p.getLat(), p.getLng()); });
+        } else st.pin.setPosition(pos);
+        qyPointPlaced(la, ln);
+      });
+    }).catch(()=>{
+      if(_qyPointMap!==st) return;
+      st.node.innerHTML=`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--text-secondary);padding:0 16px;text-align:center">${T('Map unavailable','地图暂不可用')}</div>`;
+    });
+  }
+  const st=_qyPointMap;
+  if(st&&st.node.parentNode!==host){ host.innerHTML=''; host.appendChild(st.node); try{ st.map&&st.map.resize(); }catch(e){} }
+}
+function qyPointPlaced(lat,lng){
+  const s=state.qyPoint; if(!s) return;
+  s.placed={lat:Number(lat), lng:Number(lng)};
+  const el=document.getElementById('qyPointState');
+  if(el) el.textContent=T('Point placed','配送点已标记');
+  const btn=document.getElementById('qyPointGo');
+  if(btn) btn.disabled=false;
+}
+function qyPointBtn(o){
+  if(!qyCanEdit(o)||!o.shipFrom||!o.shipFrom.awaiting_point) return '';
+  return qyBtn(T('Mark on map','在地图上标记'),"APP.cmd('qyPointOpen')");
+}
+function sheetQyPoint(){
+  const s=state.qyPoint; if(!s) return '';
+  const o=currentOrder();
+  if(!o||o.id!==s.oid||!o.shipTo) return '';
+  const g=s.guess||{};
+  const lat=Number(g.lat), lng=Number(g.lng);
+  const head=`<div style="flex:none;padding:8px 12px 12px 20px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="flex:1;font-size:18px;font-weight:500">${T('Confirm delivery point','确认配送点')}</span>
+      <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('qyPointClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button></div>
+    <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;line-height:1.5;padding-right:8px">${T(
+      'Search usually finds the estate name only. Tap the building on the map.',
+      '搜索一般只能找到小区名。请在地图上点选具体楼栋。')}</div></div>`;
+  const map=Number.isFinite(lat)&&Number.isFinite(lng)
+    ?`<div id="qyPointMapHost" data-lat="${lat}" data-lng="${lng}" style="position:relative;height:min(48vh,280px);border-radius:12px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default)">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--text-secondary)">${T('Loading map…','正在加载地图…')}</div></div>`
+    :`<div style="font-size:13px;color:var(--brick-ink);line-height:1.5">${T('No map for this address. Try Search a place or edit the ship-to.','此地址无法显示地图。请尝试搜索地点或修改收货地址。')}</div>`;
+  const body=`<div style="font-size:14px;line-height:1.55;overflow-wrap:anywhere">${escAttr([o.shipTo.district,o.shipTo.address,o.shipTo.detail].filter(Boolean).join(' '))}</div>
+    ${map}
+    <div id="qyPointState" style="font-size:12.5px;color:var(--text-secondary)">${s.placed?T('Point placed','配送点已标记'):T('No point placed yet','尚未标记配送点')}</div>`;
+  const foot=`<div style="flex:none;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default)">
+    ${s.err?`<div style="margin-bottom:10px;padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${s.err}</div>`:''}
+    <div style="display:flex;gap:8px">
+      <button class="btn2" style="flex:1"${state.orderBusy?' disabled':''} onclick="APP.cmd('qyPointClose')">${T('Cancel','取消')}</button>
+      <button id="qyPointGo" class="cta" style="flex:1"${state.orderBusy||!s.placed?' disabled':''} onclick="APP.cmd('qyPointConfirm')">${state.orderBusy==='qypoint'?T('Sending…','发送中…'):T('Confirm and dispatch','确认并发单')}</button></div></div>`;
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('qyPointClose')"></div>
+   <div class="sheet" style="z-index:48;top:36px;overflow:hidden;padding:0;display:flex;flex-direction:column">
+     ${head}
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px">${body}</div>
+     ${foot}</div>`;
+}
+reg('qyPointOpen', ()=>{
+  if(!mCan('orders:edit')) return;
+  const o=currentOrder();
+  if(!qyCanEdit(o)||!o.shipFrom||!o.shipFrom.awaiting_point||o.shipFrom.date_posture==='passed'||state.qyPoint) return;
+  const g=o.shipFrom.guess||{};
+  state.qyPoint={oid:o.id, guess:g, placed:null, busy:false, err:null};
+  render();
+});
+reg('qyPointClose', ()=>{
+  const s=state.qyPoint; if(!s||state.orderBusy) return;
+  qyPointTeardown(); state.qyPoint=null; render();
+});
+reg('qyPointConfirm', ()=>{
+  if(!mCan('orders:edit')) return;
+  const s=state.qyPoint, o=currentOrder(), p=s&&s.placed;
+  if(!s||!p||state.orderBusy||!o||o.id!==s.oid||!qyCanEdit(o)) return;
+  qyWrite(o,'qypoint','/orders/'+o._id+'/qingyun/confirm-point',{lat:p.lat,lng:p.lng},
+    {order_closed:QY_CLOSED, row_moved:QY_MOVED_ON, _:['Could not confirm it','确认失败']},
+    j=>{ qyPointTeardown(); state.qyPoint=null;
+      return j.already_created?T(...QY_ALREADY):T('Point confirmed — sending it to the channel, about a minute','配送点已确认 — 约一分钟内发单');
+    });
+});
 /* The printer can succeed as a request and fail as a print — the endpoint says
    so with ok:false, and so does this.
 
@@ -40829,14 +40949,12 @@ function shipFromCard(o){
           :T('Confirm the point today — after tonight this order can no longer go to a same-day rider.','请今天确认配送点 — 过了今晚将无法安排同城骑手。')}</span></div>`:'';
       if(!choice){
         const g=sf.guess_grade||{};
-        /* The point itself is still placed on the desktop map: §97 keeps the
-           Qingyun point picker open until a phone design exists (§325.4). */
         return card(head(T('Confirm delivery point','确认配送点'),'amber-ink')
           +sub(T('We could not place this address precisely. Check the point and confirm.','无法精确定位该地址，请核对后确认配送点。'))
           +((g.en||g.cn)?sub(escAttr(T(g.en||g.cn,g.cn||g.en))):'')
+          +sub(T('Search usually finds the estate name only. Tap the building on the map.','搜索一般只能找到小区名。请在地图上点选具体楼栋。'))
           +urgent
-          +sub(T('The point is placed on the desktop map.','配送点请在电脑端地图上标记。'))
-          +btns([qyPlaceBtn(o),editShipTo]),true);
+          +btns([qyPointBtn(o),qyPlaceBtn(o),editShipTo]),true);
       }
       /* Each place is its own button and choosing IS the confirm — nothing is
          pre-selected (the desktop's qpPickPlace). Only the index travels. */
@@ -50565,6 +50683,7 @@ function render(){
   if(state.rf&&state.detailId) html += layer('rf:'+state.rf.kind, sheetRefundForm());
   if(state.shipTo&&state.detailId===state.shipTo.oid) html += layer('shipto:'+state.shipTo.mode, sheetShipTo());
   if(state.qyPlace&&state.detailId===state.qyPlace.oid) html += layer('qyplace', sheetQyPlace());   // one key: picking must not slide the sheet in again
+  if(state.qyPoint&&state.detailId===state.qyPoint.oid) html += layer('qypoint', sheetQyPoint());
   if(state.jd&&state.detailId===state.jd.oid) html += layer('jd:'+state.jd.sid, sheetJd());
   if(state.productSku) html += layer('prod:'+state.productSku, sheetProduct());
   // §325 PD4 — a shop menu's row sheet and its Add product picker.
@@ -50646,6 +50765,7 @@ function render(){
      it belongs to is no longer on screen. */
   riderMapSync();
   ptMapSync();   // §448 — the delivery point's "look, not tap" map
+  qyPointMapSync();
   syncHistory();
   if(state.focus){ const el=document.getElementById(state.focus.id);
     if(el){ el.focus();
