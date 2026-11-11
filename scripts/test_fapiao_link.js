@@ -109,8 +109,10 @@ const link = require('../lib/fapiao-link');
   console.log('1 · who may have a code');
   ok(link.staffBlock(handle.prepare('SELECT * FROM retail_orders WHERE id = 1').get()) === null,
      'a paid till sale may show one');
-  ok(link.staffBlock(handle.prepare('SELECT * FROM retail_orders WHERE id = 2').get()) === 'not_till',
-     'the cashier\'s button stays a till sale; the menu code is on the receipt');
+  ok(link.staffBlock(handle.prepare('SELECT * FROM retail_orders WHERE id = 2').get()) === null,
+     'a paid menu counter sale may show a code in the order drawer');
+  ok(link.staffBlock(handle.prepare('SELECT * FROM retail_orders WHERE id = 6').get()) === null,
+     'a menu order may show a code before it is paid');
   ok(link.staffBlock(handle.prepare('SELECT * FROM retail_orders WHERE id = 3').get()) === 'not_open',
      'a cancelled till sale may not');
   ok(link.staffBlock(handle.prepare('SELECT * FROM retail_orders WHERE id = 4').get()) === 'not_open',
@@ -140,10 +142,13 @@ const link = require('../lib/fapiao-link');
     return { status: r.status, json, text, location: r.headers.get('location') };
   };
 
-  console.log('\n2 · the cashier\'s code');
-  const denied = await send('POST', '/api/retail-admin/orders/2/fapiao-link', {});
-  ok(denied.status === 409 && denied.json.error === 'not_till',
-     'the server refuses a QR-menu sale', denied.json);
+  console.log('\n2 · staff may open the code');
+  const menuCode = await send('POST', '/api/retail-admin/orders/2/fapiao-link', {});
+  ok(menuCode.status === 200 && menuCode.json.data && menuCode.json.data.qr_png,
+     'a paid menu counter sale returns a picture of the code', menuCode.status);
+  const pendingCode = await send('POST', '/api/retail-admin/orders/6/fapiao-link', {});
+  ok(pendingCode.status === 200 && pendingCode.json.data && pendingCode.json.data.qr_png,
+     'an unpaid menu order may open a code too', pendingCode.status);
   CAPS = ['orders:view'];
   const locked = await send('POST', '/api/retail-admin/orders/1/fapiao-link', {});
   ok(locked.status === 403, 'without orders:edit the code is not opened', locked.status);
@@ -251,10 +256,10 @@ const link = require('../lib/fapiao-link');
      'the till shows the button only after a sale it rang itself');
   ok(/till:\s*true/.test(till) && !/confirmRecall[\s\S]{0,800}till:\s*true/.test(till),
      'a recalled QR order settling on the same screen does not grow one');
-  ok(/if\(!o\|\|!o\.tillSale\|\|o\._id==null\) return ''/.test(phone),
-     'the phone draws it only for a till sale');
-  ok(/o\.shop_entry_method !== 'till'/.test(bill) && /tillFapiaoCodeRow\(o\)/.test(desk),
-     'the desktop order does the same');
+  ok(/fapiaoCodeEligible\(o\)/.test(phone) && /door !== 'till' && door !== 'qr'/.test(bill),
+     'the phone and desktop draw it for both shop doors');
+  ok(/tillFapiaoCodeRow\(o\)/.test(desk),
+     'the desktop order carries the button');
 
   server.close();
   console.log(`\n${pass} passed, ${fail} failed\n`);

@@ -24929,6 +24929,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.invoice_number, o.invoice_file_url, o.invoice_issued_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.routed_by_distance, o.channel, o.fulfillment_type,
+                    o.shop_entry_method,
                     -- §49: the short number a shop calls across its counter, and
                     -- the trading day it was drawn on. NOT unique — two shops
                     -- both call 14 on the same afternoon — so the ruling requires

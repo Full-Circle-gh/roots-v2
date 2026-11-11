@@ -532,8 +532,10 @@ function fapiaoDownloadHref(url) {
 // fapiao is already issued. The overlay stays on document.body so a drawer
 // refresh, when the details arrive, does not take the code down.
 function tillFapiaoCodeRow(o) {
-  if (!o || o.shop_entry_method !== 'till') return '';
-  if (o.status === 'cancelled' || o.status === 'pending_payment') return '';
+  const door = String((o && o.shop_entry_method) || '').toLowerCase();
+  if (!o || (door !== 'till' && door !== 'qr')) return '';
+  if (o.status === 'cancelled') return '';
+  if (o.status === 'pending_payment' && door !== 'qr') return '';
   if (o.invoice_status === 'issued') return '';
   return `<div style="margin-bottom: var(--s4);">
     <button type="button" class="db-btn" onclick="openTillFapiaoCode(${Number(o.id)})">${invT('Fapiao code', '发票码')}</button>
