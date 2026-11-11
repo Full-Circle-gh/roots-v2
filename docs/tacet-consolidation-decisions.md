@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.635
+# Tacet shared-core consolidation — decisions record, v4.636
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-11 · v4.636 — **§526 AMENDED · SUBMITTING THE FAPIAO FORM ANSWERS ON THE SAME PAGE — ASH.** Ash filled the form from the code and WeChat showed its 404. The save had answered 303, and a rejected form answered 400. WeChat draws those as its own 404. The form now posts to the `/s/fapiao/` address and every answer is 200, including the saved page. No new words. No schema change. No change to `.gitignore` or CI. See §526.
 
 2026-11-11 · v4.635 — **§526 AMENDED · THE CODE IS ON THE RECEIPT, FOR THE TILL AND THE RAMADA MENU — ASH.** Every till receipt and every Ramada menu receipt carries the code. The customer scans it, types the fapiao and submits. The cashier's button stays a till sale. A menu receipt prints before the money arrives, and the page still takes the details; the invoice group is told when the order is paid. One composed pair on the slip (vocabulary v1.408). No schema change. No change to `.gitignore` or CI. See §526.
 
@@ -34123,6 +34125,10 @@ One column, `retail_orders.fapiao_token`. No change to `.gitignore` or CI.
 6. **The code is on the paper.** A till sale and a menu order (`shop_entry_method` `till` or `qr`) print it on the customer receipt, including a compact receipt. It is minted when the slip prints and kept, so a reprint is the same code. A packing slip, a delivery, a mini-app order and a web order do not get one. A cancelled sale and a sale whose fapiao is already issued print no code.
 7. **A menu receipt prints before the money arrives, and the page still takes the details.** The invoice group is told when the order is paid, the same as a request made at checkout. The cashier's button in rule 1 stays a paid till sale. The menu customer's code is the one on the receipt.
 8. **The words under the code** are `扫码填写发票` and `Scan and type the fapiao` (vocabulary v1.408). The address is still `/s/fapiao/` plus the token.
+
+**2026-11-11 · AMENDED.** Ash filled the form and WeChat showed its 404. The save answered 303 and a rejected form answered 400, and WeChat draws those as its own 404.
+
+9. **The form posts to the address the code shows, and every answer is 200.** That includes a missing title and the saved page. There is no redirect after submit.
 
 ## §527 — AN INVOICE REQUEST GOES TO ITS OWN WECOM GROUP
 
