@@ -13401,14 +13401,7 @@ router.get('/api/retail/vouchers/public', (req, res) => {
     if (tokRow) customer = tokRow;
   }
 
-  const filtered = rows.filter(v => {
-    if (!customer || !v.per_customer_limit || v.per_customer_limit <= 0) return true;
-    const used = tdb().prepare(
-      `SELECT COUNT(*) AS n FROM retail_orders
-        WHERE customer_id = ? AND voucher_code = ? AND status NOT IN ('cancelled')`
-    ).get(customer.id, v.code).n;
-    return used < v.per_customer_limit;
-  });
+  const filtered = rows.filter(v => !voucherCapReached(customer && customer.id, v));
 
   res.json({ success: true, data: filtered });
 });
@@ -13540,14 +13533,8 @@ router.post('/api/retail/vouchers/claim', requireRetailAuth, express.json(), (re
 
   // Respect the per-customer cap — no point granting a coupon they've already
   // redeemed up to its limit.
-  if (v.per_customer_limit && v.per_customer_limit > 0) {
-    const used = tdb().prepare(
-      `SELECT COUNT(*) AS n FROM retail_orders
-        WHERE customer_id = ? AND voucher_code = ? AND status NOT IN ('cancelled')`
-    ).get(req.customer.id, v.code).n;
-    if (used >= v.per_customer_limit) {
-      return res.status(409).json({ success: false, error: 'limit_reached' });
-    }
+  if (voucherCapReached(req.customer.id, v)) {
+    return res.status(409).json({ success: false, error: 'limit_reached' });
   }
 
   tdb().prepare(
@@ -13607,16 +13594,9 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
   if (!voucherPlaceOk(v, pickupPlaceFrom(req.body?.pickup_store_id))) {
     return res.status(409).json({ success: false, error: 'not_applicable', detail: { store_id: v.store_id } });
   }
-  // Per-customer limit check
-  if (v.per_customer_limit && v.per_customer_limit > 0) {
-    const used = tdb().prepare(
-      `SELECT COUNT(*) AS n FROM retail_orders
-        WHERE customer_id = ? AND voucher_code = ?
-          AND status NOT IN ('cancelled')`
-    ).get(req.customer.id, v.code).n;
-    if (used >= v.per_customer_limit) {
-      return res.status(409).json({ success: false, error: 'per_customer_limit_reached' });
-    }
+  // Per-customer limit. A cancelled or fully refunded order does not count.
+  if (voucherCapReached(req.customer.id, v)) {
+    return res.status(409).json({ success: false, error: 'per_customer_limit_reached' });
   }
   const result = computeVoucherDiscount(v, subtotal, 0, couponableSubtotal);
   if (!result.applied) {
@@ -32508,12 +32488,12 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // ¥38.80 of wallet balance spent, ¥38.31 already returned through the payout
     // flow, so a call today returns the remaining ¥0.49 and stops.
     //
-    // NO reverseOrderVoucher. It has no ledger row to key idempotency on and its
-    // contract puts once-per-order on the caller, and no paid path returns the
-    // voucher today — not this branch, not /refund/approve, not /refund/payout.
-    // Adding it here alone would make the paid paths disagree. The reservation
-    // sweeper DOES return it, because its atomic pending_payment flip is exactly
-    // the once-per-order guarantee this site lacks.
+    // The voucher comes back with the rest. reverseOrderVoucher stamps
+    // voucher_reversed on the order, so a paid cancel here and a full refund
+    // on /refund/approve or /refund/direct cannot each return the use.
+    // A partial refund does not call it: the customer kept part of the order
+    // and the discount with it. Unpaid cancels still return it from their own
+    // branch; the stamp makes a second call a no-op.
     //
     // Placed after the if/else so the gateway path's observable order is what it
     // always was: refund bookkeeping first, then the reversals. They are also no
@@ -32525,6 +32505,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       try { reverseOrderBalance(id); } catch (e) { console.error('[reverseOrderBalance cancel]', e); }
       try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral cancel]', e); }
       try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission cancel]', e); }
+      try { reverseOrderVoucher(id); } catch (e) { console.error('[reverseOrderVoucher cancel]', e); }
     }
   }
   if (status === 'refunded') {
@@ -32555,6 +32536,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     try { reverseOrderBalance(id); } catch (e) { console.error('[reverseOrderBalance]', e); }
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral]', e); }
     try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission]', e); }
+    try { reverseOrderVoucher(id); } catch (e) { console.error('[reverseOrderVoucher refund]', e); }
     try {
       reverseOrderStockStillHere(id, null, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, note: reason || null });
       flagParcelsForRecovery(id);
@@ -32936,6 +32918,7 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   // Earned points + referral clawback stay ALL-OR-NOTHING on a full refund.
   if (isFull) {
     try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints]', e); }
+    try { reverseOrderVoucher(id); } catch (e) { console.error('[reverseOrderVoucher approve]', e); }
   }
   // A full refund undoes the kept-first-order, so claw back any referral payout.
   if (isFull) {
@@ -33310,6 +33293,7 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
     try { reverseOrderPoints(id); }   catch (e) { console.error('[reverseOrderPoints direct]', e); }
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral direct]', e); }
     try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission direct]', e); }
+    try { reverseOrderVoucher(id); } catch (e) { console.error('[reverseOrderVoucher direct]', e); }
     if (o.status !== 'refunded' && o.status !== 'cancelled') {
       tdb().prepare("UPDATE retail_orders SET status = 'refunded' WHERE id = ?").run(id);
       try { qingyunDropCopyForClosedOrder(id, 'refunded'); }
@@ -35283,32 +35267,34 @@ function reverseOrderBalance(orderId, maxAmount) {
   return give;
 }
 
-// Restore a voucher consumed at order-create when that order is cancelled.
-// Mirrors the create-time consume (global pool bump + personal-grant mark):
-// returns one use to the global pool and clears any personal grant tied to
-// this order so the customer can use it again.
+// Restore a voucher consumed at order-create when that order is cancelled or
+// fully refunded. Mirrors the create-time consume (global pool bump + personal
+// grant mark): returns one use to the global pool and clears any personal grant
+// tied to this order so the coupon shows in the customer's account again.
 //
-// NOTE: there is no per-order voucher ledger row to use as an idempotency
-// marker, so the CALLER must invoke this exactly once per order — guard the
-// cancel on an atomic pending_payment → cancelled status transition (UPDATE …
-// WHERE status='pending_payment' with changes===1) before calling. The
-// `used_count > 0` floor and the `used_at IS NOT NULL` predicate keep a stray
-// double-call from driving values negative, but the contract is once-per-order.
+// Once per order, including when a paid cancel and a refund path both call it.
+// retail_orders.voucher_reversed is the marker — the pool decrement has no
+// ledger row of its own. The UPDATE that sets it is the lock: a second call
+// changes nothing.
 function reverseOrderVoucher(orderId) {
-  const o = tdb().prepare(
-    'SELECT voucher_code FROM retail_orders WHERE id = ?'
-  ).get(orderId);
-  if (!o || !o.voucher_code) return;
   try {
     tdb().transaction(() => {
+      const o = tdb().prepare(
+        `SELECT voucher_code FROM retail_orders
+          WHERE id = ? AND COALESCE(voucher_reversed, 0) = 0`
+      ).get(orderId);
+      if (!o || !o.voucher_code) return;
+      const mark = tdb().prepare(
+        'UPDATE retail_orders SET voucher_reversed = 1 WHERE id = ? AND COALESCE(voucher_reversed, 0) = 0'
+      ).run(orderId);
+      if (mark.changes !== 1) return;
       // Return the global pool use (matched the same case-insensitive way
       // create resolved it). Floor at 0 so we never go negative.
       tdb().prepare(
         'UPDATE retail_vouchers SET used_count = used_count - 1 WHERE UPPER(code) = ? AND used_count > 0'
       ).run(String(o.voucher_code).trim().toUpperCase());
       // Un-mark any personal grant this order consumed so it reappears in the
-      // customer's wallet/checkout list (idempotent: only un-set rows still
-      // tagged to this order).
+      // customer's wallet/checkout list.
       tdb().prepare(
         'UPDATE retail_customer_vouchers SET used_at = NULL, used_order_id = NULL WHERE used_order_id = ? AND used_at IS NOT NULL'
       ).run(orderId);

@@ -222,13 +222,13 @@ console.log('\n── SOURCE: branch 3 (gateway) and the scoped absences ──'
   for (const fn of ['reverseOrderPoints', 'reverseOrderRedeem', 'reverseOrderBalance', 'reverseOrderReferral', 'reverseLifetimeCommission']) {
     ok('SOURCE', `the shared site calls ${fn} — so the gateway path still reverses it`, shared.includes(fn + '(id)'), fn);
   }
-  // THE ABSENCE THAT SOMEONE WILL LATER "FIX" FOR SYMMETRY.
-  // Matched on the CALL, not the bare name — the comment above the shared site
-  // explains at length why the voucher is not returned here, and a name-only
-  // check would trip on its own explanation.
-  ok('SOURCE', 'reverseOrderVoucher is NOT called from the no-gateway branch or the shared site',
-    !shared.includes('reverseOrderVoucher(id)'), shared.match(/reverseOrderVoucher\(id\)/g));
-  ok('SOURCE', 'reverseOrderVoucher is NOT called from branch 3 either (the paid paths agree)',
+  // A paid cancel returns the coupon from this one site, same as points and
+  // wallet. Matched on the CALL. Branch 3 must not also call it — the shared
+  // site already does, and a second call is what voucher_reversed exists to
+  // ignore, not something the gateway branch should attempt.
+  ok('SOURCE', 'reverseOrderVoucher IS called from the shared site — a paid cancel returns the coupon',
+    shared.includes('reverseOrderVoucher(id)'), shared.match(/reverseOrderVoucher\(id\)/g));
+  ok('SOURCE', 'reverseOrderVoucher is NOT called from branch 3 itself — the shared site is the one call',
     !gw.includes('reverseOrderVoucher(id)'));
   // ...and it is still called where it IS safe, or the check above is vacuous.
   ok('SOURCE', 'reverseOrderVoucher IS still called from the pending_payment branch',
@@ -238,10 +238,11 @@ console.log('\n── SOURCE: branch 3 (gateway) and the scoped absences ──'
 console.log('\n── SOURCE: branch-3 / absence mutation red-proof ──');
 {
   const gw = gatewayBranch();
-  const reAdded = gw + "\n      try { reverseOrderVoucher(id); } catch (e) {}";
-  ok('SOURCE', 'mutation actually changed branch 3', reAdded !== gw);
-  ok('SOURCE', 'the voucher-absence check goes red when someone adds it back for symmetry',
-    reAdded.includes('reverseOrderVoucher'));
+  const shared = sharedRegion();
+  const strippedVoucher = shared.split('reverseOrderVoucher(id)').join('');
+  ok('SOURCE', 'mutation actually removed the voucher return', strippedVoucher !== shared);
+  ok('SOURCE', 'the voucher-return check goes red when the shared call is removed',
+    !strippedVoucher.includes('reverseOrderVoucher(id)'));
   const stripped = gw.split("refund_status = 'paid'").join('');
   ok('SOURCE', 'mutation actually stripped the bookkeeping', stripped !== gw);
   ok('SOURCE', 'the branch-3-unchanged check goes red when its bookkeeping is stripped',

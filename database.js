@@ -2765,6 +2765,44 @@ addColumn('retail_vouchers', 'store_id',          'INTEGER');
 // remove the discount. 0 for every other order, including one whose voucher
 // came from a signed-in account or a customer the cashier attached.
 addColumn('retail_orders', 'voucher_typed_phone', 'INTEGER DEFAULT 0');
+// 1 once this order's voucher use has been handed back (cancel or full refund).
+// reverseOrderVoucher keys its once-per-order contract on this, because the
+// pool decrement has no ledger row of its own. 0 on every order that predates
+// the column, including ones an unpaid cancel already reversed.
+addColumn('retail_orders', 'voucher_reversed', 'INTEGER DEFAULT 0');
+// A paid cancel or a full refund used to leave the personal grant marked used,
+// so the coupon never reappeared in the customer's account. Unpaid cancels
+// already cleared theirs. Hand back only the grants that are STILL stamped to
+// a cancelled or refunded order — those are the ones reverseOrderVoucher never
+// ran for — and mark the order so a later reverse cannot decrement the pool
+// a second time.
+try {
+  const stuckVoucherReturns = db.prepare(`
+    SELECT o.id AS order_id, o.voucher_code
+      FROM retail_orders o
+      JOIN retail_customer_vouchers g ON g.used_order_id = o.id AND g.used_at IS NOT NULL
+     WHERE o.status IN ('cancelled', 'refunded')
+       AND o.voucher_code IS NOT NULL AND o.voucher_code != ''
+       AND COALESCE(o.voucher_reversed, 0) = 0
+  `).all();
+  if (stuckVoucherReturns.length) {
+    const returnStuck = db.transaction((rows) => {
+      for (const row of rows) {
+        const mark = db.prepare(
+          'UPDATE retail_orders SET voucher_reversed = 1 WHERE id = ? AND COALESCE(voucher_reversed, 0) = 0'
+        ).run(row.order_id);
+        if (mark.changes !== 1) continue;
+        db.prepare(
+          'UPDATE retail_vouchers SET used_count = used_count - 1 WHERE UPPER(code) = ? AND used_count > 0'
+        ).run(String(row.voucher_code).trim().toUpperCase());
+        db.prepare(
+          'UPDATE retail_customer_vouchers SET used_at = NULL, used_order_id = NULL WHERE used_order_id = ? AND used_at IS NOT NULL'
+        ).run(row.order_id);
+      }
+    });
+    returnStuck(stuckVoucherReturns);
+  }
+} catch (e) { console.error('[migration return voucher on cancelled order]', e); }
 // §428 — WHO GAVE A VOUCHER, by name, written at the moment of giving. The old
 // granted_by id has no realm (a kitchen user and a backend operator can share
 // an id), so it cannot be named reliably; this can. NULL on every grant made

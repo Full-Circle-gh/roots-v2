@@ -162,11 +162,12 @@ Page({
       });
       const active = Array.from(byCode.values());
 
-      // Used = past orders that applied a voucher_code. We do not have
-      // the full voucher row here, so render a compact summary from the
-      // order.
+      // Used = past orders that applied a voucher_code and still hold that
+      // use. A cancel or a full refund hands it back, so those orders must
+      // not keep the coupon looking spent — it is available again, and the
+      // active list above is where it shows.
       const used = orders
-        .filter(o => o.voucher_code)
+        .filter(o => o.voucher_code && o.status !== 'cancelled' && o.status !== 'refunded')
         .map(o => ({
           key: 'order-' + o.order_no,
           code: o.voucher_code,
