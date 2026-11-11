@@ -25851,14 +25851,19 @@ router.post('/api/retail-admin/orders/:id/fapiao-link', requireRetailAdmin, (req
 // not a live till sale or menu order says so without naming any other order.
 // Both paths: /s/fapiao is what the QR carries, because the filed domain
 // forwards /s/ and 404s anything else. /fapiao is the same page on a host
-// that reaches this process directly. Always 200 — a 404 status is what
-// WeChat replaces with its own "404 Not Found", so the words never show.
-function fapiaoPagePrefix(req) {
-  return String(req.path || '').indexOf('/s/fapiao/') === 0 ? '/s/fapiao/' : '/fapiao/';
+// that reaches this process directly.
+//
+// EVERY ANSWER IS 200, including a bad form and the saved page. A 303 sent
+// the customer to a URL WeChat drew as its own 404, and a 400 did the same.
+// The form posts to the absolute /s/fapiao/ address, the one the code shows.
+function fapiaoPostTarget(req) {
+  const token = String(req.params.token || '');
+  return fapiaoLink.publicUrl(currentTenantId(), token) || ('/s/fapiao/' + token);
 }
 function sendFapiaoPage(req, res, view, opts) {
   res.set('Cache-Control', 'no-store');
-  res.status(200).type('html').send(fapiaoLink.pageHtml(view, opts || {}));
+  const o = Object.assign({ action: fapiaoPostTarget(req) }, opts || {});
+  res.status(200).type('html').send(fapiaoLink.pageHtml(view, o));
 }
 function fapiaoPageGet(req, res) {
   const view = fapiaoLink.publicView(fapiaoLink.loadByToken(tdb(), req.params.token));
@@ -25874,11 +25879,12 @@ function fapiaoPagePost(req, res) {
     if (result.error === 'not_open') {
       return sendFapiaoPage(req, res, fapiaoLink.publicView(fapiaoLink.loadByToken(tdb(), token)), {});
     }
-    return res.status(400).type('html').send(fapiaoLink.pageHtml(view, { error: result.error, draft: req.body }));
+    return sendFapiaoPage(req, res, view, { error: result.error, draft: req.body });
   }
   maybeAutoIssueInvoice(order.id).catch((e) => console.warn('[fapiao-link]', e.message));
   sendWecomInvoiceRequest(order.id, { updated: !!Number(order.needs_invoice) });
-  res.redirect(303, fapiaoPagePrefix(req) + token + '?saved=1');
+  const fresh = fapiaoLink.publicView(fapiaoLink.loadByToken(tdb(), token));
+  sendFapiaoPage(req, res, fresh, { saved: true });
 }
 router.get('/s/fapiao/:token', fapiaoPageGet);
 router.post('/s/fapiao/:token', fapiaoPagePost);

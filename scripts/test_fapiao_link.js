@@ -166,14 +166,16 @@ const link = require('../lib/fapiao-link');
   const bad = await send('POST', '/s/fapiao/' + token,
     'invoice_type=company&invoice_title=&invoice_email=nope',
     { 'Content-Type': 'application/x-www-form-urlencoded' });
-  ok(bad.status === 400 && bad.text.includes('请填写发票抬头'),
-     'an empty title is refused in the words the mini app already uses');
+  ok(page.text.includes('action="https://shop.example.test/s/fapiao/' + token + '"'),
+     'the form posts to the /s/ address the code shows, not to a path the filed domain 404s');
+  ok(bad.status === 200 && bad.text.includes('请填写发票抬头'),
+     'an empty title is refused in the words the mini app already uses, and the answer is 200 so WeChat shows it');
   const saved = await send('POST', '/s/fapiao/' + token,
     'invoice_type=company&invoice_title=' + encodeURIComponent('越秀咖啡有限公司')
       + '&invoice_tax_id=91440101MA5EXAMPLE&invoice_email=ap@example.com',
     { 'Content-Type': 'application/x-www-form-urlencoded' });
-  ok(saved.status === 303 && saved.location === '/s/fapiao/' + token + '?saved=1',
-     'a complete form saves and comes back to the same order', saved.location);
+  ok(saved.status === 200 && saved.text.includes('已保存') && saved.text.includes('越秀咖啡有限公司'),
+     'a complete form saves and the same page says so, with no redirect', saved.status);
   const row = handle.prepare('SELECT needs_invoice, invoice_type, invoice_title, invoice_tax_id, invoice_email FROM retail_orders WHERE id = 1').get();
   ok(row.needs_invoice === 1 && row.invoice_type === 'company'
      && row.invoice_title === '越秀咖啡有限公司'
@@ -230,7 +232,8 @@ const link = require('../lib/fapiao-link');
   const filed = await send('POST', '/s/fapiao/' + token6,
     'invoice_type=personal&invoice_title=' + encodeURIComponent('王伟') + '&invoice_email=wei@example.com',
     { 'Content-Type': 'application/x-www-form-urlencoded' });
-  ok(filed.status === 303, 'the form saves before the menu order is paid', filed.status);
+  ok(filed.status === 200 && filed.text.includes('已保存'),
+     'the form saves before the menu order is paid, and answers 200', filed.status);
   const row6 = handle.prepare('SELECT needs_invoice, invoice_title, invoice_email FROM retail_orders WHERE id = 6').get();
   ok(row6.needs_invoice === 1 && row6.invoice_title === '王伟' && row6.invoice_email === 'wei@example.com',
      'the title and email are on the unpaid menu order', row6);
