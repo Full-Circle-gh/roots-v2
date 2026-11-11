@@ -12,10 +12,10 @@
  *   2. THE HARD CONSTRAINT — recipientAddress on the wire is byte-identical to
  *      what it was before the split existed. The split is a LOOKUP concern and
  *      must never reach the waybill;
- *   3. THE CONFIDENCE TEST — one obvious hit is taken, an ambiguous pair is
- *      asked about, and a weak match is never taken silently;
- *   4. THE SAFETY GUARDS — poi_auto and poi_picked build a payload but are NOT
- *      trusted, so both stay subject to MAX_DROP_KM and ABS_MAX_KM;
+ *   3. THE CONFIDENCE TEST — a name match is asked about, never taken. An
+ *      ambiguous pair, a single clear hit and a weak match all wait;
+ *   4. THE SAFETY GUARDS — a name match is never a payload. poi_picked builds
+ *      one but stays subject to MAX_DROP_KM; a tapped pin still has the ceiling;
  *   5. NO REGRESSION — every address the geocoder handles today still resolves
  *      the same way, by the same route, with the same source string.
  */
@@ -191,8 +191,7 @@ console.log('\n3. THE HARD CONSTRAINT — recipientAddress is untouched');
 
 await itAsync('the wire address keeps the full string, tail and all', async () => {
   const p = await buildCreatePayload(
-    ORDER({ ...QIFU }), SHOP,
-    poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '番禺区钟村街', provider: 'qingyun' }]),
+    ORDER({ ...QIFU, ...deg(NEAR), geo_source: 'customer_pin' }), SHOP, noPoi,
     { geocode: blindGeo });
   assert.strictEqual(p.recipientAddress, '祈福新村倚湖湾5座1106',
     'the rider reads this field — the split must never reach it');
@@ -220,33 +219,36 @@ await itAsync('recipientAddress is byte-identical to joinStreetDetail, always', 
 
 await itAsync('doorInfo is untouched too', async () => {
   const p = await buildCreatePayload(
-    ORDER({ province: '广东省', city: '广州市', district: '番禺区', address: '祈福新村倚湖湾', detail: '5座1106' }),
-    SHOP, poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '', provider: 'qingyun' }]),
-    { geocode: blindGeo });
+    ORDER({ province: '广东省', city: '广州市', district: '番禺区', address: '祈福新村倚湖湾', detail: '5座1106',
+      ...deg(NEAR), geo_source: 'customer_pin' }),
+    SHOP, noPoi, { geocode: blindGeo });
   assert.strictEqual(p.doorInfo, '5座1106');
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-console.log('\n4. the confidence test — take one, ask about several');
+console.log('\n4. the confidence test — a name is asked about, never taken');
 
-await itAsync('THE CASE THIS BUILD EXISTS FOR: a named 小区 the geocoder cannot place', async () => {
-  // Geocoding returns nothing for this string. The name search finds it.
-  const p = await buildCreatePayload(
-    ORDER({ ...QIFU }), SHOP,
-    poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '番禺区钟村街祈福新村', provider: 'qingyun' }]),
-    { geocode: blindGeo });
-  assert.strictEqual(p._geo.source, 'poi_auto');
-  assert.strictEqual(p.recipientLat, NEAR.lat);
-  assert.strictEqual(p._geo.poi.name, '祈福新村倚湖湾');
-  assert.strictEqual(p._geo.poi.query, '祈福新村倚湖湾', 'the query records the half it searched');
+await itAsync('THE CASE THIS BUILD EXISTS FOR: a named 小区 the geocoder cannot place is asked about', async () => {
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ ...QIFU }), SHOP,
+      poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '番禺区钟村街祈福新村', provider: 'qingyun' }]),
+      { geocode: blindGeo }),
+    (e) => {
+      assert.strictEqual(e.pickPlace, true);
+      assert.strictEqual(e.candidates[0].name, '祈福新村倚湖湾');
+      assert.notStrictEqual(e._geo && e._geo.source, 'poi_auto');
+      return true;
+    });
 });
 
-await itAsync('a single clear hit is taken without asking', async () => {
-  const p = await buildCreatePayload(
-    ORDER({ ...QIFU }), SHOP,
-    poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '', provider: 'qingyun' }]),
-    { geocode: blindGeo });
-  assert.strictEqual(p._geo.source, 'poi_auto');
+await itAsync('a single clear hit is asked about, not taken', async () => {
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ ...QIFU }), SHOP,
+      poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '', provider: 'qingyun' }]),
+      { geocode: blindGeo }),
+    (e) => { assert.strictEqual(e.pickPlace, true); return true; });
 });
 
 await itAsync('TWO similar names park for a choice instead of guessing', async () => {
@@ -307,12 +309,17 @@ await itAsync('SAME-CITY WRONG-DISTRICT: a strong name match in a different dist
 });
 
 await itAsync('a 小区 in the hit address is not treated as a different district', async () => {
-  const p = await buildCreatePayload(
-    ORDER({ province: '广东省', city: '广州市', district: '番禺区', address: '祈福新村倚湖湾' }),
-    SHOP,
-    poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '祈福新村倚湖湾小区', provider: 'qingyun' }]),
-    { geocode: blindGeo });
-  assert.strictEqual(p._geo.source, 'poi_auto');
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ province: '广东省', city: '广州市', district: '番禺区', address: '祈福新村倚湖湾' }),
+      SHOP,
+      poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '祈福新村倚湖湾小区', provider: 'qingyun' }]),
+      { geocode: blindGeo }),
+    (e) => {
+      assert.strictEqual(e.pickPlace, true);
+      assert.notStrictEqual(e.candidates[0].districtOk, false, '小区 is not a district, so the map may open here');
+      return true;
+    });
 });
 
 await itAsync('PAZHOU BASIS: the same name pinned in another district is not taken', async () => {
@@ -357,34 +364,41 @@ await itAsync('PAZHOU BASIS: a nameless coordinate in another district is not ta
     });
 });
 
-await itAsync('a perfect name with no district on the hit is still taken when the pin is in the right district', async () => {
-  const p = await buildCreatePayload(
-    ORDER({ province: '广东省', city: '广州市', district: '海珠区', address: '广州贝赛思中国华西项目部' }),
-    SHOP,
-    poiList([{ ...NEAR, name: '广州贝赛思中国华西项目部', address: '石基路205号', provider: 'qingyun' }]),
-    { geocode: {
-        ...blindGeo,
-        districtMatches: geocode.districtMatches,
-        reverseGeocode: async () => ({ district: '海珠区' }),
-      } });
-  assert.strictEqual(p._geo.source, 'poi_auto');
+await itAsync('a perfect name in the right district is still asked about', async () => {
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ province: '广东省', city: '广州市', district: '海珠区', address: '广州贝赛思中国华西项目部' }),
+      SHOP,
+      poiList([{ ...NEAR, name: '广州贝赛思中国华西项目部', address: '石基路205号', provider: 'qingyun' }]),
+      { geocode: {
+          ...blindGeo,
+          districtMatches: geocode.districtMatches,
+          reverseGeocode: async () => ({ district: '海珠区' }),
+        } }),
+    (e) => {
+      assert.strictEqual(e.pickPlace, true);
+      assert.ok(e.point, 'the map may open on a pin that is in the right district');
+      return true;
+    });
 });
-await itAsync('same district name in the address text still auto-takes', async () => {
-  const p = await buildCreatePayload(
-    ORDER({ province: '广东省', city: '广州市', district: '越秀区', address: '富力新天地' }),
-    SHOP,
-    poiList([{ ...NEAR, name: '富力新天地', address: '广东省广州市越秀区广州大道富力新天地', provider: 'qingyun' }]),
-    { geocode: blindGeo });
-  assert.strictEqual(p._geo.source, 'poi_auto');
+await itAsync('same district name in the address text is asked about, not taken', async () => {
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ province: '广东省', city: '广州市', district: '越秀区', address: '富力新天地' }),
+      SHOP,
+      poiList([{ ...NEAR, name: '富力新天地', address: '广东省广州市越秀区广州大道富力新天地', provider: 'qingyun' }]),
+      { geocode: blindGeo }),
+    (e) => { assert.strictEqual(e.pickPlace, true); assert.ok(e.point); return true; });
 });
 
-await itAsync('no district on file, or none readable from the hit — undecidable, still auto-takes', async () => {
-  const p = await buildCreatePayload(
-    ORDER({ province: '广东省', city: '广州市', district: '', address: '祈福新村倚湖湾' }),
-    SHOP,
-    poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '', provider: 'qingyun' }]),
-    { geocode: blindGeo });
-  assert.strictEqual(p._geo.source, 'poi_auto');
+await itAsync('no district on file is asked about, not taken', async () => {
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ province: '广东省', city: '广州市', district: '', address: '祈福新村倚湖湾' }),
+      SHOP,
+      poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '', provider: 'qingyun' }]),
+      { geocode: blindGeo }),
+    (e) => { assert.strictEqual(e.pickPlace, true); return true; });
 });
 
 await itAsync('a ROAD skips the name search and goes to the geocoder', async () => {
@@ -415,18 +429,15 @@ await itAsync('nothing found by either index is still a REFUSAL, not a park', as
 // ─────────────────────────────────────────────────────────────────────────
 console.log('\n5. the safety guards — resolved, but never trusted');
 
-await itAsync('poi_auto is REFUSED past MAX_DROP_KM', async () => {
-  // This is the net under an auto-take: the right-sounding name in the wrong
-  // district fails by DISTANCE, and nothing else can see it.
+await itAsync('a clear name past MAX_DROP_KM is asked about, not shipped', async () => {
   await assert.rejects(
     buildCreatePayload(
       ORDER({ ...QIFU }), SHOP,
       poiList([{ ...FAR, name: '祈福新村倚湖湾', address: '', provider: 'qingyun' }]),
       { geocode: blindGeo }),
     (e) => {
-      assert.ok(/drop-off is/.test(e.message), `expected a distance refusal, got: ${e.message}`);
-      assert.ok(!/ceiling/.test(e.message), 'this one is the 25km limit, not the 50km ceiling');
-      assert.strictEqual(e._geo.source, 'poi_auto', 'the refusal names the source');
+      assert.strictEqual(e.pickPlace, true, 'a far name is a question, not a rider');
+      assert.notStrictEqual(e._geo && e._geo.source, 'poi_auto');
       return true;
     });
 });
@@ -459,22 +470,35 @@ await itAsync('poi_picked builds a payload inside the limit', async () => {
   assert.strictEqual(p.recipientLat, NEAR.lat);
 });
 
-await itAsync('the ABS_MAX_KM ceiling still refuses everything', async () => {
+await itAsync('a name match past the ceiling is asked about, not shipped', async () => {
   await assert.rejects(
     buildCreatePayload(
       ORDER({ ...QIFU }), SHOP,
       poiList([{ ...MILES, name: '祈福新村倚湖湾', address: '', provider: 'qingyun' }]),
       { geocode: blindGeo }),
+    (e) => { assert.strictEqual(e.pickPlace, true); return true; });
+});
+
+await itAsync('the ABS_MAX_KM ceiling still refuses a tapped pin', async () => {
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ ...QIFU, ...deg(MILES), geo_source: 'customer_pin' }),
+      SHOP, noPoi, { geocode: blindGeo }),
     (e) => { assert.ok(/ceiling/.test(e.message), `expected the ceiling, got: ${e.message}`); return true; });
   assert.ok(ABS_MAX_KM > MAX_DROP_KM);
 });
 
-await itAsync('no precision grade is invented for an auto-take', async () => {
-  const p = await buildCreatePayload(
-    ORDER({ ...QIFU }), SHOP,
-    poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '', provider: 'qingyun' }]),
-    { geocode: blindGeo });
-  assert.strictEqual(p._geo.precision, null, 'nobody measured one');
+await itAsync('asking about a name invents no precision grade', async () => {
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ ...QIFU }), SHOP,
+      poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '', provider: 'qingyun' }]),
+      { geocode: blindGeo }),
+    (e) => {
+      assert.strictEqual(e.pickPlace, true);
+      assert.strictEqual(e.point && e.point.precision, null, 'nobody measured one');
+      return true;
+    });
 });
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -496,12 +520,16 @@ await itAsync('a rooftop geocode still wins, by the same name, when the name sea
   assert.strictEqual(p._geo.precision, 'rooftop');
 });
 
-await itAsync('the coarse-but-close rule still ships unconfirmed', async () => {
-  const p = await buildCreatePayload(
-    ORDER({ province: '广东省', city: '广州市', district: '天河区', address: '某某路某某号' }), SHOP, noPoi,
-    { geocode: stubGeo({ ...deg(NEAR), precision: 'coarse', level: '区县', provider: 'amap', cityMatch: true }) });
-  assert.ok(/\+coarse_near$/.test(p._geo.source), `expected coarse_near, got ${p._geo.source}`);
-  assert.strictEqual(p._geo.unconfirmed, true);
+await itAsync('a coarse pin near the store waits for a person', async () => {
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ province: '广东省', city: '广州市', district: '天河区', address: '某某路某某号' }), SHOP, noPoi,
+      { geocode: stubGeo({ ...deg(NEAR), precision: 'coarse', level: '区县', provider: 'amap', cityMatch: true }) }),
+    (e) => {
+      assert.strictEqual(e.needsPoint, true);
+      assert.ok(!/\+coarse_near$/.test(String(e._geo && e._geo.source || '')));
+      return true;
+    });
 });
 
 await itAsync('a geocoder outage is still a HOLD, not a park', async () => {

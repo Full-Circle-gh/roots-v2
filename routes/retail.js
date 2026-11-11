@@ -29147,15 +29147,9 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-place', requireRetailA
       // refused. No precision grade is invented either — nobody measured one.
       tx.prepare('UPDATE retail_orders SET address_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
         JSON.stringify({ ...addr, lat: pin.lat, lng: pin.lng, geo_source: 'poi_picked', geo_precision: null }), id);
-      // Remembered for the next order to this address, exactly as confirm-point
-      // remembers a map tap — a question asked twice is asked twice whichever
-      // surface asked it. The SOURCE is carried into the memory unchanged, so
-      // the reuse stays subject to MAX_DROP_KM: what is remembered here is that
-      // an operator chose a NAME, not that anyone stood at a door.
-      pointMemory.remember(tx, {
-        addr, lat: pin.lat, lng: pin.lng, source: 'poi_picked',
-        placeName: pick.name || null, orderId: id, orderNo: o.order_no,
-      });
+      // Not remembered. A name off a list is this order's pin. The next order
+      // to the same text asks again, unless someone has placed a point on the
+      // building — that is the only answer the memory keeps.
       const r = tx.prepare(qingyunQueue.CONFIRM_CHOICE_SQL).run(id);
       if (!r.changes) throw new Error('row_moved');
       return true;
@@ -29184,6 +29178,30 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-place', requireRetailA
   logActivity(req.user.id, req.user.username, 'qingyun_confirm_place', 'retail_order', id,
     { lat: pin.lat, lng: pin.lng, source: 'poi_picked', name: pick.name || '', idx, also_released: alsoReleased }, req.ip);
   res.json({ success: true, requeued, push_status: 'pending', name: pick.name || '', also_released: alsoReleased });
+});
+
+// ── The rider went to the wrong place ─────────────────────────────────────
+// Deletes the remembered point for this address, so the next order asks where
+// the door is. Copies that already carry that pin and have no courier yet are
+// parked with it. A courier already on the way is not moved: that cancel is
+// in the Qingyun app, and the response says so.
+router.post('/api/retail-admin/orders/:id/qingyun/forget-point', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare('SELECT id, order_no, status, address_json FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  let addr = {};
+  try { addr = JSON.parse(o.address_json || '{}') || {}; } catch { addr = {}; }
+  if (addr.pickup) return res.status(422).json({ success: false, error: 'pickup_order' });
+  const q = _qingyunPushRow(id) || {};
+  const result = pointMemory.forget(tdb(), addr);
+  logActivity(req.user.id, req.user.username, 'qingyun_forget_point', 'retail_order', id,
+    { forgotten: result.forgotten, reparked: result.reparked, live_copy: !!q.qingyun_order_id }, req.ip);
+  res.json({
+    success: true,
+    forgotten: result.forgotten,
+    reparked: result.reparked,
+    live_copy: !!q.qingyun_order_id,
+  });
 });
 
 // ── None of these is the place — give me a map instead ────────────────────

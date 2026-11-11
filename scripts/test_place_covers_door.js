@@ -16,9 +16,10 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const RETAIL = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
-const DBJS = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
-const DAEMON = fs.readFileSync(path.join(ROOT, 'scripts', 'qingyun-daemon.js'), 'utf8');
+const lf = (p) => fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
+const RETAIL = lf(path.join(ROOT, 'routes', 'retail.js'));
+const DBJS = lf(path.join(ROOT, 'database.js'));
+const DAEMON = lf(path.join(ROOT, 'scripts', 'qingyun-daemon.js'));
 const { openQueueTableDb, addTables } = require('./test-support/memory-db');
 const { withTransaction } = require('../lib/db-transaction');
 const addressPin = require('../lib/address-pin');
