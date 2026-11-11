@@ -632,12 +632,12 @@ function renderInvoiceBlock(o) {
   </div>`;
 }
 
-// Mark an order's fapiao issued (attach a pasted link and/or 发票号码), revert
-// a mistake, or upload the fapiao PDF (→ retail_media, fills the link field).
+// Mark an order's fapiao issued. A pasted link, an uploaded PDF, and the
+// 发票号码 are all optional — the request can be closed with none of them.
+// Revert a mistake, or upload the fapiao PDF (→ retail_media, fills the link field).
 async function markInvoiceIssued(id) {
   const url = (document.getElementById('inv-url-' + id)?.value || '').trim();
   const number = (document.getElementById('inv-no-' + id)?.value || '').trim();
-  if (!url && !number) { toast(invT('Add a fapiao link/PDF or invoice number', '请填写发票链接或号码'), 'err'); return; }
   try {
     await api('/api/retail-admin/orders/' + id + '/invoice', { method: 'PUT', body: { action: 'issue', file_url: url, number } });
     toast(invT('Invoice marked issued', '已标记开票'));

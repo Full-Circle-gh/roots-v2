@@ -14,7 +14,7 @@
  *   1. who may issue — invoices:manage AND orders:edit; everyone else reads;
  *   2. Copy for accounting — the desktop's payload, to the real clipboard;
  *   3. the upload — PDF or image, 10 MB, POST /invoice-file, the link filled;
- *   4. Mark issued — a link or a number first, then the desktop's body;
+ *   4. Mark issued — with or without a link, a number, or a file, then the desktop's body;
  *   5. un-issue — asked first, then the desktop's body;
  *   6. every string is the desktop's, bar the one declared.
  */
@@ -228,11 +228,10 @@ section('3 · the upload');
 /* ─────────────────────────────────────────────────────────────────────── */
 section('4 · Mark issued');
 {
-  it('neither a link nor a number: said before any request', () => {
+  it('neither a link nor a number still marks issued', () => {
     const h = mk(); h.block();
     h.CMD.invIssue();
-    assert.strictEqual(h.calls.writes.length, 0);
-    assert.ok(h.text(h.block()).includes('Add a fapiao link/PDF or invoice number'));
+    assert.deepStrictEqual(h.w(0).body, { action: 'issue', file_url: '', number: '' });
   });
   it('the desktop\'s body, trimmed; the order is re-read and the toast confirms', async () => {
     const h = mk(); h.block();
@@ -255,7 +254,7 @@ section('4 · Mark issued');
   it('a refusal stays on the sheet, and what was typed stays with it', async () => {
     const h = mk(); h.block();
     h.CMD.invSet('number', '9'); h.CMD.invIssue();
-    await no(h, 0, 'need_file_or_number');
+    await no(h, 0, 'fapiao_closed');
     assert.ok(h.ctx.state.orderErr, 'the order sheet\'s own refusal line');
     assert.strictEqual(h.ctx.state.inv.number, '9');
     assert.deepStrictEqual(h.calls.toasts, []);
@@ -309,7 +308,7 @@ section('6 · the strings');
     for (const [en, zh] of [['Copy for accounting', '复制开票信息'], ['Fapiao link (or attach PDF)', '发票链接(或上传 PDF)'],
       ['Invoice no. (optional)', '发票号码(可选)'], ['PDF / image', 'PDF / 图片'], ['Mark issued', '标记已开'], ['edit', '修改'],
       ['PDF or image only', '仅限 PDF 或图片'], ['File too large (max 10MB)', '文件过大'], ['Attached — tap Mark issued', '已附加,点击标记已开'],
-      ['Upload failed: ', '上传失败:'], ['Add a fapiao link/PDF or invoice number', '请填写发票链接或号码'],
+      ['Upload failed: ', '上传失败:'],
       ['Invoice marked issued', '已标记开票'], ['Back to requested', '已恢复待开']]) {
       assert.ok(BILL.includes(`invT('${en}', '${zh}')`), `${en} · ${zh}`);
     }
