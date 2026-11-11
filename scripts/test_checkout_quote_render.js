@@ -297,8 +297,8 @@ it('the express day reads Thu, Nov 12 / 11月12日 with Intl throwing', () => {
     cart.add({ id: 252, name_en: 'Buckwheat Bread', name_cn: '面包', price: 15 }, 1, []);
     cart.add({ id: 80, name_en: 'Dried Sour Mango', name_cn: '酸芒果干', price: 27 }, 1, []);
     const modals = [];
-    const origModal = wx.showModal;
-    wx.showModal = (o) => { modals.push(o); };
+    const origModal = global.wx.showModal;
+    global.wx.showModal = (o) => { modals.push(o); };
     const realPost = api.post;
     api.post = (url) => {
       if (String(url).indexOf('/quote') >= 0) {
@@ -321,7 +321,7 @@ it('the express day reads Thu, Nov 12 / 11月12日 with Intl throwing', () => {
       assert.ok(modals[0].content.indexOf('Dried Sour Mango') >= 0);
       assert.ok(modals[0].content.indexOf('rest of your order') >= 0);
     } finally {
-      wx.showModal = origModal;
+      global.wx.showModal = origModal;
       api.post = realPost;
       cart.clear();
     }
@@ -332,8 +332,8 @@ it('the express day reads Thu, Nov 12 / 11月12日 with Intl throwing', () => {
     cart.add({ id: 252, name_en: 'Old bread name', name_cn: '旧名', price: 15 }, 1, []);
     cart.add({ id: 81, name_en: 'Pumpkin Soup', name_cn: '南瓜汤', price: 37 }, 1, []);
     const modals = [];
-    const origModal = wx.showModal;
-    wx.showModal = (o) => { modals.push(o); };
+    const origModal = global.wx.showModal;
+    global.wx.showModal = (o) => { modals.push(o); };
     const realPost = api.post;
     api.post = (url) => {
       if (String(url).indexOf('/quote') >= 0) {
@@ -366,7 +366,7 @@ it('the express day reads Thu, Nov 12 / 11月12日 with Intl throwing', () => {
       assert.strictEqual(inst.data.deliverySlotId, '2026-11-12');
       assert.ok(modals.some((m) => (m.content || '').indexOf('Heat up?') >= 0));
     } finally {
-      wx.showModal = origModal;
+      global.wx.showModal = origModal;
       api.post = realPost;
       cart.clear();
     }
