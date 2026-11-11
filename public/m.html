@@ -41243,12 +41243,22 @@ function fapiaoDownloadHref(url) {
   if (/(?:^|[?&])download=1(?:&|$)/.test(q)) return u;
   return (m[1] || '') + m[2] + (q ? q + '&download=1' : '?download=1') + (m[4] || '');
 }
-/* §526 — a till sale has no fapiao details until the customer types them.
-   The button is this order's code, and only this order's. A QR-menu sale,
-   a mini-app order and an issued or cancelled sale have nothing to show. */
+/* §526 — shop counter orders (till or QR menu) carry a code until the customer
+   types the fapiao. The till app's own button after a sale stays till-only;
+   here both doors may open. Mini-app, web and delivery orders have none. */
+function fapiaoCodeEligible(o){
+  if(!o) return false;
+  const door=String(o.shopDoor||'').toLowerCase();
+  if(door==='till'||door==='qr') return true;
+  if(door) return false;
+  const ft=String(o.fulfillmentRaw||'').toLowerCase();
+  const ch=String(o.chanRaw||'').toLowerCase();
+  return ft==='counter'&&(ch==='shop'||ch==='manual');
+}
 function fapiaoCodeCard(o){
-  if(!o||!o.tillSale||o._id==null) return '';
-  if(o.raw==='cancelled'||o.raw==='pending_payment') return '';
+  if(!o||!fapiaoCodeEligible(o)||o._id==null) return '';
+  if(o.raw==='cancelled') return '';
+  if(o.raw==='pending_payment'&&String(o.shopDoor||'').toLowerCase()!=='qr') return '';
   if(o.invoice&&o.invoice.status==='issued') return '';
   if(!mCan('orders:edit')) return '';
   const d=state.invCode&&state.invCode.orderId===o._id?state.invCode:null;
@@ -41278,7 +41288,7 @@ function invCodeFail(code){
 reg('invCodeClose', ()=>{ invCodeStop(); state.invCode=null; render(); });
 reg('invCodeOpen', ()=>{
   const o=currentOrder();
-  if(!o||!o.tillSale||o._id==null||!mCan('orders:edit')) return;
+  if(!o||!fapiaoCodeEligible(o)||o._id==null||!mCan('orders:edit')) return;
   if(state.invCode&&state.invCode.orderId===o._id&&state.invCode.busy) return;
   invCodeStop();
   state.invCode={orderId:o._id, open:true, busy:true, png:'', title:'', err:'', timer:null};
@@ -52593,6 +52603,8 @@ function mapOrderRow(r){
     waitingList: listWaitingOn(r),
     pickup: r.fulfillment_type==='pickup',
     counter: r.fulfillment_type==='counter',
+    shopDoor: r.shop_entry_method || null,
+    fulfillmentRaw: r.fulfillment_type || null,
     // Multi-parcel rollup, from the list query's own counts. Without it a
     // dispatched order sitting in the Paid tab looks like a bug: the tab is
     // right — one parcel has gone and another has not — and the row was the
@@ -52927,6 +52939,8 @@ function mapDetail(o){
   base.addonTotal=Number(o.addon_total)||0;
   base.proof=o.alipay_proof_image||null;                    // the screenshot itself
   base.tillSale=o.shop_entry_method==='till';
+  base.shopDoor=o.shop_entry_method||null;
+  base.fulfillmentRaw=o.fulfillment_type||null;
   base.invoice=Number(o.needs_invoice)?{
     status:o.invoice_status||'requested', type:o.invoice_type||'',
     title:o.invoice_title||'', taxId:o.invoice_tax_id||'', email:o.invoice_email||'',
