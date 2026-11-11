@@ -29210,16 +29210,37 @@ router.post('/api/retail-admin/orders/:id/qingyun/pin-advice', requireRetailAdmi
   const cached = _pinAdviceCache.get(key);
   if (cached && cached.until > Date.now()) return res.json({ success: true, ...cached.body });
 
+  const lat = Number(drop.lat);
+  const lng = Number(drop.lng);
   let rev = null;
-  try { rev = await geocode.reverseGeocode({ lat: Number(drop.lat), lng: Number(drop.lng) }); }
+  try { rev = await geocode.reverseGeocode({ lat, lng }); }
   catch { rev = null; }
-  const pinLabel = rev && rev.address ? String(rev.address) : '';
+  let regeoPois = [];
+  let nearbyPois = [];
+  try {
+    regeoPois = await geocode.regeoAmapPois(lat, lng) || [];
+    nearbyPois = await geocode.searchPoi({ lat, lng, radius: 80 }) || [];
+  } catch { /* advice only — a maps blip must not block the drawer */ }
+  const pinLabelMod = require('../lib/pin-label');
+  const { pinLabel, agrees } = pinLabelMod.resolvePinLabel({
+    addr,
+    formatted: rev && rev.address ? String(rev.address) : '',
+    regeoPois,
+    nearbyPois,
+  });
   const unnamed = {
     verdict: 'unsure', pin_label: '',
     en: 'The map did not name this dot. Look at it before a rider is sent.',
     cn: '地图没有给出这个点的地名。发出骑手前请看一下地图。',
   };
   if (!pinLabel) return res.json({ success: true, ...unnamed });
+
+  if (agrees) {
+    const body = { verdict: 'same', pin_label: pinLabel, en: '', cn: '' };
+    if (_pinAdviceCache.size > 200) _pinAdviceCache.delete(_pinAdviceCache.keys().next().value);
+    _pinAdviceCache.set(key, { until: Date.now() + 10 * 60 * 1000, body });
+    return res.json({ success: true, ...body });
+  }
 
   const labelOnly = {
     verdict: 'label', pin_label: pinLabel,
@@ -29230,7 +29251,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/pin-advice', requireRetailAdmi
   try {
     const pinAdvice = require('../lib/pin-advice');
     const said = await pinAdvice.advise({
-      typed, pinLabel, pinDistrict: rev.district || '',
+      typed, pinLabel, pinDistrict: rev && rev.district ? rev.district : '',
       call: (args) => gateway.callModel(args),
     });
     const body = { verdict: said.verdict, pin_label: pinLabel, en: said.en, cn: said.cn };
