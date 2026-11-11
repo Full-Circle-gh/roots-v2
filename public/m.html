@@ -4281,23 +4281,6 @@ reg('qyRetryPush', ()=>{
   qyWrite(o,'qyretry','/orders/'+o._id+'/qingyun/retry-push',{},{_:['Could not queue it','排队失败']},
     j=>j.already_created?T(...QY_ALREADY):T('Queued — sending it to the channel, about a minute','已排队 — 约一分钟内发单'));
 });
-reg('qyForgetPoint', ()=>{
-  if(!mCan('orders:edit')) return;
-  const o=currentOrder(); if(!qyCanEdit(o)) return;
-  state.ask={title:T('This pin is the wrong place?','这个定位点是错的?'),
-    body:T('The next order to this address will ask where the door is. A rider already on the way has to be cancelled in the Qingyun app.',
-           '下一单到这个地址会重新确认门口。已经在路上的骑手需要在青云 App 里取消。'),
-    confirmLabel:T('Forget this pin','忘记定位点'), danger:true,
-    run:()=>qyWrite(o,'qyforget','/orders/'+o._id+'/qingyun/forget-point',{},
-      {pickup_order:['A pickup order has no delivery pin','自取订单没有配送定位点'],
-       _:['Could not forget the pin','无法忘记定位点']},
-      j=>j.live_copy
-        ?T('Pin forgotten for the next order. Cancel this rider in the Qingyun app.','已忘记定位点，下一单会再问。这一单的骑手请在青云 App 里取消。')
-        :(j.reparked&&j.reparked.length)
-          ?T('Pin forgotten. This order will ask where the door is before a rider is sent.','已忘记定位点。发出前会重新确认门口。')
-          :T('Pin forgotten. The next order to this address will ask where the door is.','已忘记定位点。下一单到这个地址会重新确认门口。'))};
-  render();
-});
 reg('qyRemoveStale', ()=>{
   if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); if(!qyCanEdit(o)) return;
@@ -4605,7 +4588,7 @@ function qyDestBlock(o){
     <span class="eyebrow">${T('Ship to','收货地址')}</span>
     <div style="font-size:14.5px;font-weight:500;line-height:1.5;overflow-wrap:anywhere">${escAttr(qyAddrLine(o.shipTo))}</div>
     ${map}
-    ${qyCanEdit(o)?`<div style="display:flex;gap:8px;flex-wrap:wrap">${qyPlaceBtn(o)}${qyBtn(T('Wrong place','送错地点'),"APP.cmd('qyForgetPoint')")}</div>`:''}</div>`;
+    ${qyCanEdit(o)?`<div style="display:flex;gap:8px;flex-wrap:wrap">${qyPlaceBtn(o)}</div>`:''}</div>`;
 }
 /* The results are painted IN PLACE, never by render(): the whole page is one
    innerHTML, and a repaint while staff are typing pinyin would throw away the

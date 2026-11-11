@@ -29324,6 +29324,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/set-place', requireRetailAdmin
     }
     logActivity(req.user.id, req.user.username, 'qingyun_set_place', 'retail_order', id,
       { name, detail, lat: pin.lat, lng: pin.lng, source: 'poi_picked', before, recreated: false }, req.ip);
+    try { pointMemory.forget(tdb(), addr); } catch (_) { /* the new pin is saved; memory is a courtesy */ }
     const fresh = _qingyunPushRow(id) || {};
     return res.json({ success: true, recreated: false, requeued, push_status: fresh.status || q.status, name });
   }
@@ -29431,6 +29432,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/set-place', requireRetailAdmin
   logActivity(req.user.id, req.user.username, 'qingyun_set_place', 'retail_order', id,
     { name, detail, lat: pin.lat, lng: pin.lng, source: 'poi_picked', before, recreated: true,
       old: oldQyId, new: newQyId, old_removed: removed.ok }, req.ip);
+  try { pointMemory.forget(tdb(), addr); } catch (_) { /* the new copy exists; memory is a courtesy */ }
   res.json({ success: true, recreated: true, qingyun_order_id: newQyId, old_removed: removed.ok, name });
 });
 

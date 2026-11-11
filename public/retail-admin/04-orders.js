@@ -5951,7 +5951,6 @@ function renderQyShipFrom(o) {
             ${refused
               ? `<button class="btn btn-sm" onclick="qyRetryPush(${o.id}, this)">${cuT('Retry push', '重新发单')}</button>`
               : ''}
-            <button class="btn btn-sm" type="button" onclick="qyForgetPoint(${o.id}, this)">${cuT('Wrong place', '送错地点')}</button>
           </div>
           ${sf.push_error ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;" data-no-i18n>${escapeHtml(sf.push_error)}</div>` : ''}
           ${held
@@ -6006,7 +6005,6 @@ function renderQyShipFrom(o) {
         <span style="font-size:12px; color:var(--text-3);">${cuT('Ships from', '取货门店')}</span>
         <b style="font-size:13px;">${name}</b>
         ${changeBtn}
-        <button class="btn btn-sm" type="button" onclick="qyForgetPoint(${o.id}, this)">${cuT('Wrong place', '送错地点')}</button>
       </div>
       ${movedNote}${blockedNote}${stale}
       <div id="qy-shipfrom-${o.id}" style="margin-top:8px;"></div>
@@ -6018,29 +6016,204 @@ function renderQyShipFrom(o) {
 // Put a refused push back in the queue. The daemon drains 'pending' rows every
 // ~25s, so this hands the order back to the SAME path — and the same address
 // checks — as the automatic push, rather than bypassing them.
-async function qyForgetPoint(orderId, btn) {
-  const ok = confirm(cuT(
-    'Forget this pin for this address? The next order will ask where the door is. A rider already on the way still has to be cancelled in the Qingyun app.',
-    '忘记这个地址的定位点？下一单会重新确认门口。已经在路上的骑手仍需在青云 App 里取消。'));
-  if (!ok) return;
-  if (btn) { btn.disabled = true; btn.textContent = cuT('Forgetting…', '处理中…'); }
+// The pin the rider will be sent to, drawn on the Ship to card. The dot is the
+// coordinate already on the Qingyun copy. Leaving it is the right answer when
+// it sits on the door. Searching and saving replaces that copy while no rider
+// has been called. A rider already on the road keeps the map and loses the
+// search: Tacet cannot redirect them.
+function renderDropPin(o) {
+  const sf = o.qingyun_ship_from;
+  if (!sf || sf.awaiting_point || sf.awaiting_choice) return '';
+  if (['delivered', 'cancelled', 'refunded'].includes(o.status)) return '';
+  const p = sf.dropoff;
+  const has = p && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && Number(p.lat) !== 0;
+  const locked = !!sf.blocked_by;
+  const map = has
+    ? `<div id="dp-map-${o.id}" style="position:relative;height:180px;margin-top:10px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg-elev-1);">
+         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-3);">${cuT('Loading map…', '正在加载地图…')}</div>
+       </div>
+       <div class="sub" style="margin-top:6px;">${cuT('This is where the rider will go.', '骑手会去这个点。')}</div>`
+    : `<div class="sub" style="margin-top:8px;">${cuT('No point on the map yet.', '地图上还没有配送点。')}</div>`;
+  if (locked) {
+    return map + `<div class="sub" style="margin-top:6px;">${cuT(
+      'A rider is already on the way. Cancel that job in the Qingyun app before the dot can move.',
+      '骑手已在路上。要移动这个点，请先在青云 App 取消该单。')}</div>`;
+  }
+  return map + `
+    <input id="dp-find-${o.id}" type="search" autocomplete="off" spellcheck="false"
+           placeholder="${escapeHtml(cuT('Search a place or road', '搜索地点或道路'))}"
+           oninput="dpFindType(${o.id}, event)" oncompositionend="dpFindType(${o.id}, event)"
+           style="box-sizing:border-box;width:100%;margin-top:8px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit;font:inherit;font-size:13px;">
+    <div id="dp-find-out-${o.id}" hidden style="margin-top:6px;border:1px solid var(--line);border-radius:8px;overflow:hidden;"></div>
+    <div class="sub" id="dp-hint-${o.id}" style="margin-top:8px;">${has
+      ? cuT('If this is the door, leave it. If it is not, search the building, pick it, then save.',
+            '如果就是这个门口，不用改。如果不是，搜索楼栋，选中后保存。')
+      : cuT('Search the building, pick it, then save.', '搜索楼栋，选中后保存。')}</div>
+    <button class="btn btn-sm" type="button" id="dp-save-${o.id}" hidden style="margin-top:8px;"
+            onclick="dpSavePlace(${o.id}, this)">${cuT('Save this door', '保存这个门口')}</button>`;
+}
+
+const dpFound = {};
+const dpQuery = {};
+const dpTimer = {};
+const dpPick = {};
+let _dpMap = null;
+
+function dpTeardown() {
+  if (_dpMap) { try { _dpMap.map.destroy(); } catch (e) {} _dpMap = null; }
+}
+
+let _dpGen = 0;
+async function dpInit(o) {
+  const gen = ++_dpGen;
+  dpTeardown();
+  const sf = o && o.qingyun_ship_from;
+  const el = document.getElementById('dp-map-' + (o && o.id));
+  const p = sf && sf.dropoff;
+  if (!el || !p || !Number.isFinite(Number(p.lat)) || !Number.isFinite(Number(p.lng))) return;
+  const lat = Number(p.lat), lng = Number(p.lng);
+  let cfg = null;
+  try { const r = await fetch('/api/retail/maps-config'); const j = await r.json(); cfg = j && j.data; } catch (e) { cfg = null; }
+  if (gen !== _dpGen) return;
+  if (!cfg || !cfg.provider) {
+    el.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--text-3);">${cuT(
+      'The map could not be loaded. You can still search the building below.',
+      '地图未能加载。仍可在下方搜索楼栋。')}</div>`;
+    return;
+  }
   try {
-    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/forget-point`, { method: 'POST' });
+    await qpLoadSdk(cfg);
+    if (gen !== _dpGen || !document.getElementById('dp-map-' + o.id)) return;
+    if (cfg.provider === 'amap') {
+      const map = new AMap.Map(el, { zoom: 17, center: [lng, lat], resizeEnable: true });
+      const marker = new AMap.Marker({ position: [lng, lat], map, zIndex: 120 });
+      if (gen !== _dpGen) { try { map.destroy(); } catch (e2) {} return; }
+      _dpMap = { map, marker, provider: 'amap' };
+    } else {
+      const map = new TMap.Map(el, { zoom: 17, center: new TMap.LatLng(lat, lng) });
+      const marker = new TMap.MultiMarker({ map, geometries: [{ id: 'p', position: new TMap.LatLng(lat, lng) }] });
+      if (gen !== _dpGen) { try { map.destroy(); } catch (e2) {} return; }
+      _dpMap = { map, marker, provider: 'tmap' };
+    }
+  } catch (e) {
+    if (gen !== _dpGen) return;
+    el.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--text-3);">${cuT(
+      'The map could not be loaded. You can still search the building below.',
+      '地图未能加载。仍可在下方搜索楼栋。')}</div>`;
+  }
+}
+
+function dpMovePin(lat, lng) {
+  if (!_dpMap) return;
+  if (_dpMap.provider === 'amap') {
+    _dpMap.marker.setPosition([lng, lat]);
+    _dpMap.map.setCenter([lng, lat]);
+  } else {
+    _dpMap.marker.updateGeometries([{ id: 'p', position: new TMap.LatLng(lat, lng) }]);
+    _dpMap.map.setCenter(new TMap.LatLng(lat, lng));
+  }
+}
+
+function dpFindType(orderId, ev) {
+  if (ev && ev.isComposing) return;
+  clearTimeout(dpTimer[orderId]);
+  dpTimer[orderId] = setTimeout(() => dpFindNow(orderId), 350);
+}
+
+async function dpFindNow(orderId) {
+  clearTimeout(dpTimer[orderId]);
+  const inp = document.getElementById('dp-find-' + orderId);
+  const box = document.getElementById('dp-find-out-' + orderId);
+  if (!inp || !box) return;
+  const q = (inp.value || '').trim();
+  dpQuery[orderId] = q;
+  dpPick[orderId] = null;
+  const save = document.getElementById('dp-save-' + orderId);
+  if (save) save.hidden = true;
+  if (q.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = `<div class="sub" style="padding:8px 10px;">${cuT('Searching…', '搜索中…')}</div>`;
+  const o = _OPEN_ORDER || {};
+  const bias = (o.qingyun_ship_from && o.qingyun_ship_from.dropoff) || {};
+  const body = { keyword: q, city: (o.address && o.address.city) || '' };
+  if (Number.isFinite(Number(bias.lat)) && Number.isFinite(Number(bias.lng))) {
+    body.lat = Number(bias.lat); body.lng = Number(bias.lng);
+  }
+  let list = null;
+  try {
+    const j = await api('/api/retail-admin/poi-search', { method: 'POST', body });
+    if (dpQuery[orderId] !== q) return;
+    list = Array.isArray(j.data) ? j.data : [];
+  } catch (e) {
+    if (dpQuery[orderId] !== q) return;
+    box.innerHTML = `<div class="sub" style="padding:8px 10px;">${cuT('Could not search just now. Try again.', '暂时无法搜索，请重试。')}</div>`;
+    return;
+  }
+  dpFound[orderId] = list.filter(p => p && p.name && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng))).slice(0, 6);
+  if (!dpFound[orderId].length) {
+    box.innerHTML = `<div class="sub" style="padding:8px 10px;">${cuT('No places found', '未找到地点')}</div>`;
+    return;
+  }
+  box.innerHTML = dpFound[orderId].map((p, i) =>
+    `<button type="button" onclick="dpPickPlace(${orderId}, ${i})"
+             style="display:block;width:100%;padding:8px 10px;border:0;border-top:1px solid var(--line);background:var(--bg);color:inherit;font:inherit;text-align:left;cursor:pointer;">
+       <span style="display:block;font-weight:500;">${escapeHtml(p.name || '')}</span>
+       <span class="sub">${escapeHtml(p.address || '')}</span>
+     </button>`).join('');
+  const first = box.querySelector('button');
+  if (first) first.style.borderTop = '0';
+}
+
+function dpPickPlace(orderId, i) {
+  const p = (dpFound[orderId] || [])[i];
+  if (!p) return;
+  const cur = (_OPEN_ORDER && _OPEN_ORDER.qingyun_ship_from && _OPEN_ORDER.qingyun_ship_from.dropoff) || {};
+  const same = Number.isFinite(Number(cur.lat)) && Math.abs(Number(p.lat) - Number(cur.lat)) < 1e-5
+    && Math.abs(Number(p.lng) - Number(cur.lng)) < 1e-5;
+  dpPick[orderId] = same ? null : p;
+  dpMovePin(Number(p.lat), Number(p.lng));
+  const box = document.getElementById('dp-find-out-' + orderId);
+  if (box) { box.hidden = true; box.innerHTML = ''; }
+  const inp = document.getElementById('dp-find-' + orderId);
+  if (inp) inp.value = '';
+  const hint = document.getElementById('dp-hint-' + orderId);
+  if (hint) hint.textContent = same
+    ? cuT('That is the door already on this order. Leave it.', '这就是这一单已有的门口，不用改。')
+    : cuT('Save this door to send the rider here.', '保存后，骑手会去这里。');
+  const save = document.getElementById('dp-save-' + orderId);
+  if (save) save.hidden = same;
+}
+
+async function dpSavePlace(orderId, btn) {
+  const p = dpPick[orderId];
+  if (!p) return;
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Saving…', '保存中…'); }
+  const detail = (_OPEN_ORDER && _OPEN_ORDER.address && _OPEN_ORDER.address.detail) || '';
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/set-place`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: p.name, district: p.district || '', detail,
+        lat: Number(p.lat), lng: Number(p.lng),
+      }),
+    });
     const j = await r.json();
-    if (j.success) {
-      toast(j.live_copy
-        ? cuT('Pin forgotten for the next order. Cancel this rider in the Qingyun app.', '已忘记定位点，下一单会再问。这一单的骑手请在青云 App 里取消。')
-        : (j.reparked && j.reparked.length)
-          ? cuT('Pin forgotten. This order will ask where the door is before a rider is sent.', '已忘记定位点。发出前会重新确认门口。')
-          : cuT('Pin forgotten. The next order to this address will ask where the door is.', '已忘记定位点。下一单到这个地址会重新确认门口。'),
-        'success');
+    if (j && j.success) {
+      toast(j.recreated
+        ? cuT('Saved. This order now sends the rider here.', '已保存。这一单的骑手会去这里。')
+        : cuT('Saved. Sending it to the channel, about a minute.', '已保存。约一分钟内发单。'), 'success');
       openOrder(orderId, { instant: true });
       return;
     }
-    if (btn) { btn.disabled = false; btn.textContent = cuT('Wrong place', '送错地点'); }
-    toast(cuT('Could not forget the pin', '无法忘记定位点'), 'err');
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Save this door', '保存这个门口'); }
+    const km = j && j.drop_km != null ? j.drop_km : null;
+    toast(j && j.error === 'courier_already_called'
+      ? cuT('A rider is already on it. Cancel that job in the Qingyun app first.', '已呼叫运力。请先在青云 App 取消该单。')
+      : j && j.error === 'too_far'
+        ? cuT(`That place is ${km} km from the store. Too far for a same-city rider.`, `该地点距门店 ${km} 公里，超出同城配送范围。`)
+        : cuT('Could not save this door', '无法保存这个门口'), 'err');
   } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = cuT('Wrong place', '送错地点'); }
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Save this door', '保存这个门口'); }
     toast(cuT('Network error', '网络错误'), 'err');
   }
 }
@@ -6424,6 +6597,7 @@ async function openOrder(id, opts = {}) {
     // Live rider map — mounts only when the drawer rendered a courier-map
     // container (an on-the-way same-city order). Self-tears-down any prior map.
     try { mountCourierMap(o); } catch (e) { /* map is best-effort */ }
+    try { dpInit(o); } catch (e) { /* the address and the search still stand */ }
     // Same contract for the delivery-point map: the element has to exist and
     // have a width before any SDK will lay a map into it, so it mounts here
     // rather than inside the template. Only a parked order renders the box.
@@ -6662,6 +6836,7 @@ document.addEventListener('click', (e) => {
 // Order-drawer cleanup hook — clear the mount after slide-out.
 onDrawerClose('#order-drawer', () => {
   teardownCourierMap();            // stop polling + destroy the AMap instance
+  dpTeardown();
   const m = document.getElementById('order-detail-mount');
   if (m) m.innerHTML = '';
   _OPEN_ORDER = null;
@@ -7415,6 +7590,7 @@ function renderOpenOrder(o) {
             <div class="val" data-no-i18n><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
             <div class="sub" data-no-i18n>${escapeHtml(o.address_full || '')}</div>
             ${addressChangedNote(o)}
+            ${renderDropPin(o)}
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
               <button class="btn btn-sm" onclick="openEditShipTo(${o.id})">${pinIcon(13)} ${cuT('Edit ship-to', '修改收货地址')}</button>
               ${/[A-Za-z]/.test(o.address_full || '') ? `<button class="btn btn-sm" onclick="openAddressToChinese(${o.id})">${pinIcon(13)} ${cuT('Make address Chinese', '转为中文地址')}</button>` : ''}

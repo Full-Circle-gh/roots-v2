@@ -105,6 +105,7 @@ function world(opts = {}) {
     router: { post: (p, ...h) => { ROUTES[p] = h[h.length - 1]; } },
     requireRetailAdmin: () => {}, express: { json: () => () => {} },
     tdb: () => db, withTransaction, addressPin, qingyunQueue,
+    pointMemory: require('../lib/delivery-point-memory'),
     geocode: { configured: () => true, geocodeAddress: async () => null, isDeliverablePin: () => ({ ok: false }) },
     addressCn: { translateToChinese: async (s) => s },
     cfgValue: (k, d) => d, QY_GOODS_PIC_DEFAULT: 'pic',
