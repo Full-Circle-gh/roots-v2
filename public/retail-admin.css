@@ -12707,8 +12707,10 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      On desktop the map takes the left column and the address sits beside it,
      both in view at once, so neither has to come "first". */
   #order-drawer .qp-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
-  #order-drawer .qp-addr-col { order: 1; }
-  #order-drawer .qp-map-col  { order: 2; }
+  /* Phone / narrow tablet: map and search first so a building can be tapped
+     without scrolling past the address column and the on-screen keyboard. */
+  #order-drawer .qp-map-col  { order: 1; }
+  #order-drawer .qp-addr-col { order: 2; }
   @media (min-width: 721px) {
     #order-drawer .qp-grid { grid-template-columns: 1.35fr 1fr; align-items: start; }
     #order-drawer .qp-map-col  { order: 1; }
@@ -12757,6 +12759,9 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #order-drawer .qp-map {
     position: relative; height: 240px; border-radius: 10px; overflow: hidden;
     border: 1px solid var(--line); background: var(--bg-elev-1);
+  }
+  @media (hover: none) and (pointer: coarse) {
+    #order-drawer .qp-map { height: min(50vh, 300px); }
   }
   #order-drawer .qp-map-fallback {
     display: flex; align-items: center; justify-content: center; text-align: center;
