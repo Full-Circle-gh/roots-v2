@@ -262,6 +262,13 @@ it('the map follows MEANING, not spelling — the trap that got this wrong twice
     'Feie <B> is ENLARGE; Shangpeng <B> is BOLD — passing it through is the bug');
   assert.strictEqual(spyun.TAG_MAP.CB, 'CB');
   assert.strictEqual(spyun.TAG_MAP.C,  'C');
+  assert.strictEqual(spyun.TAG_MAP.QR, 'QRCODE',
+    'Feie <QR> is the receipt code; Shangpeng spells that <QRCODE>');
+});
+
+it('a fapiao code survives translation as one Shangpeng code', () => {
+  const url = 'https://shop.example.test/s/fapiao/' + 'ab'.repeat(18);
+  assert.strictEqual(spyun.translate('<QR>' + url + '</QR>'), '<QRCODE>' + url + '</QRCODE>');
 });
 
 it('a tag mapped to a nest unwinds in the right order', () => {
@@ -289,7 +296,7 @@ it('every house tag the renderers emit has an entry in the map', () => {
   // Read the tags OUT OF the renderer rather than restating them, so a new tag
   // added to a slip fails here instead of printing raw at a counter.
   const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'feie.js'), 'utf8');
-  const emitted = new Set([...src.matchAll(/<(CB|BOLD|B|L|C)>/g)].map(m => m[1]));
+  const emitted = new Set([...src.matchAll(/<(CB|BOLD|QR|B|L|C)>/g)].map(m => m[1]));
   assert.ok(emitted.size >= 4, `expected the renderers to emit several tags, saw ${emitted.size}`);
   for (const t of emitted) {
     assert.ok(Object.prototype.hasOwnProperty.call(spyun.TAG_MAP, t),
