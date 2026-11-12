@@ -96,6 +96,17 @@ check('a saved translation is what the Spanish span shows', () => {
   assert.ok(!i18n.translated('Total', '合计', () => ({ es: 'Total' })));
 });
 
+check('names put the selected translation before English, only where different', () => {
+  const html = i18n.spans('Espresso', '浓缩咖啡', {
+    name: true,
+    lookup() { return { es: 'Espresso', ko: '에스프레소', ar: 'إسبريسو' }; },
+  });
+  assert.ok(html.indexOf('class="l-ko"') < html.indexOf('class="l-en"'));
+  assert.ok(html.includes('data-original="ko ar"'), html);
+  const fallback = i18n.spans('Espresso', '浓缩咖啡', { name: true });
+  assert.ok(fallback.includes('data-original=""'), fallback);
+});
+
 (async () => {
   await checkAsync('the model is asked once, and a changed number is not saved', async () => {
     assert.ok(/CREATE TABLE IF NOT EXISTS qr_menu_translations/.test(menuTr.SQL));

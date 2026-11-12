@@ -206,9 +206,10 @@ function cfg(key, dflt) {
 function menuDb() {
   try { return tdb(); } catch (e) { return null; }
 }
-function bi(en, cn) {
+function bi(en, cn, name = false) {
   const db = menuDb();
   return i18n.spans(en, cn, {
+    name,
     lookup: (key) => (db ? menuTr.lookup(db, key) : null),
     miss: (key, e, c) => menuTr.miss(key, e, c),
   });
@@ -826,7 +827,8 @@ body{background:var(--oat);color:var(--ink);font-family:var(--f-aleo);
   font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
 img{display:block;max-width:100%}
 ${i18n.hideCss()}
-.lang-es .tr .l-en,.lang-ko .tr .l-en,.lang-ja .tr .l-en,.lang-ar .tr .l-en{
+.lang-es .tr .l-en[data-original~="es"],.lang-ko .tr .l-en[data-original~="ko"],
+.lang-ja .tr .l-en[data-original~="ja"],.lang-ar .tr .l-en[data-original~="ar"]{
   display:block;margin-top:2px;font-family:var(--f-aleo);font-size:11px;font-weight:400;
   line-height:1.25;color:var(--olive);direction:ltr;unicode-bidi:isolate}
 
@@ -841,7 +843,8 @@ ${i18n.hideCss()}
   font-family:var(--f-bear);font-size:13px;letter-spacing:.04em;color:var(--olive);cursor:pointer}
 .lang button.on{background:var(--lime);color:var(--ink)}
 .langbtn{flex:none;border:2px solid var(--ink);background:var(--lime);color:var(--ink);
-  font-family:var(--f-bear);font-size:13px;letter-spacing:.04em;padding:6px 10px;cursor:pointer}
+  font-family:var(--f-bear);font-size:13px;line-height:20px;min-height:36px;
+  letter-spacing:.04em;padding:6px 10px;cursor:pointer}
 .lsheet{position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--oat);
   border-top:2px solid var(--ink);padding-bottom:8px}
 .lsheet[hidden]{display:none}
@@ -867,7 +870,7 @@ ${i18n.hideCss()}
   -webkit-appearance:none;appearance:none;border-radius:0}
 .srch input::-webkit-search-cancel-button,.srch input::-webkit-search-decoration{
   -webkit-appearance:none;display:none}
-.srch-ph{position:absolute;left:38px;right:40px;top:50%;transform:translateY(-50%);
+.srch-ph{position:absolute;inset-inline-start:38px;inset-inline-end:40px;top:50%;transform:translateY(-50%);
   pointer-events:none;color:var(--olive);font-size:16px;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
 .srch input:not(:placeholder-shown)~.srch-ph{display:none}
@@ -2285,7 +2288,7 @@ a.place{display:flex;align-items:center;justify-content:center;gap:7px;
 .rail{position:sticky;top:var(--barh);flex:none;width:92px;
   height:calc(100vh - var(--barh));height:calc(100dvh - var(--barh));
   overflow-y:auto;-webkit-overflow-scrolling:touch;
-  align-self:flex-start;background:var(--oat);border-right:2px solid var(--ink)}
+  align-self:flex-start;background:var(--oat);border-inline-end:2px solid var(--ink)}
 .rail a{display:flex;align-items:center;gap:2px;padding:16px 5px;
   font-family:var(--f-bear);font-size:13px;line-height:1.15;color:var(--ink);
   text-align:center;text-decoration:none;text-transform:uppercase;
@@ -2295,6 +2298,7 @@ a.place{display:flex;align-items:center;justify-content:center;gap:7px;
 .rail a .cv{flex:none;width:9px;color:var(--olive);font-size:13px;line-height:1}
 .rail a.on{background:var(--lime)}
 .rail a.on .cv{color:var(--ink)}
+html[dir="rtl"] .rail .cv{transform:scaleX(-1)}
 
 /* ── the menu ── */
 /* The pane's floor clears the basket bar when there is one, so the last row of
@@ -2304,8 +2308,9 @@ a.place{display:flex;align-items:center;justify-content:center;gap:7px;
 .sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
   padding:16px 16px 8px}
 .kick{font-family:var(--f-toni);font-size:14px;font-weight:700;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--ink);overflow-wrap:anywhere}
-.cnt{font-family:var(--f-gothic);font-size:14px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink);overflow-wrap:anywhere;min-width:0}
+.lang-ko .kick,.lang-ja .kick,.lang-ar .kick{letter-spacing:normal}
+.cnt{flex:none;font-family:var(--f-gothic);font-size:14px;font-weight:700;letter-spacing:.06em;
   color:var(--olive);font-variant-numeric:tabular-nums}
 /* TWO WAYS OF SAYING "THIS CARD OPENS". Customers did not know a card could be
    tapped to read about the product, and the + beside the price reads as the
@@ -2326,7 +2331,7 @@ a.place{display:flex;align-items:center;justify-content:center;gap:7px;
    which is where two rounds of "it is too big" came from. .sl-grid.g2,
    .sl-card, .sl-ci, .cn, .sl-cfoot, .sl-pr, .sl-plus and .sl-coos are the
    rules below, one for one. */
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:12px 16px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:12px 16px}
 /* A COLUMN, SO THE PRICE ROW SITS AT THE BOTTOM OF THE CARD RATHER THAN UNDER
    THE NAME. Two products side by side rarely have names of the same height —
    "Almond Butter" against "Maple Cinnamon Almond Butter" — and with the row
@@ -2750,14 +2755,16 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};` +
   `var QR_UI=${JSON.stringify(i18n.UI).replace(/</g, '\\u003c')};` +
   `var QR_LIM=${JSON.stringify(i18n.LIMITS).replace(/</g, '\\u003c')};` +
-  `var bi=function(en,cn){var e=String(en==null?'':en).trim(),c=String(cn==null?'':cn).trim();` +
+  `var bi=function(en,cn,name){var e=String(en==null?'':en).trim(),c=String(cn==null?'':cn).trim();` +
   `if(!e)e=c;if(!c)c=e;if(!e)return '';` +
   `var ui=QR_UI[e],more=(ui&&ui.cn===c)?ui:((window.QR_TR&&window.QR_TR[e+'\\u0001'+c])||{});` +
   `var sk=(ui&&ui.cn===c)?'':encodeURIComponent(e+'\\u0001'+c);` +
   `var langs=['en','cn','es','ko','ja','ar'],h='',pick;` +
+  `if(name)langs=['cn','es','ko','ja','ar','en'];` +
+  `var originals=name?langs.filter(function(k){return k!=='en'&&k!=='cn'&&more[k]&&String(more[k]).trim()&&String(more[k]).trim()!==e}).join(' '):'';` +
   `for(var i=0;i<langs.length;i++){var k=langs[i];` +
   `pick=k==='en'?e:(k==='cn'?c:((more[k]&&String(more[k]).trim())||e));` +
-  `h+='<span class="l-'+k+'"'+(sk&&k!=='en'&&k!=='cn'?' data-sk="'+esc(sk)+'"':'')+'>'+esc(pick)+'</span>'}` +
+  `h+='<span class="l-'+k+'"'+(sk&&k!=='en'&&k!=='cn'?' data-sk="'+esc(sk)+'"':'')+(name&&k==='en'?' data-original="'+originals+'"':'')+'>'+esc(pick)+'</span>'}` +
   `return h};` +
   `var limSpans=function(g){var mn=g.min||0,mx=g.max||0,kind='',n='';` +
   `if(mn&&mx){kind='choose';n=(mn===mx)?(''+mn):(mn+'\\u2013'+mx)}` +
@@ -2907,7 +2914,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   // submitting. A second formatter would be a price that changed at the till.
   `var lineRows=function(a){if(!a||!a.length)return '';var h='';` +
   `for(var i=0;i<a.length;i++){var it=a[i];` +
-  `h+='<div class="ln"><div class="ln-t'+trn(it.name_en,it.name_cn)+'">'+bi(it.name_en,it.name_cn)+opsLine(it.options)+'</div>'+` +
+  `h+='<div class="ln"><div class="ln-t'+trn(it.name_en,it.name_cn)+'">'+bi(it.name_en,it.name_cn,true)+opsLine(it.options)+'</div>'+` +
   `'<div class="ln-r"><span class="ln-q">\u00d7'+esc(String(it.qty))+'</span>'+` +
   `'<div class="ln-p">'+money(it.line_total)+'</div></div></div>'}` +
   `return '<div class="done-it">'+h+'</div>'};` +
@@ -2944,7 +2951,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   // apart: anything that draws the basket says basket.
   `var paintSheet=function(){var k=ids(),h='';ttl.innerHTML=L_BASKET;` +
   `for(var i=0;i<k.length;i++){var it=cart[k[i]];` +
-  `h+='<div class="ln"><div class="ln-t'+trn(it.en,it.cn)+'">'+bi(it.en,it.cn)+opsLine(it.ops)+'</div>'+` +
+  `h+='<div class="ln"><div class="ln-t'+trn(it.en,it.cn)+'">'+bi(it.en,it.cn,true)+opsLine(it.ops)+'</div>'+` +
   `'<div class="ln-r"><div class="qty">'+` +
   `'<button type="button" data-d="'+esc(k[i])+'" aria-label="-">-</button>'+` +
   `'<span>'+it.qty+'</span>'+` +
@@ -3151,7 +3158,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `h+='</div>';` +
   `pk=null;oErr.hidden=true;foot.hidden=true;optFoot.hidden=true;errEl.hidden=true;` +
   `ttl.innerHTML=L_SIZE;` +
-  `nmEl.innerHTML=bi(b.getAttribute('data-en')||'',b.getAttribute('data-cn')||'');` +
+  `nmEl.innerHTML=bi(b.getAttribute('data-en')||'',b.getAttribute('data-cn')||'',true);` +
   `nmEl.classList.toggle('tr',trn(b.getAttribute('data-en')||'',b.getAttribute('data-cn')||'')===' tr');` +
   `nmEl.hidden=false;body.innerHTML=h;shOpen(sheet);body.scrollTop=0};` +
   `var openPicker=function(b){var pid=parseInt(b.getAttribute('data-add'),10);` +
@@ -3172,7 +3179,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `if(c.def&&!c.out){d.push(c.id);if(!g.multi)break}}` +
   `pk.s[g.id]=d}` +
   `oErr.hidden=true;foot.hidden=true;optFoot.hidden=false;errEl.hidden=true;` +
-  `ttl.innerHTML=L_OPTS;nmEl.innerHTML=bi(pk.en,pk.cn);` +
+  `ttl.innerHTML=L_OPTS;nmEl.innerHTML=bi(pk.en,pk.cn,true);` +
   `nmEl.classList.toggle('tr',trn(pk.en,pk.cn)===' tr');nmEl.hidden=false;` +
   `pkPaint();shOpen(sheet);body.scrollTop=0};` +
   /* Leaving the picker puts the sheet back to being the basket. Every face of
@@ -3600,14 +3607,19 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `for(var j=0;j<need.length;j++){if(want[need[j].key])first.push(need[j]);else rest.push(need[j])}` +
   `var list=first.concat(rest),left=8;` +
   `var apply=function(map){if(!map)return;window.QR_TR=map;` +
-  `var nodes=document.querySelectorAll('[data-sk]');` +
+  `var roots=[document],templates=document.querySelectorAll('template');` +
+  `for(var t=0;t<templates.length;t++)roots.push(templates[t].content);` +
+  `for(var r=0;r<roots.length;r++){var nodes=roots[r].querySelectorAll('[data-sk]');` +
   `for(var i=0;i<nodes.length;i++){var el=nodes[i],k,m;` +
   `try{k=decodeURIComponent(el.getAttribute('data-sk'))}catch(e){continue}` +
   `m=(el.className.match(/l-(es|ko|ja|ar)/)||[])[1];` +
   `if(m&&map[k]&&map[k][m])el.textContent=map[k][m]}` +
-  `var blocks=document.querySelectorAll('.t,.dt-nm,.ln-t,.kick,.sheet-n');` +
-  `for(var b=0;b<blocks.length;b++){var en=blocks[b].querySelector('.l-en'),ex=blocks[b].querySelector('.l-es');` +
-  `if(en&&ex&&ex.textContent&&ex.textContent!==en.textContent)blocks[b].classList.add('tr')}};` +
+  `var blocks=roots[r].querySelectorAll('.t,.dt-nm,.ln-t,.kick,.sheet-n');` +
+  `for(var b=0;b<blocks.length;b++){var block=blocks[b],en=block.querySelector('[data-original]');` +
+  `if(!en)continue;var originals=[],ls=['es','ko','ja','ar'];` +
+  `for(var j=0;j<ls.length;j++){var ex=block.querySelector('.l-'+ls[j]);` +
+  `if(ex&&ex.textContent.trim()&&ex.textContent.trim()!==en.textContent.trim())originals.push(ls[j])}` +
+  `en.setAttribute('data-original',originals.join(' '));block.classList.toggle('tr',originals.length>0)}}};` +
   `var step=function(){if(!list.length||left<=0){window.QR_FILLING=0;if(!list.length)window.QR_PENDING=0;return;}` +
   `var batch=[],bytes=2;while(list.length&&batch.length<40){var s=JSON.stringify(list[0]);` +
   `if(batch.length&&bytes+s.length>120000)break;bytes+=s.length+1;batch.push(list.shift())}` +
@@ -4075,7 +4087,7 @@ function detailBody(it, code, listed, sig, qrShown) {
           `</button>`
         : `<div class="dt-ph empty"></div>`) +
       `<div class="dt-hd">` +
-        `<div class="dt-nm${nameTr(it.name_en, it.name_cn) ? ' tr' : ''}">${bi(it.name_en, it.name_cn)}</div></div>` +
+        `<div class="dt-nm${nameTr(it.name_en, it.name_cn) ? ' tr' : ''}">${bi(it.name_en, it.name_cn, true)}</div></div>` +
     `</div>` +
     /* EACH BLOCK IN ITS OWN BAND. The wrapper is what .pb spaces and
        rules against its neighbour; see the CSS for why the blocks could not
@@ -4519,7 +4531,7 @@ router.get('/s/:shopCode', (req, res) => {
       `<div class="ph">${photo}` +
       (it.sold_out ? `<div class="sold">${bi('Sold out', '售罄')}</div>` : '') +
       `</div>` +
-      `<div class="t${nameTr(it.name_en, it.name_cn) ? ' tr' : ''}">${bi(it.name_en, it.name_cn)}</div>` +
+      `<div class="t${nameTr(it.name_en, it.name_cn) ? ' tr' : ''}">${bi(it.name_en, it.name_cn, true)}</div>` +
       // `Details · 详情`, a live pair. Only where there is a sheet to open.
       (detail ? `<div class="dt-l">${bi('Details', '详情')}</div>` : '') +
       // "from 29" / "29起" — the mini app's own live pair (shop.js _toRows),
@@ -4763,7 +4775,7 @@ router.get('/s/:shopCode', (req, res) => {
 
   const paneHtml = groups.map(c => `<section class="cat" id="${c.id}"${nodeAttr(c.nodeId)}>` +
     c.sections.map(sec => `<div class="sec-h"${nodeAttr(sec.nodeId)}>` +
-        `<div class="kick${nameTr(sec.en, sec.cn) ? ' tr' : ''}">${bi(sec.en, sec.cn)}</div>` +
+        `<div class="kick${nameTr(sec.en, sec.cn) ? ' tr' : ''}">${bi(sec.en, sec.cn, true)}</div>` +
         `<div class="cnt">${pad2(sec.items.length)}</div>` +
       `</div><div class="grid">${sec.items.map(card).join('')}</div>`).join('') +
     `</section>`).join('');
@@ -5663,7 +5675,7 @@ function orderLines(orderId, cur) {
     }).join('');
   };
   return `<div class="done-it">` + rows.map(r =>
-    `<div class="ln"><div class="ln-t${nameTr(r.name_en, r.name_cn) ? ' tr' : ''}">${bi(r.name_en, r.name_cn)}${optLines(r.options_json)}</div>` +
+    `<div class="ln"><div class="ln-t${nameTr(r.name_en, r.name_cn) ? ' tr' : ''}">${bi(r.name_en, r.name_cn, true)}${optLines(r.options_json)}</div>` +
       `<div class="ln-r">` +
         `<span class="ln-q">×${esc(String(r.qty))}</span>` +
         `<div class="ln-p">${esc(money(r.line_total, cur))}</div>` +
