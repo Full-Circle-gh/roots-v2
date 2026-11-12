@@ -847,9 +847,15 @@ ${i18n.hideCss()}
 .lang button{border:0;background:transparent;padding:6px 10px;font:inherit;
   font-family:var(--f-bear);font-size:13px;letter-spacing:.04em;color:var(--olive);cursor:pointer}
 .lang button.on{background:var(--lime);color:var(--ink)}
-.langbtn{flex:none;border:2px solid var(--ink);background:var(--lime);color:var(--ink);
-  font-family:var(--f-bear);font-size:13px;line-height:20px;min-height:36px;
-  letter-spacing:.04em;padding:6px 10px;cursor:pointer}
+/* Ash, 2026-11-12: the lime square named the language and did not say it
+   opened. Globe, the word, and an arrow, on the search box's own white. */
+.langbtn{flex:none;display:inline-flex;align-items:center;gap:6px;
+  height:36px;padding:0 10px;border:2px solid var(--ink);
+  background:rgba(255,255,255,.72);color:var(--ink);
+  font-family:var(--f-bear);font-size:13px;line-height:20px;
+  letter-spacing:.04em;cursor:pointer}
+.lang-globe{width:16px;height:16px;flex:none;display:block}
+.lang-chev{width:10px;height:7px;flex:none;display:block}
 .lsheet{position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--oat);
   border-top:2px solid var(--ink);padding-bottom:8px}
 .lsheet[hidden]{display:none}
@@ -4165,7 +4171,15 @@ function toggle(lang) {
   const rows = i18n.LANGS.map((k) =>
     `<button type="button" class="lr${k === l ? ' on' : ''}" data-lang="${k}">${i18n.esc(i18n.BTN[k])}</button>`
   ).join('');
-  return `<button type="button" class="langbtn" id="langBtn">${faces}</button>` +
+  const globe = `<svg class="lang-globe" viewBox="0 0 24 24" aria-hidden="true">` +
+    `<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/>` +
+    `<ellipse cx="12" cy="12" rx="4" ry="9" fill="none" stroke="currentColor" stroke-width="1.7"/>` +
+    `<path d="M3.4 12h17.2M5 8h14M5 16h14" fill="none" stroke="currentColor" stroke-width="1.7"/>` +
+    `</svg>`;
+  const chev = `<svg class="lang-chev" viewBox="0 0 12 8" aria-hidden="true">` +
+    `<path d="M1 1.4L6 6.2 11 1.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `</svg>`;
+  return `<button type="button" class="langbtn" id="langBtn">${globe}${faces}${chev}</button>` +
     `<div class="lsheet-bg" id="langBg" hidden></div>` +
     `<div class="lsheet" id="langSheet" role="dialog" aria-modal="true" hidden>` +
     `<div class="lsheet-h"><div class="lsheet-t">${bi('Language', '语言')}</div>` +

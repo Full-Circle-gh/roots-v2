@@ -524,6 +524,18 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.ok(body.includes('class="l-es"'), 'a dish name has no Spanish span');
       assert.ok(body.includes('class="l-ru"'), 'a dish name has no Russian span');
     });
+    await checkAsync('the language button shows a globe, the language and an arrow', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      const btn = body.slice(body.indexOf('id="langBtn"'), body.indexOf('id="langBg"'));
+      assert.ok(btn.includes('class="lang-globe"') && btn.includes('class="lang-chev"'),
+        'the button is missing the globe or the arrow');
+      assert.ok(btn.indexOf('lang-globe') < btn.indexOf('class="l-en"') &&
+        btn.indexOf('class="l-en"') < btn.indexOf('lang-chev'),
+        'the marks are not globe, then the language, then the arrow');
+      assert.ok(/\.langbtn\{[^}]*background:rgba\(255,255,255,\.72\)/.test(body),
+        'the button is not the white box');
+      assert.ok(/\.langbtn\{[^}]*height:36px/.test(body), 'the button is not 36px tall');
+    });
     await checkAsync('the sold-out badge is the live 售罄 pair', async () => {
       const { body } = await get(`/s/${LIVE}`);
       const row = rowFor(body, 'Fixture kombucha');
