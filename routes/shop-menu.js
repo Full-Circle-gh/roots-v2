@@ -3588,20 +3588,35 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
      order this call hides the bar, which is what it already was. */
   `paintBar();` +
   `})();` +
+  // The whole menu is thousands of lines. Asking for all of them in one go
+  // is bigger than the server will read, so the ask was refused and the dish
+  // list stayed in English. The names on the list go first, a few dozen at a
+  // time, and each answer is written onto the page before the next ask.
   `(function(){window.qrFill=function(){if(!window.QR_PENDING||!window.QR_TR_URL||window.QR_FILLING)return;` +
   `window.QR_FILLING=1;` +
-  `fetch(window.QR_TR_URL,{method:'POST',headers:{'Content-Type':'application/json'},` +
-  `body:JSON.stringify({need:window.QR_NEED||[]})}).then(function(r){return r.json()}).then(function(j){` +
-  `window.QR_PENDING=0;if(!j||!j.map)return;window.QR_TR=j.map;` +
+  `var need=window.QR_NEED||[],want={},seen=document.querySelectorAll('.nm [data-sk],.rail [data-sk],.kick [data-sk],.t [data-sk]');` +
+  `for(var i=0;i<seen.length;i++){try{want[decodeURIComponent(seen[i].getAttribute('data-sk'))]=1}catch(e){}}` +
+  `var first=[],rest=[];` +
+  `for(var j=0;j<need.length;j++){if(want[need[j].key])first.push(need[j]);else rest.push(need[j])}` +
+  `var list=first.concat(rest),left=8;` +
+  `var apply=function(map){if(!map)return;window.QR_TR=map;` +
   `var nodes=document.querySelectorAll('[data-sk]');` +
   `for(var i=0;i<nodes.length;i++){var el=nodes[i],k,m;` +
   `try{k=decodeURIComponent(el.getAttribute('data-sk'))}catch(e){continue}` +
   `m=(el.className.match(/l-(es|ko|ja|ar)/)||[])[1];` +
-  `if(m&&j.map[k]&&j.map[k][m])el.textContent=j.map[k][m]}` +
+  `if(m&&map[k]&&map[k][m])el.textContent=map[k][m]}` +
   `var blocks=document.querySelectorAll('.t,.dt-nm,.ln-t,.kick,.sheet-n');` +
   `for(var b=0;b<blocks.length;b++){var en=blocks[b].querySelector('.l-en'),ex=blocks[b].querySelector('.l-es');` +
-  `if(en&&ex&&ex.textContent&&ex.textContent!==en.textContent)blocks[b].classList.add('tr')}` +
+  `if(en&&ex&&ex.textContent&&ex.textContent!==en.textContent)blocks[b].classList.add('tr')}};` +
+  `var step=function(){if(!list.length||left<=0){window.QR_FILLING=0;if(!list.length)window.QR_PENDING=0;return;}` +
+  `var batch=[],bytes=2;while(list.length&&batch.length<40){var s=JSON.stringify(list[0]);` +
+  `if(batch.length&&bytes+s.length>120000)break;bytes+=s.length+1;batch.push(list.shift())}` +
+  `left--;` +
+  `fetch(window.QR_TR_URL,{method:'POST',headers:{'Content-Type':'application/json'},` +
+  `body:JSON.stringify({need:batch})}).then(function(r){return r.json()}).then(function(j){` +
+  `if(!j||!j.map){window.QR_FILLING=0;return}apply(j.map);step()` +
   `}).catch(function(){window.QR_FILLING=0})};` +
+  `step()};` +
   `if(window.QR_PENDING)window.qrFill()})();`;
 
 // ─── WHOSE SIGNATURE THIS MENU SIGNS WITH (§179) ────────────────────────
@@ -4402,6 +4417,10 @@ router.get('/s/:shopCode', (req, res) => {
   const zeroAsk = (it) => !(it.variants && it.variants.length > 1) &&
     !!it.options && !(Number(it.price) > 0);
   const card = (it) => {
+    // The name goes into the ask before the detail sheet. The sheet's
+    // paragraphs are long, and a name that waits behind them is still
+    // English on the list the guest is reading.
+    bi(it.name_en, it.name_cn);
     const src = `/s/${esc(code)}/i/${it.store_product_id}` +
       `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}`;
     // No photo → the empty frame, never an <img> that cannot resolve. A
@@ -4959,8 +4978,10 @@ const TR_LIMIT = rateLimit({
 });
 
 // The guest's page asks for this only when a dish is still in English.
-// The pairs are the ones that page already rendered. The model runs here,
-// the result is saved, and the page swaps the words it is showing.
+// One ask is a few dozen lines, the names on the list first. The whole menu
+// does not fit in one body, and a body that does not fit is refused, which
+// left every dish in English. The model runs here, the result is saved, and
+// the page swaps the words it is showing.
 router.post('/s/:shopCode/tr', TR_LIMIT, express.json({ limit: '200kb' }), async (req, res) => {
   const code = String(req.params.shopCode || '');
   if (!isShopCode(code) || !resolveShop(code)) return res.status(404).json({ ok: false });
