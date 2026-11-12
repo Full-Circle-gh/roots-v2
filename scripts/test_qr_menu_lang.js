@@ -137,6 +137,33 @@ check('a saved translation is what the Spanish span shows', () => {
     assert.strictEqual(posted.length, 1);
   });
 
+  await checkAsync('a long list is translated a few dozen at a time', async () => {
+    const db = fakeDb();
+    const sizes = [];
+    const call = async (args) => {
+      const ids = [...args.messages[0].content.matchAll(/^id: (\d+)/gm)].map((m) => m[1]);
+      sizes.push(ids.length);
+      return {
+        content_blocks: [{
+          type: 'tool_use',
+          name: 'menu_translations',
+          input: {
+            items: ids.map((id) => ({ id, es: 'E' + id, ko: 'K' + id, ja: 'J' + id, ar: 'A' + id })),
+          },
+        }],
+      };
+    };
+    const pairs = [];
+    for (let i = 0; i < 21; i++) {
+      const word = 'Dish ' + String.fromCharCode(65 + i);
+      pairs.push({ en: word, cn: '菜' + String.fromCharCode(65 + i) });
+    }
+    await menuTr.fill(db, pairs, call);
+    assert.deepStrictEqual(sizes, [20, 1]);
+    const saved = db.prepare('SELECT lang, translated FROM qr_menu_translations').all();
+    assert.strictEqual(saved.length, 21 * 4);
+  });
+
   if (failed) {
     console.log(failed + ' failed');
     process.exit(1);
