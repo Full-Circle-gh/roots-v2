@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.640
+# Tacet shared-core consolidation — decisions record, v4.641
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-12 · v4.641 — **§528 AMENDED · PRODUCT TRANSLATION NO LONGER WAITS INSIDE THE LIVE PROXY — ASH.** Live evidence after v4.639: one requested line sometimes returned in fifteen seconds and sometimes exceeded the proxy's timeout; two and twenty both produced `504`. The model call is therefore queued at the front and the request answers immediately. The open product polls only the saved rows, repaints as each answer appears, and never holds one HTTP request open around the model. Catalogue names and the full background backfill keep the same queue. No schema change, no new words, no change to `.gitignore` or CI. See §528.
 
 2026-11-12 · v4.639 — **§528 AMENDED · AN OPEN PRODUCT GOES TO THE FRONT OF THE RUSSIAN BACKFILL — ASH.** Ash found product information still in English after Russian went live. The first render was correctly translating names first, but opening a product did not prioritise that product's description, ingredients and blocks; almost four thousand older lines were waiting behind the full catalogue backfill. Opening a product now moves only its missing lines to the front of the existing saved-translation queue and repaints the open sheet when they return. The names still go first on initial load, the full backfill continues behind them, and a translation response returns only the rows requested rather than the entire translation table. No schema change, no new words, no change to `.gitignore` or CI. See §528.
 
