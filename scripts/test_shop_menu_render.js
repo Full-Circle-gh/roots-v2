@@ -2896,7 +2896,7 @@ function boxOf(text) {
       }, EN_VAR);
       await page.waitForFunction((text) => Array.from(document.querySelectorAll('#dsheetB .l-ru'))
         .some(el => el.textContent === text), translated);
-      assert.ok(asked.need.length <= 5,
+      assert.ok(asked.need.length <= 1,
         `an open product waited on a timeout-sized batch: ${asked.need.length}`);
       await page.unroute('**/detail-priority-tr');
     });
