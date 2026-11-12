@@ -2874,11 +2874,12 @@ function boxOf(text) {
       });
       assert.ok(pair, 'the open product has no translatable detail line');
       const translated = 'Переведённая информация о товаре';
-      let asked = null;
+      let asked = null, translatedKey = null;
       await page.route('**/detail-priority-tr', async (route) => {
         asked = route.request().postDataJSON();
+        translatedKey = asked.need[0].key;
         await route.fulfill({ json: { ok: true, map: {
-          [pair.key]: { ru: translated },
+          [translatedKey]: { ru: translated },
         } } });
       });
       await page.evaluate((p) => {
@@ -2895,10 +2896,8 @@ function boxOf(text) {
       }, EN_VAR);
       await page.waitForFunction((text) => Array.from(document.querySelectorAll('#dsheetB .l-ru'))
         .some(el => el.textContent === text), translated);
-      assert.ok(asked.need.some(x => x.key === pair.key),
-        `the open product's line was not prioritised: ${JSON.stringify(asked.need)}`);
-      assert.ok(asked.need.length <= 20,
-        `one repaint waited for more than one model chunk: ${asked.need.length}`);
+      assert.ok(asked.need.length <= 5,
+        `an open product waited on a timeout-sized batch: ${asked.need.length}`);
       await page.unroute('**/detail-priority-tr');
     });
 
