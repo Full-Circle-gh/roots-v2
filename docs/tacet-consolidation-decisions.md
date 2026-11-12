@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.643
+# Tacet shared-core consolidation — decisions record, v4.644
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-12 · v4.644 — **§528 AMENDED · THE LANGUAGE BUTTON WORKS AS SOON AS IT IS VISIBLE — ASH.** Live Chromium measured the Ramada button at 2.19 seconds and its handler at 5.52 seconds: a 3.33-second dead interval while the browser parsed the rest of the 11.4 MB product page. The language-panel listener now runs in the head; layout measurement, search, basket and product behavior remain at the end. The large document is a separate performance problem, but it can no longer hold this control inert. No new words, no schema change, no change to `.gitignore` or CI. See §528.
 
 2026-11-12 · v4.643 — **§179 AMENDED · THE ROOTS SLOGAN STAYS ENGLISH IN EVERY QR-MENU LANGUAGE — ASH.** “From Soil to Soul” and the English house line beneath it are a brand signature, not menu copy. The default Roots slogan therefore no longer enters the bilingual or translated menu spans: English, Chinese, Spanish, Korean, Japanese, Arabic and Russian all print the same English words. A product-specific colophon tagline remains bilingual because it is product content rather than this fixed slogan. No new words, no schema change, no change to `.gitignore` or CI. See §179.
 
@@ -34166,6 +34168,8 @@ No schema change. No change to `.gitignore` or CI.
 **2026-11-12 · AMENDED BY ASH.** Russian joins the same menu as a seventh language. It follows the saved-translation and English-under-the-name rules already decided here. Russian is left to right; Arabic remains the only language that turns the page right to left.
 
 **2026-11-12 · AMENDED BY ASH.** A product the guest opens does not wait behind the catalogue-wide translation backfill. Its missing description, ingredients and content blocks move to the front of the same saved-translation queue and repaint the open sheet when ready. Initial load continues to prioritise menu names.
+
+**2026-11-12 · AMENDED BY ASH.** The language button works the moment it is visible. The Ramada page exposed the button 3.33 seconds before the end-of-document script attached its listener, so taps during that interval did nothing. The small delegated language listener now runs in the head; scripts that need the completed document remain at the end.
 
 **The rule.**
 
