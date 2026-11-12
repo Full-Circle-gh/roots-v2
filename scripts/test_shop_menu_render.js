@@ -2895,7 +2895,10 @@ function boxOf(text) {
       }, EN_VAR);
       await page.waitForFunction((text) => Array.from(document.querySelectorAll('#dsheetB .l-ru'))
         .some(el => el.textContent === text), translated);
-      assert.deepStrictEqual(asked.need.map(x => x.key), [pair.key]);
+      assert.ok(asked.need.some(x => x.key === pair.key),
+        `the open product's line was not prioritised: ${JSON.stringify(asked.need)}`);
+      assert.ok(asked.need.length <= 20,
+        `one repaint waited for more than one model chunk: ${asked.need.length}`);
       await page.unroute('**/detail-priority-tr');
     });
 

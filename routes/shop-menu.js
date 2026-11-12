@@ -3636,7 +3636,10 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `var step=function(){if(!list.length||window.QR_LEFT<=0){` +
   `if(list.length){need=list.concat(need);list=[]}window.QR_FILLING=0;` +
   `window.QR_PENDING=(need.length?1:0);return;}` +
-  `var batch=[],bytes=2;while(list.length&&batch.length<40){var s=JSON.stringify(list[0]);` +
+  // oneChunk translates twenty lines per model call. Keep the browser request
+  // to that same size so an open product repaints after one call instead of
+  // waiting for two model calls before either answer reaches the guest.
+  `var batch=[],bytes=2;while(list.length&&batch.length<20){var s=JSON.stringify(list[0]);` +
   `if(batch.length&&bytes+s.length>120000)break;bytes+=s.length+1;batch.push(list.shift())}` +
   `window.QR_LEFT--;` +
   `fetch(window.QR_TR_URL,{method:'POST',headers:{'Content-Type':'application/json'},` +
