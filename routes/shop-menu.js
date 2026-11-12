@@ -37,8 +37,8 @@
 // repo proven to render inside the WeChat in-app browser.
 //
 // LANGUAGE (§44, §528). English and Chinese are the menu the office wrote.
-// Spanish, Korean, Japanese and Arabic are saved translations of the dishes
-// and written translations of the buttons. All six are in the DOM and CSS
+// Spanish, Korean, Japanese, Arabic and Russian are saved translations of the dishes
+// and written translations of the buttons. All seven are in the DOM and CSS
 // decides which is visible, so the choice is a class swap and not a reload.
 // Resolution order: this session's toggle, then ?lang=, then the client's own
 // language, then English. Detection selects the opening render ONLY and is
@@ -828,11 +828,16 @@ body{background:var(--oat);color:var(--ink);font-family:var(--f-aleo);
 img{display:block;max-width:100%}
 ${i18n.hideCss()}
 .lang-es .tr .l-en[data-original~="es"],.lang-ko .tr .l-en[data-original~="ko"],
-.lang-ja .tr .l-en[data-original~="ja"],.lang-ar .tr .l-en[data-original~="ar"]{
+.lang-ja .tr .l-en[data-original~="ja"],.lang-ar .tr .l-en[data-original~="ar"],
+.lang-ru .tr .l-en[data-original~="ru"]{
   display:block;margin-top:2px;font-family:var(--f-aleo);font-size:11px;font-weight:400;
   line-height:1.25;color:var(--olive);direction:ltr;unicode-bidi:isolate}
 
-.bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
+/* 31 keeps the language sheet, which is nested inside this stacking context,
+   above the basket bar at 30. The seventh language made the last row overlap
+   that bar; leaving the header at 20 made Русский visible but untappable. The
+   order and product sheets remain above both at 40. */
+.bar{position:sticky;top:0;z-index:31;display:flex;align-items:center;gap:12px;
   padding:calc(13px + env(safe-area-inset-top)) 14px 13px;
   background:var(--oat);border-bottom:2px solid var(--ink)}
 .nm{flex:1;min-width:0;font-family:var(--f-bear);font-size:21px;line-height:1.1;
@@ -2309,7 +2314,7 @@ html[dir="rtl"] .rail .cv{transform:scaleX(-1)}
   padding:16px 16px 8px}
 .kick{font-family:var(--f-toni);font-size:14px;font-weight:700;letter-spacing:.12em;
   text-transform:uppercase;color:var(--ink);overflow-wrap:anywhere;min-width:0}
-.lang-ko .kick,.lang-ja .kick,.lang-ar .kick{letter-spacing:normal}
+.lang-ko .kick,.lang-ja .kick,.lang-ar .kick,.lang-ru .kick{letter-spacing:normal}
 .cnt{flex:none;font-family:var(--f-gothic);font-size:14px;font-weight:700;letter-spacing:.06em;
   color:var(--olive);font-variant-numeric:tabular-nums}
 /* TWO WAYS OF SAYING "THIS CARD OPENS". Customers did not know a card could be
@@ -2398,9 +2403,9 @@ function langScript(hasParam) {
   const detect = hasParam ? '' :
     `if(!ok(l)){var n=(navigator.language||'').toLowerCase();` +
     `l=n.indexOf('zh')===0?'cn':n.indexOf('es')===0?'es':n.indexOf('ko')===0?'ko':` +
-    `n.indexOf('ja')===0?'ja':n.indexOf('ar')===0?'ar':null}`;
+    `n.indexOf('ja')===0?'ja':n.indexOf('ar')===0?'ar':n.indexOf('ru')===0?'ru':null}`;
   return `(function(){var K='shop_menu_lang',` +
-    `ok=function(x){return x==='en'||x==='cn'||x==='es'||x==='ko'||x==='ja'||x==='ar'},l=null;` +
+    `ok=function(x){return x==='en'||x==='cn'||x==='es'||x==='ko'||x==='ja'||x==='ar'||x==='ru'},l=null;` +
     `try{l=sessionStorage.getItem(K)}catch(e){/* private mode throws on storage; open in English */}` +
     `if(!ok(l))l=null;${detect}` +
     `if(!ok(l))return;var d=document.documentElement;` +
@@ -2409,7 +2414,7 @@ function langScript(hasParam) {
 }
 
 const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
-  `OK={en:1,cn:1,es:1,ko:1,ja:1,ar:1},LANGS=['en','cn','es','ko','ja','ar'];` +
+  `OK={en:1,cn:1,es:1,ko:1,ja:1,ar:1,ru:1},LANGS=['en','cn','es','ko','ja','ar','ru'];` +
   `var open=function(on){var s=document.getElementById('langSheet'),g=document.getElementById('langBg');` +
   `if(s)s.hidden=!on;if(g)g.hidden=!on};` +
   `var mark=function(l){var n=document.querySelectorAll('#langSheet [data-lang]');` +
@@ -2759,8 +2764,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `if(!e)e=c;if(!c)c=e;if(!e)return '';` +
   `var ui=QR_UI[e],more=(ui&&ui.cn===c)?ui:((window.QR_TR&&window.QR_TR[e+'\\u0001'+c])||{});` +
   `var sk=(ui&&ui.cn===c)?'':encodeURIComponent(e+'\\u0001'+c);` +
-  `var langs=['en','cn','es','ko','ja','ar'],h='',pick;` +
-  `if(name)langs=['cn','es','ko','ja','ar','en'];` +
+  `var langs=['en','cn','es','ko','ja','ar','ru'],h='',pick;` +
+  `if(name)langs=['cn','es','ko','ja','ar','ru','en'];` +
   `var originals=name?langs.filter(function(k){return k!=='en'&&k!=='cn'&&more[k]&&String(more[k]).trim()&&String(more[k]).trim()!==e}).join(' '):'';` +
   `for(var i=0;i<langs.length;i++){var k=langs[i];` +
   `pick=k==='en'?e:(k==='cn'?c:((more[k]&&String(more[k]).trim())||e));` +
@@ -2769,13 +2774,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `var limSpans=function(g){var mn=g.min||0,mx=g.max||0,kind='',n='';` +
   `if(mn&&mx){kind='choose';n=(mn===mx)?(''+mn):(mn+'\\u2013'+mx)}` +
   `else if(mx){kind='upto';n=''+mx}else if(mn){kind='atleast';n=''+mn}else return '';` +
-  `var row=QR_LIM[kind],langs=['en','cn','es','ko','ja','ar'],h='';` +
+  `var row=QR_LIM[kind],langs=['en','cn','es','ko','ja','ar','ru'],h='';` +
   `for(var i=0;i<langs.length;i++){var k=langs[i];` +
   `h+='<span class="l-'+k+'">'+esc(String(row[k]).replace('{n}',n))+'</span>'}` +
   `return h};` +
   `var trn=function(en,cn){var e=String(en||'').trim(),c=String(cn||'').trim();if(!e)e=c;` +
   `var row=window.QR_TR&&window.QR_TR[e+'\\u0001'+c];if(!row)return '';` +
-  `var ls=['es','ko','ja','ar'];for(var i=0;i<ls.length;i++){var v=row[ls[i]];` +
+  `var ls=['es','ko','ja','ar','ru'];for(var i=0;i<ls.length;i++){var v=row[ls[i]];` +
   `if(v&&String(v).trim()&&String(v).trim()!==e)return ' tr'}return ''};` +
   // THE THREE LABELS THIS SCRIPT REPAINTS, built once at module load. Two are
   // already on this page; the third, My orders · 我的订单, is the web
@@ -3612,11 +3617,11 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `for(var r=0;r<roots.length;r++){var nodes=roots[r].querySelectorAll('[data-sk]');` +
   `for(var i=0;i<nodes.length;i++){var el=nodes[i],k,m;` +
   `try{k=decodeURIComponent(el.getAttribute('data-sk'))}catch(e){continue}` +
-  `m=(el.className.match(/l-(es|ko|ja|ar)/)||[])[1];` +
+  `m=(el.className.match(/l-(es|ko|ja|ar|ru)/)||[])[1];` +
   `if(m&&map[k]&&map[k][m])el.textContent=map[k][m]}` +
   `var blocks=roots[r].querySelectorAll('.t,.dt-nm,.ln-t,.kick,.sheet-n');` +
   `for(var b=0;b<blocks.length;b++){var block=blocks[b],en=block.querySelector('[data-original]');` +
-  `if(!en)continue;var originals=[],ls=['es','ko','ja','ar'];` +
+  `if(!en)continue;var originals=[],ls=['es','ko','ja','ar','ru'];` +
   `for(var j=0;j<ls.length;j++){var ex=block.querySelector('.l-'+ls[j]);` +
   `if(ex&&ex.textContent.trim()&&ex.textContent.trim()!==en.textContent.trim())originals.push(ls[j])}` +
   `en.setAttribute('data-original',originals.join(' '));block.classList.toggle('tr',originals.length>0)}}};` +
@@ -3846,7 +3851,7 @@ function detailBody(it, code, listed, sig, qrShown) {
       const cnSegs = b.segs && (b.segs.cn.length ? b.segs.cn : b.segs.en);
       const plain = (segs) => (segs || []).map((x) => x.text).join('');
       // The highlighted English and Chinese stay as the office wrote them.
-      // The other four languages are the plain sentence, saved like every
+      // The other five languages are the plain sentence, saved like every
       // other line on the page. bi() would wrap English and Chinese again,
       // so those two spans are dropped and the office's own markup kept.
       const more = (b.segs && (b.segs.en.length || b.segs.cn.length))
@@ -4538,7 +4543,8 @@ router.get('/s/:shopCode', (req, res) => {
       // word order as each language reads it.
       `<div class="pf"><div class="pr">` +
       (it.price_from
-        ? `<span class="pfx l-en">from </span><span class="pfx l-es">desde </span><span class="pfx l-ar">من </span>`
+        ? `<span class="pfx l-en">from </span><span class="pfx l-es">desde </span>` +
+          `<span class="pfx l-ar">من </span><span class="pfx l-ru">от </span>`
         : '') +
       // NO PRICE RATHER THAN ¥0.00 when the product's own price is zero and its
       // choices carry the money — a selection box priced by what goes in it.

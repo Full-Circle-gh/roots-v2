@@ -61,11 +61,26 @@ async function checkAsync(name, fn) {
   }
 }
 
+check('Russian is complete anywhere the QR menu owns fixed words', () => {
+  assert.deepStrictEqual(i18n.LANGS, ['en', 'cn', 'es', 'ko', 'ja', 'ar', 'ru']);
+  assert.strictEqual(i18n.BTN.ru, 'Русский');
+  for (const [source, row] of Object.entries(i18n.UI)) {
+    assert.ok(row.ru, `missing Russian UI for ${source}`);
+  }
+  for (const [kind, row] of Object.entries(i18n.LIMITS)) {
+    assert.ok(row.ru, `missing Russian limit for ${kind}`);
+  }
+  for (const [source, row] of Object.entries(i18n.GLOSS)) {
+    assert.ok(row.ru, `missing Russian allergen gloss for ${source}`);
+  }
+});
+
 check('sesame is a fixed word, not a sentence for the model', () => {
   assert.strictEqual(i18n.gloss('Sesame', 'ja'), 'ごま');
   assert.strictEqual(i18n.gloss('芝麻', 'ko'), '참깨');
   assert.strictEqual(i18n.gloss('Sesame', 'es'), 'Sésamo');
   assert.strictEqual(i18n.gloss('Sesame', 'ar'), 'سمسم');
+  assert.strictEqual(i18n.gloss('Sesame', 'ru'), 'Кунжут');
   assert.strictEqual(i18n.gloss('moon cheese', 'es'), '');
 });
 
@@ -73,6 +88,7 @@ check('a button is the written line, and a dish falls back to English', () => {
   const total = i18n.spans('Total', '合计', { lookup() { return null; } });
   assert.ok(total.includes('>合计<'), 'the Chinese total was replaced');
   assert.ok(total.includes('>합계<'), 'Korean total missing');
+  assert.ok(total.includes('>Итого<'), 'Russian total missing');
   assert.ok(!total.includes('data-sk'), 'a button was marked as dish text');
 
   let missed = null;
@@ -81,6 +97,7 @@ check('a button is the written line, and a dish falls back to English', () => {
     miss(key, en, cn) { missed = { key, en, cn }; },
   });
   assert.ok(dish.includes('class="l-es"'), 'no Spanish span');
+  assert.ok(dish.includes('class="l-ru"'), 'no Russian span');
   assert.ok(dish.includes('>Hummus platter<'), 'missing Spanish did not fall back to English');
   assert.strictEqual(missed.en, 'Hummus platter');
   assert.strictEqual(missed.key, i18n.sourceKey('Hummus platter', '鹰嘴豆泥拼盘'));
@@ -89,9 +106,10 @@ check('a button is the written line, and a dish falls back to English', () => {
 check('a saved translation is what the Spanish span shows', () => {
   const key = i18n.sourceKey('Hummus platter', '鹰嘴豆泥拼盘');
   const html = i18n.spans('Hummus platter', '鹰嘴豆泥拼盘', {
-    lookup(k) { return k === key ? { es: 'Bandeja de hummus', ko: '후무스', ja: 'フムス', ar: 'طبق حمص' } : null; },
+    lookup(k) { return k === key ? { es: 'Bandeja de hummus', ko: '후무스', ja: 'フムス', ar: 'طبق حمص', ru: 'Тарелка хумуса' } : null; },
   });
   assert.ok(html.includes('>Bandeja de hummus<'), html);
+  assert.ok(html.includes('>Тарелка хумуса<'), html);
   assert.ok(i18n.translated('Hummus platter', '鹰嘴豆泥拼盘', () => ({ es: 'Bandeja de hummus' })));
   assert.ok(!i18n.translated('Total', '合计', () => ({ es: 'Total' })));
 });
@@ -99,10 +117,10 @@ check('a saved translation is what the Spanish span shows', () => {
 check('names put the selected translation before English, only where different', () => {
   const html = i18n.spans('Espresso', '浓缩咖啡', {
     name: true,
-    lookup() { return { es: 'Espresso', ko: '에스프레소', ar: 'إسبريسو' }; },
+    lookup() { return { es: 'Espresso', ko: '에스프레소', ar: 'إسبريسو', ru: 'Эспрессо' }; },
   });
   assert.ok(html.indexOf('class="l-ko"') < html.indexOf('class="l-en"'));
-  assert.ok(html.includes('data-original="ko ar"'), html);
+  assert.ok(html.includes('data-original="ko ar ru"'), html);
   const fallback = i18n.spans('Espresso', '浓缩咖啡', { name: true });
   assert.ok(fallback.includes('data-original=""'), fallback);
 });
@@ -120,8 +138,8 @@ check('names put the selected translation before English, only where different',
           name: 'menu_translations',
           input: {
             items: [
-              { id: '0', es: 'Bandeja de hummus', ko: '후무스 플래터', ja: 'フムスの盛り合わせ', ar: 'طبق حمص' },
-              { id: '1', es: 'Tostada de 99 g', ko: '99 g', ja: '99 g', ar: '99 g' },
+              { id: '0', es: 'Bandeja de hummus', ko: '후무스 플래터', ja: 'フムスの盛り合わせ', ar: 'طبق حمص', ru: 'Тарелка хумуса' },
+              { id: '1', es: 'Tostada de 99 g', ko: '99 g', ja: '99 g', ar: '99 g', ru: '99 г' },
             ],
           },
         }],
@@ -137,7 +155,7 @@ check('names put the selected translation before English, only where different',
     const hummus = db.prepare(
       'SELECT lang, translated FROM qr_menu_translations WHERE source_key = ? ORDER BY lang'
     ).all(i18n.sourceKey(pairs[0].en, pairs[0].cn));
-    assert.strictEqual(hummus.length, 4);
+    assert.strictEqual(hummus.length, 5);
     const bad = db.prepare(
       'SELECT COUNT(*) AS n FROM qr_menu_translations WHERE source_key = ?'
     ).get(i18n.sourceKey(pairs[1].en, pairs[1].cn));
@@ -159,7 +177,7 @@ check('names put the selected translation before English, only where different',
           type: 'tool_use',
           name: 'menu_translations',
           input: {
-            items: ids.map((id) => ({ id, es: 'E' + id, ko: 'K' + id, ja: 'J' + id, ar: 'A' + id })),
+            items: ids.map((id) => ({ id, es: 'E' + id, ko: 'K' + id, ja: 'J' + id, ar: 'A' + id, ru: 'R' + id })),
           },
         }],
       };
@@ -172,7 +190,7 @@ check('names put the selected translation before English, only where different',
     await menuTr.fill(db, pairs, call);
     assert.deepStrictEqual(sizes, [20, 1]);
     const saved = db.prepare('SELECT lang, translated FROM qr_menu_translations').all();
-    assert.strictEqual(saved.length, 21 * 4);
+    assert.strictEqual(saved.length, 21 * 5);
   });
 
   if (failed) {

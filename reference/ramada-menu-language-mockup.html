@@ -144,7 +144,7 @@
     <ol>
       <li>The button is in the top bar, on the right, where EN / 中 is today.</li>
       <li>It shows the language they are reading. Tap it.</li>
-      <li>The list opens over the menu. English and 中文 are the ones you wrote. The other four are the saved translation.</li>
+      <li>The list opens over the menu. English and 中文 are the ones you wrote. The other five are saved translations.</li>
     </ol>
     <p class="quiet">Sample dishes and prices, so you can judge the placement. Not the live menu. On Arabic the page turns right to left, and the English name stays under the dish so the counter can still read it.</p>
   </aside>
@@ -178,29 +178,30 @@ const LANGS = [
   { id:'es', btn:'Español', label:'Español', title:'Idioma', search:'Buscar', rail:['Fuentes','Tostadas'], dir:'ltr' },
   { id:'ko', btn:'한국어', label:'한국어', title:'언어', search:'검색', rail:['플래터','토스트'], dir:'ltr' },
   { id:'ja', btn:'日本語', label:'日本語', title:'言語', search:'検索', rail:['盛り合わせ','トースト'], dir:'ltr' },
-  { id:'ar', btn:'العربية', label:'العربية', title:'اللغة', search:'بحث', rail:['أطباق','توست'], dir:'rtl' }
+  { id:'ar', btn:'العربية', label:'العربية', title:'اللغة', search:'بحث', rail:['أطباق','توست'], dir:'rtl' },
+  { id:'ru', btn:'Русский', label:'Русский', title:'Язык', search:'Поиск', rail:['Тарелки','Тосты'], dir:'ltr' }
 ];
 
 const CATS = [
   {
     items:[
       { img:'hummus-platter.jpg', price:'¥68',
-        en:'Hummus platter', zh:'鹰嘴豆泥拼盘', es:'Bandeja de hummus', ko:'후무스 플래터', ja:'フムスの盛り合わせ', ar:'طبق حمص' },
+        en:'Hummus platter', zh:'鹰嘴豆泥拼盘', es:'Bandeja de hummus', ko:'후무스 플래터', ja:'フムスの盛り合わせ', ar:'طبق حمص', ru:'Тарелка хумуса' },
       { img:'labneh-platter.jpg', price:'¥72',
-        en:'Labneh platter', zh:'酸奶油拼盘', es:'Bandeja de labneh', ko:'라브네 플래터', ja:'ラブネの盛り合わせ', ar:'طبق لبنة' }
+        en:'Labneh platter', zh:'酸奶油拼盘', es:'Bandeja de labneh', ko:'라브네 플래터', ja:'ラブネの盛り合わせ', ar:'طبق لبنة', ru:'Тарелка лабне' }
     ]
   },
   {
     items:[
       { img:'zaatar-labneh-toast.jpg', price:'¥42', allergen:true,
-        en:'Za’atar labneh toast', zh:'扎塔尔酸奶油吐司', es:'Tostada de labneh con za’atar', ko:'자타르 라브네 토스트', ja:'ザアタルとラブネのトースト', ar:'توست لبنة بالزعتر',
-        alg:{ en:'Sesame', zh:'芝麻', es:'Sésamo', ko:'참깨', ja:'ごま', ar:'سمسم' } },
+        en:'Za’atar labneh toast', zh:'扎塔尔酸奶油吐司', es:'Tostada de labneh con za’atar', ko:'자타르 라브네 토스트', ja:'ザアタルとラブネのトースト', ar:'توست لبنة بالزعتر', ru:'Тост с лабне и заатаром',
+        alg:{ en:'Sesame', zh:'芝麻', es:'Sésamo', ko:'참깨', ja:'ごま', ar:'سمسم', ru:'Кунжут' } },
       { img:'almond-banana-toast.jpg', price:'¥38',
-        en:'Almond banana toast', zh:'杏仁香蕉吐司', es:'Tostada de almendra y plátano', ko:'아몬드 바나나 토스트', ja:'アーモンドとバナナのトースト', ar:'توست اللوز والموز' },
+        en:'Almond banana toast', zh:'杏仁香蕉吐司', es:'Tostada de almendra y plátano', ko:'아몬드 바나나 토스트', ja:'アーモンドとバナナのトースト', ar:'توست اللوز والموز', ru:'Тост с миндалём и бананом' },
       { img:'green-pesto-toast.jpg', price:'¥40',
-        en:'Green pesto toast', zh:'绿色香蒜酱吐司', es:'Tostada de pesto verde', ko:'그린 페스토 토스트', ja:'グリーンペストのトースト', ar:'توست البيستو الأخضر' },
+        en:'Green pesto toast', zh:'绿色香蒜酱吐司', es:'Tostada de pesto verde', ko:'그린 페스토 토스트', ja:'グリーンペストのトースト', ar:'توست البيستو الأخضر', ru:'Тост с зелёным песто' },
       { img:'cashew-sour-cream-toast.jpg', price:'¥40',
-        en:'Cashew sour cream toast', zh:'腰果酸奶油吐司', es:'Tostada de crema de anacardo', ko:'캐슈 사워크림 토스트', ja:'カシューサワークリームのトースト', ar:'توست كريمة الكاجو' }
+        en:'Cashew sour cream toast', zh:'腰果酸奶油吐司', es:'Tostada de crema de anacardo', ko:'캐슈 사워크림 토스트', ja:'カシューサワークリームのトースト', ar:'توست كريمة الكاجو', ru:'Тост со сметаной из кешью' }
     ]
   }
 ];

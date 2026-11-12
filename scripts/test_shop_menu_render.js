@@ -3186,10 +3186,15 @@ function boxOf(text) {
       ], `option ranks did not follow sales: ${JSON.stringify(st.rows)}`);
     });
 
-    await check('six languages keep names, cards and the Arabic rail in order', async () => {
+    await check('seven languages keep names, cards and the Arabic rail in order', async () => {
       const tr = require('../lib/qr-menu-translate');
       const key = require('../lib/qr-menu-i18n').sourceKey(EN_OK, CN_OK);
-      const translations = { es: EN_OK, ko: '아주 긴 이름의 테스트 라테', ar: 'لاتيه الاختبار' };
+      const translations = {
+        es: EN_OK,
+        ko: '아주 긴 이름의 테스트 라테',
+        ar: 'لاتيه الاختبار',
+        ru: 'Очень длинное название тестового латте',
+      };
       db.exec(tr.SQL);
       const save = db.prepare('INSERT OR REPLACE INTO qr_menu_translations (source_key, lang, translated) VALUES (?, ?, ?)');
       for (const [lang, text] of Object.entries(translations)) save.run(key, lang, text);
@@ -3199,7 +3204,7 @@ function boxOf(text) {
         await probe.goto(`http://127.0.0.1:${PORT}/s/${CODE}?lang=en`, { waitUntil: 'domcontentloaded' });
         for (const width of [320, 390, 430]) {
           await probe.setViewportSize({ width, height: 844 });
-          for (const lang of ['en', 'cn', 'es', 'ko', 'ja', 'ar']) {
+          for (const lang of ['en', 'cn', 'es', 'ko', 'ja', 'ar', 'ru']) {
             await probe.locator('#langBtn').click();
             await probe.locator(`[data-lang="${lang}"]`).click();
             const m = await probe.evaluate(({ name, lang }) => {
@@ -3220,7 +3225,7 @@ function boxOf(text) {
                 priceDifference: pair.length === 2 ? Math.abs(pair[0].bottom - pair[1].bottom) : 0,
               };
             }, { name: EN_OK, lang });
-            const translated = lang === 'ko' || lang === 'ar';
+            const translated = lang === 'ko' || lang === 'ar' || lang === 'ru';
             assert.strictEqual(m.names.length, translated ? 2 : 1, JSON.stringify({ lang, width, m }));
             if (translated) {
               assert.strictEqual(m.names[0], translations[lang]);
@@ -3241,9 +3246,20 @@ function boxOf(text) {
           Array.from(el.children).filter(e => e.getBoundingClientRect().height > 0).map(e => e.textContent));
         assert.deepStrictEqual(basket.slice(0, 2), [translations.ko, EN_OK]);
         await probe.locator('#sheetX').click();
+        await probe.locator('#langBtn').click();
+        await probe.locator('[data-lang="ru"]').click();
+        await probe.locator('#cbarOpen').click();
+        const russianBasket = await probe.locator('#sheetB .ln-t').first().evaluate(el =>
+          Array.from(el.children).filter(e => e.getBoundingClientRect().height > 0).map(e => e.textContent));
+        assert.deepStrictEqual(russianBasket.slice(0, 2), [translations.ru, EN_OK]);
+        await probe.locator('#sheetX').click();
         // A translation may arrive after the first paint, with Spanish still
         // identical. Korean must get its English caption independently.
-        await probe.route('**/layout-tr', route => route.fulfill({ json: { map: { [key]: { es: EN_OK, ko: '새 번역 라테' } } } }));
+        await probe.route('**/layout-tr', route => route.fulfill({ json: { map: { [key]: {
+          es: EN_OK,
+          ko: '새 번역 라테',
+          ru: 'Новый перевод латте',
+        } } } }));
         await probe.evaluate(({ key, en, cn }) => {
           const original = Array.from(document.querySelectorAll('.it .t > .l-en')).find(e => e.textContent === en);
           original.setAttribute('data-original', '');
@@ -3256,6 +3272,7 @@ function boxOf(text) {
         await probe.waitForFunction(() => !window.QR_FILLING);
         const original = await probe.locator('.it .t > .l-en').filter({ hasText: EN_OK }).getAttribute('data-original');
         assert.ok(original.split(' ').includes('ko'), original);
+        assert.ok(original.split(' ').includes('ru'), original);
         assert.ok(!original.split(' ').includes('es'), original);
         const templateOriginal = await probe.evaluate(name => {
           for (const template of document.querySelectorAll('template[data-dt]')) {
@@ -3265,6 +3282,7 @@ function boxOf(text) {
           return null;
         }, EN_OK);
         assert.ok(templateOriginal && templateOriginal.split(' ').includes('ko'), templateOriginal);
+        assert.ok(templateOriginal.split(' ').includes('ru'), templateOriginal);
       } finally {
         await probe.close();
         db.prepare('DELETE FROM qr_menu_translations WHERE source_key = ?').run(key);
