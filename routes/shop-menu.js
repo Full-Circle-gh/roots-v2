@@ -3636,10 +3636,10 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `var step=function(){if(!list.length||window.QR_LEFT<=0){` +
   `if(list.length){need=list.concat(need);list=[]}window.QR_FILLING=0;` +
   `window.QR_PENDING=(need.length?1:0);return;}` +
-  // oneChunk translates twenty lines per model call. Keep the browser request
-  // to that same size so an open product repaints after one call instead of
-  // waiting for two model calls before either answer reaches the guest.
-  `var batch=[],bytes=2;while(list.length&&batch.length<20){var s=JSON.stringify(list[0]);` +
+  // A catalogue-name fill can use one whole model chunk. Product information
+  // is longer: twenty detail lines exceeded the live proxy timeout, while
+  // five return in time and let the open sheet repaint progressively.
+  `var batch=[],bytes=2,cap=window.QR_BATCH||20;while(list.length&&batch.length<cap){var s=JSON.stringify(list[0]);` +
   `if(batch.length&&bytes+s.length>120000)break;bytes+=s.length+1;batch.push(list.shift())}` +
   `window.QR_LEFT--;` +
   `fetch(window.QR_TR_URL,{method:'POST',headers:{'Content-Type':'application/json'},` +
@@ -3648,6 +3648,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `}).catch(function(){need=batch.concat(list,need);list=[];window.QR_FILLING=0})};` +
   `window.qrFill=function(root){if(!window.QR_PENDING||!window.QR_TR_URL)return;` +
   `sync();` +
+  `if(root)window.QR_BATCH=5;else if(!window.QR_BATCH)window.QR_BATCH=20;` +
   `var picked=take(root||document,!root);if(picked.length)list=picked.concat(list);` +
   `if(window.QR_FILLING||!list.length)return;window.QR_FILLING=1;window.QR_LEFT=16;step()};` +
   `if(window.QR_PENDING)window.qrFill()})();`;
