@@ -114,6 +114,19 @@ check('a saved translation is what the Spanish span shows', () => {
   assert.ok(!i18n.translated('Total', '合计', () => ({ es: 'Total' })));
 });
 
+check('a translation response can be limited to the product that asked', () => {
+  const db = fakeDb();
+  const one = i18n.sourceKey('Espresso', '浓缩咖啡');
+  const two = i18n.sourceKey('Latte', '拿铁');
+  db.rows.push(
+    { source_key: one, lang: 'ru', translated: 'Эспрессо' },
+    { source_key: two, lang: 'ru', translated: 'Латте' }
+  );
+  assert.deepStrictEqual(menuTr.clientMap(db, [{ key: one }]), {
+    [one]: { ru: 'Эспрессо' },
+  });
+});
+
 check('names put the selected translation before English, only where different', () => {
   const html = i18n.spans('Espresso', '浓缩咖啡', {
     name: true,
