@@ -852,10 +852,10 @@ ${i18n.hideCss()}
 .langbtn{flex:none;display:inline-flex;align-items:center;gap:6px;
   height:36px;padding:0 10px;border:2px solid var(--ink);
   background:rgba(255,255,255,.72);color:var(--ink);
-  font-family:var(--f-bear);font-size:13px;line-height:20px;
+  font-family:var(--f-bear);font-size:13px;line-height:16px;
   letter-spacing:.04em;cursor:pointer}
-.lang-globe{width:16px;height:16px;flex:none;display:block}
-.lang-chev{width:10px;height:7px;flex:none;display:block}
+.langbtn svg{display:block;flex:none}
+.lang-globe,.lang-chev{width:16px;height:16px}
 .lsheet{position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--oat);
   border-top:2px solid var(--ink);padding-bottom:8px}
 .lsheet[hidden]{display:none}
@@ -4171,13 +4171,13 @@ function toggle(lang) {
   const rows = i18n.LANGS.map((k) =>
     `<button type="button" class="lr${k === l ? ' on' : ''}" data-lang="${k}">${i18n.esc(i18n.BTN[k])}</button>`
   ).join('');
-  const globe = `<svg class="lang-globe" viewBox="0 0 24 24" aria-hidden="true">` +
+  const globe = `<svg class="lang-globe" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">` +
     `<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/>` +
     `<ellipse cx="12" cy="12" rx="4" ry="9" fill="none" stroke="currentColor" stroke-width="1.7"/>` +
     `<path d="M3.4 12h17.2M5 8h14M5 16h14" fill="none" stroke="currentColor" stroke-width="1.7"/>` +
     `</svg>`;
-  const chev = `<svg class="lang-chev" viewBox="0 0 12 8" aria-hidden="true">` +
-    `<path d="M1 1.4L6 6.2 11 1.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>` +
+  const chev = `<svg class="lang-chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">` +
+    `<path d="M4.5 7L12 14.5 19.5 7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>` +
     `</svg>`;
   return `<button type="button" class="langbtn" id="langBtn">${globe}${faces}${chev}</button>` +
     `<div class="lsheet-bg" id="langBg" hidden></div>` +
