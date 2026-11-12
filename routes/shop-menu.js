@@ -2582,6 +2582,10 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   // and re-parsing a string is the step where an unescaped name would become
   // markup.
   `body.innerHTML='';body.appendChild(t.content.cloneNode(true));` +
+  // The catalogue-wide Russian backfill may still be running. A product the
+  // guest chose to read goes to the front instead of waiting behind every
+  // unopened description and ingredient line.
+  `if(window.qrFill)window.qrFill(body);` +
   `var n=card.querySelector('.t');ttl.innerHTML=n?n.innerHTML:'';` +
   `var p=card.querySelector('.pr');pr.textContent=p?p.textContent:'';` +
   // A sold-out product still opens — a customer may want to know what was in
@@ -3604,14 +3608,18 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   // is bigger than the server will read, so the ask was refused and the dish
   // list stayed in English. The names on the list go first, a few dozen at a
   // time, and each answer is written onto the page before the next ask.
-  `(function(){window.qrFill=function(){if(!window.QR_PENDING||!window.QR_TR_URL||window.QR_FILLING)return;` +
-  `window.QR_FILLING=1;` +
-  `var need=window.QR_NEED||[],want={},seen=document.querySelectorAll('.nm [data-sk],.rail [data-sk],.kick [data-sk],.t [data-sk]');` +
+  `(function(){var need=[],list=[],known={},source=null;` +
+  `var sync=function(){var src=window.QR_NEED||[];` +
+  `if(src!==source){source=src;known={}}for(var n=0;n<src.length;n++){` +
+  `if(!known[src[n].key]){known[src[n].key]=1;need.push(src[n])}}};` +
+  `var take=function(root,names){var want={},q=names?'.nm [data-sk],.rail [data-sk],.kick [data-sk],.t [data-sk]':'[data-sk]';` +
+  `var seen=(root||document).querySelectorAll(q);` +
   `for(var i=0;i<seen.length;i++){try{want[decodeURIComponent(seen[i].getAttribute('data-sk'))]=1}catch(e){}}` +
-  `var first=[],rest=[];` +
-  `for(var j=0;j<need.length;j++){if(want[need[j].key])first.push(need[j]);else rest.push(need[j])}` +
-  `var list=first.concat(rest),left=8;` +
-  `var apply=function(map){if(!map)return;window.QR_TR=map;` +
+  `var picked=[],rest=[];for(var j=0;j<need.length;j++){if(want[need[j].key])picked.push(need[j]);else rest.push(need[j])}` +
+  `need=rest;return picked};` +
+  `var apply=function(map){if(!map)return;var all=window.QR_TR||{};` +
+  `for(var mk in map){if(Object.prototype.hasOwnProperty.call(map,mk))all[mk]=map[mk]}` +
+  `window.QR_TR=all;` +
   `var roots=[document],templates=document.querySelectorAll('template');` +
   `for(var t=0;t<templates.length;t++)roots.push(templates[t].content);` +
   `for(var r=0;r<roots.length;r++){var nodes=roots[r].querySelectorAll('[data-sk]');` +
@@ -3625,15 +3633,20 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `for(var j=0;j<ls.length;j++){var ex=block.querySelector('.l-'+ls[j]);` +
   `if(ex&&ex.textContent.trim()&&ex.textContent.trim()!==en.textContent.trim())originals.push(ls[j])}` +
   `en.setAttribute('data-original',originals.join(' '));block.classList.toggle('tr',originals.length>0)}}};` +
-  `var step=function(){if(!list.length||left<=0){window.QR_FILLING=0;if(!list.length)window.QR_PENDING=0;return;}` +
+  `var step=function(){if(!list.length||window.QR_LEFT<=0){` +
+  `if(list.length){need=list.concat(need);list=[]}window.QR_FILLING=0;` +
+  `window.QR_PENDING=(need.length?1:0);return;}` +
   `var batch=[],bytes=2;while(list.length&&batch.length<40){var s=JSON.stringify(list[0]);` +
   `if(batch.length&&bytes+s.length>120000)break;bytes+=s.length+1;batch.push(list.shift())}` +
-  `left--;` +
+  `window.QR_LEFT--;` +
   `fetch(window.QR_TR_URL,{method:'POST',headers:{'Content-Type':'application/json'},` +
   `body:JSON.stringify({need:batch})}).then(function(r){return r.json()}).then(function(j){` +
   `if(!j||!j.map){window.QR_FILLING=0;return}apply(j.map);step()` +
-  `}).catch(function(){window.QR_FILLING=0})};` +
-  `step()};` +
+  `}).catch(function(){need=batch.concat(list,need);list=[];window.QR_FILLING=0})};` +
+  `window.qrFill=function(root){if(!window.QR_PENDING||!window.QR_TR_URL)return;` +
+  `sync();` +
+  `var picked=take(root||document,!root);if(picked.length)list=picked.concat(list);` +
+  `if(window.QR_FILLING||!list.length)return;window.QR_FILLING=1;window.QR_LEFT=16;step()};` +
   `if(window.QR_PENDING)window.qrFill()})();`;
 
 // ─── WHOSE SIGNATURE THIS MENU SIGNS WITH (§179) ────────────────────────
@@ -4989,7 +5002,7 @@ const DISCOUNT_LIMIT = rateLimit({
    number nobody has, so the page cannot be used to learn who is a customer. */
 const TR_LIMIT = rateLimit({
   windowMs: 10 * 60 * 1000,
-  max: 8,
+  max: 16,
   standardHeaders: true,
   legacyHeaders: false,
   message: { ok: false, error: 'too_many_requests' },
@@ -5006,7 +5019,7 @@ router.post('/s/:shopCode/tr', TR_LIMIT, express.json({ limit: '200kb' }), async
   const pairs = menuTr.pairsFromBody(req.body);
   try { await menuTr.fill(tdb(), pairs); } catch (e) { /* keep the English already on the page */ }
   res.set('Cache-Control', 'no-store');
-  res.json({ ok: true, map: menuTr.clientMap(tdb()) });
+  res.json({ ok: true, map: menuTr.clientMap(tdb(), pairs) });
 });
 
 router.post('/s/:shopCode/discount', DISCOUNT_LIMIT, express.json({ limit: '2kb' }), (req, res) => {

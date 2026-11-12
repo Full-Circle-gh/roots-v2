@@ -2863,6 +2863,42 @@ function boxOf(text) {
       assert.ok(/Travels well/i.test(m.text), 'the second legacy claim was dropped');
     });
 
+    await check('an opened product moves its missing information to the translation front', async () => {
+      await page.waitForFunction(() => !window.QR_FILLING);
+      const pair = await page.evaluate(() => {
+        const el = document.querySelector('#dsheetB .l-ru[data-sk]');
+        if (!el) return null;
+        const key = decodeURIComponent(el.getAttribute('data-sk'));
+        const parts = key.split('\u0001');
+        return { key, en: parts[0], cn: parts[1] };
+      });
+      assert.ok(pair, 'the open product has no translatable detail line');
+      const translated = 'Переведённая информация о товаре';
+      let asked = null;
+      await page.route('**/detail-priority-tr', async (route) => {
+        asked = route.request().postDataJSON();
+        await route.fulfill({ json: { ok: true, map: {
+          [pair.key]: { ru: translated },
+        } } });
+      });
+      await page.evaluate((p) => {
+        window.QR_NEED = [p];
+        window.QR_TR_URL = '/detail-priority-tr';
+        window.QR_PENDING = 1;
+        document.getElementById('dsheetX').click();
+      }, pair);
+      await page.waitForTimeout(260);
+      await page.evaluate((n) => {
+        const card = Array.from(document.querySelectorAll('.it'))
+          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
+        card.click();
+      }, EN_VAR);
+      await page.waitForFunction((text) => Array.from(document.querySelectorAll('#dsheetB .l-ru'))
+        .some(el => el.textContent === text), translated);
+      assert.deepStrictEqual(asked.need.map(x => x.key), [pair.key]);
+      await page.unroute('**/detail-priority-tr');
+    });
+
     await check('§132 a nutrition_facts BLOCK prints, and the column does not print beside it', async () => {
       const m = await page.evaluate(() => ({
         cards: document.querySelectorAll('#dsheetB .nut').length,
