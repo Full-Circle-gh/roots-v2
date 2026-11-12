@@ -88,6 +88,17 @@ it('a delivery order holding stock: the reservation decides, less one minute (TC
   seedTc001211({ orderStatus: 'pending_payment', payStatus: 'pending' });
   assert.strictEqual(W.orderWechatTimeExpire(1211, { autoCancelHours: 6, counterMinutes: 120 }), '2026-10-15T11:27:00+08:00');
 });
+it('an order put back to unpaid expires from the reopen, not from the original placed time', () => {
+  freshDb();
+  db.prepare(
+    `INSERT INTO retail_orders (id, order_no, status, fulfillment_type, placed_at, payment_reopened_at)
+     VALUES (9, 'TC9', 'pending_payment', 'delivery', '2020-01-01 00:00:00', '2026-11-12 06:00:00')`
+  ).run();
+  assert.strictEqual(
+    W.orderPayExpireMs(9, { autoCancelHours: 6, counterMinutes: 120 }),
+    Date.UTC(2026, 10, 12, 12, 0, 0) - 60_000
+  );
+});
 it('no reservation: the six-hour stale sweep decides', () => {
   assert.strictEqual(W.payDeadlineMs({ fulfillmentType: 'delivery', placedAt: '2026-10-15 03:13:00', reservationExpiresAt: null, autoCancelHours: 6, counterMinutes: 120 }),
     Date.UTC(2026, 9, 15, 9, 13, 0));

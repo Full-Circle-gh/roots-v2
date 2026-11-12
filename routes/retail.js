@@ -25,6 +25,7 @@ const { reorderSlots } = require('../lib/reorder-slots');
 // extra's cost had nowhere to land until this existed.
 const { requiredOptionFloorYuan } = require('../lib/option-cost');
 const optionLimits = require('../lib/option-limits');
+const { reopenCancelledOrder } = require('../lib/reopen-cancelled-order');
 // §183 — the questions a product asks, and whether an answer is allowed. Shared
 // with routes/shop-menu.js so a counter sale and a QR sale are priced by one
 // piece of code; see the module header.
@@ -8222,7 +8223,8 @@ function cancelStalePendingOrdersForTenant() {
     if (Number.isFinite(hours) && hours > 0) {
       for (const o of tdb().prepare(
         `SELECT id, status FROM retail_orders
-          WHERE status = 'pending_payment' AND placed_at <= datetime('now', ?)
+          WHERE status = 'pending_payment'
+            AND COALESCE(payment_reopened_at, placed_at) <= datetime('now', ?)
             -- never reap an Alipay order the customer has uploaded a screenshot
             -- for: it's (claimed) paid and awaiting staff/auto-verify.
             AND NOT (payment_method = 'alipay' AND alipay_proof_image IS NOT NULL)
@@ -8246,7 +8248,7 @@ function cancelStalePendingOrdersForTenant() {
         `SELECT id, status FROM retail_orders
           WHERE status = 'pending_payment' AND payment_method = 'alipay'
             AND alipay_proof_image IS NULL
-            AND placed_at <= datetime('now', ?)
+            AND COALESCE(payment_reopened_at, placed_at) <= datetime('now', ?)
             -- §45: A COUNTER-FULFILMENT ORDER IS NEVER REAPED ON THIS
             -- TIMING. The customer is in the shop, at a table or in the queue,
             -- and this sweep would cancel their order underneath them. §45
@@ -31842,13 +31844,18 @@ router.post('/api/retail-admin/orders/:id/jd-waybill/cancel', requireRetailAdmin
 // Status transitions. Allowed steps and the timestamp column they touch.
 // Stays explicit so accidental sql-injection-style status values can't slip in.
 const STATUS_TRANSITIONS = {
+  // §529 — cancelled back to awaiting payment. The table only records that
+  // the step exists; reopenCancelledOrder does the stock, the payment row
+  // and whatever the cancel gave back.
+  pending_payment: { col: null, prev: ['cancelled'] },
   paid:       { col: 'paid_at',       prev: ['pending_payment'] },
   // awaiting_restock → preparing is the manual "Restocked → Start preparing"
   // button. The order holds no reservation (stock was never deducted while it
   // waited), but prepareCommitUnreservedOrder() below deducts it on the way into
   // preparing — same path as out-of-GZ / scheduled orders — so this can't oversell.
   preparing:  { col: 'preparing_at',  prev: ['paid', 'awaiting_restock'] },
-  /* §136 — THE STEP BACK, and it is the only one in this table. Until now
+  /* §136 — THE STEP BACK from paid. §529 is the other one, cancelled back to
+     pending_payment. Until now
      'awaiting_restock' could only be reached by the CHECKOUT: the customer
      answered the shortage modal, or §80/§128's park caught a short pre-order
      line. A shortage noticed after the money landed — the picker reaches the
@@ -32121,6 +32128,26 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
      any other refused move, so callers already read it. */
   if (!def.prev.includes(o.status) || (expect_from != null && String(expect_from) !== o.status)) {
     return res.status(409).json({ success: false, error: 'invalid_transition', from: o.status, to: status });
+  }
+
+  // §529 — cancelled → awaiting payment. Everything the cancel undid is put
+  // back here, and a refusal writes nothing. The rest of this route is the
+  // forward machine; it does not know how to undo a cancel.
+  if (status === 'pending_payment') {
+    const reopened = reopenCancelledOrder(tdb(), id, { apply: true });
+    if (!reopened.ok) {
+      return res.status(reopened.http || 409).json({
+        success: false, error: reopened.error, message: reopened.message,
+      });
+    }
+    if (!reopened.already) {
+      try {
+        logActivity(req.user.id, req.user.username, 'status_change', 'retail_order', id,
+          reopened.details || { from: 'cancelled', to: 'pending_payment' }, req.ip);
+      } catch (e) { console.error('[reopen log]', e); }
+    }
+    notifyOrderStatusChange(id, status);
+    return res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id) });
   }
 
   // Refund the customer for real when a paid order is REFUNDED or CANCELLED,

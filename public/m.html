@@ -39164,6 +39164,8 @@ const ORDER_ALSO={
   delivered:['refunded'],
   awaiting_restock:['cancelled'],
   rider_pickup:[],
+  /* §529 — the desktop's Awaiting payment on a cancelled order. */
+  cancelled:['pending_payment'],
 };
 /* Does any parcel carry a real waybill? Both undos are refused by the server
    once one does (`already_shipped`), and the desktop mirrors that guard in the
@@ -39208,6 +39210,9 @@ function orderActs(o){
     }else if(to==='awaiting_restock'){
       if(!canEdit) continue;
       acts.push(['clock',T('Hold for restock','等待补货'),"APP.cmd('advance','awaiting_restock')"]);
+    }else if(to==='pending_payment'){
+      if(!canEdit) continue;
+      acts.push(['rotate-ccw',T('Awaiting payment','待付款'),"APP.cmd('advance','pending_payment')"]);
     }else if(to==='dispatched'){
       if(!canEdit) continue;
       // paid → dispatched, skipping preparing. Relabelled for a pickup exactly

@@ -110,7 +110,7 @@ try {
   const counter2 = makeOrder('counter');
   const delivery2 = makeOrder('delivery');
   const reaperSql = `SELECT id FROM retail_orders
-     WHERE status = 'pending_payment' AND placed_at <= datetime('now', ?)
+     WHERE status = 'pending_payment' AND COALESCE(payment_reopened_at, placed_at) <= datetime('now', ?)
        AND NOT (payment_method = 'alipay' AND alipay_proof_image IS NOT NULL)
        AND COALESCE(fulfillment_type, '') <> 'counter'`;
   const picked = h.prepare(reaperSql).all('-1 hours').map(r => r.id);
@@ -122,6 +122,17 @@ try {
   check('...and the opposite still holds: it DOES select a delivery order', () => {
     assert.ok(picked.includes(delivery2),
       'the reaper selected nothing at all, so this suite proves nothing');
+  });
+  check('a delivery order put back to unpaid today is not reaped on its old placed time', () => {
+    const id = ++seq; ORDERS.push(id);
+    h.prepare(`INSERT INTO retail_orders (id, order_no, customer_id, status, fulfillment_type,
+               store_id, channel, total, placed_at, payment_reopened_at)
+               VALUES (?, ?, NULL, 'pending_payment', 'delivery', ?, 'shop', 10,
+                       datetime('now','-30 days'), CURRENT_TIMESTAMP)`)
+      .run(id, '__SWEEP-' + id, STORE);
+    const again = h.prepare(reaperSql).all('-1 hours').map(r => r.id);
+    assert.ok(!again.includes(id),
+      'an order restored today was reaped because its original placed time is old');
   });
 
   console.log('\nThe counter clock — two hours, or staff, whichever comes first');
@@ -161,6 +172,17 @@ try {
     inventory.sweepExpiredReservations();
     assert.strictEqual(statusOf(id), 'pending_payment',
       'an hour-old counter order was cancelled — the clock is still on twenty minutes');
+  });
+  check('a counter order put back to unpaid today is not cancelled on its old placed time', () => {
+    const id = ++seq; ORDERS.push(id);
+    h.prepare(`INSERT INTO retail_orders (id, order_no, customer_id, status, fulfillment_type,
+               store_id, channel, total, placed_at, payment_reopened_at)
+               VALUES (?, ?, NULL, 'pending_payment', 'counter', ?, 'shop', 10,
+                       datetime('now','-30 days'), CURRENT_TIMESTAMP)`)
+      .run(id, '__SWEEP-' + id, STORE);
+    inventory.sweepExpiredReservations();
+    assert.strictEqual(statusOf(id), 'pending_payment',
+      'a restored counter order was cancelled on the placed time from before the restore');
   });
   check('...and one just past two hours IS cancelled', () => {
     const id = ++seq; ORDERS.push(id);
