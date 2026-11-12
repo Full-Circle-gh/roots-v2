@@ -518,21 +518,26 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.ok(body.includes('data-lang="en"') && body.includes('data-lang="cn"'), 'no toggle');
       assert.ok(body.includes('>EN<') && body.includes('>中<'), 'toggle labels are not the live pair');
       assert.ok(body.includes('>Español<') && body.includes('>한국어<') &&
-        body.includes('>日本語<') && body.includes('>العربية<'),
-        'the language list is missing one of the four added languages');
+        body.includes('>日本語<') && body.includes('>العربية<') &&
+        body.includes('>Русский<'),
+        'the language list is missing one of the five added languages');
       assert.ok(body.includes('class="l-es"'), 'a dish name has no Spanish span');
+      assert.ok(body.includes('class="l-ru"'), 'a dish name has no Russian span');
     });
     await checkAsync('the sold-out badge is the live 售罄 pair', async () => {
       const { body } = await get(`/s/${LIVE}`);
       const row = rowFor(body, 'Fixture kombucha');
       assert.ok(row.includes('售罄') && row.includes('Sold out'), 'the badge is not the live pair');
     });
-    await checkAsync('opens English by default and Chinese on ?lang=cn', async () => {
+    await checkAsync('opens English by default and requested languages explicitly', async () => {
       const en = await get(`/s/${LIVE}`);
       const cn = await get(`/s/${LIVE}?lang=cn`);
+      const ru = await get(`/s/${LIVE}?lang=ru`);
       assert.ok(en.body.includes('class="lang-en"'), 'default is not English');
       assert.ok(cn.body.includes('class="lang-cn"'), '?lang=cn did not open in Chinese');
       assert.ok(cn.body.includes('lang="zh-CN"'), 'the document language attribute did not follow');
+      assert.ok(ru.body.includes('class="lang-ru"'), '?lang=ru did not open in Russian');
+      assert.ok(ru.body.includes('lang="ru"'), 'the Russian document language attribute did not follow');
     });
     await checkAsync('the session choice is read before anything is inferred', async () => {
       const { body } = await get(`/s/${LIVE}`);
