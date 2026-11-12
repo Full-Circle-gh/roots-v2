@@ -2676,6 +2676,19 @@ function tdSecPaint() {
   }
 }
 
+// The next step a delivery line can name (§530). The words are the ones already
+// on that step. Waiting on the carrier, and a case ready to close, are quieter.
+const TD_DELIVERY_LINE = {
+  tell_customer: { sev: 'brick', label: () => cuT('Tell the customer', '联系客户') },
+  claim_delay:   { sev: 'brick', label: () => cuT('Claim the delay off the carrier', '向承运商申请延误赔偿') },
+  claim_damage:  { sev: 'brick', label: () => cuT('Claim the damage off the carrier', '向承运商申请赔偿') },
+  remedy:        { sev: 'brick', label: () => cuT('Replacement or refund', '补发或退款') },
+  wait_carrier:  { sev: 'amber', label: () => cuT('Waiting on carrier', '等待承运商') },
+  mark_handled:  { sev: 'amber', label: () => cuT('Mark handled', '标记已处理') },
+  no_contact:    { sev: 'brick', label: () => cuT("Can't reach customer", '联系不上客户') },
+  needs_call:    { sev: 'brick', label: () => cuT('Delivery needs a call', '配送需要跟进') },
+};
+
 // Line icons for the Needs-you rows (24-box, currentColor so .td-nico.is-<sev>
 // tints each one to its row's severity — the icon repeating the colour is what
 // lets severity survive a glance without a second chip on the row).
@@ -2921,33 +2934,32 @@ function tdAttnRender() {
     });
   }
 
-  // Delivery — the carrier, the platform or our own rider has left someone
-  // waiting. Brick: this is the only one of the five where a customer is
-  // already having a bad day.
+  // Delivery. One line per next step (§530). The words are the step's own.
+  // Waiting on the carrier, and a case that only needs closing, are the quieter
+  // mark: nobody has to phone. A payload with no lines keeps the one old row.
   const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
-  if (da.count && dashCardWants('delivery')) {
-    // §284 — name the ones where the courier couldn't get through: those are a
-    // customer to ring now, not a parcel to watch. Exact, from the server.
-    const nc = Number(da.no_contact || 0);
-    // §285 — and the ones still on the road past their due day: the early
-    // warning, while there is time to ring them before the box arrives.
-    const rl = Number(da.running_late || 0);
-    const daState = [
-      nc > 0 ? cuT(`${nc} can't reach customer`, `${nc} 单联系不上客户`) : '',
-      rl > 0 ? cuT(`${rl} running late`, `${rl} 单配送逾期`) : '',
-    ].filter(Boolean).join(' · ');
+  const daLines = (da.lines || []).filter(l => l && l.count);
+  if (daLines.length && dashCardWants('delivery')) {
+    for (const line of daLines) {
+      const spec = TD_DELIVERY_LINE[line.key];
+      if (!spec) continue;
+      const it = line.items || [];
+      const one = line.count === 1 && it[0] && it[0].id != null;
+      fires.push({
+        sev: spec.sev, icon: 'truck',
+        label: spec.label(),
+        n: line.count,
+        mins: tdOldestMins(it),
+        cta: cuT('Open delivery', '前往配送'),
+        go: one ? `dashOpenOrderFromFeed(${Number(it[0].id)})` : "tdSecOpenOrders('delayed')",
+      });
+    }
+  } else if (da.count && dashCardWants('delivery')) {
     fires.push({
       sev: 'brick', icon: 'truck',
       label: cuT('Delivery needs a call', '配送需要跟进'),
-      state: daState || null,
       n: da.count,
-      // The oldest across every kind of delivery trouble. Each sub-list arrives
-      // oldest-first, so the true oldest is always inside the preview even when
-      // the count runs past it. A carrier exception carries no waiting_since at
-      // all (see the ops route) and simply doesn't vote.
       mins: tdOldestMins(da.items),
-      // 'delayed', not 'dispatched' — the Dispatched tab cannot contain these,
-      // since the alert is about a parcel already DELIVERED, late (§98).
       cta: cuT('Open delivery', '前往配送'), go: "tdSecOpenOrders('delayed')",
     });
   }

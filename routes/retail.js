@@ -17157,6 +17157,11 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
       // how many calls there are to make.
       .filter((r, i, all) => all.findIndex(x => x.id === r.id) === i),
     };
+    // One line per next step (§530). A failure here leaves the single line the
+    // card already had, rather than taking the whole snapshot down with it.
+    try {
+      delivery_alerts.lines = deliveryAlerts.homeLines(tdb(), daFilter, previewLimit);
+    } catch (e) { console.warn('[dashboard/ops delivery lines]', e.message); }
 
     // Fapiao worklist — un-issued invoice requests, oldest debt first. Feeds
     // the "Invoices to issue" attention card; its deep link lands on the

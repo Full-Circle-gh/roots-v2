@@ -241,10 +241,12 @@ it('the list, the drawer and Needs-you all name it, on both screens', () => {
   assert.match(RETAIL, /AS no_contact_open/);
   assert.match(ORDERS, /o\.no_contact_open/);
   assert.match(ORDERS, /renderNoContactBanner\(o, s\)/);
-  assert.match(DASH, /da\.no_contact/);
+  assert.match(DASH, /Can't reach customer/);
+  assert.match(DASH, /no_contact:/);
   assert.match(MHTML, /r\.no_contact_open/);
   assert.match(MHTML, /\$\{noContactCard\(sp\)\}/);
-  assert.match(MHTML, /delivery_alerts\.no_contact/);
+  assert.match(MHTML, /Can't reach customer/);
+  assert.match(MHTML, /no_contact:/);
 });
 
 console.log(`\n${n} passed${process.exitCode ? ', some FAILED' : ''}`);
