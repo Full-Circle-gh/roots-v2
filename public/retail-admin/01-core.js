@@ -1299,6 +1299,13 @@ function paymentBrandHTML(method, size) {
 // paid off-app. Prefer the settled one so a paid order never reads "pending".
 function primaryPayment(o) {
   const list = o?.payments || [];
+  // An order put back to awaiting payment (§529) can still carry the refunded
+  // row from the cancel. The open row is the one the customer will pay.
+  if (o?.status === 'pending_payment') {
+    return list.find(p => p.status === 'pending' || p.status === 'created')
+        || list[list.length - 1]
+        || null;
+  }
   return list.find(p => p.status === 'success')
       || list.find(p => p.status === 'refunded')
       || list[list.length - 1]

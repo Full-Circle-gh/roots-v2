@@ -2052,6 +2052,11 @@ db.exec(`
     dispatched_at       DATETIME,
     delivered_at        DATETIME,
     cancelled_at        DATETIME,
+    -- §529 — set when staff put a cancelled order back to awaiting payment.
+    -- The unpaid clocks read this instead of placed_at, so a restore of an
+    -- old order is not cancelled again on the next tick. Null on every order
+    -- that has not been restored.
+    payment_reopened_at DATETIME,
     updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE SET NULL
   );
@@ -2666,6 +2671,7 @@ addColumn('retail_orders', 'shop_entry_method',       'TEXT');
 //
 // Scoped per shop: two shops both call "14" on the same day and neither is
 // wrong, because a customer only ever hears the counter they are standing at.
+addColumn('retail_orders', 'payment_reopened_at',    'DATETIME');
 addColumn('retail_orders', 'shop_order_code',         'INTEGER');
 addColumn('retail_orders', 'shop_order_date',         'TEXT');
 try {

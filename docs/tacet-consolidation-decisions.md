@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.639
+# Tacet shared-core consolidation — decisions record, v4.640
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -25,6 +25,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-11-12 · v4.639 — **§528 AMENDED · AN OPEN PRODUCT GOES TO THE FRONT OF THE RUSSIAN BACKFILL — ASH.** Ash found product information still in English after Russian went live. The first render was correctly translating names first, but opening a product did not prioritise that product's description, ingredients and blocks; almost four thousand older lines were waiting behind the full catalogue backfill. Opening a product now moves only its missing lines to the front of the existing saved-translation queue and repaints the open sheet when they return. The names still go first on initial load, the full backfill continues behind them, and a translation response returns only the rows requested rather than the entire translation table. No schema change, no new words, no change to `.gitignore` or CI. See §528.
 
 2026-11-12 · v4.638 — **§528 AMENDED · THE QR MENU SPEAKS RUSSIAN — ASH.** Russian joins the existing six choices as `Русский`. Dish, category, description and option text is translated once and saved with the other model-written menu content. The language list, basket, checkout, order screens, allergen words and other fixed controls carry written Russian. The phone's Russian locale opens Russian. Russian remains left to right; Arabic remains the only right-to-left choice. No schema change, no new Chinese, and no change to `.gitignore` or CI. See §528 and vocabulary v1.411.
+
+2026-11-12 · v4.640 — **§529 · A CANCELLED ORDER CAN BE PUT BACK TO AWAITING PAYMENT — ASH.** On TC002837, cancelled, WeChat payment cancelled: *"put this order back to pending for payment and make a rule that can do it from the backend for every canceled order"*, then *"once you done deploy live"*. The order drawer and the phone offer **Awaiting payment · 待付款** on a cancelled order. The server puts it back to `pending_payment`, reopens a payment that never settled, holds the stock again, and takes back points, wallet balance and a voucher the cancel returned — and refuses when the customer has already used those, when money is still held, or when the order belongs to Meituan, Eleme or gzgrocery. The unpaid clocks and the WeChat pay window start again from `payment_reopened_at`, so an old order is not cancelled on the next tick. TC002837 is restored by `scripts/oneoff_restore_order_TC002837.js` through the same function. No new words. No change to `.gitignore` or CI. See §529.
 
 2026-11-12 · v4.637 — **§528 · THE QR MENU SPEAKS SIX LANGUAGES — ASH.** *"ok build it"*, after the mockup of the language button. English and Chinese stay the menu the office wrote. Spanish, Korean, Japanese and Arabic are saved translations of the dishes and written translations of the buttons. The basket and the order screen follow the same choice. The kitchen slip does not. One composed pair (vocabulary v1.410). One new table, `qr_menu_translations`. No change to `.gitignore` or CI. See §528.
 
@@ -34168,3 +34170,16 @@ No schema change. No change to `.gitignore` or CI.
 7. **It is the QR menu, every shop.** The page is one page. It is not a Ramada-only branch.
 
 One table, `qr_menu_translations`; Russian uses new rows in the existing table. One composed pair, `Language · 语言` (vocabulary v1.410). The Russian amendment adds no Chinese (vocabulary v1.411). No change to `.gitignore` or CI.
+
+## §529 — A CANCELLED ORDER CAN WAIT FOR PAYMENT AGAIN
+
+**2026-11-12 · DECIDED BY ASH.** TC002837 was cancelled, and its WeChat payment was cancelled with it. Ash, on that order: *"put this order back to pending for payment and make a rule that can do it from the backend for every canceled order"*, and then *"once you done deploy live"*.
+
+**The rule.**
+
+1. **Any cancelled order of ours can be put back to awaiting payment.** The button is on the order, on the desktop and on the phone. It is `Awaiting payment · 待付款`, the pair the customer register already uses for `pending_payment`. Meituan, Eleme and gzgrocery stay read-only: those orders belong to the marketplace.
+2. **The cancel is undone.** The order is `pending_payment`. The cancel time and reason are cleared. A payment row that was cancelled before any money moved is pending again. A row that was actually paid and refunded stays refunded, and a new pending row is what the customer pays. Stock that was held, or taken and then returned, is held again for the same window the unpaid clock gives the order. Points, wallet balance and a voucher the cancel gave back are taken again.
+3. **It is refused, and nothing is written, when that cannot be done honestly.** Money we still hold. A refund that is still in progress. A line already refunded on its own. Points, wallet balance or a voucher the customer has already used since the cancel.
+4. **The unpaid clocks start again.** `payment_reopened_at` is now. The six-hour sweep, the counter clock and the WeChat pay window read that instead of the original placed time. The "Order placed" line does not move.
+
+One new column, `payment_reopened_at`. No new words. No change to `.gitignore` or CI. TC002837 is restored through `scripts/oneoff_restore_order_TC002837.js`, which calls the same function as the button.

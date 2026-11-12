@@ -3718,7 +3718,7 @@ const NEXT_STATUS = {
   rider_pickup:    [],
   dispatched:      [['delivered', 'Mark delivered · 标记已送达'], ['refunded', 'Refund · 退款']],
   delivered:       [['refunded', 'Refund · 退款']],
-  cancelled:       [],
+  cancelled:       [['pending_payment', 'Awaiting payment · 待付款']],
   refunded:        [],
   // Awaiting-restock: customer paid + chose to wait. Kitchen can either
   // (a) jump to preparing once the missing items arrive, OR (b) cancel
@@ -3741,7 +3741,8 @@ function nextStatusFor(o) {
   // recording. The transition list is keyed on STATUS, and the only statuses a
   // counter sale can hold already offer the right things: 'pending_payment' →
   // Mark paid / Cancel (an unpaid till sale awaiting a QR settle), 'delivered' →
-  // Refund, 'cancelled'/'refunded' → nothing. It never sits at paid, preparing or
+  // Refund. 'cancelled' offers Awaiting payment (§529); 'refunded' offers
+  // nothing. It never sits at paid, preparing or
   // dispatched, because markOrderPaid flips it straight past them, so no
   // forward-fulfilment button is reachable in the first place.
   //
