@@ -36,13 +36,14 @@
 // public tracking page in routes/retail.js, which is the one thing in this
 // repo proven to render inside the WeChat in-app browser.
 //
-// LANGUAGE (§44, and the §26 narrowing). BOTH languages are in the DOM and CSS
-// decides which is visible, rather than the server picking one. That is what
-// makes the toggle a class swap instead of a reload — and a reload would
-// re-run detection, which is exactly what §26's narrowing forbids once the
-// reader has chosen. Resolution order: this session's toggle, then ?lang=,
-// then the client's own language, then English. Detection selects the opening
-// render ONLY and is never consulted again once the toggle is used.
+// LANGUAGE (§44, §528). English and Chinese are the menu the office wrote.
+// Spanish, Korean, Japanese and Arabic are saved translations of the dishes
+// and written translations of the buttons. All six are in the DOM and CSS
+// decides which is visible, so the choice is a class swap and not a reload.
+// Resolution order: this session's toggle, then ?lang=, then the client's own
+// language, then English. Detection selects the opening render ONLY and is
+// never consulted again once the toggle is used. The kitchen slip does not
+// read the saved translation.
 //
 // NOTHING BRANCHES ON THE USER AGENT. The page is the same bytes inside the
 // WeChat browser and outside it. WeChat is the expected home, not a variant:
@@ -78,6 +79,8 @@ const inventory = require('../lib/inventory');
 // rather than being copied; the module header says why. lib/option-limits is
 // no longer required here because the one caller that used it went with them.
 const productOptions = require('../lib/product-options');
+const i18n = require('../lib/qr-menu-i18n');
+const menuTr = require('../lib/qr-menu-translate');
 const optionAsk = require('../lib/option-ask');
 const optionSwitch = require('../lib/option-switch');
 const { choicePhotoVersions } = require('../lib/choice-photo');
@@ -200,12 +203,23 @@ function cfg(key, dflt) {
 // is a courtesy to a page already live, NOT a substitute for both names being
 // present: scripts/check_shop_listing_names.js is the gate that stops a shop
 // going live half-translated (§44).
+function menuDb() {
+  try { return tdb(); } catch (e) { return null; }
+}
 function bi(en, cn) {
-  const a = String(en == null ? '' : en).trim();
-  const b = String(cn == null ? '' : cn).trim();
-  const e = a || b, c = b || a;
-  if (!e && !c) return '';
-  return `<span class="l-en">${esc(e)}</span><span class="l-cn">${esc(c)}</span>`;
+  const db = menuDb();
+  return i18n.spans(en, cn, {
+    lookup: (key) => (db ? menuTr.lookup(db, key) : null),
+    miss: (key, e, c) => menuTr.miss(key, e, c),
+  });
+}
+function nameTr(en, cn) {
+  const db = menuDb();
+  return i18n.translated(en, cn, (key) => (db ? menuTr.lookup(db, key) : null));
+}
+function pageLang(req) { return i18n.askedLang(req.query && req.query.lang); }
+function langWasAsked(req) {
+  return i18n.LANGS.includes(String((req.query && req.query.lang) || ''));
 }
 
 // WeChat's two-bubble mark beside the WeChat Pay choice (Ash, 2026-10-26: "i
@@ -811,7 +825,10 @@ html{-webkit-text-size-adjust:100%}
 body{background:var(--oat);color:var(--ink);font-family:var(--f-aleo);
   font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
 img{display:block;max-width:100%}
-.lang-en .l-cn,.lang-cn .l-en{display:none}
+${i18n.hideCss()}
+.lang-es .tr .l-en,.lang-ko .tr .l-en,.lang-ja .tr .l-en,.lang-ar .tr .l-en{
+  display:block;margin-top:2px;font-family:var(--f-aleo);font-size:11px;font-weight:400;
+  line-height:1.25;color:var(--olive);direction:ltr;unicode-bidi:isolate}
 
 .bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
   padding:calc(13px + env(safe-area-inset-top)) 14px 13px;
@@ -823,6 +840,19 @@ img{display:block;max-width:100%}
 .lang button{border:0;background:transparent;padding:6px 10px;font:inherit;
   font-family:var(--f-bear);font-size:13px;letter-spacing:.04em;color:var(--olive);cursor:pointer}
 .lang button.on{background:var(--lime);color:var(--ink)}
+.langbtn{flex:none;border:2px solid var(--ink);background:var(--lime);color:var(--ink);
+  font-family:var(--f-bear);font-size:13px;letter-spacing:.04em;padding:6px 10px;cursor:pointer}
+.lsheet{position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--oat);
+  border-top:2px solid var(--ink);padding-bottom:8px}
+.lsheet[hidden]{display:none}
+.lsheet-bg{position:fixed;inset:0;z-index:44;background:rgba(26,26,23,.28)}
+.lsheet-bg[hidden]{display:none}
+.lsheet-h{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:2px solid var(--ink)}
+.lsheet-t{flex:1;font-family:var(--f-bear);font-size:16px}
+.lsheet button.lr{display:flex;align-items:center;justify-content:space-between;width:100%;
+  padding:14px;border:0;border-bottom:1px solid rgba(0,0,0,.1);background:transparent;
+  color:var(--ink);font-family:var(--f-bear);font-size:18px;text-align:start;cursor:pointer}
+.lsheet button.lr.on{background:var(--lime)}
 /* ── the search (2026-10-26) ── a full-width second row of the bar. The bar
    wraps, and the row gap is its own so the name row keeps its 12px. 16px text
    because iOS zooms the page into any field set smaller, and a menu that
@@ -2356,31 +2386,48 @@ a.place{display:flex;align-items:center;justify-content:center;gap:7px;
 // the client's own language, then English. Session storage, not a cookie:
 // §44 wants the choice to hold for the session and this page sets no cookies.
 function langScript(hasParam) {
-  return `(function(){var K='shop_menu_lang',l=null;` +
+  // Session first, then an explicit ?lang= (the server already painted that
+  // class, so this script leaves it alone), then the phone's own language.
+  // hasParam omits navigator.language entirely: the suite reads the script
+  // and refuses a page that still sniffs after the guest asked for a language.
+  const detect = hasParam ? '' :
+    `if(!ok(l)){var n=(navigator.language||'').toLowerCase();` +
+    `l=n.indexOf('zh')===0?'cn':n.indexOf('es')===0?'es':n.indexOf('ko')===0?'ko':` +
+    `n.indexOf('ja')===0?'ja':n.indexOf('ar')===0?'ar':null}`;
+  return `(function(){var K='shop_menu_lang',` +
+    `ok=function(x){return x==='en'||x==='cn'||x==='es'||x==='ko'||x==='ja'||x==='ar'},l=null;` +
     `try{l=sessionStorage.getItem(K)}catch(e){/* private mode throws on storage; open in English */}` +
-    `if(l!=='en'&&l!=='cn'){l=${hasParam ? 'null' : '((navigator.language||\'\').toLowerCase().indexOf(\'zh\')===0?\'cn\':null)'}}` +
-    `if(l==='en'||l==='cn'){var d=document.documentElement;` +
-    `d.className='lang-'+l;d.setAttribute('lang',l==='cn'?'zh-CN':'en')}})();`;
+    `if(!ok(l))l=null;${detect}` +
+    `if(!ok(l))return;var d=document.documentElement;` +
+    `d.className='lang-'+l;d.setAttribute('lang',l==='cn'?'zh-CN':l);` +
+    `if(l==='ar')d.setAttribute('dir','rtl');else d.removeAttribute('dir')})();`;
 }
 
-const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
+const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
+  `OK={en:1,cn:1,es:1,ko:1,ja:1,ar:1},LANGS=['en','cn','es','ko','ja','ar'];` +
+  `var open=function(on){var s=document.getElementById('langSheet'),g=document.getElementById('langBg');` +
+  `if(s)s.hidden=!on;if(g)g.hidden=!on};` +
+  `var mark=function(l){var n=document.querySelectorAll('#langSheet [data-lang]');` +
+  `for(var i=0;i<n.length;i++)n[i].className=n[i].getAttribute('data-lang')===l?'lr on':'lr'};` +
   `document.addEventListener('click',function(e){` +
-  `var b=e.target.closest?e.target.closest('[data-lang]'):null;if(!b)return;` +
-  `var l=b.getAttribute('data-lang');if(l!=='en'&&l!=='cn')return;` +
+  `var t=e.target;if(!t.closest)return;` +
+  `if(t.closest('#langBtn')){open(true);return}` +
+  `if(t.closest('#langX')||t.closest('#langBg')){open(false);return}` +
+  `var b=t.closest('[data-lang]');if(!b)return;` +
+  `var l=b.getAttribute('data-lang');if(!OK[l])return;` +
   `try{sessionStorage.setItem(K,l)}catch(x){/* private mode throws; the toggle still works, it just will not persist */}` +
   /* classList, NOT className. Assigning the whole class attribute here wiped
      every OTHER class the root was carrying, and §129 gave it one that matters:
      .sh-lock, the scroll lock that stops the menu moving behind an open sheet.
      Switching language with the basket up would have silently unlocked the page
-     underneath it. The lock's own code was careful about this in the other
-     direction — it adds with classList precisely so it cannot clobber .lang-* —
-     and this line was the same hazard pointing the other way. */
+     underneath it. */
   `var d=document.documentElement;` +
-  `d.classList.remove('lang-en','lang-cn');d.classList.add('lang-'+l);` +
-  `d.setAttribute('lang',l==='cn'?'zh-CN':'en');` +
-  `var n=document.querySelectorAll('[data-lang]');` +
-  `for(var i=0;i<n.length;i++){var on=n[i].getAttribute('data-lang')===l;` +
-  `if(on)n[i].className='on';else n[i].className=''}` +
+  `for(var i=0;i<LANGS.length;i++)d.classList.remove('lang-'+LANGS[i]);` +
+  `d.classList.add('lang-'+l);` +
+  `d.setAttribute('lang',l==='cn'?'zh-CN':l);` +
+  `if(l==='ar')d.setAttribute('dir','rtl');else d.removeAttribute('dir');` +
+  `mark(l);open(false);` +
+  `if(window.QR_PENDING&&l!=='en'&&l!=='cn'&&window.qrFill)window.qrFill()` +
   `},false)})();` +
   // The bar's real height, published as --barh so the rail can stick BELOW it
   // rather than behind it. Re-measured on resize, on rotation, and whenever the
@@ -2701,8 +2748,28 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var cart={},sending=false;` +
   `var esc=function(t){return String(t==null?'':t).replace(/[&<>"]/g,function(c){` +
   `return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};` +
-  `var bi=function(en,cn){return '<span class="l-en">'+esc(en)+'</span>'+` +
-  `'<span class="l-cn">'+esc(cn)+'</span>'};` +
+  `var QR_UI=${JSON.stringify(i18n.UI).replace(/</g, '\\u003c')};` +
+  `var QR_LIM=${JSON.stringify(i18n.LIMITS).replace(/</g, '\\u003c')};` +
+  `var bi=function(en,cn){var e=String(en==null?'':en).trim(),c=String(cn==null?'':cn).trim();` +
+  `if(!e)e=c;if(!c)c=e;if(!e)return '';` +
+  `var ui=QR_UI[e],more=(ui&&ui.cn===c)?ui:((window.QR_TR&&window.QR_TR[e+'\\u0001'+c])||{});` +
+  `var sk=(ui&&ui.cn===c)?'':encodeURIComponent(e+'\\u0001'+c);` +
+  `var langs=['en','cn','es','ko','ja','ar'],h='',pick;` +
+  `for(var i=0;i<langs.length;i++){var k=langs[i];` +
+  `pick=k==='en'?e:(k==='cn'?c:((more[k]&&String(more[k]).trim())||e));` +
+  `h+='<span class="l-'+k+'"'+(sk&&k!=='en'&&k!=='cn'?' data-sk="'+esc(sk)+'"':'')+'>'+esc(pick)+'</span>'}` +
+  `return h};` +
+  `var limSpans=function(g){var mn=g.min||0,mx=g.max||0,kind='',n='';` +
+  `if(mn&&mx){kind='choose';n=(mn===mx)?(''+mn):(mn+'\\u2013'+mx)}` +
+  `else if(mx){kind='upto';n=''+mx}else if(mn){kind='atleast';n=''+mn}else return '';` +
+  `var row=QR_LIM[kind],langs=['en','cn','es','ko','ja','ar'],h='';` +
+  `for(var i=0;i<langs.length;i++){var k=langs[i];` +
+  `h+='<span class="l-'+k+'">'+esc(String(row[k]).replace('{n}',n))+'</span>'}` +
+  `return h};` +
+  `var trn=function(en,cn){var e=String(en||'').trim(),c=String(cn||'').trim();if(!e)e=c;` +
+  `var row=window.QR_TR&&window.QR_TR[e+'\\u0001'+c];if(!row)return '';` +
+  `var ls=['es','ko','ja','ar'];for(var i=0;i<ls.length;i++){var v=row[ls[i]];` +
+  `if(v&&String(v).trim()&&String(v).trim()!==e)return ' tr'}return ''};` +
   // THE THREE LABELS THIS SCRIPT REPAINTS, built once at module load. Two are
   // already on this page; the third, My orders · 我的订单, is the web
   // storefront's own heading for this exact list (public/shop.html:3065, 3076,
@@ -2840,7 +2907,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // submitting. A second formatter would be a price that changed at the till.
   `var lineRows=function(a){if(!a||!a.length)return '';var h='';` +
   `for(var i=0;i<a.length;i++){var it=a[i];` +
-  `h+='<div class="ln"><div class="ln-t">'+bi(it.name_en,it.name_cn)+opsLine(it.options)+'</div>'+` +
+  `h+='<div class="ln"><div class="ln-t'+trn(it.name_en,it.name_cn)+'">'+bi(it.name_en,it.name_cn)+opsLine(it.options)+'</div>'+` +
   `'<div class="ln-r"><span class="ln-q">\u00d7'+esc(String(it.qty))+'</span>'+` +
   `'<div class="ln-p">'+money(it.line_total)+'</div></div></div>'}` +
   `return '<div class="done-it">'+h+'</div>'};` +
@@ -2877,7 +2944,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // apart: anything that draws the basket says basket.
   `var paintSheet=function(){var k=ids(),h='';ttl.innerHTML=L_BASKET;` +
   `for(var i=0;i<k.length;i++){var it=cart[k[i]];` +
-  `h+='<div class="ln"><div class="ln-t">'+bi(it.en,it.cn)+opsLine(it.ops)+'</div>'+` +
+  `h+='<div class="ln"><div class="ln-t'+trn(it.en,it.cn)+'">'+bi(it.en,it.cn)+opsLine(it.ops)+'</div>'+` +
   `'<div class="ln-r"><div class="qty">'+` +
   `'<button type="button" data-d="'+esc(k[i])+'" aria-label="-">-</button>'+` +
   `'<span>'+it.qty+'</span>'+` +
@@ -2996,8 +3063,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   /* The rule, printed under the question it governs. A group with no limit
      prints nothing, so nothing on this page changes shape for the menus that
      were authored before §153. */
-  `var lt=limTxt(g);` +
-  `if(lt)h+='<div class=\"og-lim\">'+bi(lt[0],lt[1])+'</div>';` +
+  `var lt=limSpans(g);` +
+  `if(lt)h+='<div class=\"og-lim\">'+lt+'</div>';` +
   // §506 — ranks when there is more than one answer to pick among.
   `var rank=g.choices.length>1;` +
   `if(rank)h+='<div class=\"sz-why\">'+L_RANK+'</div>';` +
@@ -3085,6 +3152,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `pk=null;oErr.hidden=true;foot.hidden=true;optFoot.hidden=true;errEl.hidden=true;` +
   `ttl.innerHTML=L_SIZE;` +
   `nmEl.innerHTML=bi(b.getAttribute('data-en')||'',b.getAttribute('data-cn')||'');` +
+  `nmEl.classList.toggle('tr',trn(b.getAttribute('data-en')||'',b.getAttribute('data-cn')||'')===' tr');` +
   `nmEl.hidden=false;body.innerHTML=h;shOpen(sheet);body.scrollTop=0};` +
   `var openPicker=function(b){var pid=parseInt(b.getAttribute('data-add'),10);` +
   `var o=optsFor(pid);` +
@@ -3104,7 +3172,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(c.def&&!c.out){d.push(c.id);if(!g.multi)break}}` +
   `pk.s[g.id]=d}` +
   `oErr.hidden=true;foot.hidden=true;optFoot.hidden=false;errEl.hidden=true;` +
-  `ttl.innerHTML=L_OPTS;nmEl.innerHTML=bi(pk.en,pk.cn);nmEl.hidden=false;` +
+  `ttl.innerHTML=L_OPTS;nmEl.innerHTML=bi(pk.en,pk.cn);` +
+  `nmEl.classList.toggle('tr',trn(pk.en,pk.cn)===' tr');nmEl.hidden=false;` +
   `pkPaint();shOpen(sheet);body.scrollTop=0};` +
   /* Leaving the picker puts the sheet back to being the basket. Every face of
      this panel repaints the heading and swaps the foot, or it wears the last
@@ -3518,7 +3587,22 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      Nothing else changes for an empty phone: with no basket and no remembered
      order this call hides the bar, which is what it already was. */
   `paintBar();` +
-  `})();`;
+  `})();` +
+  `(function(){window.qrFill=function(){if(!window.QR_PENDING||!window.QR_TR_URL||window.QR_FILLING)return;` +
+  `window.QR_FILLING=1;` +
+  `fetch(window.QR_TR_URL,{method:'POST',headers:{'Content-Type':'application/json'},` +
+  `body:JSON.stringify({need:window.QR_NEED||[]})}).then(function(r){return r.json()}).then(function(j){` +
+  `window.QR_PENDING=0;if(!j||!j.map)return;window.QR_TR=j.map;` +
+  `var nodes=document.querySelectorAll('[data-sk]');` +
+  `for(var i=0;i<nodes.length;i++){var el=nodes[i],k,m;` +
+  `try{k=decodeURIComponent(el.getAttribute('data-sk'))}catch(e){continue}` +
+  `m=(el.className.match(/l-(es|ko|ja|ar)/)||[])[1];` +
+  `if(m&&j.map[k]&&j.map[k][m])el.textContent=j.map[k][m]}` +
+  `var blocks=document.querySelectorAll('.t,.dt-nm,.ln-t,.kick,.sheet-n');` +
+  `for(var b=0;b<blocks.length;b++){var en=blocks[b].querySelector('.l-en'),ex=blocks[b].querySelector('.l-es');` +
+  `if(en&&ex&&ex.textContent&&ex.textContent!==en.textContent)blocks[b].classList.add('tr')}` +
+  `}).catch(function(){window.QR_FILLING=0})};` +
+  `if(window.QR_PENDING)window.qrFill()})();`;
 
 // ─── WHOSE SIGNATURE THIS MENU SIGNS WITH (§179) ────────────────────────
 //
@@ -3630,9 +3714,13 @@ function detailBody(it, code, listed, sig, qrShown) {
     if (!en.length && !cn.length) return '';
     const one = (list) => list.map(t =>
       `<span class="achip ${cls}${trimmed(t)}">${esc(t)}</span>`).join('');
+    const src = en.length ? en : cn;
+    const extra = i18n.EXTRA.map((lang) =>
+      `<span class="l-${lang} chipset">${one(src.map((t) => i18n.gloss(t, lang) || t))}</span>`
+    ).join('');
     return `<div class="arow"><div class="alab">${bi(label.en, label.cn)}</div>` +
       `<div class="achips"><span class="l-en chipset">${one(en)}</span>` +
-      `<span class="l-cn chipset">${one(cn.length ? cn : en)}</span></div></div>`;
+      `<span class="l-cn chipset">${one(cn.length ? cn : en)}</span>${extra}</div></div>`;
   };
   /* §236 — MAY-CONTAIN IS A SENTENCE, SO IT IS SET AS ONE. A box is a shape
      for a token. This field holds tokens on most products and a whole
@@ -3648,9 +3736,17 @@ function detailBody(it, code, listed, sig, qrShown) {
     const run = (list, sep) => esc(list.join(sep));
     // §241's "(shared facility)". A space before the English bracket, none
     // before the full-width one, which carries its own.
+    const src = en.length ? en : cn;
+    const noteRow = i18n.UI['(shared facility)'];
+    const extra = i18n.EXTRA.map((lang) => {
+      const words = src.map((t) => i18n.gloss(t, lang) || t);
+      const sep = lang === 'ar' ? '، ' : ', ';
+      const tail = note ? ' ' + (noteRow[lang] || note.en) : '';
+      return `<span class="l-${lang}">${esc(words.join(sep) + tail)}</span>`;
+    }).join('');
     return `<div class="arow"><div class="alab">${bi(label.en, label.cn)}</div>` +
       `<div class="aline"><span class="l-en">${run(en, ', ')}${note ? ' ' + esc(note.en) : ''}</span>` +
-      `<span class="l-cn">${run(cn.length ? cn : en, '、')}${note ? esc(note.cn) : ''}</span></div></div>`;
+      `<span class="l-cn">${run(cn.length ? cn : en, '、')}${note ? esc(note.cn) : ''}</span>${extra}</div></div>`;
   };
   // THE THIRD ROW IS NOT THE OFFICE'S CARD, it is the product's free_of column
   // with the card's CONTAINS row subtracted — see blockRead.freeOfChips. §241
@@ -3719,9 +3815,20 @@ function detailBody(it, code, listed, sig, qrShown) {
          there and nowhere on the live page. */
       const run = (segs) => segs.map(x => x.hl
         ? `<span class="pb-hl">${esc(x.text)}</span>` : esc(x.text)).join('');
+      const enSegs = b.segs && (b.segs.en.length ? b.segs.en : b.segs.cn);
+      const cnSegs = b.segs && (b.segs.cn.length ? b.segs.cn : b.segs.en);
+      const plain = (segs) => (segs || []).map((x) => x.text).join('');
+      // The highlighted English and Chinese stay as the office wrote them.
+      // The other four languages are the plain sentence, saved like every
+      // other line on the page. bi() would wrap English and Chinese again,
+      // so those two spans are dropped and the office's own markup kept.
+      const more = (b.segs && (b.segs.en.length || b.segs.cn.length))
+        ? bi(plain(enSegs), plain(cnSegs)).replace(
+            /^<span class="l-en">[\s\S]*?<\/span><span class="l-cn">[\s\S]*?<\/span>/, '')
+        : '';
       const bodyHtml = (b.segs && (b.segs.en.length || b.segs.cn.length))
-        ? `<span class="l-en">${run(b.segs.en.length ? b.segs.en : b.segs.cn)}</span>` +
-          `<span class="l-cn">${run(b.segs.cn.length ? b.segs.cn : b.segs.en)}</span>`
+        ? `<span class="l-en">${run(enSegs)}</span>` +
+          `<span class="l-cn">${run(cnSegs)}</span>${more}`
         : '';
       return `<div class="dt-p">` +
         ((b.kicker.en || b.kicker.cn) ? `<div class="dt-pk">${p2(b.kicker)}</div>` : '') +
@@ -3953,7 +4060,7 @@ function detailBody(it, code, listed, sig, qrShown) {
           `</button>`
         : `<div class="dt-ph empty"></div>`) +
       `<div class="dt-hd">` +
-        `<div class="dt-nm">${bi(it.name_en, it.name_cn)}</div></div>` +
+        `<div class="dt-nm${nameTr(it.name_en, it.name_cn) ? ' tr' : ''}">${bi(it.name_en, it.name_cn)}</div></div>` +
     `</div>` +
     /* EACH BLOCK IN ITS OWN BAND. The wrapper is what .pb spaces and
        rules against its neighbour; see the CSS for why the blocks could not
@@ -3987,14 +4094,34 @@ function detailBody(it, code, listed, sig, qrShown) {
 }
 // EN / 中 — the storefront's own toggle labels, reused verbatim.
 function toggle(lang) {
-  return `<div class="lang">` +
-    `<button type="button" data-lang="en"${lang === 'en' ? ' class="on"' : ''}>EN</button>` +
-    `<button type="button" data-lang="cn"${lang === 'cn' ? ' class="on"' : ''}>中</button>` +
-    `</div>`;
+  const l = i18n.LANGS.includes(lang) ? lang : 'en';
+  const faces = i18n.LANGS.map((k) =>
+    `<span class="l-${k}">${i18n.esc(i18n.BTN[k])}</span>`).join('');
+  const rows = i18n.LANGS.map((k) =>
+    `<button type="button" class="lr${k === l ? ' on' : ''}" data-lang="${k}">${i18n.esc(i18n.BTN[k])}</button>`
+  ).join('');
+  return `<button type="button" class="langbtn" id="langBtn">${faces}</button>` +
+    `<div class="lsheet-bg" id="langBg" hidden></div>` +
+    `<div class="lsheet" id="langSheet" role="dialog" aria-modal="true" hidden>` +
+    `<div class="lsheet-h"><div class="lsheet-t">${bi('Language', '语言')}</div>` +
+    `<button type="button" class="sheet-x" id="langX" aria-label="${esc('Close 关闭')}">` +
+    `<span class="xb xb1"></span><span class="xb xb2"></span></button></div>${rows}</div>`;
 }
 
-function shell({ lang, hasParam, title, vars, faces, body }) {
-  return `<!doctype html><html lang="${lang === 'cn' ? 'zh-CN' : 'en'}" class="lang-${lang}"><head>
+function langBoot(code) {
+  const db = menuDb();
+  const pending = menuTr.takePending();
+  if (db && pending.length) menuTr.schedule(db, pending);
+  const map = db ? menuTr.clientMap(db) : {};
+  const json = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
+  return `<script>window.QR_TR=${json(map)};window.QR_PENDING=${pending.length ? 1 : 0};` +
+    `window.QR_NEED=${json(pending)};window.QR_TR_URL=${json('/s/' + code + '/tr')};</script>`;
+}
+
+function shell({ lang, hasParam, title, vars, faces, body, boot }) {
+  const l = i18n.LANGS.includes(lang) ? lang : 'en';
+  const dir = l === 'ar' ? ' dir="rtl"' : '';
+  return `<!doctype html><html lang="${i18n.htmlLang(l)}" class="lang-${l}"${dir}><head>
 <meta charset="utf-8">
 <meta name="viewport" content="${VIEWPORT}">
 <meta name="robots" content="noindex,nofollow">
@@ -4002,6 +4129,7 @@ function shell({ lang, hasParam, title, vars, faces, body }) {
 <style>${styles(vars, faces)}</style>
 <script>${langScript(hasParam)}</script>
 </head><body>
+${boot || ''}
 ${body}
 <script>${TOGGLE_SCRIPT}</script>
 </body></html>`;
@@ -4026,13 +4154,13 @@ ${body}
 //      nothing and buys a guesser a great deal.
 function notFoundPage(req, res) {
   const { vars, fonts } = themeBits();
-  const lang = req.query.lang === 'cn' ? 'cn' : 'en';
+  const lang = pageLang(req);
   const brand = brandText();
   // Never cached: a code that resolves to nothing today may be a live shop
   // tomorrow, and an intermediary holding this 404 would outlast the fix.
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.status(404).type('html').send(shell({
-    lang, hasParam: req.query.lang === 'cn' || req.query.lang === 'en',
+    lang, hasParam: langWasAsked(req),
     title: brand, vars, faces: fontFaces(fonts),
     body: `<div class="bar">${toggle(lang)}</div>
 <div class="empty"><div class="t">${bi('No products yet.', '暂无商品')}</div>` +
@@ -4181,8 +4309,8 @@ router.get('/s/:shopCode', (req, res) => {
   if (!shop) return notFoundPage(req, res);
 
   const { vars, fonts } = themeBits();
-  const lang = req.query.lang === 'cn' ? 'cn' : 'en';
-  const hasParam = req.query.lang === 'cn' || req.query.lang === 'en';
+  const lang = pageLang(req);
+  const hasParam = langWasAsked(req);
   const cur = normalizeCurrency(cfg('currency', null));
   const name = shopName(shop);
   const groups = buildMenu(shop);
@@ -4308,8 +4436,9 @@ router.get('/s/:shopCode', (req, res) => {
        A SOLD-OUT SIZE STILL GETS ITS BUTTON, because the picker has to draw it
        greyed and say so (§120 rule 1A's shape); it is inside a [hidden]
        wrapper, so no thumb can reach it and the picker refuses it anyway. */
-    const addBtn = (m, extra) =>
-      `<button type="button" class="add" data-add="${m.store_product_id}"` +
+    const addBtn = (m, extra) => {
+      bi(m.variant_label || '', m.variant_label_cn || m.variant_label || '');
+      return `<button type="button" class="add" data-add="${m.store_product_id}"` +
       ` data-p="${esc(String(Number(m.price) || 0))}"` +
       (m.options ? ` data-ask="1"` : '') +
       (m.sold_out ? ` data-out="1"` : '') +
@@ -4317,6 +4446,7 @@ router.get('/s/:shopCode', (req, res) => {
       ` data-vl-en="${esc(m.variant_label || '')}" data-vl-cn="${esc(m.variant_label_cn || m.variant_label || '')}"` +
       (extra || '') +
       ` aria-label="${esc(m.name_en || m.name_cn || '')}">+</button>`;
+    };
     const vs = it.variants && it.variants.length > 1 ? it.variants : null;
     // A collapsed card's visible + does NOT add anything: it offers the sizes,
     // exactly as the mini app's grid does. data-sizes is the flag, read from
@@ -4340,9 +4470,21 @@ router.get('/s/:shopCode', (req, res) => {
        OWN questions — a 250g jar can ask something the 500g does not. Emitting
        only the representative's would mean choosing the other size and being
        asked the representative's questions, or none at all. */
-    const optTpl = (m) => m.options
-      ? `<template data-op="${m.store_product_id}">${esc(JSON.stringify(m.options))}</template>`
-      : '';
+    // Questions and answers are drawn later, in the browser. Touching them
+    // here is what puts them in the saved translation, the same as a name
+    // that is already on the card.
+    const remember = (m) => {
+      for (const q of m.options || []) {
+        bi(q.q_en, q.q_cn);
+        for (const c of q.choices || []) bi(c.en, c.cn);
+      }
+    };
+    const optTpl = (m) => {
+      remember(m);
+      return m.options
+        ? `<template data-op="${m.store_product_id}">${esc(JSON.stringify(m.options))}</template>`
+        : '';
+    };
     const optJson = vs ? vs.map(optTpl).join('') : optTpl(it);
     // TAPPABLE ONLY WHERE THERE IS SOMETHING TO READ. A product with no
     // ingredients, no nutrition and no allergen flags opens a sheet saying
@@ -4358,20 +4500,24 @@ router.get('/s/:shopCode', (req, res) => {
       `<div class="ph">${photo}` +
       (it.sold_out ? `<div class="sold">${bi('Sold out', '售罄')}</div>` : '') +
       `</div>` +
-      `<div class="t">${bi(it.name_en, it.name_cn)}</div>` +
+      `<div class="t${nameTr(it.name_en, it.name_cn) ? ' tr' : ''}">${bi(it.name_en, it.name_cn)}</div>` +
       // `Details · 详情`, a live pair. Only where there is a sheet to open.
       (detail ? `<div class="dt-l">${bi('Details', '详情')}</div>` : '') +
       // "from 29" / "29起" — the mini app's own live pair (shop.js _toRows),
       // word order as each language reads it.
       `<div class="pf"><div class="pr">` +
-      (it.price_from ? `<span class="pfx l-en">from </span>` : '') +
+      (it.price_from
+        ? `<span class="pfx l-en">from </span><span class="pfx l-es">desde </span><span class="pfx l-ar">من </span>`
+        : '') +
       // NO PRICE RATHER THAN ¥0.00 when the product's own price is zero and its
       // choices carry the money — a selection box priced by what goes in it.
       // ¥0.00 there reads as free or broken. Reported by Ash from the live
       // menu. A zero-price product that asks nothing still shows its ¥0.00:
       // that one is a pricing mistake worth seeing, not a way of selling.
       (zeroAsk(it) ? '' : esc(money(it.price, cur))) +
-      (it.price_from ? `<span class="pfx l-cn">起</span>` : '') +
+      (it.price_from
+        ? `<span class="pfx l-cn">起</span><span class="pfx l-ko">부터</span><span class="pfx l-ja">から</span>`
+        : '') +
       `</div>${add}</div>` +
       `</div>`;
   };
@@ -4598,7 +4744,7 @@ router.get('/s/:shopCode', (req, res) => {
 
   const paneHtml = groups.map(c => `<section class="cat" id="${c.id}"${nodeAttr(c.nodeId)}>` +
     c.sections.map(sec => `<div class="sec-h"${nodeAttr(sec.nodeId)}>` +
-        `<div class="kick">${bi(sec.en, sec.cn)}</div>` +
+        `<div class="kick${nameTr(sec.en, sec.cn) ? ' tr' : ''}">${bi(sec.en, sec.cn)}</div>` +
         `<div class="cnt">${pad2(sec.items.length)}</div>` +
       `</div><div class="grid">${sec.items.map(card).join('')}</div>`).join('') +
     `</section>`).join('');
@@ -4626,6 +4772,7 @@ router.get('/s/:shopCode', (req, res) => {
     lang, hasParam,
     title: [name.en || name.cn, brand].filter(Boolean).join(' · '),
     vars, faces: fontFaces(fonts), body: `<a id="top"></a>` + head + body,
+    boot: langBoot(code),
   }));
 });
 
@@ -4803,6 +4950,26 @@ const DISCOUNT_LIMIT = rateLimit({
    THE ANSWER IS THE DISCOUNT AND NOTHING ELSE. No name, no account, no code —
    §426 rule 6. A number that holds nothing gets the same empty list as a
    number nobody has, so the page cannot be used to learn who is a customer. */
+const TR_LIMIT = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: 'too_many_requests' },
+});
+
+// The guest's page asks for this only when a dish is still in English.
+// The pairs are the ones that page already rendered. The model runs here,
+// the result is saved, and the page swaps the words it is showing.
+router.post('/s/:shopCode/tr', TR_LIMIT, express.json({ limit: '200kb' }), async (req, res) => {
+  const code = String(req.params.shopCode || '');
+  if (!isShopCode(code) || !resolveShop(code)) return res.status(404).json({ ok: false });
+  const pairs = menuTr.pairsFromBody(req.body);
+  try { await menuTr.fill(tdb(), pairs); } catch (e) { /* keep the English already on the page */ }
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true, map: menuTr.clientMap(tdb()) });
+});
+
 router.post('/s/:shopCode/discount', DISCOUNT_LIMIT, express.json({ limit: '2kb' }), (req, res) => {
   const code = String(req.params.shopCode || '');
   if (!isShopCode(code)) return res.status(404).json({ success: false, error: 'not_found' });
@@ -5405,8 +5572,7 @@ function backLink(req) {
   // nobody asked for would therefore force English on a Chinese phone that had
   // simply never touched the toggle. Where they did ask, it is carried, so the
   // choice survives the link even on a phone whose sessionStorage throws.
-  const q = (req.query.lang === 'cn' || req.query.lang === 'en')
-    ? `?lang=${req.query.lang}` : '';
+  const q = langWasAsked(req) ? `?lang=${pageLang(req)}` : '';
   return `<a class="bk" href="/s/${encodeURIComponent(code)}${q}">` +
     `<span class="cv">‹</span>${bi('Back', '返回')}</a>`;
 }
@@ -5476,7 +5642,7 @@ function orderLines(orderId, cur) {
     }).join('');
   };
   return `<div class="done-it">` + rows.map(r =>
-    `<div class="ln"><div class="ln-t">${bi(r.name_en, r.name_cn)}${optLines(r.options_json)}</div>` +
+    `<div class="ln"><div class="ln-t${nameTr(r.name_en, r.name_cn) ? ' tr' : ''}">${bi(r.name_en, r.name_cn)}${optLines(r.options_json)}</div>` +
       `<div class="ln-r">` +
         `<span class="ln-q">×${esc(String(r.qty))}</span>` +
         `<div class="ln-p">${esc(money(r.line_total, cur))}</div>` +
@@ -5486,7 +5652,7 @@ function orderLines(orderId, cur) {
 
 function payScreen(req, res, { status, order, main, extra, shop }) {
   const { vars, fonts } = themeBits();
-  const lang = req.query.lang === 'cn' ? 'cn' : 'en';
+  const lang = pageLang(req);
   const cur = normalizeCurrency(cfg('currency', null));
   // THE TONE IS READ OFF THE ORDER, not passed in beside it. A caller that
   // chose the screen and the colour separately could hand the paid screen the
@@ -5502,7 +5668,7 @@ function payScreen(req, res, { status, order, main, extra, shop }) {
   const name = shopName(shop);
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.status(status).type('html').send(shell({
-    lang, hasParam: req.query.lang === 'cn' || req.query.lang === 'en',
+    lang, hasParam: langWasAsked(req),
     title: brandText(), vars, faces: fontFaces(fonts),
     body: `<div class="ordp${tone}">` +
       `<div class="bar"><div class="nm">${bi(name.en, name.cn)}</div>${toggle(lang)}</div>` +
@@ -5546,6 +5712,7 @@ function payScreen(req, res, { status, order, main, extra, shop }) {
       // still the safe one.
       `<div class="ord-f">${backLink(req)}</div>` +
       `</div>`,
+    boot: langBoot(shop.public_code || ''),
   }));
 }
 
@@ -5877,7 +6044,7 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
     const st = await settleAlipayOrder(order);
     if (moneyIn(st)) return payScreen(req, res, { status: 200, order: { ...order, status: st }, main: PAID_MAIN, shop });
     if (st !== 'pending_payment') return counter();
-    const lq = (req.query.lang === 'cn' || req.query.lang === 'en') ? `&lang=${req.query.lang}` : '';
+    const lq = langWasAsked(req) ? `&lang=${pageLang(req)}` : '';
     // While the page is open it asks /state every 4 seconds for ten minutes,
     // and reloads once the answer is no longer "waiting" — the reload draws
     // whichever screen is now true. No script, no harm: the button still works
@@ -6038,10 +6205,10 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
     `document.addEventListener('WeixinJSBridgeReady',go,false)}else{go()}})();`;
 
   const { vars, fonts } = themeBits();
-  const lang = req.query.lang === 'cn' ? 'cn' : 'en';
+  const lang = pageLang(req);
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.status(200).type('html').send(shell({
-    lang, hasParam: req.query.lang === 'cn' || req.query.lang === 'en',
+    lang, hasParam: langWasAsked(req),
     title: brandText(), vars, faces: fontFaces(fonts),
     body: `<div class="bar">${toggle(lang)}</div>` +
       `<div class="done" id="payWait">` +
@@ -6052,6 +6219,7 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
         backLink(req) +
       `</div>` + paid +
       `<script>${script}</script>`,
+    boot: langBoot(code),
   }));
 });
 

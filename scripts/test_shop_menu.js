@@ -517,6 +517,10 @@ const soldOut = (row) => /class="sold"/.test(row);
       const { body } = await get(`/s/${LIVE}`);
       assert.ok(body.includes('data-lang="en"') && body.includes('data-lang="cn"'), 'no toggle');
       assert.ok(body.includes('>EN<') && body.includes('>中<'), 'toggle labels are not the live pair');
+      assert.ok(body.includes('>Español<') && body.includes('>한국어<') &&
+        body.includes('>日本語<') && body.includes('>العربية<'),
+        'the language list is missing one of the four added languages');
+      assert.ok(body.includes('class="l-es"'), 'a dish name has no Spanish span');
     });
     await checkAsync('the sold-out badge is the live 售罄 pair', async () => {
       const { body } = await get(`/s/${LIVE}`);

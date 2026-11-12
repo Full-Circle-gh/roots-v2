@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ramada menu — language mockup</title>
+<style>
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --olive:#6A6E2D; --lime:#CCD900;
+    --f-name:"Segoe UI","Microsoft YaHei","Yu Gothic UI","Malgun Gothic",sans-serif;
+    --f-body:Georgia,"Microsoft YaHei","Yu Gothic UI","Malgun Gothic",serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    background:#e4d5c8;
+    color:var(--ink);
+    font-family:var(--f-body);
+    min-height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:48px;
+    padding:32px 24px;
+  }
+  .note{max-width:280px;font-family:var(--f-name)}
+  .note h1{
+    font-family:var(--f-name);
+    font-size:22px;
+    font-weight:700;
+    line-height:1.15;
+    letter-spacing:-.01em;
+  }
+  .note p{margin-top:12px;font-size:15px;line-height:1.45}
+  .note ol{margin:14px 0 0 18px;font-size:15px;line-height:1.45}
+  .note li+li{margin-top:8px}
+  .note .quiet{margin-top:16px;color:#5c5348;font-size:13px;line-height:1.4}
+
+  .phone{
+    width:390px;height:780px;flex:none;
+    background:var(--oat);
+    border:2px solid var(--ink);
+    position:relative;
+    overflow:hidden;
+    box-shadow:8px 10px 0 var(--ink);
+  }
+  .screen{height:100%;display:flex;flex-direction:column;background:var(--oat);color:var(--ink)}
+  .bar{
+    flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:12px;row-gap:10px;
+    padding:13px 14px;background:var(--oat);border-bottom:2px solid var(--ink);
+    position:relative;z-index:5;
+  }
+  .nm{flex:1;min-width:0;font-family:var(--f-name);font-size:21px;font-weight:700;line-height:1.1}
+  .langbtn{
+    flex:none;border:2px solid var(--ink);background:var(--lime);color:var(--ink);
+    font-family:var(--f-name);font-size:13px;font-weight:700;letter-spacing:.04em;
+    padding:6px 10px;cursor:pointer;
+  }
+  .langbtn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .srch{
+    flex:1 1 100%;display:flex;align-items:center;height:42px;padding:0 10px;
+    border:2px solid var(--ink);background:rgba(255,255,255,.72);
+    color:var(--olive);font-size:16px;
+  }
+  .wrap{flex:1;display:flex;min-height:0}
+  .rail{
+    flex:none;width:92px;overflow:auto;background:var(--oat);
+    border-right:2px solid var(--ink);
+  }
+  #phone[dir="rtl"] .rail{border-right:0;border-left:2px solid var(--ink)}
+  .rail a{
+    display:block;padding:16px 8px;font-family:var(--f-name);font-size:13px;font-weight:700;
+    line-height:1.15;color:var(--ink);text-align:center;text-decoration:none;
+    text-transform:uppercase;border-bottom:1px solid rgba(0,0,0,.08);
+  }
+  .rail a.on{background:var(--lime)}
+  .pane{flex:1;min-width:0;overflow:auto;background:rgba(255,255,255,.62);padding-bottom:24px}
+  .sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:16px 16px 8px}
+  .kick{font-family:var(--f-name);font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+  .cnt{font-family:var(--f-name);font-size:14px;font-weight:700;letter-spacing:.06em;color:var(--olive)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:12px 16px}
+  .it{min-width:0}
+  .ph{aspect-ratio:1/1;background:var(--oat);border:0;overflow:hidden}
+  .ph img{width:100%;height:100%;object-fit:cover}
+  .t{font-family:var(--f-name);font-size:14px;font-weight:700;line-height:1.2;margin-top:9px}
+  .orig{
+    margin-top:3px;font-family:var(--f-body);font-size:11px;line-height:1.25;color:var(--olive);
+    unicode-bidi:isolate;
+  }
+  .orig[hidden]{display:none}
+  .chip{
+    display:inline-block;margin-top:6px;padding:2px 6px;border:1px solid var(--ink);
+    font-family:var(--f-name);font-size:10px;font-weight:700;letter-spacing:.04em;
+  }
+  .foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+  .pr{font-family:var(--f-name);font-size:13.5px;font-weight:700;font-variant-numeric:tabular-nums}
+  .plus{
+    width:26px;height:26px;border:2px solid var(--ink);background:var(--lime);
+    position:relative;
+  }
+  .plus i{position:absolute;background:var(--ink);left:50%;top:50%}
+  .plus i:first-child{width:12px;height:2px;margin:-1px 0 0 -6px}
+  .plus i:last-child{width:2px;height:12px;margin:-6px 0 0 -1px}
+
+  .scrim{
+    position:absolute;inset:0;background:rgba(26,26,23,.28);z-index:8;
+  }
+  .scrim[hidden]{display:none}
+  .sheet{
+    position:absolute;left:0;right:0;bottom:0;z-index:9;
+    background:var(--oat);border-top:2px solid var(--ink);
+    padding-bottom:8px;
+  }
+  .sheet[hidden]{display:none}
+  .sheet-h{
+    display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:2px solid var(--ink);
+  }
+  .sheet-t{flex:1;font-family:var(--f-name);font-size:16px;font-weight:700}
+  .sheet-x{
+    width:32px;height:32px;border:2px solid var(--ink);background:transparent;cursor:pointer;position:relative;
+  }
+  .sheet-x span{position:absolute;left:50%;top:50%;width:14px;height:2px;background:var(--ink);margin:-1px 0 0 -7px}
+  .sheet-x span:first-child{transform:rotate(45deg)}
+  .sheet-x span:last-child{transform:rotate(-45deg)}
+  .row{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    width:100%;padding:14px;border:0;border-bottom:1px solid rgba(0,0,0,.1);
+    background:transparent;color:var(--ink);cursor:pointer;text-align:start;
+    font-family:var(--f-name);font-size:18px;font-weight:700;
+  }
+  .row.on{background:var(--lime)}
+  .tick{width:14px;height:8px;border-left:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:rotate(-45deg);flex:none}
+
+  @media (max-width:820px){
+    body{flex-direction:column;align-items:center;padding:20px 12px 32px}
+    .note{max-width:390px}
+    .phone{width:min(390px,100%);height:min(780px,78vh)}
+  }
+</style>
+</head>
+<body>
+  <aside class="note">
+    <h1>Where the guest picks a language</h1>
+    <ol>
+      <li>The button is in the top bar, on the right, where EN / 中 is today.</li>
+      <li>It shows the language they are reading. Tap it.</li>
+      <li>The list opens over the menu. English and 中文 are the ones you wrote. The other four are the saved translation.</li>
+    </ol>
+    <p class="quiet">Sample dishes and prices, so you can judge the placement. Not the live menu. On Arabic the page turns right to left, and the English name stays under the dish so the counter can still read it.</p>
+  </aside>
+
+  <div class="phone" id="phone">
+    <div class="screen">
+      <header class="bar">
+        <div class="nm">Ramada</div>
+        <button type="button" class="langbtn" id="langBtn" aria-haspopup="dialog" aria-expanded="false">EN</button>
+        <div class="srch" id="search">Search products</div>
+      </header>
+      <div class="wrap">
+        <nav class="rail" id="rail"></nav>
+        <main class="pane" id="pane"></main>
+      </div>
+    </div>
+    <div class="scrim" id="scrim" hidden></div>
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+      <div class="sheet-h">
+        <div class="sheet-t" id="sheetTitle">Language</div>
+        <button type="button" class="sheet-x" id="close" aria-label="Close"><span></span><span></span></button>
+      </div>
+      <div id="rows"></div>
+    </div>
+  </div>
+
+<script>
+const LANGS = [
+  { id:'en', btn:'EN', label:'English', title:'Language', search:'Search products', rail:['Platters','Toasts'], dir:'ltr' },
+  { id:'zh', btn:'中文', label:'中文', title:'语言', search:'搜索商品', rail:['拼盘','吐司'], dir:'ltr' },
+  { id:'es', btn:'Español', label:'Español', title:'Idioma', search:'Buscar', rail:['Fuentes','Tostadas'], dir:'ltr' },
+  { id:'ko', btn:'한국어', label:'한국어', title:'언어', search:'검색', rail:['플래터','토스트'], dir:'ltr' },
+  { id:'ja', btn:'日本語', label:'日本語', title:'言語', search:'検索', rail:['盛り合わせ','トースト'], dir:'ltr' },
+  { id:'ar', btn:'العربية', label:'العربية', title:'اللغة', search:'بحث', rail:['أطباق','توست'], dir:'rtl' }
+];
+
+const CATS = [
+  {
+    items:[
+      { img:'hummus-platter.jpg', price:'¥68',
+        en:'Hummus platter', zh:'鹰嘴豆泥拼盘', es:'Bandeja de hummus', ko:'후무스 플래터', ja:'フムスの盛り合わせ', ar:'طبق حمص' },
+      { img:'labneh-platter.jpg', price:'¥72',
+        en:'Labneh platter', zh:'酸奶油拼盘', es:'Bandeja de labneh', ko:'라브네 플래터', ja:'ラブネの盛り合わせ', ar:'طبق لبنة' }
+    ]
+  },
+  {
+    items:[
+      { img:'zaatar-labneh-toast.jpg', price:'¥42', allergen:true,
+        en:'Za’atar labneh toast', zh:'扎塔尔酸奶油吐司', es:'Tostada de labneh con za’atar', ko:'자타르 라브네 토스트', ja:'ザアタルとラブネのトースト', ar:'توست لبنة بالزعتر',
+        alg:{ en:'Sesame', zh:'芝麻', es:'Sésamo', ko:'참깨', ja:'ごま', ar:'سمسم' } },
+      { img:'almond-banana-toast.jpg', price:'¥38',
+        en:'Almond banana toast', zh:'杏仁香蕉吐司', es:'Tostada de almendra y plátano', ko:'아몬드 바나나 토스트', ja:'アーモンドとバナナのトースト', ar:'توست اللوز والموز' },
+      { img:'green-pesto-toast.jpg', price:'¥40',
+        en:'Green pesto toast', zh:'绿色香蒜酱吐司', es:'Tostada de pesto verde', ko:'그린 페스토 토스트', ja:'グリーンペストのトースト', ar:'توست البيستو الأخضر' },
+      { img:'cashew-sour-cream-toast.jpg', price:'¥40',
+        en:'Cashew sour cream toast', zh:'腰果酸奶油吐司', es:'Tostada de crema de anacardo', ko:'캐슈 사워크림 토스트', ja:'カシューサワークリームのトースト', ar:'توست كريمة الكاجو' }
+    ]
+  }
+];
+
+let current = 'en';
+
+function langBy(id){ return LANGS.find(l => l.id === id); }
+
+function render(){
+  const L = langBy(current);
+  document.documentElement.lang = 'en';
+  document.getElementById('phone').dir = L.dir;
+  document.getElementById('langBtn').textContent = L.btn;
+  document.getElementById('search').textContent = L.search;
+  document.getElementById('sheetTitle').textContent = L.title;
+
+  document.getElementById('rail').innerHTML = L.rail.map((name, i) =>
+    `<a class="${i === 0 ? 'on' : ''}" href="#c${i}">${name}</a>`).join('');
+
+  document.getElementById('pane').innerHTML = CATS.map((cat, i) => {
+    const cards = cat.items.map(it => {
+      const showOrig = current !== 'en' && current !== 'zh';
+      const alg = it.allergen ? `<div class="chip">${it.alg[current]}</div>` : '';
+      return `<article class="it">
+        <div class="ph"><img src="../public/brand/menu/${it.img}" alt=""></div>
+        <div class="t">${it[current]}</div>
+        <div class="orig" dir="ltr"${showOrig ? '' : ' hidden'}>${it.en}</div>
+        ${alg}
+        <div class="foot"><div class="pr">${it.price}</div><div class="plus" aria-hidden="true"><i></i><i></i></div></div>
+      </article>`;
+    }).join('');
+    return `<section id="c${i}">
+      <div class="sec-h"><div class="kick">${L.rail[i]}</div><div class="cnt">0${cat.items.length}</div></div>
+      <div class="grid">${cards}</div>
+    </section>`;
+  }).join('');
+
+  document.getElementById('rows').innerHTML = LANGS.map(l =>
+    `<button type="button" class="row${l.id === current ? ' on' : ''}" data-pick="${l.id}">
+      <span>${l.label}</span>${l.id === current ? '<i class="tick"></i>' : ''}
+    </button>`).join('');
+}
+
+function openSheet(){
+  document.getElementById('sheet').hidden = false;
+  document.getElementById('scrim').hidden = false;
+  document.getElementById('langBtn').setAttribute('aria-expanded', 'true');
+}
+function closeSheet(){
+  document.getElementById('sheet').hidden = true;
+  document.getElementById('scrim').hidden = true;
+  document.getElementById('langBtn').setAttribute('aria-expanded', 'false');
+}
+
+document.getElementById('langBtn').addEventListener('click', openSheet);
+document.getElementById('close').addEventListener('click', closeSheet);
+document.getElementById('scrim').addEventListener('click', closeSheet);
+document.getElementById('rows').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pick]');
+  if (!b) return;
+  current = b.getAttribute('data-pick');
+  render();
+  closeSheet();
+});
+
+render();
+</script>
+</body>
+</html>
