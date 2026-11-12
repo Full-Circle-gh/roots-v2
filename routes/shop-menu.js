@@ -851,7 +851,8 @@ ${i18n.hideCss()}
    opened. Globe, the word, and an arrow, on the search box's own white.
    The row sits in one inner line. A phone button keeps its own padding
    unless appearance is cleared, and that padding was holding the marks
-   off the middle. */
+   off the middle. The letters of this face sit high in their line, so the
+   label is dropped 2px onto the globe's center. */
 .langbtn{flex:none;display:inline-flex;align-items:center;justify-content:center;
   height:36px;padding:0 10px;border:2px solid var(--ink);
   background:rgba(255,255,255,.72);color:var(--ink);
@@ -859,6 +860,7 @@ ${i18n.hideCss()}
   cursor:pointer;-webkit-appearance:none;appearance:none;border-radius:0}
 .langbtn-in{display:inline-flex;align-items:center;gap:6px;
   font-size:13px;line-height:16px;letter-spacing:.04em}
+.langbtn-in span{position:relative;top:2px}
 .langbtn svg{display:block;flex:none}
 .lang-globe,.lang-chev{width:16px;height:16px}
 .lsheet{position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--oat);
