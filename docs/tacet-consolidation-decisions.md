@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.642
+# Tacet shared-core consolidation — decisions record, v4.643
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-12 · v4.643 — **§179 AMENDED · THE ROOTS SLOGAN STAYS ENGLISH IN EVERY QR-MENU LANGUAGE — ASH.** “From Soil to Soul” and the English house line beneath it are a brand signature, not menu copy. The default Roots slogan therefore no longer enters the bilingual or translated menu spans: English, Chinese, Spanish, Korean, Japanese, Arabic and Russian all print the same English words. A product-specific colophon tagline remains bilingual because it is product content rather than this fixed slogan. No new words, no schema change, no change to `.gitignore` or CI. See §179.
 
 2026-11-12 · v4.642 — **§530 · NEEDS YOU NAMES THE DELIVERY STEP — ASH.** The home line always said "Delivery needs a call". Ash, on an order whose next step is the carrier: the line should say what the step inside says. A late or damaged parcel is named by the same next step the order already promotes — tell the customer, claim it, replacement or refund, waiting on the carrier, or mark handled. A courier who cannot get through is its own line. Everything that is still a phone call stays "Delivery needs a call". Waiting on the carrier, and a case ready to close, use the quieter mark. One order on a line opens that order. No new words. No schema change. No change to `.gitignore` or CI. See §530.
 
@@ -19994,9 +19996,11 @@ guard is at the one edge that needs it, not in the module.
 
 **NO STRING WAS COMPOSED, in either language.** Everything the block prints is
 data: the product's own tagline, the shop's own tagline, the shop's own name.
-Both languages are emitted and CSS picks, because that is what this page is —
-the phone picks one because it knows which one it is in, and copying that would
-have rendered half the readers a blank line.
+A product-specific tagline emits both languages and CSS picks, because it is
+product content. **AMENDED 2026-11-12:** Roots' default “From Soil to Soul” is
+a fixed brand signature and stays English in every QR-menu language; it no
+longer enters the bilingual or translated spans. The English house line was
+already language-neutral and remains so.
 
 **NOT DONE, so it is not assumed.** No schema and no migration — every column
 read already existed. No switch to hide the colophon on the QR menu: the

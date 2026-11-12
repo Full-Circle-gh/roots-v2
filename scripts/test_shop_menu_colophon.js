@@ -163,10 +163,12 @@ let server, PORT;
    getting Roots, and the check failed for a reason that had nothing to do with
    the page. Anything that needs a header the browser owns has to be sent by a
    client that will send it. */
-function get(headers) {
+function get(headers, lang) {
   return new Promise((resolve, reject) => {
     const req = http.request({
-      host: '127.0.0.1', port: PORT, path: `/s/${CODE}`, method: 'GET',
+      host: '127.0.0.1', port: PORT,
+      path: `/s/${CODE}${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`,
+      method: 'GET',
       headers: headers || {},
     }, (res) => {
       let body = '';
@@ -183,12 +185,15 @@ function get(headers) {
 // product's own <template data-dt>. Asking the whole page instead would let
 // one product's colophon answer for another's.
 function sheetFor(html, nameEn) {
-  const at = html.indexOf(nameEn);
-  assert.ok(at > -1, `product "${nameEn}" is not on the page at all`);
-  const card = html.lastIndexOf('<div class="it', at);
-  assert.ok(card > -1, `no row wrapper before "${nameEn}"`);
-  const next = html.indexOf('<div class="it', at);
-  const row = html.slice(card, next === -1 ? html.length : next);
+  let card = html.indexOf('<div class="it');
+  let row = '';
+  while (card > -1) {
+    const next = html.indexOf('<div class="it', card + 1);
+    const candidate = html.slice(card, next === -1 ? html.length : next);
+    if (candidate.includes(nameEn)) { row = candidate; break; }
+    card = next;
+  }
+  assert.ok(row, `no product row contains "${nameEn}"`);
   const open = row.indexOf('<template data-dt=');
   if (open === -1) return null;              // this card does not open at all
   const from = row.indexOf('>', open) + 1;
@@ -235,10 +240,17 @@ function sheetFor(html, nameEn) {
     assert.ok(/pb-colo-r"><\/span><span>/.test(sheet), 'the rule before the name is missing');
   });
 
-  check('the shop tagline is drawn in BOTH languages', () => {
-    const sheet = sheetFor(page, 'Colo Auto');
-    assert.ok(sheet.includes(roots.tagline_en), 'the English tagline is missing');
-    assert.ok(sheet.includes(roots.tagline_cn), 'the Chinese tagline is missing');
+  await checkAsync('the shop slogan stays English in every menu language', async () => {
+    for (const lang of ['en', 'cn', 'es', 'ko', 'ja', 'ar', 'ru']) {
+      const r = await get(undefined, lang);
+      assert.strictEqual(r.status, 200, `${lang} menu did not render`);
+      const sheet = sheetFor(r.body, 'Colo Auto');
+      assert.ok(sheet.includes(`<div class="pb-colo-t">${roots.tagline_en}</div>`),
+        `${lang} menu does not carry the plain English slogan`);
+      assert.ok(!sheet.includes(roots.tagline_cn),
+        `${lang} menu still carries the translated slogan`);
+      assert.ok(sheet.includes(roots.house), `${lang} menu lost the English house line`);
+    }
   });
 
   check('a tagline typed into one box only reaches both languages', () => {
