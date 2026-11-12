@@ -3643,10 +3643,15 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `var batch=[],bytes=2,cap=window.QR_BATCH||20;while(list.length&&batch.length<cap){var s=JSON.stringify(list[0]);` +
   `if(batch.length&&bytes+s.length>120000)break;bytes+=s.length+1;batch.push(list.shift())}` +
   `window.QR_LEFT--;` +
-  `fetch(window.QR_TR_URL,{method:'POST',headers:{'Content-Type':'application/json'},` +
-  `body:JSON.stringify({need:batch})}).then(function(r){return r.json()}).then(function(j){` +
-  `if(!j||!j.map){window.QR_FILLING=0;return}apply(j.map);step()` +
-  `}).catch(function(){need=batch.concat(list,need);list=[];window.QR_FILLING=0})};` +
+  `var ask=function(read,tries){fetch(window.QR_TR_URL,{method:'POST',headers:{'Content-Type':'application/json'},` +
+  `body:JSON.stringify({need:batch,read:read?1:0})}).then(function(r){return r.json()}).then(function(j){` +
+  `if(!j||!j.map)throw new Error('translation read failed');apply(j.map);` +
+  `var active=(document.documentElement.className.match(/lang-(es|ko|ja|ar|ru)/)||[])[1];` +
+  `var ready=!active||batch.every(function(p){var row=j.map[p.key];return row&&row[active]});` +
+  `if(ready||tries>=24){step();return}` +
+  `setTimeout(function(){ask(true,tries+1)},5000)` +
+  `}).catch(function(){if(tries<24){setTimeout(function(){ask(true,tries+1)},5000);return}` +
+  `need=batch.concat(list,need);list=[];window.QR_FILLING=0})};ask(false,0)};` +
   `window.qrFill=function(root){if(!window.QR_PENDING||!window.QR_TR_URL)return;` +
   `sync();` +
   `if(root)window.QR_BATCH=1;else if(!window.QR_BATCH)window.QR_BATCH=20;` +
@@ -5013,16 +5018,35 @@ const TR_LIMIT = rateLimit({
   message: { ok: false, error: 'too_many_requests' },
 });
 
+// Polls only read rows already saved by the queued model job. They are cheap,
+// frequent and separately budgeted so a slow model never turns into a proxy
+// timeout or consumes another model-call allowance.
+const TR_READ_LIMIT = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: 'too_many_requests' },
+});
+
 // The guest's page asks for this only when a dish is still in English.
 // One ask is a few dozen lines, the names on the list first. The whole menu
 // does not fit in one body, and a body that does not fit is refused, which
 // left every dish in English. The model runs here, the result is saved, and
 // the page swaps the words it is showing.
-router.post('/s/:shopCode/tr', TR_LIMIT, express.json({ limit: '200kb' }), async (req, res) => {
+router.post('/s/:shopCode/tr', express.json({ limit: '200kb' }), (req, res, next) => {
+  const limit = req.body && req.body.read ? TR_READ_LIMIT : TR_LIMIT;
+  limit(req, res, next);
+}, (req, res) => {
   const code = String(req.params.shopCode || '');
   if (!isShopCode(code) || !resolveShop(code)) return res.status(404).json({ ok: false });
   const pairs = menuTr.pairsFromBody(req.body);
-  try { await menuTr.fill(tdb(), pairs); } catch (e) { /* keep the English already on the page */ }
+  if (!(req.body && req.body.read)) {
+    // Do not hold the proxy open around a model call. The front queue keeps
+    // this product ahead of the catalogue backfill; the browser polls only
+    // the saved rows and repaints them as they arrive.
+    menuTr.fill(tdb(), pairs).catch(() => { /* keep the English already on the page */ });
+  }
   res.set('Cache-Control', 'no-store');
   res.json({ ok: true, map: menuTr.clientMap(tdb(), pairs) });
 });

@@ -2864,41 +2864,39 @@ function boxOf(text) {
     });
 
     await check('an opened product moves its missing information to the translation front', async () => {
-      await page.waitForFunction(() => !window.QR_FILLING);
-      const pair = await page.evaluate(() => {
-        const el = document.querySelector('#dsheetB .l-ru[data-sk]');
-        if (!el) return null;
-        const key = decodeURIComponent(el.getAttribute('data-sk'));
-        const parts = key.split('\u0001');
-        return { key, en: parts[0], cn: parts[1] };
+      const probe = await ctx.newPage();
+      let opened = false, asked = null;
+      await probe.route(`**/s/${CODE}/tr`, async (route) => {
+        const body = route.request().postDataJSON();
+        if (opened) asked = body;
+        const map = {};
+        for (const p of body.need || []) {
+          map[p.key] = { es: 'E', ko: 'K', ja: 'J', ar: 'A', ru: 'Переведено' };
+        }
+        await route.fulfill({ json: { ok: true, map } });
       });
-      assert.ok(pair, 'the open product has no translatable detail line');
-      const translated = 'Переведённая информация о товаре';
-      let asked = null, translatedKey = null;
-      await page.route('**/detail-priority-tr', async (route) => {
-        asked = route.request().postDataJSON();
-        translatedKey = asked.need[0].key;
-        await route.fulfill({ json: { ok: true, map: {
-          [translatedKey]: { ru: translated },
-        } } });
-      });
-      await page.evaluate((p) => {
-        window.QR_NEED = [p];
-        window.QR_TR_URL = '/detail-priority-tr';
-        window.QR_PENDING = 1;
-        document.getElementById('dsheetX').click();
-      }, pair);
-      await page.waitForTimeout(260);
-      await page.evaluate((n) => {
-        const card = Array.from(document.querySelectorAll('.it'))
-          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
-        card.click();
-      }, EN_VAR);
-      await page.waitForFunction((text) => Array.from(document.querySelectorAll('#dsheetB .l-ru'))
-        .some(el => el.textContent === text), translated);
-      assert.ok(asked.need.length <= 1,
-        `an open product waited on a timeout-sized batch: ${asked.need.length}`);
-      await page.unroute('**/detail-priority-tr');
+      try {
+        await probe.goto(`http://127.0.0.1:${PORT}/s/${CODE}?lang=ru`, { waitUntil: 'domcontentloaded' });
+        await probe.waitForFunction(() => !window.QR_FILLING);
+        const target = await probe.evaluate(() => {
+          for (const t of document.querySelectorAll('template[data-dt]')) {
+            if (t.content.querySelector('.l-ru[data-sk]')) {
+              return t.closest('.it').querySelector('.t .l-en').textContent;
+            }
+          }
+          return '';
+        });
+        assert.ok(target, 'no product detail carries a translatable line');
+        opened = true;
+        await probe.evaluate((name) => Array.from(document.querySelectorAll('.it[data-open]'))
+          .find(c => c.querySelector('.t .l-en').textContent === name).click(), target);
+        await probe.waitForFunction(() => Array.from(document.querySelectorAll('#dsheetB .l-ru'))
+          .some(el => el.textContent === 'Переведено'));
+        assert.ok(asked && asked.need.length === 1,
+          `an open product waited on a timeout-sized batch: ${JSON.stringify(asked)}`);
+      } finally {
+        await probe.close();
+      }
     });
 
     await check('§132 a nutrition_facts BLOCK prints, and the column does not print beside it', async () => {
