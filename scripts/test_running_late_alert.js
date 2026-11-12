@@ -219,10 +219,10 @@ it('the server sends it to the card, the list and the parcel', () => {
 });
 
 it('both screens show it on Needs-you, the list and the parcel', () => {
-  assert.match(DASH, /da\.running_late/);
+  assert.match(DASH, /Delivery needs a call/);
   assert.match(ORDERS, /o\.running_late_days/);
   assert.match(ORDERS, /\$\{runningLateBanner\}/);
-  assert.match(MHTML, /delivery_alerts\.running_late/);
+  assert.match(MHTML, /Delivery needs a call/);
   assert.match(MHTML, /r\.running_late_days/);
   assert.match(MHTML, /runningLate:sp\.running_late_days/);
 });

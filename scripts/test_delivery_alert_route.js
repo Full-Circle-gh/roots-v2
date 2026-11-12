@@ -343,6 +343,83 @@ it('the filter hands back the stuck ROWS, so the card need not re-read them', ()
     'a stuck row carries its id and the instant it went overdue');
 });
 
+console.log('\nthe lines name the next step, and they add up to the count');
+
+const delayCase = require('../lib/delay-case');
+
+it('a late parcel nobody has touched is "tell the customer", and the lines add up', () => {
+  const db = fixture();
+  db.exec(`
+    ALTER TABLE retail_orders ADD COLUMN tracking_no_contact_seen_at TEXT;
+    ALTER TABLE retail_shipments ADD COLUMN tracking_no_contact_seen_at TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN customer_told_at TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN dispute_state TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN remedy TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN reason TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN dispute_filed_at TEXT;
+  `);
+  const f = alerts.alertFilter(db, 'o', NOON);
+  const lines = alerts.homeLines(db, f, 8);
+  const sum = lines.reduce((n, l) => n + l.count, 0);
+  assert.strictEqual(sum, alerts.alertCount(db, f), 'a line must not count an order twice, or drop one');
+  const tell = lines.find(l => l.key === 'tell_customer');
+  assert.ok(tell && tell.count === 1 && tell.items[0].id === 3,
+    'a late parcel with no case is the first step');
+  assert.ok(lines.some(l => l.key === 'needs_call' && l.count === 3),
+    'the carrier exception, the Meituan order and the stuck rider stay a call');
+});
+
+it('a filed claim whose other steps are done is waiting on the carrier', () => {
+  const db = fixture();
+  db.exec(`
+    ALTER TABLE retail_orders ADD COLUMN tracking_no_contact_seen_at TEXT;
+    ALTER TABLE retail_shipments ADD COLUMN tracking_no_contact_seen_at TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN customer_told_at TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN dispute_state TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN remedy TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN reason TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN dispute_filed_at TEXT;
+  `);
+  db.prepare(`INSERT INTO retail_delay_cases
+    (id, shipment_id, order_id, customer_told_at, dispute_state, remedy, dispute_filed_at)
+    VALUES (1, 30, 3, '2026-11-01 00:00:00', 'filed', 'refund', '2026-11-09 00:00:00')`).run();
+  const lines = alerts.homeLines(db, alerts.alertFilter(db, 'o', NOON), 8);
+  const wait = lines.find(l => l.key === 'wait_carrier');
+  assert.ok(wait && wait.count === 1 && wait.items[0].id === 3);
+  assert.strictEqual(wait.waiting_since, '2026-11-09 00:00:00',
+    'the age is how long the claim has been filed');
+});
+
+it('the step codes follow the order the drawer already promotes', () => {
+  assert.strictEqual(delayCase.lateCaseStep(null), 'tell_customer');
+  assert.strictEqual(delayCase.lateCaseStep({ customer_told_at: 't', dispute_state: 'none' }), 'claim_delay');
+  assert.strictEqual(delayCase.lateCaseStep({ customer_told_at: 't', dispute_state: 'none', reason: 'damaged' }), 'claim_damage');
+  assert.strictEqual(delayCase.lateCaseStep({ customer_told_at: 't', dispute_state: 'filed' }), 'remedy');
+  assert.strictEqual(delayCase.lateCaseStep({ customer_told_at: 't', dispute_state: 'filed', remedy: 'refund' }), 'wait_carrier');
+  assert.strictEqual(delayCase.lateCaseStep({ customer_told_at: 't', dispute_state: 'paid', remedy: 'refund' }), 'mark_handled');
+  assert.strictEqual(delayCase.lateCaseStep({ dispute_state: 'filed', remedy: 'refund' }), 'tell_customer',
+    'a claim filed before the customer was told is still "tell the customer"');
+});
+
+it('a courier who cannot get through is its own line, ahead of the exception', () => {
+  const db = fixture();
+  db.exec(`
+    ALTER TABLE retail_orders ADD COLUMN tracking_no_contact_seen_at TEXT;
+    ALTER TABLE retail_shipments ADD COLUMN tracking_no_contact_seen_at TEXT;
+  `);
+  db.prepare("UPDATE retail_orders SET tracking_scenario = 'no_contact', tracking_no_contact_event = NULL WHERE id = 1").run();
+  db.exec(`
+    ALTER TABLE retail_delay_cases ADD COLUMN customer_told_at TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN dispute_state TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN remedy TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN reason TEXT;
+    ALTER TABLE retail_delay_cases ADD COLUMN dispute_filed_at TEXT;
+  `);
+  const lines = alerts.homeLines(db, alerts.alertFilter(db, 'o', NOON), 8);
+  const nc = lines.find(l => l.key === 'no_contact');
+  assert.ok(nc && nc.items.some(it => it.id === 1), 'the no-answer is not folded into "needs a call"');
+});
+
 console.log('\nroutes/retail.js — the orders list filters on that same set');
 
 it('status=delayed asks the shared module, not a lone air-delay EXISTS', () => {
@@ -397,16 +474,15 @@ it('the filter says its own name — a narrowed list with nothing lit has no way
 });
 
 it('one alert opens the order; more than one opens the list', () => {
-  // The branch itself, lifted and run — a textual check would pass on a
+  // The function itself, lifted and run — a textual check would pass on a
   // condition that had been inverted.
-  const at = MHTML.indexOf("const daIt=items('delivery_alerts');");
+  const at = MHTML.indexOf('function deliveryLineGo');
   assert.ok(at > 0, 'the delivery card must still choose its destination');
-  const src = MHTML.slice(at, MHTML.indexOf('add(c(', at));
-  const decide = (count, list) =>
-    new Function('c', 'items', src + '; return daGo;')(() => count, () => list);
+  const src = MHTML.slice(at, MHTML.indexOf('/* deliveryLineGo end */', at));
+  const decide = new Function(src + '\nreturn deliveryLineGo;')();
 
-  assert.match(decide(1, [{ id: 7, order_no: 'A7' }]), /openDeliveryAlert/,
-    'a single alert must open the delivery itself, not a list of one');
+  assert.match(decide(1, [{ id: 7, order_no: 'A7' }]), /openDeliveryAlert',7/,
+    'a single alert must open that delivery, not a list of one');
   assert.match(decide(3, [{ id: 7 }, { id: 8 }, { id: 9 }]), /ordersGo','delayed'/,
     'several alerts must open the filtered list');
   assert.match(decide(1, []), /ordersGo','delayed'/,

@@ -39943,6 +39943,12 @@ function oldestOf(items){
   const h=Math.round(m/60);
   return h<48?T(h+'h',h+' 小时'):T(Math.round(h/24)+'d',Math.round(h/24)+' 天');
 }
+/* One delivery line: a single order opens that order, more open the list. */
+function deliveryLineGo(n,it){
+  const id=it&&it.length===1&&it[0]&&it[0].id!=null?Number(it[0].id):null;
+  return (Number(n)===1&&id!=null)?"APP.cmd('openDeliveryAlert',"+id+")":"APP.cmd('ordersGo','delayed')";
+}
+/* deliveryLineGo end */
 /* THE LAST THREE DAYS OF THE SHOP'S MONTH. The phone's copy of
    lib/fapiao-reminders.js's isMonthEnd, computed off the SHOP's date rather
    than the handset's — a phone in another timezone must not disagree with the
@@ -39993,18 +39999,31 @@ function opsFires(){
      Guarded on the item actually being there. `count` is exact while `items` is
      a preview, so the two agree at 1 by construction — but a payload that ever
      disagreed would otherwise open a sheet onto nothing. */
-  /* §284 — the ones where the courier couldn't get through are a customer to
-     ring now, so the row says so instead of an age. Exact, from the server. */
-  const daNc=Number((o.delivery_alerts&&o.delivery_alerts.no_contact)||0);
-  /* §285 — and the ones still on the road past their due day. */
-  const daRl=Number((o.delivery_alerts&&o.delivery_alerts.running_late)||0);
-  const daMeta=[daNc>0?T(daNc+" can't reach the customer",daNc+' 单联系不上顾客'):'',
-                daRl>0?T(daRl+' running late',daRl+' 单配送逾期'):''].filter(Boolean).join(' · ');
-  const daIt=items('delivery_alerts');
-  const daGo=(c('delivery_alerts')===1&&daIt.length===1&&daIt[0]&&daIt[0].id!=null)
-    ?"APP.cmd('openDeliveryAlert')":"APP.cmd('ordersGo','delayed')";
-  add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),daIt,
-    daMeta,daGo);
+  /* One line per next step (§530). The words are the step's own. A payload
+     with no lines keeps the one old row. */
+  const daLines=(o.delivery_alerts&&o.delivery_alerts.lines)||[];
+  const daNamed=daLines.filter(l=>l&&l.count);
+  if(daNamed.length){
+    const daWord={
+      tell_customer:['brick',T('Tell the customer','联系客户')],
+      claim_delay:['brick',T('Claim the delay off the carrier','向承运商申请延误赔偿')],
+      claim_damage:['brick',T('Claim the damage off the carrier','向承运商申请赔偿')],
+      remedy:['brick',T('Replacement or refund','补发或退款')],
+      wait_carrier:['amber',T('Waiting on carrier','等待承运商')],
+      mark_handled:['amber',T('Mark handled','标记已处理')],
+      no_contact:['brick',T("Can't reach customer",'联系不上客户')],
+      needs_call:['brick',T('Delivery needs a call','配送需要跟进')],
+    };
+    daNamed.forEach(ln=>{
+      const spec=daWord[ln.key]; if(!spec) return;
+      const it=ln.items||[];
+      add(true,spec[0],'truck',spec[1],ln.count,it,'',deliveryLineGo(ln.count,it));
+    });
+  } else {
+    const daIt=items('delivery_alerts');
+    add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),daIt,
+      '',deliveryLineGo(c('delivery_alerts'),daIt));
+  }
   add(c('payment_mismatch'),'brick','banknote',T("Payment doesn't match",'付款金额不符'),c('payment_mismatch'),items('payment_mismatch'),'',"APP.cmd('ordersGo','pending')");
   // The brick fire's sibling: a proof IS on file, it was not rejected, and the
   // order is still unpaid — verified with auto-flip off, unreadable, or never
@@ -53520,15 +53539,27 @@ reg('openCustOrder', i=>{
    is `delivered`, which is not even the default view), so there is no row to
    fall back on and the sheet is built from the read alone, with detailFetch
    holding the screen while it is in flight.
-   It takes NO argument. The order number would have to survive being written
-   into a JS string literal inside an HTML attribute, and the id is already on
-   the snapshot this card was drawn from — so the command reads it back from
-   there rather than being handed it through the DOM.
+   A line with one order passes that order's id. With no id it reads the first
+   item off the snapshot, which is what the single old row did. The id is a
+   number, so it can sit in the command. The order number still is not written
+   into the page.
    orderOverCust stays FALSE, which is the one way this differs from its
    sibling: nothing is underneath this sheet but Home, and setting it would
    push the next customer record under a sheet that is not there. */
-reg('openDeliveryAlert', ()=>{
-  const it=((state.ops&&state.ops.delivery_alerts&&state.ops.delivery_alerts.items)||[])[0];
+reg('openDeliveryAlert', (id)=>{
+  const da=state.ops&&state.ops.delivery_alerts;
+  const want=id!=null&&id!==''?Number(id):NaN;
+  let it=null;
+  if(!isNaN(want)){
+    const lists=((da&&da.lines)||[]).map(l=>l&&l.items).concat([(da&&da.items)||[]]);
+    for(const list of lists){
+      if(!list) continue;
+      const hit=list.find(x=>x&&Number(x.id)===want);
+      if(hit){ it=hit; break; }
+    }
+    if(!it) it={id:want,order_no:'#'+want};
+  }
+  if(!it) it=((da&&da.items)||[])[0];
   if(!it||it.id==null) return;
   const no=it.order_no||('#'+it.id);
   /* The read stamps seen_at server-side exactly as a tap on the list does, so

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.641
+# Tacet shared-core consolidation — decisions record, v4.642
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-12 · v4.642 — **§530 · NEEDS YOU NAMES THE DELIVERY STEP — ASH.** The home line always said "Delivery needs a call". Ash, on an order whose next step is the carrier: the line should say what the step inside says. A late or damaged parcel is named by the same next step the order already promotes — tell the customer, claim it, replacement or refund, waiting on the carrier, or mark handled. A courier who cannot get through is its own line. Everything that is still a phone call stays "Delivery needs a call". Waiting on the carrier, and a case ready to close, use the quieter mark. One order on a line opens that order. No new words. No schema change. No change to `.gitignore` or CI. See §530.
 
 2026-11-12 · v4.641 — **§528 AMENDED · PRODUCT TRANSLATION NO LONGER WAITS INSIDE THE LIVE PROXY — ASH.** Live evidence after v4.639: one requested line sometimes returned in fifteen seconds and sometimes exceeded the proxy's timeout; two and twenty both produced `504`. The model call is therefore queued at the front and the request answers immediately. The open product polls only the saved rows, repaints as each answer appears, and never holds one HTTP request open around the model. Catalogue names and the full background backfill keep the same queue. No schema change, no new words, no change to `.gitignore` or CI. See §528.
 
@@ -34185,3 +34187,17 @@ One table, `qr_menu_translations`; Russian uses new rows in the existing table. 
 4. **The unpaid clocks start again.** `payment_reopened_at` is now. The six-hour sweep, the counter clock and the WeChat pay window read that instead of the original placed time. The "Order placed" line does not move.
 
 One new column, `payment_reopened_at`. No new words. No change to `.gitignore` or CI. TC002837 is restored through `scripts/oneoff_restore_order_TC002837.js`, which calls the same function as the button.
+
+## §530 — NEEDS YOU NAMES THE DELIVERY STEP
+
+**2026-11-12 · DECIDED BY ASH.** The home line said "Delivery needs a call" for every delivery problem. Ash, looking at one order: the line should change with the step inside. An order waiting on the carrier should say so.
+
+**The rule.**
+
+1. **One line per next step, and each order is on one line.** The count of the lines is the count of the card. An order that is two kinds of trouble is still one order.
+2. **A late or damaged parcel uses the next step the order already shows.** Tell the customer, then the claim, then replacement or refund, then waiting on the carrier. When those are done, the line says mark handled. The words are the ones already on that step.
+3. **A courier who cannot reach the customer is its own line.** A parcel still on the road, a Meituan order past its time, a rider nobody picked up, and a carrier exception stay "Delivery needs a call", because those are still a phone call.
+4. **Waiting on the carrier is the quieter mark.** So is a case that only needs closing. The others stay the red one. The age on the carrier line is how long the claim has been filed. The other lines keep the clock they already had.
+5. **One order on a line opens that order.** More than one opens the delayed list.
+
+No new words. No schema change. No change to `.gitignore` or CI. The delivery block's own one-line footer still counts the whole set.
