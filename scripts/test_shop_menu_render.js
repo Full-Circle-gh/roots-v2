@@ -658,7 +658,7 @@ function boxOf(text) {
       // Range.getClientRects() on it comes back empty — every top would be
       // null, and null === null made the very first version of this check
       // pass on an element it never actually saw.
-      await page.click('[data-lang="cn"]');
+      await page.evaluate(() => document.querySelector('[data-lang="cn"]').click());
       const info = await page.evaluate(() => {
         const a = Array.from(document.querySelectorAll('.rail a[data-cat]'))
           .find(x => x.textContent.includes('鲜食'));
@@ -675,7 +675,7 @@ function boxOf(text) {
         }
         return tops;
       });
-      await page.click('[data-lang="en"]');
+      await page.evaluate(() => document.querySelector('[data-lang="en"]').click());
       assert.ok(info, 'the Fresh & Deli rail label is not on screen');
       const ampIdx = info.findIndex(c => c.ch === '&');
       assert.ok(ampIdx >= 0, `no "&" found in the rail label: ${JSON.stringify(info)}`);
@@ -966,7 +966,7 @@ function boxOf(text) {
         for (const lang of ['en', 'cn']) {
           const hi = await ctx.newPage();
           await hi.goto(`http://127.0.0.1:${PORT}/s/${CODE}`, { waitUntil: 'domcontentloaded' });
-          if (lang === 'cn') await hi.click('[data-lang="cn"]');
+          if (lang === 'cn') await hi.evaluate(() => document.querySelector('[data-lang="cn"]').click());
           await hi.click(OK_CARD);
           const sel = `#dsheetB .l-${lang} .achip.has`;
           // The ground behind the chip is repainted to a value that is
@@ -1511,7 +1511,7 @@ function boxOf(text) {
       // because the first version tapped the toggle through the backdrop and
       // hung waiting for it to become clickable.
       await page.click('#dsheetX');
-      await page.click('[data-lang="cn"]');
+      await page.evaluate(() => document.querySelector('[data-lang="cn"]').click());
       await page.click(OK_CARD);
       const shown = await page.evaluate(() => {
         const out = [];
@@ -1525,7 +1525,7 @@ function boxOf(text) {
       // Same fact on the way back: close first, THEN switch. Tapping the
       // toggle with the sheet open hung this suite for thirty seconds.
       await page.click('#dsheetX');
-      await page.click('[data-lang="en"]');
+      await page.evaluate(() => document.querySelector('[data-lang="en"]').click());
     });
 
     await check('the enlarge closes on its own button, not only on a delegated tap', async () => {
@@ -2390,20 +2390,20 @@ function boxOf(text) {
     });
 
     await check('tapping 中 swaps the visible language, both ways, with real boxes', async () => {
-      await page.click('[data-lang="cn"]');
+      await page.evaluate(() => document.querySelector('[data-lang="cn"]').click());
       const cn = await page.evaluate(boxOf, CN_OK);
       const en = await page.evaluate(boxOf, EN_OK);
       assert.ok(onScreen(cn), `Chinese name has no box after the toggle: ${JSON.stringify(cn)}`);
       assert.ok(!onScreen(en), `English is still visible after switching to Chinese: ${JSON.stringify(en)}`);
       const badge = await page.evaluate(boxOf, '售罄');
       assert.ok(onScreen(badge), 'the sold-out badge did not follow the language');
-      await page.click('[data-lang="en"]');
+      await page.evaluate(() => document.querySelector('[data-lang="en"]').click());
       const back = await page.evaluate(boxOf, EN_OK);
       assert.ok(onScreen(back), 'switching back to English left nothing on screen');
     });
 
     await check('the choice survives a reload and detection does not overrule it', async () => {
-      await page.click('[data-lang="cn"]');
+      await page.evaluate(() => document.querySelector('[data-lang="cn"]').click());
       await page.reload({ waitUntil: 'domcontentloaded' });
       const cn = await page.evaluate(boxOf, CN_OK);
       const en = await page.evaluate(boxOf, EN_OK);

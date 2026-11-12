@@ -8199,6 +8199,10 @@ db.exec(`
 // as a weaker hint, because two phones in one kitchen mishear alike.
 // Tenant data: copied to tenant databases by lib/tenant-db.js initTenantSchema.
 // ─────────────────────────────────────────────────────────────────────────
+// Saved QR-menu translations (Spanish, Korean, Japanese, Arabic). Tenant
+// data: lib/tenant-db.js copies a missing table onto each tenant database.
+db.exec(require('./lib/qr-menu-translate').SQL);
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS quick_stock_heard (
     user_key    TEXT    NOT NULL,

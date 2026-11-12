@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.636
+# Tacet shared-core consolidation — decisions record, v4.637
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-12 · v4.637 — **§528 · THE QR MENU SPEAKS SIX LANGUAGES — ASH.** *"ok build it"*, after the mockup of the language button. English and Chinese stay the menu the office wrote. Spanish, Korean, Japanese and Arabic are saved translations of the dishes and written translations of the buttons. The basket and the order screen follow the same choice. The kitchen slip does not. One composed pair (vocabulary v1.410). One new table, `qr_menu_translations`. No change to `.gitignore` or CI. See §528.
 
 2026-11-11 · v4.636 — **§526 AMENDED · SUBMITTING THE FAPIAO FORM ANSWERS ON THE SAME PAGE — ASH.** Ash filled the form from the code and WeChat showed its 404. The save had answered 303, and a rejected form answered 400. WeChat draws those as its own 404. The form now posts to the `/s/fapiao/` address and every answer is 200, including the saved page. No new words. No schema change. No change to `.gitignore` or CI. See §526.
 
@@ -34142,3 +34144,19 @@ One column, `retail_orders.fapiao_token`. No change to `.gitignore` or CI.
 4. **The address is a staff secret.** It is left out of the public config, and a safe database copy cuts it, the same as the new-order webhook.
 
 No schema change. No change to `.gitignore` or CI.
+
+## §528 — THE QR MENU SPEAKS SIX LANGUAGES
+
+**2026-11-12 · DECIDED BY ASH.** The Ramada menu should be readable in Spanish, Korean, Japanese and Arabic, as well as the English and Chinese it already has. Ash, after a mockup of where the control sits: *"ok build it"*, and before that, that the basket and the order screen follow the language the guest picked.
+
+**The rule.**
+
+1. **The button stays where EN / 中 is.** One button, showing the language the guest is reading. Tapping it opens a list: EN, 中, Español, 한국어, 日本語, العربية. The choice is remembered for the visit. The phone's own language opens the menu when it is one of those six.
+2. **English and Chinese are the menu the office wrote.** They are not sent to a model. Spanish, Korean, Japanese and Arabic of a dish name, a description, a category or an option are translated once and saved. The next guest reads the saved line. A line that has not been saved yet shows the English, and the page asks for the translation without making the guest wait for the first paint.
+3. **Buttons are written, not translated by the model.** Place order, the basket, pay at the counter, sold out, and the rest of the short labels are fixed in all six languages. An allergen word comes from a fixed list. A word that is not on that list stays as the office wrote it.
+4. **Under a translated dish name, the English stays**, small, so the counter can read the phone. Prices, weights and the order number do not change.
+5. **Arabic turns the page right to left.** The button moves to the other end of the bar.
+6. **The kitchen slip does not change language.** The order stores the English and Chinese the catalogue already had. The guest's screen is the only thing that switches.
+7. **It is the QR menu, every shop.** The page is one page. It is not a Ramada-only branch.
+
+One new table, `qr_menu_translations`. One composed pair, `Language · 语言` (vocabulary v1.410). No change to `.gitignore` or CI.
