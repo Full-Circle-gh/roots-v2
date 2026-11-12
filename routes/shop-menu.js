@@ -848,12 +848,17 @@ ${i18n.hideCss()}
   font-family:var(--f-bear);font-size:13px;letter-spacing:.04em;color:var(--olive);cursor:pointer}
 .lang button.on{background:var(--lime);color:var(--ink)}
 /* Ash, 2026-11-12: the lime square named the language and did not say it
-   opened. Globe, the word, and an arrow, on the search box's own white. */
-.langbtn{flex:none;display:inline-flex;align-items:center;gap:6px;
+   opened. Globe, the word, and an arrow, on the search box's own white.
+   The row sits in one inner line. A phone button keeps its own padding
+   unless appearance is cleared, and that padding was holding the marks
+   off the middle. */
+.langbtn{flex:none;display:inline-flex;align-items:center;justify-content:center;
   height:36px;padding:0 10px;border:2px solid var(--ink);
   background:rgba(255,255,255,.72);color:var(--ink);
-  font-family:var(--f-bear);font-size:13px;line-height:16px;
-  letter-spacing:.04em;cursor:pointer}
+  font-family:var(--f-bear);font-size:0;line-height:0;letter-spacing:0;
+  cursor:pointer;-webkit-appearance:none;appearance:none;border-radius:0}
+.langbtn-in{display:inline-flex;align-items:center;gap:6px;
+  font-size:13px;line-height:16px;letter-spacing:.04em}
 .langbtn svg{display:block;flex:none}
 .lang-globe,.lang-chev{width:16px;height:16px}
 .lsheet{position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--oat);
@@ -4177,9 +4182,9 @@ function toggle(lang) {
     `<path d="M3.4 12h17.2M5 8h14M5 16h14" fill="none" stroke="currentColor" stroke-width="1.7"/>` +
     `</svg>`;
   const chev = `<svg class="lang-chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">` +
-    `<path d="M4.5 7L12 14.5 19.5 7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `<path d="M4.5 8.25L12 15.75 19.5 8.25" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>` +
     `</svg>`;
-  return `<button type="button" class="langbtn" id="langBtn">${globe}${faces}${chev}</button>` +
+  return `<button type="button" class="langbtn" id="langBtn"><span class="langbtn-in">${globe}${faces}${chev}</span></button>` +
     `<div class="lsheet-bg" id="langBg" hidden></div>` +
     `<div class="lsheet" id="langSheet" role="dialog" aria-modal="true" hidden>` +
     `<div class="lsheet-h"><div class="lsheet-t">${bi('Language', '语言')}</div>` +
