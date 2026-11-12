@@ -4035,15 +4035,18 @@ function detailBody(it, code, listed, sig, qrShown) {
      a page anyone can scan. Anything outside the cast's alphabet is not a
      character this shop has, and is simply not drawn. */
   const ipKey = /^[a-z0-9-]{1,40}$/.test(String(rawKey || '')) ? String(rawKey) : '';
-  /* THE TAGLINE, PER LANGUAGE, exactly as the phone resolves it: the product's
-     own override first; failing that the OTHER language, so an office that
-     filled only one half still reads in both views; and only then the shop's
-     house line. BOTH halves are emitted and CSS picks, because that is what
-     this page is -- the phone picks one because it knows which one it is in. */
+  /* A PRODUCT-SPECIFIC TAGLINE is content, so it follows the menu language:
+     its own override first, then the OTHER language so a half-filled product
+     never goes blank. The shop's DEFAULT slogan is different: it is a brand
+     signature, and Ash ruled that "From Soil to Soul" stays English in every
+     menu language. Emit that default as plain escaped text, outside the i18n
+     spans, so Chinese and model-written languages cannot replace it. */
   const ovEn = String(it.colophon_tagline_en || '').trim();
   const ovCn = String(it.colophon_tagline_cn || '').trim();
-  const coloTag = bi(ovEn || ovCn || String((sig && sig.tagline_en) || ''),
-                     ovCn || ovEn || String((sig && sig.tagline_cn) || ''));
+  const hasTagOverride = Boolean(ovEn || ovCn);
+  const coloTag = hasTagOverride
+    ? bi(ovEn || ovCn, ovCn || ovEn)
+    : esc(String((sig && (sig.tagline_en || sig.tagline_cn)) || '').trim());
   /* The name on the hairline rule is the shop's own and is NOT bilingual: a
      tenant has one name. Empty for a tenant that carries none -- a rule reading
      "undefined" is worse than a rule with nothing on it (lib/brand-signature). */
