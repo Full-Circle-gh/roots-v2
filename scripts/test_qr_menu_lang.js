@@ -5,6 +5,8 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const i18n = require('../lib/qr-menu-i18n');
 const menuTr = require('../lib/qr-menu-translate');
 
@@ -73,6 +75,19 @@ check('Russian is complete anywhere the QR menu owns fixed words', () => {
   for (const [source, row] of Object.entries(i18n.GLOSS)) {
     assert.ok(row.ru, `missing Russian allergen gloss for ${source}`);
   }
+});
+
+check('the language panel listener loads before the large menu body', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'shop-menu.js'), 'utf8');
+  const early = source.indexOf('<script>${EARLY_LANG_SCRIPT}</script>');
+  const body = source.indexOf('</head><body>', early);
+  const late = source.indexOf('<script>${TOGGLE_SCRIPT}</script>', body);
+  assert.ok(early > -1, 'the early language listener is not emitted');
+  assert.ok(body > early, 'the language listener moved back into the menu body');
+  assert.ok(late > body, 'the completed-document scripts are no longer at the end');
+  const listener = source.slice(source.indexOf('const EARLY_LANG_SCRIPT'), source.indexOf('const TOGGLE_SCRIPT'));
+  assert.ok(listener.includes("t.closest('#langBtn')"), 'the early script does not own the language button');
+  assert.ok(!listener.includes("document.querySelector('.bar')"), 'body layout work moved into the head');
 });
 
 check('sesame is a fixed word, not a sentence for the model', () => {

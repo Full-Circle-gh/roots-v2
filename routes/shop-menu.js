@@ -2413,7 +2413,12 @@ function langScript(hasParam) {
     `if(l==='ar')d.setAttribute('dir','rtl');else d.removeAttribute('dir')})();`;
 }
 
-const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
+/* THE LANGUAGE PANEL IS INTERACTIVE BEFORE THE DOCUMENT FINISHES PARSING.
+   Ramada's full menu is an 11 MB document: Chromium painted #langBtn 3.33s
+   before the old end-of-body script attached this listener. Delegation needs
+   no body node at install time, so this one small control belongs in <head>.
+   Everything that queries the completed body stays in TOGGLE_SCRIPT below. */
+const EARLY_LANG_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `OK={en:1,cn:1,es:1,ko:1,ja:1,ar:1,ru:1},LANGS=['en','cn','es','ko','ja','ar','ru'];` +
   `var open=function(on){var s=document.getElementById('langSheet'),g=document.getElementById('langBg');` +
   `if(s)s.hidden=!on;if(g)g.hidden=!on};` +
@@ -2438,7 +2443,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang',` +
   `if(l==='ar')d.setAttribute('dir','rtl');else d.removeAttribute('dir');` +
   `mark(l);open(false);` +
   `if(window.QR_PENDING&&l!=='en'&&l!=='cn'&&window.qrFill)window.qrFill()` +
-  `},false)})();` +
+  `},false)})();`;
+
+const TOGGLE_SCRIPT =
   // The bar's real height, published as --barh so the rail can stick BELOW it
   // rather than behind it. Re-measured on resize, on rotation, and whenever the
   // bar itself changes box — the language toggle can swap a one-line shop name
@@ -4186,6 +4193,7 @@ function shell({ lang, hasParam, title, vars, faces, body, boot }) {
 <title>${esc(title)}</title>
 <style>${styles(vars, faces)}</style>
 <script>${langScript(hasParam)}</script>
+<script>${EARLY_LANG_SCRIPT}</script>
 </head><body>
 ${boot || ''}
 ${body}
