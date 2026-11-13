@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.644
+# Tacet shared-core consolidation — decisions record, v4.645
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-13 · v4.645 — **§531 · A NEW EXPENSE OF AN ITEM OPENS ON COMPANY AND NOT ARRIVED YET — ASH:** *"company and not arrived yet should be by defult when creating new expense of an item"*. Company was already the opening answer (§226). Not arrived yet opened off, and turned on only after a goods category was picked (§114 amended). The form now opens with both on. A category that is not goods turns Not arrived yet off; clearing the category puts it back. Record another and reopening the screen both start there again. Left on, approval still raises a purchase order, and the approver still cannot untick it — a taxi or ginger has to be unticked, or filed under a category that is not goods. No new words. No schema change. No change to `.gitignore` or CI. See §531.
 
 2026-11-12 · v4.644 — **§528 AMENDED · THE LANGUAGE BUTTON WORKS AS SOON AS IT IS VISIBLE — ASH.** Live Chromium measured the Ramada button at 2.19 seconds and its handler at 5.52 seconds: a 3.33-second dead interval while the browser parsed the rest of the 11.4 MB product page. The language-panel listener now runs in the head; layout measurement, search, basket and product behavior remain at the end. The large document is a separate performance problem, but it can no longer hold this control inert. No new words, no schema change, no change to `.gitignore` or CI. See §528.
 
@@ -34209,3 +34211,15 @@ One new column, `payment_reopened_at`. No new words. No change to `.gitignore` o
 5. **One order on a line opens that order.** More than one opens the delayed list.
 
 No new words. No schema change. No change to `.gitignore` or CI. The delivery block's own one-line footer still counts the whole set.
+
+## §531 — A NEW EXPENSE OF AN ITEM OPENS ON COMPANY AND NOT ARRIVED YET
+
+**2026-11-13 · DECIDED BY ASH.** *"company and not arrived yet should be by defult when creating new expense of an item"*, on the phone's Expense form with Company and Not arrived yet both on and the category still unchosen.
+
+**The rule.**
+
+1. **A new expense opens with Company and Not arrived yet both on.** Company was already the opening answer. Not arrived yet is now the other half, from the moment the form opens, on Record another, and on every return to the screen.
+2. **A category that is not goods turns Not arrived yet off.** A goods category keeps it on. Clearing the category puts the opening answer back. The person can still change it after any of those.
+3. **Left on, approval raises a purchase order.** The approver still cannot untick it. A taxi or ginger has to be unticked on the form, or filed under a category that is not goods. Who paid still carries onto Record another: a second claim in a row is the same person on the same account.
+
+No new words. No schema change. No change to `.gitignore` or CI.
