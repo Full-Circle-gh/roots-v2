@@ -6057,12 +6057,24 @@ function renderDropPin(o) {
       'A rider is already on the way. Cancel that job in the Qingyun app before the dot can move.',
       '骑手已在路上。要移动这个点，请先在青云 App 取消该单。')}</div>`;
   }
+  // A room number is not a place. Searching "A1504" finds nothing, and
+  // picking a building used to keep only the room already stored — so a door
+  // that lived on a paper receipt could not be added on this card. The box is
+  // the same unit field the phone's place sheet already has. Saving it without
+  // a new place keeps the pin and writes the room onto the waybill.
+  const room = (o.address && o.address.detail) || '';
   return map + `
     <input id="dp-find-${o.id}" type="search" autocomplete="off" spellcheck="false"
            placeholder="${escapeHtml(cuT('Search a place or road', '搜索地点或道路'))}"
            oninput="dpFindType(${o.id}, event)" oncompositionend="dpFindType(${o.id}, event)"
            style="box-sizing:border-box;width:100%;margin-top:8px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit;font:inherit;font-size:13px;">
     <div id="dp-find-out-${o.id}" hidden style="margin-top:6px;border:1px solid var(--line);border-radius:8px;overflow:hidden;"></div>
+    <label class="sub" style="display:block;margin-top:8px;">${cuT('Unit / floor (optional)', '单元 / 楼层(可选)')}
+      <input id="dp-detail-${o.id}" type="text" maxlength="200" autocomplete="off" spellcheck="false"
+             value="${escapeHtml(room)}"
+             oninput="dpDetailType(${o.id})"
+             style="box-sizing:border-box;display:block;width:100%;margin-top:4px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit;font:inherit;font-size:13px;">
+    </label>
     <div class="sub" id="dp-hint-${o.id}" style="margin-top:8px;">${has
       ? cuT('If this is the door, leave it. If it is not, search the building, pick it, then save.',
             '如果就是这个门口，不用改。如果不是，搜索楼栋，选中后保存。')
@@ -6171,8 +6183,7 @@ async function dpFindNow(orderId) {
   const q = (inp.value || '').trim();
   dpQuery[orderId] = q;
   dpPick[orderId] = null;
-  const save = document.getElementById('dp-save-' + orderId);
-  if (save) save.hidden = true;
+  dpSyncSave(orderId);
   if (q.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
   box.hidden = false;
   box.innerHTML = `<div class="sub" style="padding:8px 10px;">${cuT('Searching…', '搜索中…')}</div>`;
@@ -6223,15 +6234,48 @@ function dpPickPlace(orderId, i) {
   if (hint) hint.textContent = same
     ? cuT('That is the door already on this order. Leave it.', '这就是这一单已有的门口，不用改。')
     : cuT('Save this door to send the rider here.', '保存后，骑手会去这里。');
-  const save = document.getElementById('dp-save-' + orderId);
-  if (save) save.hidden = same;
+  dpSyncSave(orderId);
 }
 
+// The room box and a newly picked place share one Save. A room on its own is
+// enough: the pin stays, and the waybill gains the door. Searching again must
+// not hide that button while the typed room is still different.
+function dpRoomText(orderId) {
+  const box = document.getElementById('dp-detail-' + orderId);
+  // No box yet means "leave the stored room", not "the room was cleared".
+  if (!box) return dpSavedRoom();
+  return String(box.value || '').replace(/\s+/g, ' ').trim();
+}
+function dpSavedRoom() {
+  const o = _OPEN_ORDER;
+  return String((o && o.address && o.address.detail) || '').replace(/\s+/g, ' ').trim();
+}
+function dpSyncSave(orderId) {
+  const save = document.getElementById('dp-save-' + orderId);
+  if (!save) return;
+  const o = _OPEN_ORDER || {};
+  const pin = o.qingyun_ship_from && o.qingyun_ship_from.dropoff;
+  const canKeep = !!(o.address && o.address.address && pin
+    && Number.isFinite(Number(pin.lat)) && Number.isFinite(Number(pin.lng)) && Number(pin.lat) !== 0);
+  const roomChanged = dpRoomText(orderId) !== dpSavedRoom();
+  save.hidden = !dpPick[orderId] && !(roomChanged && canKeep);
+}
+function dpDetailType(orderId) { dpSyncSave(orderId); }
+
 async function dpSavePlace(orderId, btn) {
-  const p = dpPick[orderId];
+  const picked = dpPick[orderId];
+  const o = _OPEN_ORDER || {};
+  const addr = o.address || {};
+  const cur = (o.qingyun_ship_from && o.qingyun_ship_from.dropoff) || {};
+  // No new place: keep the pin and the street, and write the room they typed.
+  const p = picked || (
+    addr.address && Number.isFinite(Number(cur.lat)) && Number.isFinite(Number(cur.lng))
+      ? { name: addr.address, district: addr.district || '', lat: Number(cur.lat), lng: Number(cur.lng) }
+      : null
+  );
   if (!p) return;
   if (btn) { btn.disabled = true; btn.textContent = cuT('Saving…', '保存中…'); }
-  const detail = (_OPEN_ORDER && _OPEN_ORDER.address && _OPEN_ORDER.address.detail) || '';
+  const detail = dpRoomText(orderId);
   try {
     const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/set-place`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
