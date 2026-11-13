@@ -907,6 +907,23 @@ function chIcon(ch){ return `<span style="color:var(--text-secondary);display:fl
    what it just decided. */
 const EXP_PAID_DEFAULT = 'company';
 
+/* §531 — NOT ARRIVED YET DEFAULTS ON, FOR A NEW EXPENSE OF AN ITEM.
+   Ash: "company and not arrived yet should be by default when creating new
+   expense of an item". Company is the constant above. This is the other half.
+
+   SET IN THE SAME PLACES THE OTHER DEFAULT IS, PLUS RECORD ANOTHER. The state
+   literal, the reset on every entry, and the reset that starts the next claim.
+   A default written in one of those and not the others is a default that
+   drifts: the form would open one way the first time and another way after
+   Record another.
+
+   A CATEGORY THAT IS NOT GOODS TURNS IT OFF. A taxi or ginger filed under its
+   own category does not raise an order. Left on — no category yet, or a goods
+   category — approval raises a purchase order, and the approver still cannot
+   untick it. That is the risk of an opening default, and it is why a non-goods
+   category clears the box rather than leaving the opening answer standing. */
+const EXP_COMING_DEFAULT = true;
+
 /* ==========================================================================
    State + navigation
    ========================================================================== */
@@ -1412,10 +1429,11 @@ const state = {
           results repaint and the input must not. */
        pick:false,q:'',
        amount:'',cat:'',paid:EXP_PAID_DEFAULT,note:'',storeId:null,date:null,photo:null,
-       /* §114 amended 2026-10-09 (Ash): `goods` is the categories the shop has
-          ticked as goods. Picking one ticks Not arrived yet; anything else
-          leaves it off. A starting answer the person can still change. */
-       coming:false,goods:[],
+       /* §531: a new expense of an item opens with Not arrived yet on, and
+          with Company selected. `goods` is the categories the shop has ticked
+          as goods. Picking one keeps the box on; any other category turns it
+          off. A starting answer the person can still change. */
+       coming:EXP_COMING_DEFAULT,goods:[],
        busy:false,err:'',sent:null,
        mine:null,mineTried:false,owed:0,waiting:0},
   /* THE APPROVAL QUEUE (§87 step three). A DIFFERENT SCREEN WITH A DIFFERENT
@@ -1826,7 +1844,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
     f.catsTried=false; f.catsErr=''; f.catsMsg=''; f.catsBusy=''; f.catsNew=''; }
   if(route==='expense'){ const x=state.exp;
     x.amount=''; x.cat=''; x.paid=EXP_PAID_DEFAULT; x.note=''; x.photo=null; x.date=null;
-    x.coming=false; x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false;
+    x.coming=EXP_COMING_DEFAULT; x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false;
     x.pick=false; x.q=''; }
   /* A broadcast is written from an empty screen every time. What was left in
      the form after one was sent is the LAST one sent, and re-opening on it is
@@ -29688,10 +29706,10 @@ function screenExpense(){
         <button class="chip ${x.paid==='company'?'on':''}" onclick="APP.cmd('expPaid','company')">${T('Company','公司')}</button>
       </div>
       ${/* §114 — HAS IT ARRIVED? A SINGLE OPT-IN, NOT A PAIR OF CHIPS.
-           Unticked is exactly what this form has always meant, so no claim
-           already sent changes meaning. Amended 2026-10-09 (Ash): picking a
-           category the shop has ticked as Goods ticks it for the person
-           (expCat); a taxi or ginger still starts unticked.
+           §531: a new expense of an item opens with it on, beside Company.
+           Picking a category the shop has not ticked as Goods turns it off
+           (expCat). The person can still change it after. No claim already
+           sent changes meaning — only the box a new one opens with.
 
            Ticking it makes the claim into an ORDER on approval: the shop can
            then see it is coming, and whoever it arrives to ticks it in. That is
@@ -29796,10 +29814,11 @@ reg('expNote', v=>{ state.exp.note=String(v==null?'':v); });
    removable without a second control for it. */
 reg('expCat', c=>{ const x=state.exp;
   x.cat=(x.cat===c)?'':String(c); x.pick=false; x.q='';
-  /* §114 amended — A GOODS CATEGORY TICKS NOT ARRIVED YET, any other unticks
-     it. Picking a category is a fresh answer to what was bought, so it sets
-     the box either way; the person can still change it after. */
-  x.coming=!!x.cat&&(x.goods||[]).indexOf(x.cat)>=0;
+  /* §531 — A GOODS CATEGORY KEEPS NOT ARRIVED YET ON, any other turns it off.
+     The form opened with it on. Picking a category is a fresh answer to what
+     was bought, so it sets the box either way; clearing the category returns
+     the opening default. The person can still change it after. */
+  x.coming=x.cat?((x.goods||[]).indexOf(x.cat)>=0):EXP_COMING_DEFAULT;
   render(); });
 reg('expPickOpen', ()=>{ const x=state.exp; x.pick=true; x.q=''; render(); });
 reg('expPickClose', ()=>{ const x=state.exp; x.pick=false; x.q=''; render(); });
@@ -29821,8 +29840,9 @@ reg('expAgain', ()=>{ const x=state.exp;
      photo are about ONE thing that was bought and must never carry over — that
      is how the same taxi gets claimed twice. Who paid and which shop are facts
      about the person, and asking again for every claim in a row is friction for
-     nothing. */
-  x.sent=null; x.amount=''; x.note=''; x.photo=null; x.err=''; x.cat=''; x.coming=false;
+     nothing. Not arrived yet goes back to the opening default (§531): the next
+     item starts on, and whether the last one was unticked does not decide it. */
+  x.sent=null; x.amount=''; x.note=''; x.photo=null; x.err=''; x.cat=''; x.coming=EXP_COMING_DEFAULT;
   x.mineTried=false; render(); });
 
 /* THE PHOTO IS DOWNSCALED ON THE PHONE, and this is the whole of why: a modern

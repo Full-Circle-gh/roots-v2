@@ -1220,13 +1220,14 @@ addColumn('categories', 'is_active',    'INTEGER DEFAULT 1');
 // would want if §111's intent is ever built again.
 addColumn('categories', 'needs_po',     'INTEGER');
 // is_goods — IS A COST FILED HERE USUALLY GOODS THAT HAVE TO ARRIVE (§114,
-// amended 2026-10-09 by Ash). It decides ONE thing: whether the phone's claim
-// form ticks "Not arrived yet" when this category is picked. It is a starting
+// amended 2026-10-09 by Ash, and §531). A new expense of an item opens with
+// "Not arrived yet" on. This column decides what picking the category does to
+// that box: goods keeps it on, anything else turns it off. It is a starting
 // answer the person can change, never a rule — the claim carries its own
 // `awaiting_delivery`, and nothing on the server reads this column to decide
 // anything. Unlike `needs_po` above it cannot lose a row: it never redirects a
-// save, it only pre-ticks a box the person can see. DEFAULT 0, so no category
-// changes behaviour until somebody ticks it.
+// save, it only sets a box the person can see. DEFAULT 0, so a category nobody
+// has ticked turns the box off when it is picked.
 addColumn('categories', 'is_goods',     'INTEGER DEFAULT 0');
 // ── A claim can be waiting for its goods (§114) ────────────────────────────
 // awaiting_delivery — THE MONEY HAS GONE AND THE GOODS HAVE NOT ARRIVED. §111

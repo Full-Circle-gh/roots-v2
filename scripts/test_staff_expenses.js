@@ -339,32 +339,43 @@ it('§114 — the two things an order cannot do without are refused on the phone
   assert.match(CLAIM, /awaitingDelivery && !note/, 'both of them');
 });
 
-it('§114 — the flag does not survive onto the next claim, or a reopened form', () => {
-  // "Record another" keeps who paid and which shop — facts about the person —
-  // and clears what the claim was. Whether the LAST thing was still coming says
-  // nothing about the next one, and a sticky flag would silently raise an order
-  // for a taxi.
-  assert.match(PHONE_CODE, /\bcoming:false,goods:\[\],/, 'a fresh form opens with it off');
-  assert.match(PHONE_CODE, /x\.cat=''; x\.coming=false;/,
-    'the reset clears it with the amount and the note');
+it('§531 — a new expense of an item opens with Not arrived yet on', () => {
+  // Ash, 2026-11-13: "company and not arrived yet should be by default when
+  // creating new expense of an item". Company is EXP_PAID_DEFAULT. This is the
+  // other half, named once and read everywhere the form starts again — the
+  // state literal, every entry, and Record another. A literal in any of those
+  // is how the form opens one way the first time and another way the next.
+  assert.match(PHONE_CODE, /const EXP_COMING_DEFAULT = true;/,
+    'the default is on, named once');
+  assert.match(PHONE_CODE, /\bcoming:EXP_COMING_DEFAULT,goods:\[\],/,
+    'a fresh form opens with it on');
+  assert.match(PHONE_CODE, /x\.cat=''; x\.coming=EXP_COMING_DEFAULT;/,
+    'Record another starts the next item the same way, rather than keeping whether the last one was unticked');
   const entry = PHONE_CODE.match(/if\(route==='expense'\)\{[\s\S]*?\}/);
-  assert.ok(entry && /x\.coming=false;/.test(entry[0]), 'and so does entering the screen');
+  assert.ok(entry && /x\.coming=EXP_COMING_DEFAULT;/.test(entry[0]),
+    'and so does entering the screen');
+  assert.ok(entry && /x\.paid=EXP_PAID_DEFAULT;/.test(entry[0]),
+    'and who paid opens on the company');
+  assert.strictEqual(PHONE_CODE.split('EXP_COMING_DEFAULT').length - 1, 5,
+    'declared once, and read by the state, the entry reset, Record another, and clearing the category');
   // Ticked makes the note required; the label must not call it optional then.
   assert.match(PHONE_CODE, /T\('Note','备注'\)\}\$\{x\.coming\?'':' · '\+T\('optional','可选'\)\}/,
     'the note is not called optional while it is required');
 });
 
-it('§114 amended — a GOODS category ticks Not arrived yet, any other unticks it', () => {
-  // Ash, 2026-10-09: "tick it by default for goods category". The shop marks
-  // which categories are goods; the form reads that list from its own meta.
+it('§114 amended — a GOODS category keeps Not arrived yet on, any other turns it off', () => {
+  // Ash, 2026-10-09: "tick it by default for goods category". §531 opens the
+  // form already ticked, so a goods category keeps that answer and a taxi
+  // category is what turns it off. The shop marks which categories are goods;
+  // the form reads that list from its own meta.
   assert.match(ROUTE_CODE, /COALESCE\(is_goods, 0\) = 1/, 'the server lists the goods categories');
   assert.match(ROUTE_CODE, /data: \{ categories, goods: goodsCategories\(db\), stores, recent \}/,
     'and hands them to the form');
   assert.match(PHONE_CODE, /x\.goods=\(d&&d\.goods\)\|\|\[\];/, 'the form keeps them');
   const pick = PHONE_CODE.match(/reg\('expCat'[\s\S]*?render\(\); \}\);/);
   assert.ok(pick, 'the category command must be readable');
-  assert.match(pick[0], /x\.coming=!!x\.cat&&\(x\.goods\|\|\[\]\)\.indexOf\(x\.cat\)>=0;/,
-    'picking sets the box from the list, and clearing the category unticks it');
+  assert.ok(pick[0].includes("x.coming=x.cat?((x.goods||[]).indexOf(x.cat)>=0):EXP_COMING_DEFAULT;"),
+    'a goods category keeps it on, any other turns it off, and clearing the category returns the default');
   // A STARTING ANSWER, NOT A RULE: the validator and the submit path never read
   // the goods flag — the claim's own awaiting_delivery is still what decides.
   assert.ok(!/is_goods|goodsCategories/.test(CLAIM), 'lib/expense-claim.js does not read it');

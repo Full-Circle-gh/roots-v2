@@ -267,10 +267,11 @@ function activeCategories(db) {
   } catch (e) { return []; }
 }
 
-/* §114 amended — the active categories ticked as GOODS, which the phone's claim
-   form uses to tick "Not arrived yet" when one is picked. A starting answer,
+/* §114 amended, §531 — the active categories ticked as GOODS. A new expense
+   of an item already opens with "Not arrived yet" on. Picking one of these
+   keeps it on; picking any other category turns it off. A starting answer,
    not a rule: nothing here or in lib/expense-claim.js reads it, and a read
-   failure is an empty list, which only means the box starts unticked. */
+   failure is an empty list, which means a picked category turns the box off. */
 function goodsCategories(db) {
   try {
     return db.prepare(

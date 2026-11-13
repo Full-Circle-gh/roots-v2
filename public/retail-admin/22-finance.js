@@ -2278,9 +2278,10 @@ window.finCatFlag = function finCatFlag(id, checked) {
     { method: 'PATCH', body: { is_operating: !!checked } }));
 };
 
-/* §114 amended 2026-10-09 (Ash): GOODS pre-ticks "Not arrived yet" when this
-   category is picked on the phone's claim form. A starting answer only — the
-   person can untick it, and nothing in the books reads it. */
+/* §114 amended 2026-10-09, §531 (Ash): a new expense of an item already opens
+   with "Not arrived yet" on. GOODS keeps it on when this category is picked;
+   any other category turns it off. A starting answer only — the person can
+   change it, and nothing in the books reads this flag. */
 window.finCatGoods = function finCatGoods(id, checked) {
   return finCatsWrite(() => api('/api/retail-admin/finance/categories/' + id,
     { method: 'PATCH', body: { is_goods: !!checked } }));
