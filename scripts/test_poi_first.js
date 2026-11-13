@@ -125,6 +125,19 @@ it('handles Chinese numerals in the tail', () => {
   assert.strictEqual(s.findable, '碧桂园凤凰城二期');
 });
 
+it('lifts a building letter and room with no 栋 or 房 written', () => {
+  // 源海御苑A1504 is the door. Leaving A1504 on the findable half makes the
+  // string look English, and the name search is then skipped.
+  const s = splitFindable('源海御苑A1504', {});
+  assert.strictEqual(s.findable, '源海御苑');
+  assert.strictEqual(s.lastMile, 'A1504');
+  assert.strictEqual(s.shape, 'named');
+  const full = splitFindable('凤安一街59号源海御苑A1504房', {});
+  assert.strictEqual(full.findable, '凤安一街59号源海御苑');
+  assert.strictEqual(full.lastMile, 'A1504房');
+  assert.strictEqual(full.shape, 'named');
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 console.log('\n2. the scorer — computed here, because neither API returns one');
 

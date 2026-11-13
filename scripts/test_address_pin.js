@@ -276,6 +276,20 @@ const noPoi = { geocode: async () => null };
     assert.strictEqual(p._geo.translated, true);
   });
 
+  await itAsync('keeps a building code the translator did not fold in', async () => {
+    // 'A1504' is the building and the room, not English. A translator that
+    // returns the estate and drops the code must not take the room with it.
+    const p = await buildCreatePayload(
+      ORDER({ province: '广东省', city: '广州市', district: '海珠区', address: '源海御苑', detail: 'A1504',
+              lat: 23.10, lng: 113.30, geo_source: 'poi_picked' }),
+      SHOP, noPoi,
+      {
+        geocode: stubGeo(null),
+        translateCn: async () => ({ province: '广东省', city: '广州市', district: '海珠区', street: '源海御苑' }),
+      });
+    assert.strictEqual(p.recipientAddress, '源海御苑 A1504');
+  });
+
   await itAsync('keeps the original text when translation is unavailable', async () => {
     const p = await buildCreatePayload(
       ORDER({ province: '广东省', city: '广州市', district: '天河区', address: '15 Zhujiang West Road' }),

@@ -451,6 +451,7 @@ function pickerSandbox({ searchResults = [{ name: '品秀星越花园A栋', addr
   vm.runInContext([
     decls,
     area[0],
+    grab(ORDERS, 'qpScrollMapIntoView', '04-orders.js'),
     grab(ORDERS, 'qpDrawMap', '04-orders.js'),
     grab(ORDERS, 'qpFindType', '04-orders.js'),
     grab(ORDERS, 'qpFindNow', '04-orders.js'),
@@ -888,6 +889,90 @@ await itAsync('THE BUG: keyword, no city, no centre → no boundary, never undef
 await itAsync('a partial centre counts as no centre', async () => {
   const u = await tencentUrl({ kw: '天河路', lat: 23.1291 });
   assert.doesNotMatch(u, /undefined/);
+});
+
+// ── The door card can take a room that is not a place ────────────────────
+// Searching "A1504" finds nothing: it is a building letter and a room, not a
+// 小区. The card has to let that be typed onto the pin already there.
+console.log('\nthe drop-pin card — a room can be typed without searching for it');
+
+function dropPinVm(order) {
+  const els = {};
+  const posts = [];
+  const sandbox = {
+    cuT: (en) => en,
+    escapeHtml: (s) => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'),
+    document: { getElementById: (id) => els[id] || null },
+    _OPEN_ORDER: order,
+    dpPick: {},
+    fetch: async (url, opts) => {
+      posts.push({ url, body: JSON.parse(opts.body) });
+      return { json: async () => ({ success: true, recreated: true }) };
+    },
+    toast() {},
+    openOrder() {},
+    Number, String, JSON, Math,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext([
+    grab(ORDERS, 'renderDropPin', '04-orders.js'),
+    grab(ORDERS, 'dpSavedRoom', '04-orders.js'),
+    grab(ORDERS, 'dpRoomText', '04-orders.js'),
+    grab(ORDERS, 'dpSyncSave', '04-orders.js'),
+    grab(ORDERS, 'dpDetailType', '04-orders.js'),
+    grab(ORDERS, 'dpSavePlace', '04-orders.js'),
+  ].join('\n'), sandbox);
+  return { sandbox, els, posts };
+}
+
+const YUANHAI = {
+  id: 7, status: 'paid',
+  address_full: '广东省 广州市 海珠区 源海御苑',
+  address: { province: '广东省', city: '广州市', district: '海珠区', address: '源海御苑', detail: '' },
+  qingyun_ship_from: { dropoff: { lat: 23.102, lng: 113.301 } },
+};
+
+it('the card has a room box, and Save stays hidden until the room changes', () => {
+  const { sandbox, els } = dropPinVm(YUANHAI);
+  const html = sandbox.renderDropPin(YUANHAI);
+  assert.match(html, /id="dp-detail-7"/);
+  assert.match(html, /Unit \/ floor \(optional\)/);
+  assert.match(ORDERS, /cuT\('Unit \/ floor \(optional\)', '单元 \/ 楼层\(可选\)'\)/);
+  assert.match(html, /id="dp-save-7" hidden/);
+  els['dp-detail-7'] = { value: '' };
+  els['dp-save-7'] = { hidden: true };
+  els['dp-detail-7'].value = 'A1504';
+  sandbox.dpDetailType(7);
+  assert.strictEqual(els['dp-save-7'].hidden, false, 'typing the room is enough to save');
+});
+
+it('a rider already on the way does not get a room box', () => {
+  const locked = { ...YUANHAI, qingyun_ship_from: { dropoff: { lat: 23.1, lng: 113.3 }, blocked_by: 'called' } };
+  const { sandbox } = dropPinVm(locked);
+  const html = sandbox.renderDropPin(locked);
+  assert.doesNotMatch(html, /dp-detail-7/);
+});
+
+await itAsync('saving the room keeps the pin and the street', async () => {
+  const { sandbox, els, posts } = dropPinVm(YUANHAI);
+  els['dp-detail-7'] = { value: 'A1504' };
+  els['dp-save-7'] = { hidden: false, disabled: false, textContent: '' };
+  await sandbox.dpSavePlace(7, els['dp-save-7']);
+  assert.deepStrictEqual(posts[0].body, {
+    name: '源海御苑', district: '海珠区', detail: 'A1504', lat: 23.102, lng: 113.301,
+  });
+});
+
+await itAsync('a picked building is saved with the room that was typed', async () => {
+  const { sandbox, els, posts } = dropPinVm(YUANHAI);
+  sandbox.dpPick[7] = { name: '源海御苑A栋', district: '海珠区', lat: 23.103, lng: 113.302 };
+  els['dp-detail-7'] = { value: 'A1504' };
+  els['dp-save-7'] = { hidden: false, disabled: false, textContent: '' };
+  await sandbox.dpSavePlace(7, els['dp-save-7']);
+  assert.strictEqual(posts[0].body.name, '源海御苑A栋');
+  assert.strictEqual(posts[0].body.detail, 'A1504');
+  assert.strictEqual(posts[0].body.lat, 23.103);
 });
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
