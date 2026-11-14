@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.414 · 2026-11-14 · CLOSING ELEME CLOSES THE SHOP — THE EXCEPTION SENTENCES ARE RETIRED.** §533. Ash closed Eleme at Tianhe. Tacet said closed and Eleme stayed open. The close now reaches Eleme, so the confirms use the same live pairs as every other channel: `No new orders arrive at this store on this channel. Orders already placed are not affected. · 该门店在此渠道将不再接到新订单。已下单的订单不受影响。` and `New orders can arrive at this store again. · 这家门店可以重新接单。` The whole channel uses `No new orders arrive on this channel at any store. Orders already placed are not affected. · 所有门店在此渠道将不再接到新订单。已下单的订单不受影响。` and `New orders can arrive on this channel again. A shop that is closed stays closed. · 该渠道可以重新接单。已关闭的门店保持关闭。` **RETIRED:** the five §393 sentences (the one-store close, the every-store close, the two reopen lines, and `Eleme is the exception`). `change queued · 变更排队中` and `applying… · 处理中…` stay, and now show on Eleme while the daemon applies the change. Nothing composed. Rules 1 to 7 unchanged.
+
 **v1.413 · 2026-11-14 · QR MENU COMPANY SALES — COMPOSED BY CODEX.** §532. `TOP SELLERS · 热销商品`, `Last 30 days · All locations · 近30天 · 所有门店` (each language is a complete label), and `{n} sold · 已售 {n}`. Composed by Codex under Ash's standing delegation. Rejected reusing `Ranked by best sellers · 按热销排序` as a category name: it describes sorting. Rejected bare `月销`: it does not identify the rolling window or company-wide scope. Rejected `人已购买`: quantities are units, not unique customers. The existing Details and tap-any-product labels stop rendering on menu cards; product detail and ordering actions remain. Rules 1–7 unchanged.
 
 **v1.412 · 2026-11-14 · THE CATEGORY BANNER HINT NAMES THE QR MENU — ONE PAIR AMENDED BY THE SESSION.** §531. The hint under Banner (optional) said the picture shows only on the mini app's Shop tab. It now also names the QR menu, because that menu draws the same picture. **AMENDED:** `A wide picture, 5 : 2, shown at the top of this category on the mini app's Shop tab and on the QR menu. Hidden while a customer is searching. · 宽幅图片,比例 5 : 2,显示在小程序「商品」页和二维码菜单该分类的顶部。顾客搜索时隐藏。` `二维码菜单` is the live name on the category pane (`二维码菜单已隐藏`). The phone copies the desktop hint, as §298 already required. **RETIRED** from this hint: `A wide picture, 5 : 2, shown at the top of this category on the mini app's Shop tab. Hidden while a customer is searching. · 宽幅图片,比例 5 : 2,显示在小程序「商品」页该分类的顶部。顾客搜索时隐藏。` Nothing else retired. Rules 1 to 7 unchanged.
@@ -12598,6 +12600,8 @@ The phone's own, already live: `Price · 价格`, `Cancelled · 已取消`, `Pai
 `Void · 作废`, `Saving… · 保存中…`, `Loading… · 加载中…`, `Try again · 重试`.
 
 ## Closing Eleme at a store, said truthfully (§393)
+
+**Retired 2026-11-14, v1.414.** These five sentences are no longer shown. Closing Eleme now closes the shop, and the confirms use the live pairs this section said were no longer shown for Eleme.
 
 **Operator register (Rule 1), 2026-10-01.** The phone's Sales confirms
 (`public/m.html` ELEME_CLOSE_WORDS), the desktop Sales grid's reopen confirm

@@ -1873,7 +1873,7 @@ function csRender() {
     let html = '';
     for (const c of cells) {
       if (c.pending) anyPending = true;
-      const note = (ch === 'meituan' && c.pending) ? ' <span class="sales-ch-loc-note">' + cuT('applying…', '处理中…') + '</span>' : '';
+      const note = c.pending ? ' <span class="sales-ch-loc-note">' + cuT('applying…', '处理中…') + '</span>' : '';
       html += '<span class="sales-ch-where-it' + (c.open ? '' : ' closed') + '">'
         + '<span class="sales-dot ' + (c.open ? 'ok' : 'off') + '"></span>' + csStoreName(c) + note + '</span>';
     }
@@ -1923,7 +1923,7 @@ function csRenderLocations() {
     // switching one on opens the shop with only that channel.
     const rows = serving.map((c) => {
       const x = cellFor(c, l.storeCode); const on = !!(x && x.open);
-      const note = (c.channel === 'meituan' && x && x.pending) ? ' <span class="sales-ch-loc-note">' + cuT('applying…', '处理中…') + '</span>' : '';
+      const note = (x && x.pending) ? ' <span class="sales-ch-loc-note">' + cuT('applying…', '处理中…') + '</span>' : '';
       return '<div class="sales-ch-loc-row' + (on ? '' : ' closed') + '">'
         + '<span class="sales-dot ' + (on ? 'ok' : 'off') + '"></span>'
         + '<span class="sales-ch-loc-nm">' + csName(c.channel) + note + '</span>'
@@ -2011,11 +2011,9 @@ window.csCell = async function (ch, storeCode, open) {
     const chan = csName(ch);
     if (!(await askConfirm({
       title: cuT('Open ' + chan + ' at ' + store + '?', '在 ' + store + ' 开启 ' + chan + '？'),
-      // §325 S2m — Eleme is never told a store is shut, so its orders never
-      // stopped; what this brings back for Eleme is the stock pushes. The
-      // phone's live pair for the same act (m.html ELEME_CLOSE_WORDS.openOne).
-      body: ch === 'eleme' ? cuT('Stock is sent to Eleme for this store again.', '恢复向饿了么推送该门店的库存。')
-                           : cuT('New orders can arrive at this store again.', '这家门店可以重新接单。'),
+      // §533 — Eleme is told, the same as every other channel, so the confirm
+      // is the same live pair the phone uses for opening a channel at a store.
+      body: cuT('New orders can arrive at this store again.', '这家门店可以重新接单。'),
       confirmLabel: cuT('Open', '开启'),
     }))) return;
   }

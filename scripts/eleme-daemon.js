@@ -860,6 +860,81 @@ async function refreshCatalogueCache(configs) {
   }
 }
 
+// ── Shop open / close (§533) ─────────────────────────────────────────────────
+// setChannelOpen writes channel_status.target_open. This daemon owns the
+// logged-in Eleme session, so it is the one that tells the shop. Not gated on
+// opening hours: an operator can close or open at any time. A missing column
+// (a database that has not migrated) is a no-op. Logout, a security check, or
+// a dropped connection leaves the command queued. A refusal puts the cell back
+// so the screen stops claiming the change, and pages once.
+async function applyShopStatus(cfg) {
+  const storeCode = cfg.store_code;
+  let cmd = null;
+  try {
+    cmd = db.prepare("SELECT target_open FROM channel_status WHERE channel='eleme' AND store_code=? AND target_open IS NOT NULL").get(storeCode);
+  } catch (_) { return; }
+  if (!cmd) return;
+
+  let browser;
+  try { browser = await getBrowser(storeCode, cfg.shop_id); }
+  catch (e) { log(storeCode, `shop status left queued — ${e.message}`); return; }
+
+  const wantOpen = cmd.target_open === 1;
+  let r;
+  try { r = await browser.setBusinessStatus(wantOpen); }
+  catch (e) { log(storeCode, `shop status left queued — ${e.message}`); return; }
+
+  if (r.loggedIn === false) {
+    noteLoginResult(storeCode, false);
+    log(storeCode, 'shop status left queued — not logged in');
+    return;
+  }
+  if (r.verify) {
+    noteVerifyResult(storeCode, true);
+    log(storeCode, 'shop status left queued — verification');
+    return;
+  }
+  if (r.transient) {
+    log(storeCode, `shop status left queued — ${r.reason || 'transient'}`);
+    return;
+  }
+  noteVerifyResult(storeCode, !!browser.verificationRequired);
+
+  const resultJson = JSON.stringify({
+    ok: !!r.ok, via: r.via || null, reason: r.reason || null, at: new Date().toISOString(),
+  });
+  if (!r.ok) {
+    const revertTo = wantOpen ? 0 : 1;
+    const info = db.prepare(`UPDATE channel_status
+        SET is_open=?, target_open=NULL, last_result=?, updated_at=CURRENT_TIMESTAMP
+      WHERE channel='eleme' AND store_code=? AND target_open=?`)
+      .run(revertTo, resultJson, storeCode, cmd.target_open);
+    logSync(storeCode, 'business_status_set', 'error',
+      { targetOpen: wantOpen, via: r.via, reason: r.reason }, r.reason || 'shop status refused');
+    log(storeCode, `shop status → ${wantOpen ? 'OPEN' : 'CLOSED'} FAILED: ${r.reason || ''}`);
+    if (info.changes) {
+      const key = 'shop_status:' + storeCode;
+      if (!alerts[key]) {
+        alerts[key] = true;
+        alertMerchant(ACCOUNT, wantOpen
+          ? `🔴 饿了么 ${storeCode} 没有打开，请在饿了么上手动打开\nEleme ${storeCode} did not open. Open it on Eleme.`
+          : `🔴 饿了么 ${storeCode} 没有关掉，请在饿了么上手动关闭\nEleme ${storeCode} did not close. Close it on Eleme.`);
+      }
+    }
+    return;
+  }
+
+  db.prepare(`UPDATE channel_status
+      SET is_open=?, target_open=NULL, last_result=?, updated_at=CURRENT_TIMESTAMP
+    WHERE channel='eleme' AND store_code=? AND target_open=?`)
+    .run(wantOpen ? 1 : 0, resultJson, storeCode, cmd.target_open);
+  logSync(storeCode, 'business_status_set', 'ok', { targetOpen: wantOpen, via: r.via });
+  log(storeCode, `shop status → ${wantOpen ? 'OPEN' : 'CLOSED'} on Eleme${r.via ? ' (' + r.via + ')' : ''}`);
+  const key = 'shop_status:' + storeCode;
+  if (alerts[key]) alerts[key] = false;
+  noteLoginResult(storeCode, true);
+}
+
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -947,6 +1022,10 @@ async function main() {
         log: (m) => log('*', m),
       });
     } catch (e) { console.error('[eleme-daemon] preorder flip:', e.message); }
+
+    // §533 — tell Eleme about a close or open the operator just asked for.
+    // Before the stock push, so a shop that just closed is not pushed to first.
+    for (const cfg of configs) await applyShopStatus(cfg);
 
     await processStockQueue(configs);
     await sleep(jitter(QUEUE_CHECK_MS));

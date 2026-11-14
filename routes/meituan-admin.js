@@ -1110,12 +1110,14 @@ router.post('/api/retail-admin/store-status/store/:code', requireRetailAdmin, ex
 // active store (unlike gzgrocery, which is tianhe-only).
 //
 // eleme used to be excluded from `integrated` below (OAuth was dead, so there
-// was no real channel to open/close) — it's browser automation now
-// (lib/eleme-browser.js), stores in channel_status exactly like mini_app/web/
-// gzgrocery/pos with no special-casing needed here, and eleme-daemon.js
-// already reads this same table via channelClosedStores('eleme') to gate
-// stock pushes. Marking it integrated is what the Sales-page card needs to
-// unlock its toggle and show the per-location rows.
+// was no real channel to open/close). It is browser automation now
+// (lib/eleme-browser.js). The cell still lives in channel_status and flips at
+// the tap, the same as mini_app/web/gzgrocery/pos. §533 adds one extra fact
+// for the row: channel_status.target_open is the command eleme-daemon.js has
+// not applied on the shop yet, so the row can say the change is still queued.
+// eleme-daemon.js also reads this table via channelClosedStores('eleme') to
+// gate stock pushes. Marking it integrated is what the Sales-page card needs
+// to unlock its toggle and show the per-location rows.
 const GRID_CHANNELS = ['mini_app', 'web', 'meituan', 'eleme', 'gzgrocery', 'pos'];
 function csStores(db, channel) {
   const all = db.prepare("SELECT code, name_en, name_cn, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
@@ -1185,11 +1187,20 @@ router.get('/api/retail-admin/channel-status', requireRetailAdmin, (req, res) =>
     // read as a till which closed itself: the write landed, the answer did not
     // change, and nothing on screen said why.
     const shopOpen = (code) => !(mt[code] && mt[code].fulfillment_open === 0);
+    // §533 — a scratch schema with no target_open column still draws the grid.
+    let elemePending = {};
+    try {
+      elemePending = {};
+      for (const r of db.prepare("SELECT store_code FROM channel_status WHERE channel='eleme' AND target_open IS NOT NULL").all()) {
+        elemePending[r.store_code] = true;
+      }
+    } catch (_) { elemePending = {}; }
     const channels = GRID_CHANNELS.map((ch) => {
       const cells = csStoresInScope(db, ch, req).map((s) => {
         const cell = { storeCode: s.code, name: s.name, nameEn: s.name_en || s.name, nameCn: s.name_cn || s.name,
                        open: csCellOpen(db, ch, s.code), shopOpen: shopOpen(s.code) };
         if (ch === 'meituan') { const r = mt[s.code] || {}; cell.readOk = r.read_ok === 1; cell.pending = r.target_open != null; cell.statusDesc = r.status_desc || null; }
+        else if (ch === 'eleme') cell.pending = !!elemePending[s.code];
         return cell;
       });
       return { channel: ch, integrated: true, single: ch === 'gzgrocery' ? 'tianhe' : null,
