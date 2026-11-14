@@ -1788,7 +1788,9 @@ function boxOf(text) {
                  phBottom: ph.bottom, phRight: ph.right,
                  prTop: pr.top, prBottom: pr.bottom, prRight: pr.right };
       });
-      assert.ok(m.bTop >= m.phBottom - 1,
+      // The photo is the file's own shape and can run longer than the
+      // price row. "Not over the photo" is which column it sits in.
+      assert.ok(m.bLeft >= m.phRight - 1,
         `the add button is still over the photo: ${JSON.stringify(m)}`);
       // On the price's row, and to the right of it.
       assert.ok(m.bTop < m.prBottom && m.bRight > m.prRight,

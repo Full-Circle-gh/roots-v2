@@ -2483,9 +2483,16 @@ button.cat-bn{cursor:pointer}
 .rail a{padding:15px 4px}
 .sec-h{padding:16px 12px 6px;flex-wrap:wrap;row-gap:4px}
 .grid{grid-template-columns:minmax(0,1fr);gap:0;padding:0 12px}
-.it{display:grid;grid-template-columns:clamp(60px,19vw,88px) minmax(0,1fr);
+/* §536 — a bit bigger, and the file's own shape. The column was about 74px
+   and the frame was a square, so a 4:5 drink (the catalogue's own file) was
+   squeezed and looked small. The column is wider. The card does not square
+   the file, so a tall photo is longer and a square photo stays square.
+   Nothing is cropped. A card with no photo keeps an empty square. */
+.it{display:grid;grid-template-columns:clamp(84px,26vw,112px) minmax(0,1fr);
   column-gap:10px;row-gap:7px;padding:14px 0;border-bottom:1px solid rgba(0,0,0,.1);align-items:start}
-.it .ph{grid-column:1;grid-row:1 / 3;align-self:start}
+.it .ph{grid-column:1;grid-row:1 / 3;align-self:start;aspect-ratio:auto}
+.it .ph img{height:auto}
+.it .ph:not(:has(img)){aspect-ratio:1/1}
 .it .title{grid-column:2;min-width:0;display:flex;align-items:baseline;flex-wrap:wrap;gap:5px 7px}
 .it .t{margin:0;font-size:16px;line-height:1.25;min-width:0;max-width:100%}
 .sales{font-family:var(--f-aleo);font-size:11px;line-height:1.5;font-weight:600;
@@ -2498,7 +2505,7 @@ button.cat-bn{cursor:pointer}
 .it[data-buy]{cursor:pointer}
 .it:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .srching .top-sellers{display:none}
-@media (min-width:700px){.rail{width:120px}.grid{padding:0 20px}.it{grid-template-columns:96px minmax(0,1fr);column-gap:16px}.it .t{font-size:18px}}
+@media (min-width:700px){.rail{width:120px}.grid{padding:0 20px}.it{grid-template-columns:132px minmax(0,1fr);column-gap:16px}.it .t{font-size:18px}}
 
 .empty{padding:64px 24px;text-align:center}
 .empty .t{font-family:var(--f-bear);font-size:22px;line-height:1.2;margin:0}
@@ -4636,8 +4643,10 @@ router.get('/s/:shopCode', (req, res) => {
     // paragraphs are long, and a name that waits behind them is still
     // English on the list the guest is reading.
     bi(it.name_en, it.name_cn);
+    // §536 — the card keeps the file's own shape. s=1 would pad a tall
+    // photo out to a square before it ever reached this frame.
     const src = `/s/${esc(code)}/i/${it.store_product_id}` +
-      `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}&s=1`;
+      `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}`;
     // No photo → the empty frame, never an <img> that cannot resolve. A
     // product nobody has photographed is ordinary; a broken-image glyph beside
     // its name reads as a fault in the shop.

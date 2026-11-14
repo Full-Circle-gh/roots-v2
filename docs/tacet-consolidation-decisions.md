@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.648
+# Tacet shared-core consolidation — decisions record, v4.649
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-14 · v4.649 — **§536 · THE MENU CARD SHOWS THE PHOTO A BIT BIGGER, AT ITS OWN SHAPE — ASH.** On the Ramada menu the picture was a small square, about 74px. The drinks are 4:5 files. Squaring them and drawing them that small is what made the picture look small. The card column is wider, about 100px on a phone, and the card no longer squares the file, so a tall photo is longer and a square photo stays square. Nothing is cropped. A card with no photo keeps an empty square. The product page stays the square tile. No new words. No schema change. No change to `.gitignore` or CI. See §536.
 
 2026-11-14 · v4.648 — **§535 · A MENU CARD SHOWS THE PRODUCT PAGE'S OPENING SENTENCE — ASH.** On the Ramada menu the line under a name was the start of the old write-up, cut at two lines. Teas opened on the latte's milk instruction. Salads and juices opened on "Product type" and a net weight. The product page already opens on the sentence the office wrote for that dish. The card now shows that sentence, still cut at two lines. A page with no such sentence keeps the old write-up. A sentence the office switched off for this menu stays off the card. No new words. No schema change. No change to `.gitignore` or CI. See §535.
 
@@ -34290,5 +34292,18 @@ No schema change. No new words. No change to `.gitignore` or CI.
 2. **No hero, the old write-up.** A product whose page has no opening paragraph keeps the start of `description_en` / `description_cn`.
 3. **A hero switched off for this menu is not the opening.** The card does not rescue it from the old write-up's first lines, and it does not go looking through that write-up for a "better" sentence. The latte's page opens on "Choose your milk", so the latte's card does too.
 4. **Nothing is composed.** Both texts are already on the product. A missing language stays missing and the existing fallback fills it.
+
+No new words. No schema change. No change to `.gitignore` or CI.
+
+## §536 — THE MENU CARD SHOWS THE PHOTO A BIT BIGGER, AT ITS OWN SHAPE
+
+**2026-11-14 · DECIDED BY ASH.** Ash, on the Ramada menu: the product picture should be bigger, and it should be the original shape, which is longer. Measured the same day: the drink files are 800×1000 (4:5). Many other files are already square. The card was asking for a square and drawing it in a column of about 74px.
+
+**The rule.**
+
+1. **The card column is wider.** On a phone, `clamp(84px, 26vw, 112px)`, about 100px. On a wide window, 132px. It was `clamp(60px, 19vw, 88px)` and 96px.
+2. **The card shows the file's own shape.** It does not ask for the square (`s=1`). A 4:5 file is longer. A square file stays square. Nothing is cropped, and the page ground is not painted down the sides of a tall file.
+3. **No photo keeps an empty square,** so a card nobody has photographed still holds a frame.
+4. **The product page stays the square tile.** So do the enlarge, a pairing and a choice. This change is the list card only.
 
 No new words. No schema change. No change to `.gitignore` or CI.

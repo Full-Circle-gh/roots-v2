@@ -919,7 +919,14 @@ function langSpan(html, lang) {
         db.prepare('UPDATE store_products SET image_data = ? WHERE id = ?').run(PIXEL, P_UNPUB);
       }
       const { body } = await get(`/s/${LIVE}`);
-      assert.ok(body.includes('w=320&s=1'), 'the menu card does not ask for the square');
+      // §536 — the card shows the file's own shape. The page, the enlarge
+      // and a pairing still ask for the square.
+      const cards = body.match(/<div class="ph"><img src="[^"]*"/g) || [];
+      assert.ok(cards.length > 0, 'the menu drew no card photo');
+      assert.ok(cards.every(s => /[?&]w=320"/.test(s) && !/s=1/.test(s)),
+        'the card still squares the file, or stopped asking for a thumbnail');
+      assert.ok(body.includes('clamp(84px,26vw,112px)'),
+        'the card photo went back to the small column');
       assert.ok(body.includes('w=1000&s=1'), 'the product page does not ask for the square');
     });
     await checkAsync('a product not listed at this shop is refused', async () => {
