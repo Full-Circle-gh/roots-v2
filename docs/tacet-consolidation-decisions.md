@@ -34209,3 +34209,15 @@ One new column, `payment_reopened_at`. No new words. No change to `.gitignore` o
 5. **One order on a line opens that order.** More than one opens the delayed list.
 
 No new words. No schema change. No change to `.gitignore` or CI. The delivery block's own one-line footer still counts the whole set.
+
+## §531 — QR MENU TOP SELLERS AND COMPANY-WIDE UNIT COUNTS
+
+**2026-11-14 · DECIDED BY ASH.** After reviewing a two-column menu and a recommended row layout, Ash: "ok lets do what you recommend". The existing Tacet QR menu is the implementation, not a replacement site.
+
+1. Top Sellers is the first rail entry and the first product section. It contains up to six orderable products already visible on this shop's menu, ranked by the company's recorded retail unit sales. Ordinary categories retain their configured order. No sales means no invented ranking or empty section.
+2. Company means the current tenant, across all locations and recorded retail channels, including online and marketplace orders. It never means other tenants. The window is the last 30 complete business days, ending yesterday, refreshed daily. The caption says "Last 30 days · All locations". Counts are units, never unique people or revenue. Cancelled, refunded and replacement orders do not count; partial refunded quantities are subtracted.
+3. A variant family has one count across all its product IDs, including sizes not listed at this particular location. The menu still offers only this location's listed sizes and prices. Existing local size/choice ranking is unchanged.
+4. One horizontal product row per item, smaller header, readable functional text, and sales beside each name on every category. A long name/count wraps without clipping. The repeated Details link and instructional tip go; the existing full-card detail action, size/options picker and basket remain the ordering path. A card without product details opens its existing options/size/add action when tapped.
+5. The existing seven languages and tenant theme apply. No brand, currency, sales numbers or Ramada-only code is hardcoded. The existing sticky basket appears after an item is added. During search, the duplicate Top Sellers section is hidden so each matching product appears once.
+
+No schema change. No change to CI, hooks or session configuration. Work is prepared on a separate branch for review; no production deployment is implied by a local commit.
