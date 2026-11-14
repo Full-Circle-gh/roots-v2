@@ -2482,6 +2482,7 @@ button.cat-bn{cursor:pointer}
 .rail{width:84px}
 .rail a{padding:15px 4px}
 .sec-h{padding:16px 12px 6px;flex-wrap:wrap;row-gap:4px}
+.sales-scope{padding:12px 12px 0;font-family:var(--f-aleo);font-size:12px;line-height:1.4;color:var(--olive)}
 .grid{grid-template-columns:minmax(0,1fr);gap:0;padding:0 12px}
 .it{display:grid;grid-template-columns:clamp(60px,19vw,88px) minmax(0,1fr);
   column-gap:10px;row-gap:7px;padding:14px 0;border-bottom:1px solid rgba(0,0,0,.1);align-items:start}
@@ -4995,6 +4996,8 @@ router.get('/s/:shopCode', (req, res) => {
         `<div class="cnt">${pad2(sec.items.length)}</div>` +
       `</div><div class="grid">${sec.items.map(it => card(it, !!c.best)).join('')}</div>`).join('') +
     `</section>`).join('');
+  // §537 — once, above the categories. The same window covers every count.
+  const salesScope = `<div class="sales-scope">${bi('Last 30 days · All locations', '近30天 · 所有门店')}</div>`;
   // The line above the menu is for a menu where at least one card opens.
   // The Chinese is composed (vocabulary v1.351).
   const dtTip = '';
@@ -5003,7 +5006,7 @@ router.get('/s/:shopCode', (req, res) => {
     ? `<div class="wrap">${rail}<div class="pane">` +
         // The search's empty answer, public/shop.html's live pair.
         `<div class="srch-none" id="mqNone" hidden>${bi('No products found.', '没有找到商品')}</div>` +
-        `${dtTip}${paneHtml}</div></div>` + cartUi
+        `${salesScope}${dtTip}${paneHtml}</div></div>` + cartUi
     : `<div class="empty"><div class="t">${bi('No products yet.', '暂无商品')}</div>` +
       `<div class="s">${bi('Check back soon.', '请稍后再来')}</div></div>`) + popupUi;
 

@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.417 · 2026-11-14 · THE MONTHLY LINE IS ONCE, AT THE TOP — NO NEW WORDS.** §537. `Last 30 days · All locations · 近30天 · 所有门店` renders once, above the categories. It does not repeat under each heading. Nothing composed. Nothing retired. Rules 1 to 7 unchanged.
+
+**v1.416 · 2026-11-14 · THE MONTHLY LINE IS BACK ON THE QR MENU — NO NEW WORDS.** §536. `Last 30 days · All locations · 近30天 · 所有门店` renders again under each section heading. Ash asked for the monthly claim knowing the figure is the lifted count. `{n} sold · 已售 {n}` stays. `TOP SELLERS · 热销商品` still does not render. Nothing composed. Nothing retired. Rules 1 to 7 unchanged.
+
 **v1.415 · 2026-11-14 · QR MENU SALES LIFT — NO NEW WORDS.** §534. `TOP SELLERS · 热销商品` and `Last 30 days · All locations · 近30天 · 所有门店` stop rendering on the QR menu. `{n} sold · 已售 {n}` stays. Nothing composed. Nothing retired. Rules 1 to 7 unchanged.
 
 **v1.414 · 2026-11-14 · CLOSING ELEME CLOSES THE SHOP — THE EXCEPTION SENTENCES ARE RETIRED.** §533. Ash closed Eleme at Tianhe. Tacet said closed and Eleme stayed open. The close now reaches Eleme, so the confirms use the same live pairs as every other channel: `No new orders arrive at this store on this channel. Orders already placed are not affected. · 该门店在此渠道将不再接到新订单。已下单的订单不受影响。` and `New orders can arrive at this store again. · 这家门店可以重新接单。` The whole channel uses `No new orders arrive on this channel at any store. Orders already placed are not affected. · 所有门店在此渠道将不再接到新订单。已下单的订单不受影响。` and `New orders can arrive on this channel again. A shop that is closed stays closed. · 该渠道可以重新接单。已关闭的门店保持关闭。` **RETIRED:** the five §393 sentences (the one-store close, the every-store close, the two reopen lines, and `Eleme is the exception`). `change queued · 变更排队中` and `applying… · 处理中…` stay, and now show on Eleme while the daemon applies the change. Nothing composed. Rules 1 to 7 unchanged.

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.648
+# Tacet shared-core consolidation — decisions record, v4.650
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-14 · v4.650 — **§537 · THE MONTHLY LINE IS ONCE, AT THE TOP — ASH.** Ash: no need to say it on every category, just the top. One "Last 30 days · All locations" sits above the categories. The counts stay the lifted figures. No new words. No schema change. No change to `.gitignore` or CI. See §537.
+
+2026-11-14 · v4.649 — **§536 · THE MENU SAYS THE SOLD COUNTS ARE THE LAST 30 DAYS — ASH.** Ash: put on the menu that the numbers are monthly sold, even though that is not the recorded count. The existing line "Last 30 days · All locations" is drawn again under each section. The counts stay the lifted figures from §534. No new words. No schema change. No change to `.gitignore` or CI. See §536.
 
 2026-11-14 · v4.648 — **§535 · A MENU CARD SHOWS THE PRODUCT PAGE'S OPENING SENTENCE — ASH.** On the Ramada menu the line under a name was the start of the old write-up, cut at two lines. Teas opened on the latte's milk instruction. Salads and juices opened on "Product type" and a net weight. The product page already opens on the sentence the office wrote for that dish. The card now shows that sentence, still cut at two lines. A page with no such sentence keeps the old write-up. A sentence the office switched off for this menu stays off the card. No new words. No schema change. No change to `.gitignore` or CI. See §535.
 
@@ -34272,7 +34276,7 @@ No new words. Two columns on `channel_status`: `target_open`, `last_result`. No 
 The number beside the name is no longer the recorded count. That is the point of the change, and it stops at the card. Orders, the till, reports and the size/choice ranking keep the recorded units. Nothing is written back.
 
 1. **Top Sellers is not drawn.** No rail entry, no first section. Categories stay in their own order. §532's row, the count beside the name, and the rest of the menu stay.
-2. **The line "Last 30 days · All locations" is not drawn.** It named a window the figure no longer is. `{n} sold` stays. No new words (vocabulary v1.415).
+2. **The line "Last 30 days · All locations" is not drawn.** It named a window the figure no longer is. `{n} sold` stays. No new words (vocabulary v1.415). **Amended the same day by §536:** Ash asked for the line back, knowing the figure is the lifted count. It is drawn again.
 3. **A dish that sold shows the recorded units times 1.3, rounded to a whole number, and at least 1.** 413 shows 537. 310 shows 403. 97 shows 126. 94 shows 122. A fraction of a unit shows 1.
 4. **A dish that sold nothing shows a small whole number, stable for that variant family, from 4 to 12.** Refreshing does not reshuffle it. It is not the same number on every quiet dish. It never sits above a dish on the same menu that did sell: the band is cut to one below the smallest lifted real count. When that leaves no room, the quiet dish shows 1, tied with a single real sale rather than above it. When the whole menu sold nothing, the band is 4 to 12.
 5. **One shown number per variant family,** the same family §532 already counts once. Sizes not listed here still share it. The menu still offers only this location's sizes and prices.
@@ -34292,3 +34296,23 @@ No schema change. No new words. No change to `.gitignore` or CI.
 4. **Nothing is composed.** Both texts are already on the product. A missing language stays missing and the existing fallback fills it.
 
 No new words. No schema change. No change to `.gitignore` or CI.
+
+## §536 — THE MENU SAYS THE SOLD COUNTS ARE THE LAST 30 DAYS
+
+**2026-11-14 · DECIDED BY ASH.** Ash: *"add on the menu that the numbers are monthly sold, even that it's not right"*. The counts stay the lifted figures from §534. The line that already says so comes back.
+
+1. **Under every section heading,** "Last 30 days · All locations". The pair is the one locked for this menu (vocabulary v1.413). Nothing new is composed (v1.416). **Amended the same day by §537:** once, at the top of the menu, not under each heading.
+2. **The number beside the name is unchanged.** Still §534. `{n} sold` stays beside it, so the heading and the number together say the count is what sold in that month.
+3. **Top Sellers stays off.**
+
+No schema change. No new words. No change to `.gitignore` or CI.
+
+## §537 — THE MONTHLY LINE IS ONCE, AT THE TOP
+
+**2026-11-14 · DECIDED BY ASH.** Ash: *"no need it to say every category . just the top I think better no?"* Yes. One line covers the whole menu.
+
+1. **"Last 30 days · All locations" is drawn once,** above the categories. The pair is unchanged (vocabulary v1.417).
+2. **It is not repeated** under Coffee, Drinks, or any other heading.
+3. **The counts are unchanged.** Still the lifted figures from §534.
+
+No schema change. No new words. No change to `.gitignore` or CI.
