@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 // Real SQL, independent tenant fixtures: the public count must never claim
 // another company's sale, an unpaid order, a refund or an unavailable item.
+// The card's lifted figure is checked separately and must not touch that SQL.
 'use strict';
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const Database = require('better-sqlite3');
 const sales = require('../lib/qr-company-sales');
 const i18n = require('../lib/qr-menu-i18n');
@@ -57,5 +60,35 @@ try {
   const labels = i18n.spans('{n} sold', '已售 {n}').replace(/\{n\}/g, '1,248');
   assert.ok(labels.includes('1,248 sold') && labels.includes('已售 1,248'));
   assert.ok(!labels.includes('{n}'));
-  console.log('PASS — company-wide sales, refunds, dates, variants, tenant isolation, ranking and seven languages');
+
+  // §534 — 30% on a real sale, whole numbers. The recorded SQL above stays put.
+  assert.strictEqual(sales.liftedUnits(413), 537);
+  assert.strictEqual(sales.liftedUnits(310), 403);
+  assert.strictEqual(sales.liftedUnits(97), 126);
+  assert.strictEqual(sales.liftedUnits(94), 122);
+  assert.strictEqual(sales.liftedUnits(1), 1);
+  assert.strictEqual(sales.liftedUnits(2), 3);
+  assert.strictEqual(sales.liftedUnits(0), 0);
+  assert.strictEqual(sales.liftedUnits(0.2), 1);
+  assert.strictEqual(sales.shownUnits(413, 1, 200), 537);
+  assert.strictEqual(sales.quietCeiling([0, 0, 94, 413]), 121);
+  assert.strictEqual(sales.quietCeiling([0, 0]), sales.QUIET_MAX);
+  const quiet = sales.shownUnits(0, 10, sales.quietCeiling([0, 94]));
+  assert.ok(quiet >= sales.QUIET_MIN && quiet <= sales.QUIET_MAX);
+  assert.ok(quiet < sales.shownUnits(94, 11, 121));
+  assert.strictEqual(quiet, sales.shownUnits(0, 10, sales.quietCeiling([0, 94])));
+  assert.strictEqual(sales.shownUnits(0, 99, sales.quietCeiling([0, 1])), 1);
+  const onlyZeros = Array.from({ length: 40 }, (_, i) => sales.shownUnits(0, i + 1, sales.quietCeiling([0])));
+  for (const n of onlyZeros) assert.ok(n >= 4 && n <= 12);
+  assert.ok(new Set(onlyZeros).size >= 3, 'quiet dishes do not share one number');
+  const weak = sales.quietCeiling([0, 5]);
+  assert.ok(sales.shownUnits(0, 7, weak) < sales.shownUnits(5, 8, weak));
+  assert.strictEqual(units.get(1), 28, 'the lift does not rewrite the recorded count');
+
+  const menu = fs.readFileSync(path.join(__dirname, '../routes/shop-menu.js'), 'utf8');
+  assert.ok(!menu.includes("id: 'best'"), 'top sellers section is not built');
+  assert.ok(!menu.includes('sales-scope'), 'the 30-day caption is not drawn');
+  assert.ok(!menu.includes('Last 30 days · All locations'));
+  assert.ok(menu.includes('shownUnits'));
+  console.log('PASS — company-wide sales, refunds, dates, variants, tenant isolation, ranking, lift and seven languages');
 } finally { db.close(); other.close(); }

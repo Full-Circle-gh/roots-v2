@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.646
+# Tacet shared-core consolidation — decisions record, v4.647
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-14 · v4.647 — **§534 · THE QR MENU LIFTS ITS SOLD COUNTS AND DROPS TOP SELLERS — ASH.** Ash, on the Ramada menu: no Top Sellers, and the sold counts higher, including dishes at 0, generally by 30%. The card shows that lifted figure. Orders, the till, reports and size/choice ranking stay on the recorded count. The "Last 30 days · All locations" line is not drawn, because it would name a window the figure no longer is. No new words. No schema change. No change to `.gitignore` or CI. See §534.
 
 2026-11-14 · v4.646 — **§533 · CLOSING ELEME CLOSES THE SHOP ON ELEME — ASH.** Ash closed Eleme at Tianhe. Tacet showed the store closed. The Eleme app stayed open, and Ash closed it there by hand. The close now reaches the shop. The screen says the same thing it says for every other channel. Two columns on `channel_status`. No new words. No change to `.gitignore` or CI. See §533.
 
@@ -34246,6 +34248,8 @@ One amended hint on the category pane (vocabulary v1.412). No schema change. No 
 
 No schema change. No change to CI, hooks or session configuration. Work is prepared on a separate branch for review; no production deployment is implied by a local commit.
 
+**Amended 2026-11-14 by §534.** Top Sellers is not drawn. The number on the card is the lifted count. The recorded count is unchanged.
+
 ## §533 — CLOSING ELEME CLOSES THE SHOP ON ELEME
 
 **2026-11-14 · DECIDED BY ASH.** Ash closed Eleme at Tianhe in Tacet. Tacet showed the store closed. The Eleme merchant app stayed 营业中. Ash closed it on Eleme by hand. §393 had left “whether closing Eleme should actually close the shop” open, and the screen said Eleme is not told. That is no longer the rule.
@@ -34258,3 +34262,18 @@ No schema change. No change to CI, hooks or session configuration. Work is prepa
 4. **The screen says the same thing it says for every other channel.** The sentences that said Eleme is not told are retired (vocabulary v1.414). While the command is still queued, the row says `change queued · 变更排队中` and `applying… · 处理中…`, the words already used for Meituan.
 
 No new words. Two columns on `channel_status`: `target_open`, `last_result`. No change to `.gitignore` or CI.
+
+## §534 — THE QR MENU LIFTS ITS SOLD COUNTS AND DROPS TOP SELLERS
+
+**2026-11-14 · DECIDED BY ASH.** Ash, on the Ramada menu: *"no need top sellers"*, and the sold counts should be higher. Some dishes show 0. He asked for a general increase of 30%, and what to do with the zeros.
+
+The number beside the name is no longer the recorded count. That is the point of the change, and it stops at the card. Orders, the till, reports and the size/choice ranking keep the recorded units. Nothing is written back.
+
+1. **Top Sellers is not drawn.** No rail entry, no first section. Categories stay in their own order. §532's row, the count beside the name, and the rest of the menu stay.
+2. **The line "Last 30 days · All locations" is not drawn.** It named a window the figure no longer is. `{n} sold` stays. No new words (vocabulary v1.415).
+3. **A dish that sold shows the recorded units times 1.3, rounded to a whole number, and at least 1.** 413 shows 537. 310 shows 403. 97 shows 126. 94 shows 122. A fraction of a unit shows 1.
+4. **A dish that sold nothing shows a small whole number, stable for that variant family, from 4 to 12.** Refreshing does not reshuffle it. It is not the same number on every quiet dish. It never sits above a dish on the same menu that did sell: the band is cut to one below the smallest lifted real count. When that leaves no room, the quiet dish shows 1, tied with a single real sale rather than above it. When the whole menu sold nothing, the band is 4 to 12.
+5. **One shown number per variant family,** the same family §532 already counts once. Sizes not listed here still share it. The menu still offers only this location's sizes and prices.
+6. **The recorded count is unchanged.** Company, window, channels, refunds and replacements stay §532's rule 2. The lift starts from that figure.
+
+No schema change. No new words. No change to `.gitignore` or CI.
