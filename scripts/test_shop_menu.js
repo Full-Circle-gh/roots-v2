@@ -482,6 +482,82 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.ok(/class="cnt">0\d</.test(body), 'the section count is not zero-padded to two digits');
     });
 
+    console.log('\nA category banner (§531) — the picture already set on the category');
+    async function withBanner(banner, fn) {
+      const key = 'category.tree';
+      const prev = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+      const tree = JSON.parse(JSON.stringify(require(path.join(ROOT, 'lib/category-tree')).getCategoryTree(db)));
+      const ready = tree.find(t => t.name === 'Ready to Eat');
+      assert.ok(ready, 'the fixture tree has no Ready to Eat');
+      ready.banner = banner;
+      // A category with nothing listed must not grow a banner of its own.
+      const dry = tree.find(t => t.name === 'Dry & Pantry');
+      assert.ok(dry, 'the fixture tree has no Dry & Pantry, so an empty category cannot be proved quiet');
+      dry.banner = { image_url: '/api/retail/media/99', target: '', start_at: '', end_at: '' };
+      setConfig(key, tree);
+      try { await fn(await get(`/s/${LIVE}`)); }
+      finally {
+        if (!prev) db.prepare('DELETE FROM storefront_config WHERE key = ?').run(key);
+        else db.prepare(`INSERT INTO storefront_config (key, value_json) VALUES (?, ?)
+                         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`).run(key, prev.value_json);
+      }
+    }
+    await checkAsync('the picture sits first in its category, at 5:2, and a search hides it', async () => {
+      await withBanner(
+        { image_url: '/api/retail/media/12', target: '', start_at: '', end_at: '' },
+        ({ body }) => {
+          const i = body.indexOf('class="cat-bn"');
+          assert.ok(i > -1, 'no banner');
+          const section = body.slice(body.lastIndexOf('<section class="cat"', i), body.indexOf('</section>', i));
+          assert.ok(section.includes('Ready to Eat'), 'the banner is not on Ready to Eat');
+          assert.ok(section.indexOf('cat-bn') < section.indexOf('class="sec-h"'), 'the banner is not first in the category');
+          assert.ok(section.includes('src="/api/retail/media/12"'), 'the picture is missing');
+          assert.ok(!section.includes('data-bn='), 'picture only grew a tap');
+          assert.ok(!body.includes('/api/retail/media/99'), 'a category with no dishes still drew its banner');
+          assert.ok(/\.cat-bn-box\{[^}]*padding-top:40%/.test(body), 'the box is not a fixed 5:2');
+          assert.ok(body.includes('.srching .sec-h .cnt,.srching .cat-bn{display:none}'), 'a search would leave the banner up');
+        });
+    });
+    await checkAsync('outside its dates the picture is not drawn', async () => {
+      for (const banner of [
+        { image_url: '/api/retail/media/12', target: '', start_at: '2099-01-01', end_at: '' },
+        { image_url: '/api/retail/media/12', target: '', start_at: '', end_at: '2000-01-01' },
+      ]) {
+        await withBanner(banner, ({ body }) => {
+          assert.ok(!body.includes('class="cat-bn"'), 'a banner outside its dates was drawn');
+          assert.ok(!body.includes('/api/retail/media/12'), 'the picture URL was still on the page');
+        });
+      }
+    });
+    await checkAsync('a dish link opens that dish; a page link and a missing dish stay a picture', async () => {
+      await withBanner(
+        { image_url: '/api/retail/media/12', target: 'product:' + P_MADE_ON, start_at: '', end_at: '' },
+        ({ body }) => {
+          assert.ok(body.includes(
+            `<button type="button" class="cat-bn" data-bn="${P_MADE_ON}" aria-label="Fixture oat latte">`),
+            'the dish link did not become a button naming that dish');
+          assert.ok(body.includes(".cat-bn[data-bn]"), 'a tap has nothing to open the dish');
+        });
+      await withBanner(
+        { image_url: '/api/retail/media/12', target: 'promotions', start_at: '', end_at: '' },
+        ({ body }) => {
+          assert.ok(body.includes('class="cat-bn"'), 'the picture is missing');
+          assert.ok(!body.includes('data-bn='), 'a mini-app page became a button on this menu');
+        });
+      await withBanner(
+        { image_url: '/api/retail/media/12', target: 'product:1', start_at: '', end_at: '' },
+        ({ body }) => {
+          assert.ok(body.includes('class="cat-bn"'), 'the picture is missing');
+          assert.ok(!body.includes('data-bn='), 'a dish that is not on the menu became a button');
+        });
+      await withBanner(
+        { image_url: '/api/retail/media/12?x="><script>', target: '', start_at: '', end_at: '' },
+        ({ body }) => {
+          assert.ok(body.includes('src="/api/retail/media/12?x=&quot;&gt;&lt;script&gt;"'), 'the picture address was not escaped');
+          assert.ok(!body.includes('?x="><script>'), 'the picture address closed the tag');
+        });
+    });
+
     console.log('\nSizes — a card holding several sizes shows the cheapest');
     await checkAsync('the card reads the cheapest size, not the group owner\'s', async () => {
       const { body } = await get(`/s/${LIVE}`);

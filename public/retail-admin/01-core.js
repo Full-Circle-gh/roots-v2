@@ -2852,10 +2852,10 @@ function catRenderPane() {
 
 // ── §297 · A category's banner ──────────────────────────────────────────────
 // One wide 5:2 picture per TOP category, drawn at the top of its section on
-// the mini app's Shop tab. It lives on the tree node (`banner`), so it moves
-// with the category when the category is dragged or renamed, and saves with
-// the tree like every other edit here (autosave). The server keeps only a
-// usable one (lib/category-tree.js sanitizeBanner).
+// the mini app's Shop tab and on the QR menu. It lives on the tree node
+// (`banner`), so it moves with the category when the category is dragged or
+// renamed, and saves with the tree like every other edit here (autosave).
+// The server keeps only a usable one (lib/category-tree.js sanitizeBanner).
 //
 // "Today" is China's day, and the status words are the pop-ups' own
 // (05-marketing.js puStatus), because the fields are the same start/end days.
@@ -2877,7 +2877,7 @@ const CAT_BANNER_PAGES = [
 function catBannerHtml(t) {
   const b = t && t.banner;
   const head = `<div class="cat2-sec" style="margin-top:26px">${escapeHtml(cuT('Banner (optional)', '横幅(可选)'))}</div>`;
-  const hint = `<div class="cat2-empty">${escapeHtml(cuT('A wide picture, 5 : 2, shown at the top of this category on the mini app\'s Shop tab. Hidden while a customer is searching.', '宽幅图片,比例 5 : 2,显示在小程序「商品」页该分类的顶部。顾客搜索时隐藏。'))}</div>`;
+  const hint = `<div class="cat2-empty">${escapeHtml(cuT('A wide picture, 5 : 2, shown at the top of this category on the mini app\'s Shop tab and on the QR menu. Hidden while a customer is searching.', '宽幅图片,比例 5 : 2,显示在小程序「商品」页和二维码菜单该分类的顶部。顾客搜索时隐藏。'))}</div>`;
   const file = '<input type="file" id="cat2-banner-file" accept="image/*" hidden onchange="catBannerPicked(this)">';
   if (!b || !b.image_url) {
     return head + hint + file +
