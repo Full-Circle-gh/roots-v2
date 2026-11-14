@@ -758,13 +758,19 @@ function buildMenu(shop) {
   }
   const out = cats.filter(c => c.sections.length);
   if (other.sections.length) out.push(other);
+  // §534 — the card shows the lifted count. The recorded count stays in
+  // companyUnits and is what size/option ranking and the books already use.
+  // Top Sellers is not drawn.
   const companyUnits = qrCompanySales.companyUnits();
-  for (const c of out) for (const sec of c.sections) for (const r of sec.items) {
-    r.company_units = qrCompanySales.forProduct(companyUnits, r);
+  const rows = [];
+  for (const c of out) for (const sec of c.sections) for (const r of sec.items) rows.push(r);
+  const ceiling = qrCompanySales.quietCeiling(rows.map(r => qrCompanySales.forProduct(companyUnits, r)));
+  for (const r of rows) {
+    r.company_units = qrCompanySales.shownUnits(
+      qrCompanySales.forProduct(companyUnits, r),
+      r.variant_group_id || r.store_product_id,
+      ceiling);
   }
-  const best = qrCompanySales.topSellers(out);
-  if (best.length) out.unshift({ id: 'best', en: 'TOP SELLERS', cn: '热销商品',
-    best: true, sections: [{ en: 'TOP SELLERS', cn: '热销商品', items: best }] });
   return out;
 }
 
@@ -2476,7 +2482,6 @@ button.cat-bn{cursor:pointer}
 .rail{width:84px}
 .rail a{padding:15px 4px}
 .sec-h{padding:16px 12px 6px;flex-wrap:wrap;row-gap:4px}
-.sales-scope{flex:1 0 100%;padding-bottom:4px;font-family:var(--f-aleo);font-size:12px;line-height:1.4;color:var(--olive)}
 .grid{grid-template-columns:minmax(0,1fr);gap:0;padding:0 12px}
 .it{display:grid;grid-template-columns:clamp(60px,19vw,88px) minmax(0,1fr);
   column-gap:10px;row-gap:7px;padding:14px 0;border-bottom:1px solid rgba(0,0,0,.1);align-items:start}
@@ -4706,7 +4711,7 @@ router.get('/s/:shopCode', (req, res) => {
     const tap = detail
       ? ` data-open="${it.store_product_id}" role="button" tabindex="0"`
       : (!it.sold_out ? ' data-buy="1" role="button" tabindex="0"' : '');
-    const sales = `<span class="sales">${bi('{n} sold', '已售 {n}').replace(/\{n\}/g, esc(it.company_units.toLocaleString('en-US', { maximumFractionDigits: 2 })))}</span>`;
+    const sales = `<span class="sales">${bi('{n} sold', '已售 {n}').replace(/\{n\}/g, esc(Math.round(it.company_units).toLocaleString('en-US')))}</span>`;
     // Use only the catalogue's own copy, never invent a product description.
     const plain = v => String(v || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     const description = plain(it.description_en) || plain(it.description_cn)
@@ -4966,7 +4971,6 @@ router.get('/s/:shopCode', (req, res) => {
     c.sections.map(sec => `<div class="sec-h"${nodeAttr(sec.nodeId)}>` +
         `<div class="kick${nameTr(sec.en, sec.cn) ? ' tr' : ''}">${bi(sec.en, sec.cn, true)}</div>` +
         `<div class="cnt">${pad2(sec.items.length)}</div>` +
-        `<div class="sales-scope">${bi('Last 30 days · All locations', '近30天 · 所有门店')}</div>` +
       `</div><div class="grid">${sec.items.map(it => card(it, !!c.best)).join('')}</div>`).join('') +
     `</section>`).join('');
   // The line above the menu is for a menu where at least one card opens.
