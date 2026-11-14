@@ -188,6 +188,22 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// §531 — today's date and the banner's start/end window. The same two
+// functions live in miniapp/utils/promo-cards.js for the Shop tab. They are
+// copied here because the production server does not carry the mini app
+// sources (scripts/deploy-changed.sh leaves miniapp/ off the box). A require
+// of that file took the live app down and the deploy rolled back.
+function chinaToday(now) {
+  const ms = now == null ? Date.now() : Number(now);
+  return new Date(ms + 8 * 3600e3).toISOString().slice(0, 10);
+}
+function inDateWindow(item, today) {
+  if (!item) return false;
+  if (item.start_at && today < item.start_at) return false;
+  if (item.end_at && today > item.end_at) return false;
+  return true;
+}
+
 // One dotted storefront_config key, on the request's tenant scope. Same five
 // lines routes/retail-setup.js uses; kept local so this file has no dependency
 // on the setup route.
@@ -697,7 +713,10 @@ function buildMenu(shop) {
   const cats = [];
   const byTop = new Map();
   for (const t of tree) {
-    const cat = { id: 'c' + cats.length, nodeId: t.id || '', en: t.name, cn: t.name_cn || '', subs: t.subs || [], sections: [] };
+    const cat = {
+      id: 'c' + cats.length, nodeId: t.id || '', en: t.name, cn: t.name_cn || '',
+      subs: t.subs || [], banner: t.banner || null, sections: [],
+    };
     byTop.set(t.name, cat);
     cats.push(cat);
   }
@@ -752,6 +771,34 @@ function buildMenu(shop) {
 // The count beside a section heading, zero-padded to two digits — the shop's
 // own countStr treatment.
 function pad2(n) { return n < 10 ? '0' + n : String(n); }
+
+// §531 — one banner per top category, the picture already set on the category.
+// Same days as the mini app (China, both ends inclusive). A product link opens
+// that dish when it is listed here, including as a size of another card. A
+// link to a mini-app page has nowhere to go on this menu, so the picture stays
+// a picture. A category this menu is not showing never reaches here.
+function listedDish(groups, id) {
+  for (const g of groups) {
+    for (const sec of g.sections || []) {
+      for (const it of sec.items || []) {
+        if (String(it.store_product_id) === id) return it;
+        const v = (it.variants || []).find(x => String(x.store_product_id) === id);
+        if (v) return v;
+      }
+    }
+  }
+  return null;
+}
+function menuBannerHtml(cat, groups) {
+  const b = cat && cat.banner;
+  if (!b || !b.image_url || !inDateWindow(b, chinaToday())) return '';
+  const box = `<span class="cat-bn-box"><img src="${esc(b.image_url)}" alt=""></span>`;
+  const m = /^product:(\d+)$/.exec(String(b.target || ''));
+  const hit = m ? listedDish(groups, m[1]) : null;
+  if (!hit) return `<div class="cat-bn">${box}</div>`;
+  const name = hit.name_en || hit.name_cn || '';
+  return `<button type="button" class="cat-bn" data-bn="${m[1]}" aria-label="${esc(name)}">${box}</button>`;
+}
 
 // ─── page ───────────────────────────────────────────────────────────────
 
@@ -912,7 +959,7 @@ ${i18n.hideCss()}
 /* A section's count is how many it holds, not how many matched: "08" beside
    the one card a search left standing reads as a fault, so it goes while a
    search is showing and comes back with the full menu. */
-.srching .sec-h .cnt{display:none}
+.srching .sec-h .cnt,.srching .cat-bn{display:none}
 .it.sx,.sec-h.sx,.grid.sx,.cat.sx{display:none}
 .srch-none{padding:36px 16px;text-align:center;color:var(--olive);font-size:15px}
 .srch-none[hidden]{display:none}
@@ -2335,6 +2382,17 @@ html[dir="rtl"] .rail .cv{transform:scaleX(-1)}
   padding-bottom:calc(30px + var(--cbarh) + env(safe-area-inset-bottom))}
 .sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
   padding:16px 16px 8px}
+/* §531 — the category's banner, the same 5:2 picture the mini app draws first
+   in the section. The inner box takes its height from its own width, so a
+   slow picture cannot change how tall the category is. A search hides it
+   (the .srching rule above). */
+.cat-bn{box-sizing:border-box;display:block;width:calc(100% - 32px);margin:16px 16px 0;
+  padding:0;border:2px solid var(--ink);background:var(--oat);overflow:hidden;
+  text-align:start;font:inherit;color:inherit;line-height:0;cursor:default;
+  -webkit-appearance:none;appearance:none}
+button.cat-bn{cursor:pointer}
+.cat-bn-box{position:relative;display:block;height:0;padding-top:40%;overflow:hidden}
+.cat-bn img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;display:block}
 .kick{font-family:var(--f-toni);font-size:14px;font-weight:700;letter-spacing:.12em;
   text-transform:uppercase;color:var(--ink);overflow-wrap:anywhere;min-width:0}
 .lang-ko .kick,.lang-ja .kick,.lang-ar .kick,.lang-ru .kick{letter-spacing:normal}
@@ -2676,6 +2734,16 @@ const TOGGLE_SCRIPT =
   `catch(e){pushed=false/* file:// and some locked-down web views refuse pushState; the page then opens and closes by its own close button, which is how it worked before Back was wired up */}}` +
   `shOpen(sh);body.scrollTop=0};` +
   `document.addEventListener('click',function(e){` +
+  // §531 — a banner that names a dish on this menu opens that dish. The id is
+  // digits we wrote. A size of a collapsed card is not the card's own
+  // data-open: it is that size's add button, which sits inside the card.
+  // A page link never becomes a button, so it cannot land here.
+  `var bn=e.target.closest?e.target.closest('.cat-bn[data-bn]'):null;` +
+  `if(bn){var id=bn.getAttribute('data-bn');` +
+  `var bcard=document.querySelector('.it[data-open=\"'+id+'\"]');` +
+  `if(!bcard){var bt=document.querySelector('template[data-dt=\"'+id+'\"],template[data-op=\"'+id+'\"],.add[data-add=\"'+id+'\"]');` +
+  `bcard=bt&&bt.closest?bt.closest('.it[data-open]'):null}` +
+  `if(bcard)open(bcard);return}` +
   // A choice's picture in the option picker opens the same viewer.
   `var ci=e.target.closest?e.target.closest('.oc-i[data-big]'):null;` +
   `if(ci){bigImg.src=ci.getAttribute('data-big')+'&w=${HERO_W}&s=1';big.hidden=false;return}` +
@@ -4894,6 +4962,7 @@ router.get('/s/:shopCode', (req, res) => {
   ) : '';
 
   const paneHtml = groups.map(c => `<section class="cat${c.best ? ' top-sellers' : ''}" id="${c.id}"${nodeAttr(c.nodeId)}>` +
+    menuBannerHtml(c, groups) +
     c.sections.map(sec => `<div class="sec-h"${nodeAttr(sec.nodeId)}>` +
         `<div class="kick${nameTr(sec.en, sec.cn) ? ' tr' : ''}">${bi(sec.en, sec.cn, true)}</div>` +
         `<div class="cnt">${pad2(sec.items.length)}</div>` +
