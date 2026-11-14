@@ -922,7 +922,9 @@ ${i18n.hideCss()}
 .dt-ph{flex:none;width:88px;height:88px;padding:0;border:2px solid var(--ink);
   background:var(--oat);overflow:hidden;cursor:zoom-in;
   -webkit-tap-highlight-color:transparent}
-.dt-ph img{width:100%;height:100%;object-fit:cover}
+/* SAME SQUARE AS THE CARD, same bytes (s=1). contain rather than cover so a
+   file the route did not square still shows whole instead of losing an edge. */
+.dt-ph img{width:100%;height:100%;object-fit:contain}
 .dt-ph.empty{cursor:default}
 .dt-hd{flex:1;min-width:0}
 .dt-nm{font-family:var(--f-bear);font-size:19px;line-height:1.15;overflow-wrap:anywhere}
@@ -2358,14 +2360,16 @@ html[dir="rtl"] .rail .cv{transform:scaleX(-1)}
    both cards to the taller one; this makes the name absorb that difference
    instead of the price. */
 .it{min-width:0;display:flex;flex-direction:column}
-/* SQUARE, AND THE WHOLE PHOTO — THE SECOND DEPARTURE, on Ash's direction. The
-   website's .sl-ci is 4/5 and fills it, which cut the left and right off every
-   square product photo (Ash, on the Ramada menu: "the square picture are
-   getting cropped in the menu"). The catalogue's photos are square — §289 found
-   the same thing at the till — and this page's own product view already frames
-   them 1/1. contain rather than cover so a photo that is not square shows whole
-   on the oat ground instead of losing an edge; a square one fills the frame
-   exactly as before. */
+/* SQUARE, AND THE WHOLE PHOTO. The website's card was 4/5 and filled it, which
+   cut the sides off a square photo (Ash: "the square picture are getting
+   cropped in the menu"). contain keeps a file that is not square whole, on
+   this page's own ground, rather than cutting an edge.
+
+   ASH, 2026-11-14: that ground showing down the sides read as the picture not
+   fitting the square. The picture still keeps its own shape. Asked with s=1,
+   the image route copies the file's own edge pixels outward until the bytes
+   are square, so the tile meets all four edges and nothing is cut. A file
+   that was already square is unchanged and still fills the frame. */
 .ph{position:relative;aspect-ratio:1/1;background:var(--oat);overflow:hidden}
 .ph img{width:100%;height:100%;object-fit:contain}
 /* .sl-coos — the veil is rgba(0,0,0,.75) there, not .78, and the type is 10px. */
@@ -2638,7 +2642,7 @@ const TOGGLE_SCRIPT =
   `document.addEventListener('click',function(e){` +
   // A choice's picture in the option picker opens the same viewer.
   `var ci=e.target.closest?e.target.closest('.oc-i[data-big]'):null;` +
-  `if(ci){bigImg.src=ci.getAttribute('data-big')+'&w=${HERO_W}';big.hidden=false;return}` +
+  `if(ci){bigImg.src=ci.getAttribute('data-big')+'&w=${HERO_W}&s=1';big.hidden=false;return}` +
   `var z=e.target.closest?e.target.closest('.dt-ph[data-big]'):null;` +
   `if(z){var pid=z.getAttribute('data-big'),v=z.getAttribute('data-v')||'';` +
   // The enlarge asks the SAME route for a wider render. It is a separate URL,
@@ -2646,7 +2650,7 @@ const TOGGLE_SCRIPT =
   // \\/ NOT \/ — this is inside a template literal, where \/ collapses to a bare
   // slash and the emitted JS reads `replace(//$/` , which is a line comment that
   // swallows the whole rest of the script. Cost the entire page's behaviour once.
-  `bigImg.src=location.pathname.replace(/\\/$/,'')+'/i/'+pid+'?v='+encodeURIComponent(v)+'&w=${HERO_W}';` +
+  `bigImg.src=location.pathname.replace(/\\/$/,'')+'/i/'+pid+'?v='+encodeURIComponent(v)+'&w=${HERO_W}&s=1';` +
   `big.hidden=false;return}` +
   `var card=e.target.closest?e.target.closest('.it[data-open]'):null;` +
   // A tap on the card's own + adds; it must not also open the sheet behind it.
@@ -3133,7 +3137,7 @@ const TOGGLE_SCRIPT =
   /* A TAP ON THE PICTURE ENLARGES IT, through the same full-screen viewer the product sheet's photo opens (#big), and does NOT tick the row:
      the customer is looking, not choosing. data-big is the choice route
      without a width; the viewer asks it for the hero width. */
-  `(gi?(c.img?'<img class=\"oc-i\" src=\"'+esc(c.img)+'&w=160\" data-big=\"'+esc(c.img)+'\" alt=\"\" loading=\"lazy\" decoding=\"async\">':'<span class=\"oc-i\"></span>'):'')+` +
+  `(gi?(c.img?'<img class=\"oc-i\" src=\"'+esc(c.img)+'&w=160&s=1\" data-big=\"'+esc(c.img)+'\" alt=\"\" loading=\"lazy\" decoding=\"async\">':'<span class=\"oc-i\"></span>'):'')+` +
   `(rank?'<span class=\"oc-rank\">#'+(j+1)+'</span>':'')+` +
   `'<span class=\"oc-l\">'+bi(c.en,c.cn)+'</span>'+` +
   `'<span class=\"oc-d\">'+(c.out?L_OUT:(c.d?('+'+money(c.d)):''))+'</span>'+` +
@@ -4007,7 +4011,7 @@ function detailBody(it, code, listed, sig, qrShown) {
       if (!live.length) return '';
       return head(b.head) + `<div class="pb-pair">` + live.map(x =>
         `<div class="pb-pair-t"><div class="pb-pair-f">` +
-        `<img src="/s/${esc(code)}/i/${x.id}?w=${MENU_THUMB_W}" alt="" loading="lazy" decoding="async">` +
+        `<img src="/s/${esc(code)}/i/${x.id}?w=${MENU_THUMB_W}&s=1" alt="" loading="lazy" decoding="async">` +
         `</div><div class="pb-pair-n">${p2(x.name)}</div></div>`).join('') + `</div>`;
     }
     if (b.type === 'faq') {
@@ -4134,7 +4138,7 @@ function detailBody(it, code, listed, sig, qrShown) {
         ? `<button type="button" class="dt-ph" data-big="${it.store_product_id}"` +
           ` data-v="${esc(it.updated_at || '')}" aria-label="${esc('Enlarge 放大')}">` +
           `<img src="/s/${esc(code)}/i/${it.store_product_id}` +
-          `?v=${encodeURIComponent(it.updated_at || '')}&w=${HERO_W}" alt="" loading="lazy" decoding="async">` +
+          `?v=${encodeURIComponent(it.updated_at || '')}&w=${HERO_W}&s=1" alt="" loading="lazy" decoding="async">` +
           `</button>`
         : `<div class="dt-ph empty"></div>`) +
       `<div class="dt-hd">` +
@@ -4494,7 +4498,7 @@ router.get('/s/:shopCode', (req, res) => {
     // English on the list the guest is reading.
     bi(it.name_en, it.name_cn);
     const src = `/s/${esc(code)}/i/${it.store_product_id}` +
-      `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}`;
+      `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}&s=1`;
     // No photo → the empty frame, never an <img> that cannot resolve. A
     // product nobody has photographed is ordinary; a broken-image glyph beside
     // its name reads as a fault in the shop.
@@ -4888,10 +4892,11 @@ router.get('/s/:shopCode/i/:productId', async (req, res) => {
   let w = parseInt(req.query.w, 10);
   w = (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
   const ver = String(req.query.v || '');
+  const square = req.query.s === '1';
 
   let tkey = 'default';
   try { tkey = tdb().name || 'default'; } catch (e) { /* no tenant scope on this request; the default key is correct, not a fallback */ }
-  const ckey = `${tkey}|${code}|${id}|w${w || 0}|${ver}`;
+  const ckey = `${tkey}|${code}|${id}|w${w || 0}|${ver}|sq${square ? 1 : 0}`;
   const hit = PHOTO_CACHE.get(ckey);
   if (hit) {
     res.set('Content-Type', hit.mime);
@@ -4908,7 +4913,7 @@ router.get('/s/:shopCode/i/:productId', async (req, res) => {
   `).get(code, id);
   const data = gate && resolveProductImage(id);
   if (!data) return res.status(404).end();
-  return sendMenuPhoto(res, data, w, ckey);
+  return sendMenuPhoto(res, data, w, ckey, square);
 });
 
 // A choice's picture on the menu — the photo of the product the choice is
@@ -4924,10 +4929,11 @@ router.get('/s/:shopCode/c/:choiceId', async (req, res) => {
   let w = parseInt(req.query.w, 10);
   w = (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
   const ver = String(req.query.v || '');
+  const square = req.query.s === '1';
 
   let tkey = 'default';
   try { tkey = tdb().name || 'default'; } catch (e) { /* no tenant scope on this request; the default key is correct, not a fallback */ }
-  const ckey = `${tkey}|${code}|c${id}|w${w || 0}|${ver}`;
+  const ckey = `${tkey}|${code}|c${id}|w${w || 0}|${ver}|sq${square ? 1 : 0}`;
   const hit = PHOTO_CACHE.get(ckey);
   if (hit) {
     res.set('Content-Type', hit.mime);
@@ -4947,12 +4953,23 @@ router.get('/s/:shopCode/c/:choiceId', async (req, res) => {
   `).get(code, id);
   const data = gate && resolveProductImage(gate.stock_product_id);
   if (!data) return res.status(404).end();
-  return sendMenuPhoto(res, data, w, ckey);
+  return sendMenuPhoto(res, data, w, ckey, square);
 });
 
 // The bytes of a menu photo, resized when asked, cached under ckey. Shared by
 // the product photo and the choice photo routes.
-async function sendMenuPhoto(res, data, w, ckey) {
+//
+// s=1 ASKS FOR A SQUARE. Ash, 2026-11-14, on the counter menu: the tile is a
+// square and the picture must meet all four edges, and the picture inside
+// keeps its own shape even when the file is not a square. A tall file was
+// sitting in the square with this page's ground showing down each side.
+// Fitting the long side inside the asked size, then copying the file's own
+// edge pixels outward, makes the bytes square without cutting the cup or the
+// words and without stretching them. A file that is already square takes the old width
+// resize and nothing else. The page asks with s=1 on every square frame — the
+// card, the product page, the enlarge, a pairing, a choice — which is also
+// what makes a browser drop the year-long immutable copy of the old bytes.
+async function sendMenuPhoto(res, data, w, ckey, square) {
   const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
   if (!m) return res.redirect(String(data));
   const mime = m[1] || 'application/octet-stream';
@@ -4960,7 +4977,27 @@ async function sendMenuPhoto(res, data, w, ckey) {
   let outMime = mime;
   if (w && /^image\//i.test(mime) && !/svg/i.test(mime)) {
     try {
-      let pipe = sharp(buf).resize({ width: w, withoutEnlargement: true });
+      let pipe;
+      if (square) {
+        // Raw, then one encode below. Encoding here and again for jpeg would
+        // put a square catalogue photo through two lossy passes.
+        const sized = await sharp(buf).resize({
+          width: w, height: w, fit: 'inside', withoutEnlargement: true,
+        }).raw().toBuffer({ resolveWithObject: true });
+        const rw = sized.info.width, rh = sized.info.height, ch = sized.info.channels;
+        pipe = sharp(sized.data, { raw: { width: rw, height: rh, channels: ch } });
+        if (rw && rh && rw !== rh) {
+          const side = Math.max(rw, rh);
+          const top = Math.floor((side - rh) / 2);
+          const left = Math.floor((side - rw) / 2);
+          pipe = pipe.extend({
+            top, bottom: side - rh - top, left, right: side - rw - left,
+            extendWith: 'copy',
+          });
+        }
+      } else {
+        pipe = sharp(buf).resize({ width: w, withoutEnlargement: true });
+      }
       if (/jpe?g/i.test(mime))    pipe = pipe.jpeg({ quality: 72, mozjpeg: true });
       else if (/png/i.test(mime)) pipe = pipe.png({ compressionLevel: 9, palette: true });
       const out = await pipe.toBuffer({ resolveWithObject: true });
