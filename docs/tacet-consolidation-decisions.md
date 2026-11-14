@@ -34210,7 +34210,7 @@ One new column, `payment_reopened_at`. No new words. No change to `.gitignore` o
 
 No new words. No schema change. No change to `.gitignore` or CI. The delivery block's own one-line footer still counts the whole set.
 
-## §531 — QR MENU TOP SELLERS AND COMPANY-WIDE UNIT COUNTS
+## §532 — QR MENU TOP SELLERS AND COMPANY-WIDE UNIT COUNTS
 
 **2026-11-14 · DECIDED BY ASH.** After reviewing a two-column menu and a recommended row layout, Ash: "ok lets do what you recommend". The existing Tacet QR menu is the implementation, not a replacement site.
 

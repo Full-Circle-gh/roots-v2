@@ -2410,15 +2410,15 @@ html[dir="rtl"] .rail .cv{transform:scaleX(-1)}
 .out .ph img{filter:grayscale(.5);opacity:.72}
 .out .t,.out .pr{opacity:.5}
 
-/* §531 replaces the historical two-column rules above. Logical placement
+/* §532 replaces the historical two-column rules above. Logical placement
    keeps the same row usable in Arabic. Titles and counts can wrap separately. */
 .bar{padding:calc(9px + env(safe-area-inset-top)) 12px 9px;row-gap:8px}
 .nm{font-size:19px}
 .srch{height:38px;font-family:var(--f-aleo)}
 .rail{width:84px}
 .rail a{padding:15px 4px}
-.sec-h{padding:16px 12px 6px}
-.sales-scope{padding:0 12px 8px;font-family:var(--f-aleo);font-size:12px;line-height:1.4;color:var(--olive)}
+.sec-h{padding:16px 12px 6px;flex-wrap:wrap;row-gap:4px}
+.sales-scope{flex:1 0 100%;padding-bottom:4px;font-family:var(--f-aleo);font-size:12px;line-height:1.4;color:var(--olive)}
 .grid{grid-template-columns:minmax(0,1fr);gap:0;padding:0 12px}
 .it{display:grid;grid-template-columns:clamp(60px,19vw,88px) minmax(0,1fr);
   column-gap:10px;row-gap:7px;padding:14px 0;border-bottom:1px solid rgba(0,0,0,.1);align-items:start}
@@ -4897,7 +4897,8 @@ router.get('/s/:shopCode', (req, res) => {
     c.sections.map(sec => `<div class="sec-h"${nodeAttr(sec.nodeId)}>` +
         `<div class="kick${nameTr(sec.en, sec.cn) ? ' tr' : ''}">${bi(sec.en, sec.cn, true)}</div>` +
         `<div class="cnt">${pad2(sec.items.length)}</div>` +
-      `</div><div class="sales-scope">${bi('Last 30 days · All locations', '近30天 · 所有门店')}</div><div class="grid">${sec.items.map(it => card(it, !!c.best)).join('')}</div>`).join('') +
+        `<div class="sales-scope">${bi('Last 30 days · All locations', '近30天 · 所有门店')}</div>` +
+      `</div><div class="grid">${sec.items.map(it => card(it, !!c.best)).join('')}</div>`).join('') +
     `</section>`).join('');
   // The line above the menu is for a menu where at least one card opens.
   // The Chinese is composed (vocabulary v1.351).
