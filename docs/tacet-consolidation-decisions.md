@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.647
+# Tacet shared-core consolidation — decisions record, v4.648
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-14 · v4.648 — **§535 · A MENU CARD SHOWS THE PRODUCT PAGE'S OPENING SENTENCE — ASH.** On the Ramada menu the line under a name was the start of the old write-up, cut at two lines. Teas opened on the latte's milk instruction. Salads and juices opened on "Product type" and a net weight. The product page already opens on the sentence the office wrote for that dish. The card now shows that sentence, still cut at two lines. A page with no such sentence keeps the old write-up. A sentence the office switched off for this menu stays off the card. No new words. No schema change. No change to `.gitignore` or CI. See §535.
 
 2026-11-14 · v4.647 — **§534 · THE QR MENU LIFTS ITS SOLD COUNTS AND DROPS TOP SELLERS — ASH.** Ash, on the Ramada menu: no Top Sellers, and the sold counts higher, including dishes at 0, generally by 30%. The card shows that lifted figure. Orders, the till, reports and size/choice ranking stay on the recorded count. The "Last 30 days · All locations" line is not drawn, because it would name a window the figure no longer is. No new words. No schema change. No change to `.gitignore` or CI. See §534.
 
@@ -34277,3 +34279,16 @@ The number beside the name is no longer the recorded count. That is the point of
 6. **The recorded count is unchanged.** Company, window, channels, refunds and replacements stay §532's rule 2. The lift starts from that figure.
 
 No schema change. No new words. No change to `.gitignore` or CI.
+
+## §535 — A MENU CARD SHOWS THE PRODUCT PAGE'S OPENING SENTENCE
+
+**2026-11-14 · DECIDED BY ASH.** Ash, on the Ramada menu: the line under each name is not clear, and it should be the sentence from the product page. Measured on that menu the same day: 107 of 223 dishes opened on a spec sheet ("Product type", net weight, origin), 7 opened on the latte's milk line — including teas whose page says what the tea is — and 30 showed no line even though the page had one. Espresso's card said "Espresso, hot water, nothing else", which is the Americano; its page says "Pulled fresh, one cup at a time."
+
+**The rule.**
+
+1. **The card shows the page's opening paragraph.** That is the hero block the detail sheet draws, in the office's order, after the same allow-list and the same per-block switch. Two lines, as before. English and Chinese are that paragraph's own two halves.
+2. **No hero, the old write-up.** A product whose page has no opening paragraph keeps the start of `description_en` / `description_cn`.
+3. **A hero switched off for this menu is not the opening.** The card does not rescue it from the old write-up's first lines, and it does not go looking through that write-up for a "better" sentence. The latte's page opens on "Choose your milk", so the latte's card does too.
+4. **Nothing is composed.** Both texts are already on the product. A missing language stays missing and the existing fallback fills it.
+
+No new words. No schema change. No change to `.gitignore` or CI.

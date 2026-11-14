@@ -3829,6 +3829,26 @@ function menuSignature(req) {
 // one standing at the counter are the same person, and two wordings for
 // "may contain traces of" would be the defect §30 exists to prevent.
 
+// The one sentence under the name on a menu card.
+//
+// THE CARD PREVIEWS THE PAGE, IT DOES NOT OPEN THE OLD WRITE-UP. description_en
+// is the catalogue's long text. On the live menu it often starts with a shared
+// milk instruction, or with "Product type / net weight / origin", and two lines
+// of that tell a guest nothing about the dish. The product page already opens
+// on the hero paragraph the office wrote for that dish. That paragraph is the
+// card's sentence. A page with no hero keeps the old write-up. A hero the
+// office switched off for this menu is not the page's opening, so the card
+// does not use it either. Nothing here is composed: both texts are the
+// product's own, and a missing half is left missing for bi() to settle.
+function cardBlurb(it, shownTypes) {
+  const plain = (v) => String(v || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  const blocks = blockRead.pageBlocks(it && it.description_blocks, shownTypes);
+  const hero = blocks.find((b) => b.type === 'hero_intro' && b.body &&
+    (plain(b.body.en) || plain(b.body.cn)));
+  if (hero) return { en: plain(hero.body.en), cn: plain(hero.body.cn) };
+  return { en: plain(it && it.description_en), cn: plain(it && it.description_cn) };
+}
+
 // The sheet's body for one product. Returns '' when the product has nothing to
 // say — the caller then renders no sheet at all and the card stays untappable,
 // because an empty panel is worse than a card that does not respond.
@@ -4712,10 +4732,12 @@ router.get('/s/:shopCode', (req, res) => {
       ? ` data-open="${it.store_product_id}" role="button" tabindex="0"`
       : (!it.sold_out ? ' data-buy="1" role="button" tabindex="0"' : '');
     const sales = `<span class="sales">${bi('{n} sold', '已售 {n}').replace(/\{n\}/g, esc(Math.round(it.company_units).toLocaleString('en-US')))}</span>`;
-    // Use only the catalogue's own copy, never invent a product description.
-    const plain = v => String(v || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    const description = plain(it.description_en) || plain(it.description_cn)
-      ? `<div class="menu-desc">${bi(plain(it.description_en), plain(it.description_cn))}</div>` : '';
+    // §535 — the page's opening paragraph, or the old write-up when the page
+    // has none. The same list the sheet just used, so a block switched off
+    // here is switched off on the card too.
+    const blurb = cardBlurb(it, qrShown);
+    const description = (blurb.en || blurb.cn)
+      ? `<div class="menu-desc">${bi(blurb.en, blurb.cn)}</div>` : '';
     return `<div class="it${it.sold_out ? ' out' : ''}${detail ? ' has-dt' : ''}"${tap}>` +
       vadds +
       // The normal category owns the heavy product data. Top Sellers opens

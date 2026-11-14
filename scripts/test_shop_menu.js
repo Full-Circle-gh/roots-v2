@@ -121,9 +121,18 @@ const P_SZ_BIG     = 9961;  // group owner, ¥87
 const P_SZ_SMALL   = 9962;  // its sibling, ¥29
 const P_EVEN_A     = 9963;  // group owner, ¥20
 const P_EVEN_B     = 9964;  // its sibling, ¥20
+// §535. The line under the name. Ids sit clear of the 9951–9964 block above
+// and of the 9941 / 9946 blocks other suites use.
+const P_TEA        = 9931;  // old write-up is the milk line; the page is the tea
+const P_SALAD      = 9932;  // old write-up is a spec sheet; the page is the salad
+const P_PLAIN      = 9933;  // no page paragraph at all
+const P_HIDDEN     = 9934;  // the page paragraph is switched off for this menu
+const P_QUIET      = 9935;  // no old write-up; the page has the sentence
+const P_LATTE      = 9936;  // the page itself opens on the milk line
 const PRODS = [P_STOCK_OK, P_STOCK_ZERO, P_STOCK_NONE, P_STOCK_OFF, P_MADE_ON,
                P_MADE_ZERO, P_MADE_OFF, P_LOOSE, P_UNPUB, P_NONAME,
-               P_SZ_BIG, P_SZ_SMALL, P_EVEN_A, P_EVEN_B];
+               P_SZ_BIG, P_SZ_SMALL, P_EVEN_A, P_EVEN_B,
+               P_TEA, P_SALAD, P_PLAIN, P_HIDDEN, P_QUIET, P_LATTE];
 
 // A 1x1 gif as a data URI — real bytes, so the photo route is exercised end to
 // end rather than short-circuited by an empty column.
@@ -258,6 +267,33 @@ function seed() {
   sized.run(P_SZ_SMALL, 'Fixture sized soda', '测试规格汽水', '__M-62', 29, P_SZ_BIG, '330ml', '330毫升', 1);
   sized.run(P_EVEN_A,   'Fixture even jar',   '测试同价罐',   '__M-63', 20, P_EVEN_A, 'Mint', '薄荷', 0);
   sized.run(P_EVEN_B,   'Fixture even jar',   '测试同价罐',   '__M-64', 20, P_EVEN_A, 'Lime', '青柠', 1);
+  const told = db.prepare(`INSERT INTO store_products
+    (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category,
+     description_en, description_cn, description_blocks)
+    VALUES (?, ?, ?, ?, ?, 1, 1, 'Drinks', ?, ?, ?)`);
+  const hero = (en, cn, extra) => JSON.stringify([{
+    type: 'hero_intro', body_en: en, body_cn: cn, ...(extra || {}),
+  }]);
+  told.run(P_TEA, 'Fixture tea card', '测试茶卡片', '__M-65', 20,
+    'Choose your milk — cow milk, or oat milk. Every other item is plant-based.',
+    '可选牛奶或燕麦奶。菜单上的其他所有产品都是植物基的。',
+    hero('Black tea steeped with rose.', '红茶与玫瑰一同浸泡。'));
+  told.run(P_SALAD, 'Fixture salad card', '测试沙拉卡片', '__M-66', 21,
+    'Product type: Ready-to-eat refrigerated salad. Net weight: 300g.',
+    '产品类型：即食冷藏沙拉。净重：300克。',
+    hero('Cooked red and white quinoa with crisp vegetables.', '红白藜麦配脆蔬菜。'));
+  told.run(P_PLAIN, 'Fixture plain card', '测试纯文字卡片', '__M-67', 22,
+    'Espresso and water, nothing else.', '浓缩咖啡加水，仅此而已。', null);
+  told.run(P_HIDDEN, 'Fixture hidden card', '测试隐藏卡片', '__M-68', 23,
+    'The old write-up stays when the page hides its opening.',
+    '页面隐藏开篇时，仍用原来的介绍。',
+    hero('This opening is switched off for the menu.', '这段开篇在菜单上是关掉的。', { hide_qr: true }));
+  told.run(P_QUIET, 'Fixture quiet card', '测试无旧文卡片', '__M-69', 24,
+    '', '', hero('Juicy, crisp, and unmistakably vibrant.', '多汁、清爽、鲜亮。'));
+  told.run(P_LATTE, 'Fixture page latte', '测试页面拿铁', '__M-70', 25,
+    'Yunnan single-origin espresso. Silky milk.',
+    '云南单一产地浓缩。奶质顺滑。',
+    hero('Choose your milk — cow milk, or oat milk.', '可选牛奶或燕麦奶。'));
 
   const mkShop = db.prepare('INSERT INTO shops (location_id, public_code, is_active) VALUES (?, ?, ?)');
   const codes = { [LOC_LIVE]: 'MENUAAA2', [LOC_EMPTY]: 'MENUBBB3', [LOC_OFF]: 'MENUCCC4', [LOC_DEAD]: 'MENUDDD5' };
@@ -287,6 +323,12 @@ function seed() {
   add.run(liveShop, P_SZ_SMALL,   29,   'made_here', 1, 10);
   add.run(liveShop, P_EVEN_A,     20,   'made_here', 1, 11);
   add.run(liveShop, P_EVEN_B,     20,   'made_here', 1, 12);
+  add.run(liveShop, P_TEA,        20,   'made_here', 1, 13);
+  add.run(liveShop, P_SALAD,      21,   'made_here', 1, 14);
+  add.run(liveShop, P_PLAIN,      22,   'made_here', 1, 15);
+  add.run(liveShop, P_HIDDEN,     23,   'made_here', 1, 16);
+  add.run(liveShop, P_QUIET,      24,   'made_here', 1, 17);
+  add.run(liveShop, P_LATTE,      25,   'made_here', 1, 18);
   // P_LOOSE is stocked and must have a shelf row, or §47 would make it sold
   // out and the grouping assertion would be reading a greyed row.
   const shelf = db.prepare(`INSERT INTO retail_store_stock (store_id, product_id, physical_qty, safety_buffer)
@@ -317,14 +359,31 @@ function getBuf(url) {
 // Text between an item's opening div and its close, so an assertion can ask
 // "is THIS product's row greyed" rather than "does the page contain 售罄".
 function rowFor(html, nameEn) {
-  const at = html.indexOf(nameEn);
-  assert.ok(at > -1, `product "${nameEn}" is not on the page at all`);
-  const start = html.lastIndexOf('<div class="it', at);
-  assert.ok(start > -1, `no row wrapper before "${nameEn}"`);
-  const end = html.indexOf('<div class="it', at);
-  return html.slice(start, end === -1 ? html.length : end);
+  // The translation boot quotes every line before the cards do. The card is
+  // the element, not the first time the name appears in the document.
+  const marker = '<div class="it';
+  let from = 0;
+  while (from < html.length) {
+    const start = html.indexOf(marker, from);
+    if (start < 0) break;
+    const next = html.indexOf(marker, start + marker.length);
+    const row = html.slice(start, next === -1 ? html.length : next);
+    if (row.includes(nameEn)) return row;
+    from = start + marker.length;
+  }
+  assert.fail(`no row wrapper for "${nameEn}"`);
 }
 const soldOut = (row) => /class="sold"/.test(row);
+function menuDesc(html, nameEn) {
+  const row = rowFor(html, nameEn);
+  const m = row.match(/<div class="menu-desc">([\s\S]*?)<\/div>/);
+  assert.ok(m, `${nameEn} has no line under its name`);
+  return m[1];
+}
+function langSpan(html, lang) {
+  const m = html.match(new RegExp(`<span class="l-${lang}">([\\s\\S]*?)</span>`));
+  return m ? m[1] : '';
+}
 
 (async () => {
   saveConfig();
@@ -455,6 +514,52 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.ok(!body.includes('class="it'), 'an empty menu rendered item rows');
     });
 
+    console.log('\n§535 — the line under the name is the page\'s opening sentence');
+    await checkAsync('a tea does not open on the milk line when its page says what the tea is', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      const line = menuDesc(body, 'Fixture tea card');
+      assert.ok(langSpan(line, 'en').includes('Black tea steeped with rose'),
+        'the card did not show the page\'s sentence');
+      assert.ok(langSpan(line, 'cn').includes('红茶与玫瑰一同浸泡'),
+        'the Chinese card did not show the page\'s sentence');
+      assert.ok(!line.includes('Choose your milk') && !line.includes('可选牛奶'),
+        'the card still opens on the old milk instruction');
+    });
+    await checkAsync('a spec sheet does not stand in for the page\'s sentence', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      const line = menuDesc(body, 'Fixture salad card');
+      assert.ok(langSpan(line, 'en').includes('Cooked red and white quinoa'),
+        'the card did not show the salad\'s sentence');
+      assert.ok(!line.includes('Product type') && !line.includes('产品类型'),
+        'the card still opens on the spec sheet');
+    });
+    await checkAsync('no page paragraph keeps the old write-up', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      const line = menuDesc(body, 'Fixture plain card');
+      assert.ok(langSpan(line, 'en').includes('Espresso and water, nothing else'));
+      assert.ok(langSpan(line, 'cn').includes('浓缩咖啡加水，仅此而已'));
+    });
+    await checkAsync('a sentence switched off for this menu stays off the card', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      const line = menuDesc(body, 'Fixture hidden card');
+      assert.ok(langSpan(line, 'en').includes('old write-up stays'));
+      assert.ok(!line.includes('switched off') && !line.includes('关掉的'),
+        'a hero the page hides still appeared under the name');
+    });
+    await checkAsync('a page sentence shows even when the old write-up is empty', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      const line = menuDesc(body, 'Fixture quiet card');
+      assert.ok(langSpan(line, 'en').includes('Juicy, crisp, and unmistakably vibrant'));
+      assert.ok(langSpan(line, 'cn').includes('多汁、清爽、鲜亮'));
+    });
+    await checkAsync('the card follows the page even when the old write-up reads better', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      const line = menuDesc(body, 'Fixture page latte');
+      assert.ok(langSpan(line, 'en').includes('Choose your milk'));
+      assert.ok(!line.includes('Yunnan single-origin'),
+        'the card picked a sentence the page does not open on');
+    });
+
     console.log('\nGrouping');
     await checkAsync('groups follow the category tree order, not the menu sort order', async () => {
       const { body } = await get(`/s/${LIVE}`);
@@ -466,8 +571,9 @@ const soldOut = (row) => /class="sold"/.test(row);
     });
     await checkAsync('the uncategorised band is last, and its labels are the shop\'s own', async () => {
       const { body } = await get(`/s/${LIVE}`);
-      const loose = body.indexOf('Fixture unfiled');
-      assert.ok(loose > body.indexOf('Fixture oat latte'), 'the unfiled band is not last');
+      const pane = body.indexOf('<div class="pane"');
+      const loose = body.indexOf('Fixture unfiled', pane);
+      assert.ok(loose > body.indexOf('Fixture oat latte', pane), 'the unfiled band is not last');
       // OTHER / 其他 and ALL / 全部 are copied from miniapp/pages/shop/shop.js,
       // so the rail mints nothing. The unfiled band's own section heading stays
       // EMPTY rather than inventing a word for it.
@@ -1426,7 +1532,10 @@ const soldOut = (row) => /class="sold"/.test(row);
         const bar = /<div class="cbar"[^>]*>/.exec(r.body);
         assert.ok(bar, 'the basket bar is not on the page at all');
         assert.ok(!/data-wxpay/.test(bar[0]), 'the basket advertised a payment rail that is not configured');
-        assert.ok(!/微信支付/.test(r.body), 'a WeChat Pay control reached a shop that cannot take one');
+        // The words live in the language dictionary even when the rail is off.
+        // The control is the button.
+        assert.ok(!/data-pm="wechat"/.test(r.body) && !/data-pq="wechat"/.test(r.body),
+          'a WeChat Pay control reached a shop that cannot take one');
         assert.ok(!/class="pw"/.test(r.body), 'the payment row rendered with nothing behind it');
       });
 
@@ -1493,7 +1602,7 @@ const soldOut = (row) => /class="sold"/.test(row);
           'the search label lost a language');
         assert.ok(/aria-labelledby="mqL"/.test(bar), 'the field has no accessible name');
         assert.ok(/id="mqX" hidden>/.test(bar) && /清除/.test(bar), 'the clear button is missing or showing before anything is typed');
-        assert.ok(/<div class="srch-none" id="mqNone" hidden><span class="l-en">No products found\.<\/span><span class="l-cn">没有找到商品<\/span><\/div>/.test(r.body),
+        assert.ok(/<div class="srch-none" id="mqNone" hidden><span class="l-en">No products found\.<\/span><span class="l-cn">没有找到商品<\/span>/.test(r.body),
           'the empty answer is missing, or is showing before a search');
         assert.ok(/var q=document\.getElementById\('mq'\);if\(!q\)return;/.test(r.body)
           && /q\.addEventListener\('input',run,false\)/.test(r.body),
