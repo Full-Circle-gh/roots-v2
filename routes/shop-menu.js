@@ -68,7 +68,6 @@ const { tdb } = require('../lib/tenant-db');
 const { isShopCode } = require('../lib/shop-code');
 const { applySiteMenuFrameHeaders } = require('../lib/shop-menu-redirect');
 const { getCategoryTree } = require('../lib/category-tree');
-const { chinaToday, inDateWindow } = require('../miniapp/utils/promo-cards');
 const qrCatOrder = require('../lib/qr-menu-category-order');
 const qrVariantSales = require('../lib/qr-variant-sales');
 const { themeToCssVars, sanitizeTheme,
@@ -186,6 +185,22 @@ function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// §531 — today's date and the banner's start/end window. The same two
+// functions live in miniapp/utils/promo-cards.js for the Shop tab. They are
+// copied here because the production server does not carry the mini app
+// sources (scripts/deploy-changed.sh leaves miniapp/ off the box). A require
+// of that file took the live app down and the deploy rolled back.
+function chinaToday(now) {
+  const ms = now == null ? Date.now() : Number(now);
+  return new Date(ms + 8 * 3600e3).toISOString().slice(0, 10);
+}
+function inDateWindow(item, today) {
+  if (!item) return false;
+  if (item.start_at && today < item.start_at) return false;
+  if (item.end_at && today > item.end_at) return false;
+  return true;
 }
 
 // One dotted storefront_config key, on the request's tenant scope. Same five
