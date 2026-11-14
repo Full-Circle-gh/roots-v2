@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roots on a phone — mockup</title>
+<!--
+  Mockup only. The brand site at www.rootskitchenchina.com, redrawn for a
+  phone. Same words and pictures as the published website layout. Nothing
+  here is wired to the editor.
+-->
+<style>
+  @font-face { font-family:'Bear Serif'; src:url('../public/fonts/LilitaOne.ttf') format('truetype'); unicode-range:U+0024,U+0025,U+0030-0039,U+00A5; font-display:swap; }
+  @font-face { font-family:'Bear Serif'; src:url('../public/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Lilita One'; src:url('../public/fonts/LilitaOne.ttf') format('truetype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('../public/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'League Gothic'; src:url('../public/fonts/LeagueGothic.ttf') format('truetype'); font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('../public/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+
+  :root {
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --lime:#CCD900;
+    --f-bear:'Bear Serif', Georgia, serif;
+    --f-toni:'Toni Grotesk', 'Arial Narrow', sans-serif;
+    --f-gothic:'League Gothic', 'Arial Narrow', sans-serif;
+    --f-aleo:'Aleo', Georgia, serif;
+    --f-num:'Lilita One', 'Bear Serif', Georgia, serif;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; }
+  body {
+    background:#1a1a17;
+    color:var(--ink);
+    font-family:var(--f-aleo);
+    -webkit-font-smoothing:antialiased;
+  }
+  a { color:inherit; }
+  img { max-width:100%; }
+
+  .desk {
+    max-width:1120px;
+    margin:0 auto;
+    display:grid;
+    grid-template-columns:minmax(280px, 400px) 414px;
+    gap:48px;
+    align-items:start;
+    justify-content:center;
+    padding:36px 28px 72px;
+  }
+  .notes {
+    background:var(--oat);
+    border-radius:20px;
+    padding:28px 26px 26px;
+  }
+  .notes h2 {
+    font-family:var(--f-bear);
+    font-weight:500;
+    font-size:34px;
+    line-height:1.02;
+    margin:0;
+  }
+  .notes .stand {
+    font-size:17px;
+    line-height:1.45;
+    margin:14px 0 0;
+  }
+  .notes h3 {
+    font-family:var(--f-toni);
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--forest);
+    margin:26px 0 8px;
+  }
+  .notes p, .notes li { font-size:16px; line-height:1.45; }
+  .notes ul.plain { margin:8px 0 0; padding-left:18px; }
+  .notes ul.plain li { margin:6px 0; }
+  .sizes { list-style:none; margin:8px 0 0; padding:0; }
+  .sizes li { padding:9px 0; border-top:1px solid rgba(26,26,23,.12); }
+  .sizes b {
+    display:block;
+    font-family:var(--f-toni);
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+  }
+  .sizes span { display:block; margin-top:2px; font-size:15px; line-height:1.35; }
+  .rec {
+    margin-top:22px;
+    background:var(--forest);
+    color:#fff;
+    border-radius:16px;
+    padding:16px 18px 18px;
+  }
+  .rec h3 { color:var(--lime); margin:0; }
+  .rec p { margin:8px 0 0; }
+
+  .device-label {
+    margin:0 0 10px;
+    color:var(--oat);
+    font-family:var(--f-toni);
+    font-weight:700;
+    font-size:12px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+  }
+  .phone {
+    width:390px;
+    height:min(844px, calc(100vh - 80px));
+    min-height:640px;
+    background:#0e0e0c;
+    border-radius:36px;
+    padding:10px 10px 12px;
+    box-shadow:0 28px 70px rgba(0,0,0,.45);
+    display:flex;
+    flex-direction:column;
+    position:sticky;
+    top:24px;
+  }
+  .urlbar {
+    height:34px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex:none;
+  }
+  .urlbar span {
+    font-family:var(--f-aleo);
+    font-size:13px;
+    color:var(--oat);
+    background:#2a2a26;
+    border-radius:999px;
+    padding:3px 14px;
+  }
+  .viewport { position:relative; flex:1; min-height:0; }
+  .screen {
+    height:100%;
+    overflow:auto;
+    background:var(--oat);
+    border-radius:26px;
+    scroll-behavior:smooth;
+    scrollbar-width:thin;
+    scrollbar-color:#365329 transparent;
+  }
+
+  /* ── the site, at phone width ── */
+  .bar {
+    position:sticky; top:0; z-index:5;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:12px 18px 12px 16px;
+    background:var(--oat);
+    border-bottom:1px solid rgba(26,26,23,.08);
+  }
+  .mark { height:40px; width:auto; display:block; }
+  .bar nav { display:flex; gap:16px; }
+  .bar nav a {
+    font-family:var(--f-toni);
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    text-decoration:none;
+  }
+  #order, #food, #visit, #contact, #story, #fair { scroll-margin-top: 72px; }
+  .bar nav a:focus-visible, .btn:focus-visible, .cl:focus-visible, .fab:focus-visible {
+    outline:3px solid var(--ink); outline-offset:3px;
+  }
+
+  .hero-photo { height:196px; background:#d7cec4; }
+  .hero-photo img { width:100%; height:100%; object-fit:cover; object-position:center 62%; display:block; }
+  .hero-copy { padding:18px 22px 28px; }
+  .krow { display:flex; align-items:flex-end; justify-content:space-between; gap:8px; }
+  .kicker {
+    font-family:var(--f-toni);
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.12em;
+    line-height:1.35;
+    text-transform:uppercase;
+    color:var(--forest);
+    margin:0;
+  }
+  .cast { height:72px; width:auto; display:block; flex:none; animation:bob 4.6s ease-in-out infinite; }
+  h1, h2 { font-family:var(--f-bear); font-weight:500; letter-spacing:-0.01em; }
+  .hero-copy h1 {
+    font-size:38px;
+    line-height:1.04;
+    margin:12px 0 0;
+    text-wrap:balance;
+  }
+  .lede, .intro, .addr, .story p, .fair p {
+    font-size:17px;
+    line-height:1.5;
+    margin:14px 0 0;
+  }
+  .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:22px; }
+  .btn {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-height:48px;
+    padding:12px 20px;
+    border-radius:999px;
+    border:2px solid var(--forest);
+    background:transparent;
+    color:var(--forest);
+    font-family:var(--f-toni);
+    font-weight:700;
+    font-size:14px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    text-decoration:none;
+  }
+  .btn.fill { background:var(--forest); color:#fff; }
+
+  .facts { background:var(--forest); color:#fff; padding:36px 22px 32px; }
+  .fact + .fact { margin-top:26px; }
+  .fact h2 {
+    font-family:var(--f-gothic);
+    font-weight:400;
+    font-size:40px;
+    line-height:.95;
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+    color:var(--lime);
+    margin:0;
+  }
+  .fact h2::after {
+    content:"";
+    display:block;
+    width:36px; height:3px;
+    background:var(--lime);
+    margin-top:8px;
+  }
+  .fact p { font-size:16px; line-height:1.4; margin:8px 0 0; max-width:36ch; }
+
+  .steps { background:#fff; padding:32px 22px 36px; }
+  .steps h2, .block h2, .visit h2, .story h2, .fair h2 {
+    font-size:32px;
+    line-height:1.05;
+    margin:10px 0 0;
+    text-wrap:balance;
+  }
+  .step {
+    margin-top:16px;
+    border:2px solid var(--ink);
+    border-radius:20px;
+    padding:18px 18px 20px;
+  }
+  .step .n {
+    font-family:var(--f-num);
+    font-size:52px;
+    line-height:1;
+    color:var(--forest);
+  }
+  .step h3 {
+    font-family:var(--f-bear);
+    font-weight:500;
+    font-size:24px;
+    line-height:1.15;
+    margin:4px 0 0;
+  }
+  .step p { font-size:16px; line-height:1.45; margin:8px 0 0; }
+
+  .marquee { background:var(--lime); color:var(--ink); overflow:hidden; padding:14px 0; }
+  .marquee-track { display:flex; width:max-content; animation:mq 36s linear infinite; }
+  .marquee span {
+    font-family:var(--f-gothic);
+    font-size:22px;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    white-space:nowrap;
+    padding-right:32px;
+  }
+
+  .block { background:var(--oat); padding:32px 0 36px 22px; }
+  .block .kicker, .block h2 { padding-right:22px; }
+  .rail {
+    display:flex; gap:12px;
+    overflow-x:auto;
+    scroll-snap-type:x mandatory;
+    padding:18px 22px 6px 0;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .rail::-webkit-scrollbar { display:none; }
+  .card {
+    flex:0 0 214px;
+    scroll-snap-align:start;
+    background:#fff;
+    border-radius:18px;
+    overflow:hidden;
+  }
+  .card .pic { height:168px; background:#e4dbd2; }
+  .card .pic img { width:100%; height:100%; object-fit:cover; display:block; }
+  .card .pad { padding:12px 14px 14px; }
+  .card h3 {
+    font-family:var(--f-bear);
+    font-weight:500;
+    font-size:18px;
+    line-height:1.15;
+    margin:0;
+    min-height:2.3em;
+  }
+  .card .meta { display:flex; align-items:baseline; gap:8px; margin-top:8px; }
+  .card .price { font-family:var(--f-num); font-size:20px; color:var(--forest); line-height:1; }
+  .card .size { font-size:14px; color:#3d3a34; }
+
+  .visit { background:#fff; padding:32px 22px 36px; }
+  .addr { max-width:36ch; }
+  .dirs { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+  .dirs a {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-height:44px;
+    padding:10px 14px;
+    border-radius:999px;
+    border:2px solid var(--ink);
+    font-family:var(--f-toni);
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    text-decoration:none;
+  }
+
+  .contact { background:var(--oat); padding:28px 22px 36px; }
+  .cl {
+    display:flex; align-items:center; gap:14px;
+    margin-top:10px;
+    padding:14px 16px;
+    background:#fff;
+    border:2px solid var(--ink);
+    border-radius:18px;
+    text-decoration:none;
+    color:inherit;
+  }
+  .cl svg { width:28px; height:28px; flex:none; color:var(--forest); }
+  .cl .txt { min-width:0; flex:1; display:flex; flex-direction:column; gap:2px; }
+  .cl .name { font-family:var(--f-bear); font-weight:500; font-size:20px; line-height:1.15; }
+  .cl .sub { font-size:16px; line-height:1.3; overflow-wrap:anywhere; }
+  .cl .qr { width:72px; height:72px; object-fit:contain; flex:none; background:#fff; border-radius:8px; }
+
+  .story { background:#fff; }
+  .story .shot { height:230px; background:#e4dbd2; }
+  .story .shot img { width:100%; height:100%; object-fit:cover; object-position:70% 35%; display:block; }
+  .story .pad { padding:26px 22px 36px; }
+  .by {
+    margin:12px 0 0;
+    font-family:var(--f-toni);
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--forest);
+  }
+  .story p { margin:14px 0 0; }
+
+  .fair-pic { background:var(--oat); padding:8px 8px 0; }
+  .fair-pic img { width:100%; height:auto; display:block; }
+  .fair { background:var(--lime); padding:28px 22px 36px; }
+  .fair .btn { margin-top:20px; }
+
+  footer.foot {
+    background:#fff;
+    border-top:1px solid rgba(26,26,23,.08);
+    padding:26px 22px 96px;
+  }
+  footer.foot .mark { height:28px; }
+  footer.foot .line { font-size:16px; margin:12px 0 0; }
+  footer.foot .links { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:14px; }
+  footer.foot .links a {
+    font-family:var(--f-toni);
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    text-decoration:none;
+    color:var(--forest);
+  }
+
+  .fab {
+    position:absolute;
+    right:16px; bottom:16px;
+    z-index:6;
+    width:56px; height:56px;
+    border-radius:50%;
+    background:var(--forest);
+    color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 6px 18px rgba(0,0,0,.22);
+    text-decoration:none;
+  }
+  .fab svg { width:28px; height:28px; }
+
+  @keyframes mq { from { transform:translateX(0); } to { transform:translateX(-50%); } }
+  @keyframes bob { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-6px); } }
+  @media (prefers-reduced-motion:reduce) {
+    .marquee-track, .cast { animation:none; }
+    .screen { scroll-behavior:auto; }
+  }
+  @media (max-width:900px) {
+    .desk { grid-template-columns:1fr; padding:20px 16px 48px; }
+    .phone { position:relative; top:0; margin:0 auto; height:780px; }
+  }
+
+  body.plain { background:var(--oat); }
+  body.plain .notes, body.plain .device-label, body.plain .urlbar { display:none; }
+  body.plain .desk { display:block; max-width:none; padding:0; }
+  body.plain .phone {
+    width:390px; height:auto; min-height:0; margin:0 auto;
+    position:static; background:transparent; box-shadow:none;
+    border-radius:0; padding:0;
+  }
+  body.plain .viewport { height:auto; }
+  body.plain .screen { height:auto; overflow:visible; border-radius:0; }
+  body.plain .fab { position:fixed; }
+</style>
+</head>
+<body>
+<div class="desk">
+  <aside class="notes">
+    <h2>The phone page, redrawn.</h2>
+    <p class="stand">Same words, same pictures, same address. The type is set in real pixels, and anything that was sharing the width now stacks.</p>
+    <div class="rec">
+      <h3>Recommendation</h3>
+      <p>Build this as the phone layout of the website only. The shop and the mini app keep the 750 scale. Same words, same pictures.</p>
+    </div>
+
+    <h3>Why it feels small today</h3>
+    <p>The website borrows the mini app’s ruler. Type is a fraction of 750, and the opening block stays two columns on a phone. On a 390px screen that comes out as:</p>
+    <ul class="sizes">
+      <li><b>Opening line</b><span>about 22px, in a column roughly 160px wide</span></li>
+      <li><b>Opening paragraph</b><span>about 11px</span></li>
+      <li><b>Small heading</b><span>about 9px. “New to China?” is that one.</span></li>
+      <li><b>Fact sentence</b><span>about 12px, in half the band</span></li>
+      <li><b>A step</b><span>the number is about 33px, the sentence about 12px</span></li>
+    </ul>
+
+    <h3>Type on this page</h3>
+    <ul class="sizes">
+      <li><b>Opening line</b><span>38px Bear Serif, across the full width</span></li>
+      <li><b>Section line</b><span>32px Bear Serif</span></li>
+      <li><b>Reading</b><span>17px Aleo. A step and a fact sentence are 16px.</span></li>
+      <li><b>Small heading</b><span>13px Toni Grotesk, capitals, forest</span></li>
+      <li><b>The four facts</b><span>40px League Gothic, lime on forest, with a short rule on the heading</span></li>
+      <li><b>Step numbers and prices</b><span>Lilita One. Bear’s own digits are a thin face and do not match the letters.</span></li>
+    </ul>
+
+    <h3>What the brand already says</h3>
+    <ul class="plain">
+      <li>Oat ground, one forest band, one lime band. Ink for the lines.</li>
+      <li>The filled button is forest. The second button is an outline. Buttons stay pills. Cards keep the 20px corner and the 2px line.</li>
+      <li>Characters are the cut-outs: the flexing one at the opening, the onion by the steps, the radishes by the dishes. The forest band is left clear so the four lines can be read.</li>
+      <li>English only. The chat button stays a forest circle with a line icon.</li>
+    </ul>
+
+    <h3>On the page itself</h3>
+    <ul class="plain">
+      <li>The photograph is full width. The words sit under it.</li>
+      <li>The four facts are one column. Each sentence has the width of the phone.</li>
+      <li>The dishes are a sideways row of large cards, so a name like “Strawberry Coconut Parfait” stays at 18px.</li>
+      <li>The blank 40px gaps between blocks are gone. Each section has its own padding.</li>
+      <li>The small heading on the opening, “Guangzhou · since 2017”, is made from words already on the page.</li>
+      <li>The Chinese line for a taxi is switched on in the editor and the field is empty, so it is left off. The pin is not saved, so Apple Maps, Google Maps and Amap search by the address.</li>
+    </ul>
+  </aside>
+
+  <div class="device">
+    <p class="device-label">390px · scroll inside the phone</p>
+    <div class="phone">
+      <div class="urlbar"><span>rootskitchenchina.com</span></div>
+      <div class="viewport">
+        <div class="screen" id="screen">
+          <header class="bar">
+            <a href="#top" aria-label="Roots"><img class="mark" src="../public/brand/roots-wordmark.png" alt="Roots"></a>
+            <nav aria-label="Main">
+              <a href="#order">Order</a>
+              <a href="#visit">Visit</a>
+            </nav>
+          </header>
+
+          <section id="top">
+            <div class="hero-photo">
+              <img src="https://www.rootskitchenchina.com/api/retail/media/351" alt="The Roots counter at the Ramada Pearl lobby, Yuexiu">
+            </div>
+            <div class="hero-copy">
+              <div class="krow">
+                <p class="kicker">Guangzhou · since 2017</p>
+                <img class="cast" src="../public/brand/cutout/ip-flex.png" alt="">
+              </div>
+              <h1>Landed in Guangzhou? Lunch is sorted.</h1>
+              <p class="lede">Roots is a 100% plant-based café and fresh-food kitchen in Guangzhou, since 2017. Grab-and-go yogurts, salads, wraps, soups and dips made fresh in our own kitchen, plus coffee, fresh juice and kombucha. No additives, no preservatives, no refined sugar. We took the junk out. You're welcome.</p>
+              <div class="actions">
+                <a class="btn fill" href="#visit">Directions</a>
+                <a class="btn" href="https://wa.me/8618613159912?text=Hi%20Roots%2C%20I%20found%20you%20on%20your%20website.">WhatsApp</a>
+              </div>
+            </div>
+          </section>
+
+          <section class="facts" aria-label="Facts">
+            <div class="fact">
+              <h2>Since 2017</h2>
+              <p>Guangzhou's plant-based kitchen for nearly a decade</p>
+            </div>
+            <div class="fact">
+              <h2>100% plants</h2>
+              <p>Everything is vegan. Every dish, every jar, every snack</p>
+            </div>
+            <div class="fact">
+              <h2>Junk-free</h2>
+              <p>No additives, no preservatives, no refined sugar</p>
+            </div>
+            <div class="fact">
+              <h2>All of China</h2>
+              <p>Everything we make, delivered to your door nationwide</p>
+            </div>
+          </section>
+
+          <section class="steps" id="order">
+            <div class="krow">
+              <p class="kicker">New to China?</p>
+              <img class="cast" src="../public/brand/cutout/ip-onion.png" alt="">
+            </div>
+            <h2>Two ways from hungry to happy.</h2>
+            <p class="intro">How to order food in China as a foreigner? With us it's easy. No Chinese and no app needed: order the way that suits you, whether you're at your hotel, your apartment or the Canton Fair.</p>
+            <article class="step">
+              <div class="n">1</div>
+              <h3>Eat in or take away</h3>
+              <p>Order at the counter, or scan the QR menu on your table. It opens in your phone's browser, no app needed. Pay with WeChat Pay, Alipay, an international card or cash.</p>
+            </article>
+            <article class="step">
+              <div class="n">2</div>
+              <h3>Delivered nationwide</h3>
+              <p>Shanghai, Beijing or Guangzhou, everything we make comes to your door. Order in the Roots mini app in WeChat, and pay with WeChat Pay or Alipay.</p>
+            </article>
+          </section>
+
+          <div class="marquee" aria-hidden="true">
+            <div class="marquee-track">
+              <span>We took the junk out. You're welcome. · Food made from food · From soil to soul · Approved by taste buds · Life's too short for boring food · </span>
+              <span>We took the junk out. You're welcome. · Food made from food · From soil to soul · Approved by taste buds · Life's too short for boring food · </span>
+            </div>
+          </div>
+
+          <section class="block" id="food">
+            <div class="krow">
+              <p class="kicker">Approved by taste buds</p>
+              <img class="cast" src="../public/brand/cutout/ip-radishes.png" alt="">
+            </div>
+            <h2>Healthy plant-based food, made in our own kitchen.</h2>
+            <div class="rail">
+              <article class="card">
+                <div class="pic"><img src="https://www.rootskitchenchina.com/api/retail/products/42/image?v=2026-10-28%2008%3A28%3A05" alt="Tofu Banh Mi Wrap"></div>
+                <div class="pad"><h3>Tofu Banh Mi Wrap</h3><div class="meta"><span class="price">¥44</span><span class="size">320g</span></div></div>
+              </article>
+              <article class="card">
+                <div class="pic"><img src="https://www.rootskitchenchina.com/api/retail/products/44/image?v=2026-10-16%2008%3A14%3A58" alt="Guacamole"></div>
+                <div class="pad"><h3>Guacamole</h3><div class="meta"><span class="price">¥49</span><span class="size">250g</span></div></div>
+              </article>
+              <article class="card">
+                <div class="pic"><img src="https://www.rootskitchenchina.com/api/retail/products/5/image?v=2026-10-28%2008%3A28%3A05" alt="Zhoug, green chilli dip"></div>
+                <div class="pad"><h3>Zhoug — Green Chilli Dip</h3><div class="meta"><span class="price">¥42</span><span class="size">230g</span></div></div>
+              </article>
+              <article class="card">
+                <div class="pic"><img src="https://www.rootskitchenchina.com/api/retail/products/18/image?v=2026-10-16%2008%3A14%3A58" alt="Strawberry Coconut Parfait"></div>
+                <div class="pad"><h3>Strawberry Coconut Parfait</h3><div class="meta"><span class="price">¥30</span><span class="size">130g</span></div></div>
+              </article>
+              <article class="card">
+                <div class="pic"><img src="https://www.rootskitchenchina.com/api/retail/products/364/image?v=2026-10-16%2008%3A14%3A58" alt="Misfit Medjool Dates"></div>
+                <div class="pad"><h3>Misfit Medjool Dates</h3><div class="meta"><span class="price">¥242</span></div></div>
+              </article>
+              <article class="card">
+                <div class="pic"><img src="https://www.rootskitchenchina.com/api/retail/products/243/image?v=2026-10-24%2003%3A54%3A16" alt="Cherry Ginger Jam"></div>
+                <div class="pad"><h3>Cherry Ginger Jam</h3><div class="meta"><span class="price">¥42</span><span class="size">225g</span></div></div>
+              </article>
+              <article class="card">
+                <div class="pic"><img src="https://www.rootskitchenchina.com/api/retail/products/286/image?v=2026-10-29%2007%3A39%3A07" alt="Mango Kombucha"></div>
+                <div class="pad"><h3>Mango Kombucha</h3><div class="meta"><span class="price">¥29</span><span class="size">300ml</span></div></div>
+              </article>
+              <article class="card">
+                <div class="pic"><img src="https://www.rootskitchenchina.com/api/retail/products/46/image?v=2026-10-16%2008%3A14%3A58" alt="Organic Pea Protein"></div>
+                <div class="pad"><h3>Organic Pea Protein</h3><div class="meta"><span class="price">¥162</span><span class="size">680g</span></div></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="visit" id="visit">
+            <p class="kicker">Come say hi · Plant-based café in Yuexiu, Guangzhou</p>
+            <h2>Roots · Yuexiu</h2>
+            <p class="addr">Ramada Pearl Hotel lobby, No. 9 Mingyue 1st Rd, Guangzhou Avenue Central, Yuexiu District, Guangzhou</p>
+            <div class="dirs">
+              <a href="https://maps.apple.com/?q=Ramada%20Pearl%20Hotel%20lobby%2C%20No.%209%20Mingyue%201st%20Rd%2C%20Guangzhou">Apple Maps</a>
+              <a href="https://www.google.com/maps/search/?api=1&amp;query=Ramada%20Pearl%20Hotel%20No.%209%20Mingyue%201st%20Rd%20Guangzhou">Google Maps</a>
+              <a href="https://uri.amap.com/search?keyword=Ramada%20Pearl%20Hotel%20Mingyue%20Guangzhou">Amap</a>
+            </div>
+          </section>
+
+          <section class="contact" id="contact">
+            <p class="kicker">Find us online</p>
+            <h2>Read the reviews, then come say hi.</h2>
+            <a class="cl" href="https://www.tripadvisor.com/Restaurant_Review-g298555-d34751233-Reviews-Roots-Guangzhou_Guangdong.html">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="13" r="3.5"/><circle cx="16.5" cy="13" r="3.5"/><circle cx="7.5" cy="13" r=".8" fill="currentColor"/><circle cx="16.5" cy="13" r=".8" fill="currentColor"/><path d="M4 9.5C6.5 7 9 6.5 12 6.5s5.5.5 8 3M12 9.5l-1.5 2h3z"/></svg>
+              <span class="txt"><span class="name">TripAdvisor</span></span>
+            </a>
+            <a class="cl" href="https://www.happycow.net/reviews/roots-guangzhou-117141">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20c0-8 5-14 15-15-1 10-7 15-15 15z"/><path d="M5 20c3-4 6-7 10-10"/></svg>
+              <span class="txt"><span class="name">HappyCow</span></span>
+            </a>
+            <a class="cl" href="https://instagram.com/livewithroots">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17" cy="7" r=".9" fill="currentColor"/></svg>
+              <span class="txt"><span class="name">Instagram</span><span class="sub">@livewithroots</span></span>
+            </a>
+            <a class="cl" href="https://wa.me/8618613159912?text=Hi%20Roots%2C%20I%20found%20you%20on%20your%20website.">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 12a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.2-4.2A8.5 8.5 0 1 1 20.5 12z"/><path d="M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.5-2-1-1 .8c-1-.4-2-1.4-2.4-2.4l.8-1-1-2z"/></svg>
+              <span class="txt"><span class="name">WhatsApp</span><span class="sub">+86 186 1315 9912</span></span>
+            </a>
+            <a class="cl" href="mailto:ashermarad84@gmail.com">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/></svg>
+              <span class="txt"><span class="name">Email</span><span class="sub">ashermarad84@gmail.com</span></span>
+            </a>
+            <div class="cl">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 9.5c-.5-3-3.3-5-6.5-5C4.9 4.5 2 7 2 10c0 1.7.9 3.2 2.3 4.2L3.8 16l2.3-1.1c.8.2 1.6.4 2.4.4"/><path d="M22 14.5c0-2.8-2.7-5-6-5s-6 2.2-6 5 2.7 5 6 5c.7 0 1.4-.1 2-.3l2 1-.5-1.7c1.5-.9 2.5-2.3 2.5-4z"/></svg>
+              <span class="txt"><span class="name">WeChat</span><span class="sub">ashermarad85</span></span>
+              <img class="qr" src="https://www.rootskitchenchina.com/api/retail/media/61" alt="WeChat QR code">
+            </div>
+          </section>
+
+          <section class="story" id="story">
+            <div class="shot">
+              <img src="https://www.rootskitchenchina.com/api/retail/media/126" alt="Asher, founder of Roots">
+            </div>
+            <div class="pad">
+              <p class="kicker">Our story</p>
+              <h2>The Roots of It All</h2>
+              <p class="by">Asher, founder · 3 min</p>
+              <p>My dad used to say that a tree with strong roots can weather any storm.</p>
+              <p>I didn't understand that when I was young. I understood it the moment I started cooking in a tiny kitchen, trying to make food that actually made me feel good.</p>
+              <p>That kitchen became Roots.</p>
+              <p>No investors. No business plan. Just a frustration, a stove, and a belief that real food shouldn't be complicated.</p>
+              <p>This is where it started — and why it still matters.</p>
+            </div>
+          </section>
+
+          <section id="fair">
+            <div class="fair-pic">
+              <img src="../public/brand/welcome-roots.jpg" alt="Welcome to Roots. Food made from food. From soil to soul.">
+            </div>
+            <div class="fair">
+              <h2>In town for the Canton Fair? We'll pack your food.</h2>
+              <p>Tell us your days at the fair and we'll put together a package for you: fresh plant-based meals, snacks and drinks, packed with ice packs so they stay cold. Message us on WhatsApp or WeChat to arrange it, or drop by the Ramada Pearl lobby, Yuexiu, for coffee, juice and kombucha.</p>
+              <a class="btn fill" href="https://wa.me/8618613159912?text=Hi%20Roots%2C%20I%20found%20you%20on%20your%20website.">Message us</a>
+            </div>
+          </section>
+
+          <footer class="foot">
+            <img class="mark" src="../public/brand/roots-wordmark.png" alt="Roots">
+            <p class="line">Food made from food. From soil to soul.</p>
+            <div class="links">
+              <a href="#visit">Visit</a>
+              <a href="#order">Order</a>
+              <a href="https://instagram.com/livewithroots">Instagram</a>
+              <a href="mailto:ashermarad84@gmail.com">Email</a>
+            </div>
+          </footer>
+        </div>
+        <a class="fab" href="https://wa.me/8618613159912?text=Hi%20Roots%2C%20I%20found%20you%20on%20your%20website." aria-label="WhatsApp">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 12a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.2-4.2A8.5 8.5 0 1 1 20.5 12z"/><path d="M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.5-2-1-1 .8c-1-.4-2-1.4-2.4-2.4l.8-1-1-2z"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  if (q.has('plain')) document.body.classList.add('plain');
+  const y = Number(q.get('y') || 0);
+  if (y) document.documentElement.style.marginTop = (-y) + 'px';
+</script>
+</body>
+</html>
