@@ -208,7 +208,7 @@ function optsOnCard(html, pid) {
     assert.ok(menu.includes('data-big="\'+esc(c.img)+\'"'), 'the picture carries no data-big');
     const taps = menu.split("closest('.oc-i[data-big]')").length - 1;
     assert.strictEqual(taps, 2, `expected the viewer to open AND the picker to ignore the tap, saw ${taps}`);
-    assert.ok(/if\(ci\)\{bigImg\.src=ci\.getAttribute\('data-big'\)\+'&w=\d+';big\.hidden=false;return\}/.test(menu),
+    assert.ok(/if\(ci\)\{bigImg\.src=ci\.getAttribute\('data-big'\)\+'&w=\d+&s=1';big\.hidden=false;return\}/.test(menu),
       'the viewer is not opened from the choice picture');
     assert.ok(menu.includes('id="bigX"'), 'the viewer has lost its close button');
     assert.ok(menu.includes('if(!big.hidden){shut();e.stopImmediatePropagation();return}'),

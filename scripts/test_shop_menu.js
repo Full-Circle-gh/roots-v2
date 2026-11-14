@@ -666,6 +666,74 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.strictEqual(r.status, 200);
       assert.ok(r.bytes.length > 0);
     });
+    await checkAsync('a picture that is not square is served square, edges copied, nothing cut', async () => {
+      // The card, the product page and the enlarge all ask with s=1. A tall
+      // file used to sit in the square with the page ground down each side.
+      // The route copies the file's own edge out until the bytes are square.
+      // A wide file does the same on the short side. Without s=1 the old
+      // width resize stands, so a caller that did not ask is not reframed.
+      const sharp = require('sharp');
+      const paint = async (w, h, at) => {
+        const raw = Buffer.alloc(w * h * 3, 255);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 3;
+          if (x === 0) { raw[i] = 255; raw[i + 1] = 0; raw[i + 2] = 0; }
+          else if (x === w - 1) { raw[i] = 0; raw[i + 1] = 0; raw[i + 2] = 255; }
+          else if (y === 0) { raw[i] = 0; raw[i + 1] = 255; raw[i + 2] = 0; }
+          else if (y === h - 1) { raw[i] = 255; raw[i + 1] = 255; raw[i + 2] = 0; }
+          else if (x === at.x && y === at.y) { raw[i] = 0; raw[i + 1] = 0; raw[i + 2] = 0; }
+        }
+        const png = await sharp(raw, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer();
+        return 'data:image/png;base64,' + png.toString('base64');
+      };
+      const near = (px, rgb, why) => {
+        for (let k = 0; k < 3; k++) {
+          assert.ok(Math.abs(px[k] - rgb[k]) <= 12, `${why}: ${px} vs ${rgb}`);
+        }
+      };
+      const px = (data, info, x, y) => {
+        const i = (y * info.width + x) * info.channels;
+        return [data[i], data[i + 1], data[i + 2]];
+      };
+      const read = async (bytes) => sharp(bytes).raw().toBuffer({ resolveWithObject: true });
+      try {
+        db.prepare('UPDATE store_products SET image_data = ? WHERE id = ?')
+          .run(await paint(8, 16, { x: 4, y: 8 }), P_UNPUB);
+        const tall = await getBuf(`/s/${LIVE}/i/${P_UNPUB}?w=16&s=1&v=tall`);
+        assert.strictEqual(tall.status, 200, 'the tall picture was refused');
+        assert.ok(/^image\//.test(tall.type), tall.type);
+        const t = await read(tall.bytes);
+        assert.strictEqual(t.info.width, t.info.height, 'a tall picture was not made square');
+        assert.strictEqual(t.info.width, 16, `squared to ${t.info.width}, not the long side`);
+        // Left pad is a copy of the red edge. The green top row is still the
+        // top row, which a centre crop would have thrown away. The black dot
+        // is still in the middle of the original, not stretched across it.
+        near(px(t.data, t.info, 0, 8), [255, 0, 0], 'left edge');
+        near(px(t.data, t.info, 15, 8), [0, 0, 255], 'right edge');
+        near(px(t.data, t.info, 6, 0), [0, 255, 0], 'top was cut');
+        near(px(t.data, t.info, 6, 15), [255, 255, 0], 'bottom was cut');
+        near(px(t.data, t.info, 8, 8), [0, 0, 0], 'the middle moved');
+
+        db.prepare('UPDATE store_products SET image_data = ? WHERE id = ?')
+          .run(await paint(16, 8, { x: 8, y: 4 }), P_UNPUB);
+        const wide = await getBuf(`/s/${LIVE}/i/${P_UNPUB}?w=16&s=1&v=wide`);
+        const d = await read(wide.bytes);
+        assert.strictEqual(d.info.width, d.info.height, 'a wide picture was not made square');
+        near(px(d.data, d.info, 8, 0), [0, 255, 0], 'top edge');
+        near(px(d.data, d.info, 8, 15), [255, 255, 0], 'bottom edge');
+        near(px(d.data, d.info, 0, 6), [255, 0, 0], 'left was cut');
+        near(px(d.data, d.info, 8, 8), [0, 0, 0], 'the wide middle moved');
+
+        const plain = await getBuf(`/s/${LIVE}/i/${P_UNPUB}?w=16&v=plain`);
+        const p = await read(plain.bytes);
+        assert.ok(p.info.width !== p.info.height, 'a picture that did not ask was squared anyway');
+      } finally {
+        db.prepare('UPDATE store_products SET image_data = ? WHERE id = ?').run(PIXEL, P_UNPUB);
+      }
+      const { body } = await get(`/s/${LIVE}`);
+      assert.ok(body.includes('w=320&s=1'), 'the menu card does not ask for the square');
+      assert.ok(body.includes('w=1000&s=1'), 'the product page does not ask for the square');
+    });
     await checkAsync('a product not listed at this shop is refused', async () => {
       const r = await getBuf(`/s/${LIVE}/i/${P_NONAME}`);
       assert.strictEqual(r.status, 404, 'an unlisted product\'s photo was served through a shop menu');
