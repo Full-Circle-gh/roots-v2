@@ -2635,8 +2635,9 @@ const TOGGLE_SCRIPT =
      Cancelling the picker adds nothing, so it still lands back here. */
   `dtAdded=function(){if(!sh.hidden)close()};` +
   `var open=function(card){` +
-  `var t=card.querySelector('template[data-dt]');if(!t)return;` +
-  `openPid=card.getAttribute('data-open');` +
+  `var id=card.getAttribute('data-open');` +
+  `var t=card.querySelector('template[data-dt]')||document.querySelector('template[data-dt="'+id+'"]');if(!t)return;` +
+  `openPid=id;` +
   // cloneNode rather than innerHTML: the template's content is already parsed,
   // and re-parsing a string is the step where an unescaped name would become
   // markup.
@@ -4536,7 +4537,8 @@ router.get('/s/:shopCode', (req, res) => {
   // A sized card is never one — its price is the smallest size's.
   const zeroAsk = (it) => !(it.variants && it.variants.length > 1) &&
     !!it.options && !(Number(it.price) > 0);
-  const card = (it) => {
+  const detailsById = new Map();
+  const card = (it, best = false) => {
     // The name goes into the ask before the detail sheet. The sheet's
     // paragraphs are long, and a name that waits behind them is still
     // English on the list the guest is reading.
@@ -4624,12 +4626,15 @@ router.get('/s/:shopCode', (req, res) => {
         ? `<template data-op="${m.store_product_id}">${esc(JSON.stringify(m.options))}</template>`
         : '';
     };
-    const optJson = vs ? vs.map(optTpl).join('') : optTpl(it);
+    const optJson = best ? '' : (vs ? vs.map(optTpl).join('') : optTpl(it));
     // TAPPABLE ONLY WHERE THERE IS SOMETHING TO READ. A product with no
     // ingredients, no nutrition and no allergen flags opens a sheet saying
     // nothing, which is worse than a card that does not respond — so the whole
     // detail apparatus is absent for it rather than empty.
-    const detail = detailBody(it, code, listed, sig, qrShown);
+    if (!detailsById.has(it.store_product_id)) {
+      detailsById.set(it.store_product_id, detailBody(it, code, listed, sig, qrShown));
+    }
+    const detail = detailsById.get(it.store_product_id);
     const tap = detail
       ? ` data-open="${it.store_product_id}" role="button" tabindex="0"`
       : (!it.sold_out ? ' data-buy="1" role="button" tabindex="0"' : '');
@@ -4640,7 +4645,9 @@ router.get('/s/:shopCode', (req, res) => {
       ? `<div class="menu-desc">${bi(plain(it.description_en), plain(it.description_cn))}</div>` : '';
     return `<div class="it${it.sold_out ? ' out' : ''}${detail ? ' has-dt' : ''}"${tap}>` +
       vadds +
-      (detail ? `<template data-dt="${it.store_product_id}">${detail}</template>` : '') +
+      // The normal category owns the heavy product data. Top Sellers opens
+      // that same template instead of downloading every detail twice.
+      (detail && !best ? `<template data-dt="${it.store_product_id}">${detail}</template>` : '') +
       optJson +
       `<div class="ph">${photo}` +
       (it.sold_out ? `<div class="sold">${bi('Sold out', '售罄')}</div>` : '') +
@@ -4890,7 +4897,7 @@ router.get('/s/:shopCode', (req, res) => {
     c.sections.map(sec => `<div class="sec-h"${nodeAttr(sec.nodeId)}>` +
         `<div class="kick${nameTr(sec.en, sec.cn) ? ' tr' : ''}">${bi(sec.en, sec.cn, true)}</div>` +
         `<div class="cnt">${pad2(sec.items.length)}</div>` +
-      `</div><div class="sales-scope">${bi('Last 30 days · All locations', '近30天 · 所有门店')}</div><div class="grid">${sec.items.map(card).join('')}</div>`).join('') +
+      `</div><div class="sales-scope">${bi('Last 30 days · All locations', '近30天 · 所有门店')}</div><div class="grid">${sec.items.map(it => card(it, !!c.best)).join('')}</div>`).join('') +
     `</section>`).join('');
   // The line above the menu is for a menu where at least one card opens.
   // The Chinese is composed (vocabulary v1.351).
