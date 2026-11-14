@@ -6789,6 +6789,11 @@ db.exec(`
     PRIMARY KEY (channel, store_code)
   );
 `);
+// §533 — Eleme's open/close is a command the daemon applies on the shop, then
+// clears. is_open still flips at the tap. last_result is the daemon's note
+// when the shop call lands or is refused.
+addColumn('channel_status', 'target_open', 'INTEGER');
+addColumn('channel_status', 'last_result', 'TEXT');
 
 // ── 青云聚信 (Qingyun, Meituan's delivery AGGREGATOR) courier-tracking ─────────
 // Mirrors a delivery dispatched through saas.cyanclouds.com back to a roots order so

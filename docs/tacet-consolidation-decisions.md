@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.645
+# Tacet shared-core consolidation — decisions record, v4.646
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-14 · v4.646 — **§533 · CLOSING ELEME CLOSES THE SHOP ON ELEME — ASH.** Ash closed Eleme at Tianhe. Tacet showed the store closed. The Eleme app stayed open, and Ash closed it there by hand. The close now reaches the shop. The screen says the same thing it says for every other channel. Two columns on `channel_status`. No new words. No change to `.gitignore` or CI. See §533.
 
 2026-11-14 · v4.645 — **§531 · THE QR MENU SHOWS A CATEGORY'S BANNER — ASH.** Ash set a banner on Coffee & Tea and the Ramada menu still had none. The picture was already saved. §297 had told the QR menu to ignore it. The same picture now sits at the top of that category, on the same days, and hides while a search is typed. A dish link opens that dish. A link to a mini-app page stays a picture. The web shop still ignores it. One amended hint (vocabulary v1.412). No schema change. No change to `.gitignore` or CI. See §531.
 
@@ -34243,3 +34245,16 @@ One amended hint on the category pane (vocabulary v1.412). No schema change. No 
 5. The existing seven languages and tenant theme apply. No brand, currency, sales numbers or Ramada-only code is hardcoded. The existing sticky basket appears after an item is added. During search, the duplicate Top Sellers section is hidden so each matching product appears once.
 
 No schema change. No change to CI, hooks or session configuration. Work is prepared on a separate branch for review; no production deployment is implied by a local commit.
+
+## §533 — CLOSING ELEME CLOSES THE SHOP ON ELEME
+
+**2026-11-14 · DECIDED BY ASH.** Ash closed Eleme at Tianhe in Tacet. Tacet showed the store closed. The Eleme merchant app stayed 营业中. Ash closed it on Eleme by hand. §393 had left “whether closing Eleme should actually close the shop” open, and the screen said Eleme is not told. That is no longer the rule.
+
+**The rule.**
+
+1. **Closing Eleme at a store closes the shop on Eleme. Opening it opens the shop.** The cell still flips at the tap, so the screen and the stock gate agree with it. `channel_status.target_open` is the command the Eleme daemon applies on the shop and then clears. It is not Meituan’s `store_business_status.target_open`.
+2. **The daemon tells Eleme through the merchant site the browser already drives.** It tries the current shop call first, then the older one. A refusal puts the cell back and says so, so the screen stops claiming a change that did not happen. A login, a security check, or a dropped connection leaves the command queued and tries again. A status read that still shows the old state is logged and the write is trusted: that read lags the write.
+3. **Orders already placed still come in.** The order poll stays on opening hours, not on this switch.
+4. **The screen says the same thing it says for every other channel.** The sentences that said Eleme is not told are retired (vocabulary v1.414). While the command is still queued, the row says `change queued · 变更排队中` and `applying… · 处理中…`, the words already used for Meituan.
+
+No new words. Two columns on `channel_status`: `target_open`, `last_result`. No change to `.gitignore` or CI.

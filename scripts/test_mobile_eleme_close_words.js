@@ -1,19 +1,14 @@
 #!/usr/bin/env node
 /**
- * §325 step S2m — WHAT CLOSING ELEME AT A STORE ACTUALLY DOES, AND THE WORDS
- * THAT SAY SO.
+ * §533 — CLOSING ELEME AT A STORE CLOSES THE SHOP ON ELEME.
  *
  *   node scripts/test_mobile_eleme_close_words.js
  *
- * Closing Eleme at a store (the Sales screen, phone and desktop) writes its
- * channel_status cell and drops that store's queued Eleme stock pushes; the
- * Eleme daemon then skips the store's pushes. Nothing tells Eleme the shop is
- * shut and the order poll is gated on opening hours only, so Eleme customers
- * can still order and those orders still come in. The phone's confirm said
- * "No new orders arrive at this store on this channel" — the opposite. This
- * pins both halves: the server behaviour the new sentence describes (real
- * setChannelOpen on a scratch database, and the daemon's source), and the
- * sentence itself on every close that reaches Eleme, phone and desktop.
+ * Closing Eleme at a store writes the cell at once (the grid and the stock
+ * gate) and queues channel_status.target_open. The Eleme daemon applies that
+ * command on the shop and then clears it. The confirm says the same thing it
+ * says for every other channel. The order poll stays gated on opening hours
+ * only, so orders already placed still come in.
  * No browser — fast shard.
  */
 'use strict';
@@ -57,9 +52,11 @@ function block(src, anchor) {
 }
 const line = (src, anchor) => { const a = src.indexOf(anchor); assert.ok(a >= 0, anchor); return src.slice(a, src.indexOf('\n', a)); };
 
-const ELEME_ONE = 'Stock stops being sent to Eleme for this store: updates already waiting are dropped, and new ones wait until it reopens. Eleme is not told the store is closed — customers can still order there, and those orders still come in.';
-const ELEME_ALL = 'Stock stops being sent to Eleme for every store: updates already waiting are dropped, and new ones wait until it reopens. Eleme is not told the stores are closed — customers can still order there, and those orders still come in.';
-const EXCEPT = 'Eleme is the exception: it is not told, so Eleme orders can still come in.';
+const ONE = 'No new orders arrive at this store on this channel. Orders already placed are not affected.';
+const ONE_OPEN = 'New orders can arrive at this store again.';
+const ALL = 'No new orders arrive on this channel at any store. Orders already placed are not affected.';
+const ALL_OPEN = 'New orders can arrive on this channel again. A shop that is closed stays closed.';
+const RETIRED = ['饿了么不会收到门店关闭的通知', '饿了么除外', 'Eleme is the exception', 'Eleme is not told'];
 
 // ─── the phone, in a vm ──────────────────────────────────────────────────
 const SRC = [
@@ -68,7 +65,7 @@ const SRC = [
   slice(M, 'const ROUTE_CAP={', '/* Fail-OPEN on null'),
   slice(M, 'const MCAN_MONEY_ONLY=', '/* NAMED FOR THE JOB'),
   slice(M, 'const CHAN_META={', 'function statusSales(){'),
-  '/*' + slice(M, '§325 S2m — WHAT CLOSING ELEME ACTUALLY DOES', "/* The Sales board's own retry"),
+  slice(M, "reg('chanCell'", "/* The Sales board's own retry"),
 ].join('\n');
 const cell = (code, open) => ({ storeCode: code, nameEn: code === 'tianhe' ? 'Tianhe' : 'Yuexiu', nameCn: code === 'tianhe' ? '天河店' : '越秀店', open });
 function phone(opts = {}) {
@@ -96,9 +93,12 @@ function phone(opts = {}) {
   const ask = () => { assert.ok(ctx.state.ask, 'no confirm'); return { title: String(ctx.state.ask.title), body: String(ctx.state.ask.body) }; };
   return { ctx, CMD, writes, ask };
 }
+function noRetired(body) {
+  for (const s of RETIRED) assert.ok(!body.includes(s), 'retired sentence still shown: ' + s);
+}
 
 section('1 · what the server really does when Eleme is closed at a store');
-it('the close writes the cell and drops that store\'s queued Eleme pushes — and only those', () => {
+it('the close writes the cell, queues the shop command, and drops that store\'s queued Eleme pushes — and only those', () => {
   const { setChannelOpen } = require(path.join(ROOT, 'lib', 'store-close'));
   db.prepare(`INSERT OR IGNORE INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order) VALUES (1, 'tianhe', 'Tianhe', '天河', 1, 1)`).run();
   db.prepare(`INSERT OR IGNORE INTO store_products (id, name_en, name_cn, sku, sell_price) VALUES (1, 'Oat milk', '燕麦奶', 'S2M-1', 10)`).run();
@@ -107,87 +107,125 @@ it('the close writes the cell and drops that store\'s queued Eleme pushes — an
   q('tianhe', 'pending'); q('tianhe', 'error'); q('yuexiu', 'pending'); q('tianhe', 'done');
   const r = setChannelOpen(db, { channel: 'eleme', storeCode: 'tianhe', open: false, by: 'test' });
   assert.strictEqual(r.cleared, 2, 'the pending and the error row went');
-  assert.strictEqual(db.prepare("SELECT is_open FROM channel_status WHERE channel='eleme' AND store_code='tianhe'").get().is_open, 0);
+  const closed = db.prepare("SELECT is_open, target_open FROM channel_status WHERE channel='eleme' AND store_code='tianhe'").get();
+  assert.strictEqual(closed.is_open, 0, 'the cell flips at the tap');
+  assert.strictEqual(closed.target_open, 0, 'and the daemon is told to close the shop');
   assert.strictEqual(db.prepare("SELECT COUNT(*) AS c FROM eleme_sync_queue WHERE store_code='yuexiu'").get().c, 1, 'the other store kept its push');
   assert.strictEqual(db.prepare("SELECT COUNT(*) AS c FROM eleme_sync_queue WHERE store_code='tianhe' AND status='done'").get().c, 1, 'history is kept');
   assert.ok(require(path.join(ROOT, 'lib', 'inventory')).channelClosedStores('eleme').has('tianhe'), 'and the store now reads closed for Eleme');
   assert.strictEqual(r.refilled, 0);
   const re = setChannelOpen(db, { channel: 'eleme', storeCode: 'tianhe', open: true, by: 'test' });
   assert.strictEqual(re.refilled, 0, 'reopening Eleme queues no fresh snapshot (Meituan only)');
+  const opened = db.prepare("SELECT is_open, target_open FROM channel_status WHERE channel='eleme' AND store_code='tianhe'").get();
+  assert.strictEqual(opened.is_open, 1);
+  assert.strictEqual(opened.target_open, 1, 'reopening queues the shop open, before the daemon has run');
 });
-it('the daemon skips a closed store\'s pushes, and its order poll does not look at the switch', () => {
+it('the daemon applies the shop command, and its order poll does not look at the switch', () => {
   const D = read('scripts/eleme-daemon.js');
   assert.ok(/channelClosedStores\('eleme'\)/.test(block(D, 'async function processStockQueue(')), 'pushes skip closed stores');
   const poll = block(D, 'async function pollOrders(');
   assert.ok(!/channel_status|channelClosedStores|isStoreTradingOnChannel/.test(poll), 'the order import never reads the close');
   const loop = block(D, 'async function main(');
-  assert.ok(/if \(!isStoreOpen\(code\)\)/.test(loop) && !/channelClosedStores|channel_status/.test(loop.slice(loop.indexOf('ORDER_POLL_ON) {'))), 'the poll is gated on opening hours only');
+  const pollLoop = loop.slice(loop.indexOf('if (ORDER_POLL_ON)'), loop.indexOf('lastDriftSweep'));
+  assert.ok(/if \(!isStoreOpen\(code\)\)/.test(pollLoop) && !/channelClosedStores|channel_status|isStoreTradingOnChannel/.test(pollLoop), 'the poll is gated on opening hours only');
+  assert.ok(/applyShopStatus\(/.test(loop), 'the loop tells Eleme');
+  const apply = block(D, 'async function applyShopStatus(');
+  assert.ok(/setBusinessStatus\(/.test(apply), 'through the browser session');
+  const queued = apply.indexOf('left queued');
+  const clear = apply.indexOf('target_open=NULL');
+  assert.ok(queued >= 0 && clear > queued, 'a login or network miss leaves the command queued');
+  assert.ok(/is_open=\?/.test(apply), 'a refusal puts the cell back');
 });
-it('nothing anywhere tells Eleme a shop is shut', () => {
-  for (const f of ['lib/eleme-browser.js', 'lib/eleme-client.js', 'scripts/eleme-daemon.js', 'routes/eleme-admin.js']) {
-    if (!fs.existsSync(path.join(ROOT, f))) continue;
-    assert.ok(!/置休|setShopStatus|setBusinessStatus|shop_status|business_status/.test(read(f)), f + ' has no Eleme shop-status write');
-  }
+it('the browser asks Eleme with the shop calls the merchant shell already names', () => {
+  const B = read('lib/eleme-browser.js');
+  assert.ok(B.includes("'openShop'"), 'ncp open');
+  assert.ok(B.includes('updateShopBusyLevel') && /busyLevel:\s*2/.test(B), 'ncp close is 休息中');
+  assert.ok(B.includes('xtop.shop.shopBusinessOperateTop.openShop'), 'xtop open');
+  assert.ok(B.includes('xtop.shop.shopBusinessOperateTop.closeShop'), 'xtop close');
+  assert.ok(B.includes('async setBusinessStatus(open)'), 'the daemon has a method to call');
+});
+it('a status payload says open or closed only when it really does', () => {
+  const { shopLooksOpen } = require(path.join(ROOT, 'lib', 'eleme-browser'));
+  assert.strictEqual(shopLooksOpen({ busyLevel: 0 }), true);
+  assert.strictEqual(shopLooksOpen({ busyLevel: 2 }), false);
+  assert.strictEqual(shopLooksOpen({ data: { shop: { busy_level: 2 } } }), false);
+  assert.strictEqual(shopLooksOpen({ statusText: '营业中' }), true);
+  assert.strictEqual(shopLooksOpen({ statusText: '休息中' }), false);
+  assert.strictEqual(shopLooksOpen({ hours: '营业时间 10:00-22:00' }), null);
+  assert.strictEqual(shopLooksOpen({ note: '未营业' }), null);
+  assert.strictEqual(shopLooksOpen({}), null);
 });
 
 section('2 · the phone says what is true');
-it('closing Eleme at one store: what stops, and that orders still come in', () => {
+it('closing Eleme at one store uses the same sentence as every other channel', () => {
   const p = phone();
   p.CMD.chanCell('eleme', 'tianhe', 0);
   const a = p.ask();
   assert.strictEqual(a.title, 'Close Eleme at Tianhe?');
-  assert.strictEqual(a.body, ELEME_ONE);
-  assert.ok(!a.body.includes('No new orders'), 'the old promise is gone for Eleme');
+  assert.strictEqual(a.body, ONE);
+  noRetired(a.body);
   assert.strictEqual(p.writes.length, 0);
 });
 it('every other channel keeps its sentence — Meituan really does close', () => {
   const p = phone();
   p.CMD.chanCell('meituan', 'tianhe', 0);
-  assert.strictEqual(p.ask().body, 'No new orders arrive at this store on this channel. Orders already placed are not affected.');
+  assert.strictEqual(p.ask().body, ONE);
 });
-it('reopening Eleme at a store says the stock comes back, not that orders can arrive again', () => {
+it('reopening Eleme at a store says orders can arrive again', () => {
   const p = phone();
   p.CMD.chanCell('eleme', 'yuexiu', 1);
-  assert.strictEqual(p.ask().body, 'Stock is sent to Eleme for this store again.');
+  assert.strictEqual(p.ask().body, ONE_OPEN);
+  noRetired(p.ask().body);
 });
-it('the whole channel, both ways', () => {
+it('the whole channel, both ways, with no Eleme exception', () => {
   const p = phone();
   p.CMD.chanAll('eleme', 0);
-  assert.strictEqual(p.ask().body, ELEME_ALL);
+  assert.strictEqual(p.ask().body, ALL);
   p.CMD.chanAll('eleme', 1);
-  assert.strictEqual(p.ask().body, 'Stock is sent to Eleme again. A shop that is closed stays closed.');
+  assert.strictEqual(p.ask().body, ALL_OPEN);
   p.CMD.chanAll('meituan', 0);
-  assert.ok(p.ask().body.startsWith('No new orders arrive on this channel at any store.'), 'other channels unchanged');
+  assert.ok(p.ask().body.startsWith(ALL), 'other channels unchanged');
+  assert.ok(p.ask().body.includes('Meituan follows within about a minute.'), 'Meituan still names its own delay');
 });
-it('closing a whole shop, or everything, names Eleme as the exception — only where Eleme is live', () => {
+it('closing a whole shop, or everything, does not call Eleme the exception', () => {
   const p = phone();
   p.CMD.shopOpen('tianhe', 0);
-  assert.ok(p.ask().body.endsWith(EXCEPT), 'the shop switch');
+  noRetired(p.ask().body);
+  assert.ok(p.ask().body.startsWith('Every sales channel at this shop closes'));
   p.CMD.ocMaster(0);
-  assert.ok(p.ask().body.endsWith(EXCEPT), 'Close everything');
-  const n = phone({ eleme: false });
-  n.CMD.shopOpen('tianhe', 0);
-  assert.ok(!n.ask().body.includes('Eleme'), 'no Eleme, no exception');
-  n.CMD.ocMaster(0);
-  assert.ok(!n.ask().body.includes('Eleme'));
+  noRetired(p.ask().body);
+  assert.ok(p.ask().body.includes('every Meituan shop closes within about a minute'));
 });
 it('in Chinese', () => {
   const p = phone({ lang: 'zh' });
   p.CMD.chanCell('eleme', 'tianhe', 0);
-  assert.ok(p.ask().body.includes('饿了么不会收到门店关闭的通知'));
+  assert.ok(p.ask().body.includes('该门店在此渠道将不再接到新订单'));
+  noRetired(p.ask().body);
+  p.CMD.chanCell('eleme', 'yuexiu', 1);
+  assert.strictEqual(p.ask().body, '这家门店可以重新接单。');
   p.CMD.shopOpen('tianhe', 0);
-  assert.ok(p.ask().body.endsWith('饿了么除外：它不会收到通知，饿了么订单仍可能进来。'));
+  noRetired(p.ask().body);
+  p.CMD.ocMaster(0);
+  noRetired(p.ask().body);
+});
+it('the Sales board keeps asking while a change is still queued', () => {
+  const load = block(M, 'async function loadChannels(');
+  assert.ok(load.includes('x.pending') && load.includes("top==='sales'") && load.includes(',4000'), 'polls every 4s on Sales while a cell is pending');
+  assert.ok(load.indexOf('chanTried&&!force') < load.indexOf('_chanPoll'), 'a casual re-entry does not cancel that wait');
 });
 
 section('3 · the desktop says the same');
-it('opening Eleme at a shut shop says the stock comes back', () => {
+it('opening Eleme at a shut shop says orders can arrive again', () => {
   const C = read('public/retail-admin/01-core.js');
-  assert.ok(C.includes("body: ch === 'eleme' ? cuT('Stock is sent to Eleme for this store again.', '恢复向饿了么推送该门店的库存。')"));
-  assert.ok(M.includes("openOne:['Stock is sent to Eleme for this store again.','恢复向饿了么推送该门店的库存。']"), 'the phone\'s live pair, word for word');
+  assert.ok(!C.includes('Stock is sent to Eleme'));
+  assert.ok(C.includes("cuT('New orders can arrive at this store again.', '这家门店可以重新接单。')"));
+  assert.ok(!/=== 'meituan' && c\.pending/.test(C) && !/=== 'meituan' && x && x\.pending/.test(C), 'applying… is any queued change');
+  assert.ok(C.includes("c.pending ? ' <span class=\"sales-ch-loc-note\">'"));
 });
-it('the open/close panel names Eleme as the exception, in the phone\'s words', () => {
+it('the open/close panel no longer says Eleme is the exception', () => {
   const H = read('public/retail-admin.html');
-  assert.ok(H.includes('Closing pauses new orders.') && H.includes(EXCEPT + ' · ') && H.includes('饿了么除外：它不会收到通知，饿了么订单仍可能进来。'));
+  assert.ok(H.includes('Closing pauses new orders.'));
+  assert.ok(!H.includes('Eleme is the exception') && !H.includes('饿了么除外'));
 });
 
 (async () => {
