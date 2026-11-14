@@ -70,6 +70,7 @@ const { applySiteMenuFrameHeaders } = require('../lib/shop-menu-redirect');
 const { getCategoryTree } = require('../lib/category-tree');
 const qrCatOrder = require('../lib/qr-menu-category-order');
 const qrVariantSales = require('../lib/qr-variant-sales');
+const qrCompanySales = require('../lib/qr-company-sales');
 const { themeToCssVars, sanitizeTheme,
         DIGIT_SUBSTITUTE, DIGIT_RANGE } = require('../lib/brand-theme');
 const inventory = require('../lib/inventory');
@@ -569,7 +570,7 @@ function buildMenu(shop) {
            -- Showing a tag that IS set is the other direction and is what Ash
            -- asked for; blockRead.freeOfChips drops any flag the card itself
            -- speaks about, so the card is never contradicted.
-           p.description_blocks, p.nutrition, p.free_of,
+           p.description_blocks, p.description_en, p.description_cn, p.nutrition, p.free_of,
            -- §179 — WHAT SIGNS THE SHEET. The colophon is NOT a block and never
            -- was: it is three columns on the product row over the shop's own
            -- signature. That is why the per-block "hide on the QR menu" switch
@@ -757,6 +758,13 @@ function buildMenu(shop) {
   }
   const out = cats.filter(c => c.sections.length);
   if (other.sections.length) out.push(other);
+  const companyUnits = qrCompanySales.companyUnits();
+  for (const c of out) for (const sec of c.sections) for (const r of sec.items) {
+    r.company_units = qrCompanySales.forProduct(companyUnits, r);
+  }
+  const best = qrCompanySales.topSellers(out);
+  if (best.length) out.unshift({ id: 'best', en: 'TOP SELLERS', cn: '热销商品',
+    best: true, sections: [{ en: 'TOP SELLERS', cn: '热销商品', items: best }] });
   return out;
 }
 
@@ -2460,6 +2468,33 @@ button.cat-bn{cursor:pointer}
 .out .ph img{filter:grayscale(.5);opacity:.72}
 .out .t,.out .pr{opacity:.5}
 
+/* §532 replaces the historical two-column rules above. Logical placement
+   keeps the same row usable in Arabic. Titles and counts can wrap separately. */
+.bar{padding:calc(9px + env(safe-area-inset-top)) 12px 9px;row-gap:8px}
+.nm{font-size:19px}
+.srch{height:38px;font-family:var(--f-aleo)}
+.rail{width:84px}
+.rail a{padding:15px 4px}
+.sec-h{padding:16px 12px 6px;flex-wrap:wrap;row-gap:4px}
+.sales-scope{flex:1 0 100%;padding-bottom:4px;font-family:var(--f-aleo);font-size:12px;line-height:1.4;color:var(--olive)}
+.grid{grid-template-columns:minmax(0,1fr);gap:0;padding:0 12px}
+.it{display:grid;grid-template-columns:clamp(60px,19vw,88px) minmax(0,1fr);
+  column-gap:10px;row-gap:7px;padding:14px 0;border-bottom:1px solid rgba(0,0,0,.1);align-items:start}
+.it .ph{grid-column:1;grid-row:1 / 3;align-self:start}
+.it .title{grid-column:2;min-width:0;display:flex;align-items:baseline;flex-wrap:wrap;gap:5px 7px}
+.it .t{margin:0;font-size:16px;line-height:1.25;min-width:0;max-width:100%}
+.sales{font-family:var(--f-aleo);font-size:11px;line-height:1.5;font-weight:600;
+  color:var(--olive);font-variant-numeric:tabular-nums;white-space:nowrap}
+.menu-desc{flex-basis:100%;font-family:var(--f-aleo);font-size:12px;line-height:1.4;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.it .pf{grid-column:2;margin:0;align-self:end;min-width:0}
+.it .pr{font-family:var(--f-aleo);font-size:15px;font-weight:700;letter-spacing:0;line-height:1.3}
+.it .add{flex:none;width:44px;height:44px}
+.it[data-buy]{cursor:pointer}
+.it:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.srching .top-sellers{display:none}
+@media (min-width:700px){.rail{width:120px}.grid{padding:0 20px}.it{grid-template-columns:96px minmax(0,1fr);column-gap:16px}.it .t{font-size:18px}}
+
 .empty{padding:64px 24px;text-align:center}
 .empty .t{font-family:var(--f-bear);font-size:22px;line-height:1.2;margin:0}
 .empty .s{margin-top:8px;color:var(--olive);font-size:14px}`;
@@ -2550,7 +2585,7 @@ const TOGGLE_SCRIPT =
   `if(!v){if(w)w.classList.remove('srching');var h=document.querySelectorAll('.sx');` +
   `for(var i=0;i<h.length;i++)h[i].classList.remove('sx');none.hidden=true;was='';return}` +
   `if(!was)window.scrollTo(0,0);was=v;if(w)w.classList.add('srching');var any=0;` +
-  `for(var c=0;c<cats.length;c++){var g=cats[c].querySelectorAll('.grid'),cAny=0;` +
+  `for(var c=0;c<cats.length;c++){if(cats[c].classList.contains('top-sellers'))continue;var g=cats[c].querySelectorAll('.grid'),cAny=0;` +
   `for(var j=0;j<g.length;j++){var its=g[j].querySelectorAll('.it'),gAny=0;` +
   `for(var k=0;k<its.length;k++){var ok=nm(its[k]).indexOf(v)>=0;mark(its[k],!ok);if(ok)gAny=1}` +
   `mark(g[j],!gAny);var hd=g[j].previousElementSibling;` +
@@ -2658,8 +2693,9 @@ const TOGGLE_SCRIPT =
      Cancelling the picker adds nothing, so it still lands back here. */
   `dtAdded=function(){if(!sh.hidden)close()};` +
   `var open=function(card){` +
-  `var t=card.querySelector('template[data-dt]');if(!t)return;` +
-  `openPid=card.getAttribute('data-open');` +
+  `var id=card.getAttribute('data-open');` +
+  `var t=card.querySelector('template[data-dt]')||document.querySelector('template[data-dt="'+id+'"]');if(!t)return;` +
+  `openPid=id;` +
   // cloneNode rather than innerHTML: the template's content is already parsed,
   // and re-parsing a string is the step where an unescaped name would become
   // markup.
@@ -2740,7 +2776,7 @@ const TOGGLE_SCRIPT =
   `document.addEventListener('keydown',function(e){` +
   `if(e.key!=='Enter'&&e.key!==' ')return;` +
   `var card=e.target.closest?e.target.closest('.it[data-open]'):null;` +
-  `if(card){e.preventDefault();open(card)}},false);` +
+  `if(card&&e.target===card){e.preventDefault();open(card)}},false);` +
   // Adding from the sheet routes through the card's own + , so there is one
   // add path and the basket cannot learn a second way to be wrong.
   /* Adding from the page routes through the card's own + , so there is one
@@ -2761,6 +2797,12 @@ const TOGGLE_SCRIPT =
   `var os=document.getElementById('sheet');` +
   `if(!os||os.hidden)close()},false);` +
   `})();` +
+  // Cards without a detail page use the existing button, including its picker.
+  `(function(){var buy=function(e){var c=e.target.closest?e.target.closest('.it[data-buy]'):null;` +
+  `if(!c||(e.target.closest&&e.target.closest('.add')))return;` +
+  `if(e.type==='keydown'){if(e.target!==c||(e.key!=='Enter'&&e.key!==' '))return;e.preventDefault()}` +
+  `var b=c.querySelector('.pf .add');if(b)b.click()};` +
+  `document.addEventListener('click',buy,false);document.addEventListener('keydown',buy,false)})();` +
   // ── THE BASKET ──────────────────────────────────────────────────────────
   //
   // IT IS THE ONLY STATE THIS PAGE HOLDS, and it holds it in a plain object
@@ -4542,8 +4584,11 @@ router.get('/s/:shopCode', (req, res) => {
   // The rail: ALL, every category holding something, then OTHER. Anchors, not
   // tabs — a menu is short enough to scroll, and an anchor needs no state and
   // no script to work. ALL / 全部 and OTHER / 其他 are the shop's own labels.
+  const hasBest = groups.some(c => c.best);
   const rail = groups.length
-    ? `<nav class="rail"><a href="#top" data-cat="top" class="on">` +
+    ? `<nav class="rail">` +
+      (hasBest ? `<a href="#best" data-cat="best" class="on"><span class="lb">${bi('TOP SELLERS', '热销商品')}</span><span class="cv">\u203a</span></a>` : '') +
+      `<a href="#top" data-cat="top"${hasBest ? '' : ' class="on"'}>` +
       // ALL WEARS THE SAME THREE PARTS AS EVERY OTHER TAB, and the empty .cv is
       // the reason: the label only centres because it is the flex:1 child
       // between two 9px spacers. ALL had neither, so its text sat hard against
@@ -4551,7 +4596,7 @@ router.get('/s/:shopCode', (req, res) => {
       // chevron in it — ALL is the top of the list, not a jump into one — but
       // the width it would occupy is still held, or the centring is a lie.
       `<span class="lb">${bi('ALL', '全部')}</span><span class="cv"></span></a>` +
-      groups.map(c => `<a href="#${c.id}" data-cat="${c.id}">` +
+      groups.filter(c => !c.best).map(c => `<a href="#${c.id}" data-cat="${c.id}">` +
         `<span class="lb">${bi(c.en, noOrphanAmp(c.cn))}</span><span class="cv">\u203a</span></a>`).join('') +
       `</nav>`
     : '';
@@ -4560,7 +4605,8 @@ router.get('/s/:shopCode', (req, res) => {
   // A sized card is never one — its price is the smallest size's.
   const zeroAsk = (it) => !(it.variants && it.variants.length > 1) &&
     !!it.options && !(Number(it.price) > 0);
-  const card = (it) => {
+  const detailsById = new Map();
+  const card = (it, best = false) => {
     // The name goes into the ask before the detail sheet. The sheet's
     // paragraphs are long, and a name that waits behind them is still
     // English on the list the guest is reading.
@@ -4648,24 +4694,33 @@ router.get('/s/:shopCode', (req, res) => {
         ? `<template data-op="${m.store_product_id}">${esc(JSON.stringify(m.options))}</template>`
         : '';
     };
-    const optJson = vs ? vs.map(optTpl).join('') : optTpl(it);
+    const optJson = best ? '' : (vs ? vs.map(optTpl).join('') : optTpl(it));
     // TAPPABLE ONLY WHERE THERE IS SOMETHING TO READ. A product with no
     // ingredients, no nutrition and no allergen flags opens a sheet saying
     // nothing, which is worse than a card that does not respond — so the whole
     // detail apparatus is absent for it rather than empty.
-    const detail = detailBody(it, code, listed, sig, qrShown);
+    if (!detailsById.has(it.store_product_id)) {
+      detailsById.set(it.store_product_id, detailBody(it, code, listed, sig, qrShown));
+    }
+    const detail = detailsById.get(it.store_product_id);
     const tap = detail
-      ? ` data-open="${it.store_product_id}" role="button" tabindex="0"` : '';
+      ? ` data-open="${it.store_product_id}" role="button" tabindex="0"`
+      : (!it.sold_out ? ' data-buy="1" role="button" tabindex="0"' : '');
+    const sales = `<span class="sales">${bi('{n} sold', '已售 {n}').replace(/\{n\}/g, esc(it.company_units.toLocaleString('en-US', { maximumFractionDigits: 2 })))}</span>`;
+    // Use only the catalogue's own copy, never invent a product description.
+    const plain = v => String(v || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const description = plain(it.description_en) || plain(it.description_cn)
+      ? `<div class="menu-desc">${bi(plain(it.description_en), plain(it.description_cn))}</div>` : '';
     return `<div class="it${it.sold_out ? ' out' : ''}${detail ? ' has-dt' : ''}"${tap}>` +
       vadds +
-      (detail ? `<template data-dt="${it.store_product_id}">${detail}</template>` : '') +
+      // The normal category owns the heavy product data. Top Sellers opens
+      // that same template instead of downloading every detail twice.
+      (detail && !best ? `<template data-dt="${it.store_product_id}">${detail}</template>` : '') +
       optJson +
       `<div class="ph">${photo}` +
       (it.sold_out ? `<div class="sold">${bi('Sold out', '售罄')}</div>` : '') +
       `</div>` +
-      `<div class="t${nameTr(it.name_en, it.name_cn) ? ' tr' : ''}">${bi(it.name_en, it.name_cn, true)}</div>` +
-      // `Details · 详情`, a live pair. Only where there is a sheet to open.
-      (detail ? `<div class="dt-l">${bi('Details', '详情')}</div>` : '') +
+      `<div class="title"><div class="t${nameTr(it.name_en, it.name_cn) ? ' tr' : ''}">${bi(it.name_en, it.name_cn, true)}</div>${sales}${description}</div>` +
       // "from 29" / "29起" — the mini app's own live pair (shop.js _toRows),
       // word order as each language reads it.
       `<div class="pf"><div class="pr">` +
@@ -4906,18 +4961,17 @@ router.get('/s/:shopCode', (req, res) => {
       : '')
   ) : '';
 
-  const paneHtml = groups.map(c => `<section class="cat" id="${c.id}"${nodeAttr(c.nodeId)}>` +
+  const paneHtml = groups.map(c => `<section class="cat${c.best ? ' top-sellers' : ''}" id="${c.id}"${nodeAttr(c.nodeId)}>` +
     menuBannerHtml(c, groups) +
     c.sections.map(sec => `<div class="sec-h"${nodeAttr(sec.nodeId)}>` +
         `<div class="kick${nameTr(sec.en, sec.cn) ? ' tr' : ''}">${bi(sec.en, sec.cn, true)}</div>` +
         `<div class="cnt">${pad2(sec.items.length)}</div>` +
-      `</div><div class="grid">${sec.items.map(card).join('')}</div>`).join('') +
+        `<div class="sales-scope">${bi('Last 30 days · All locations', '近30天 · 所有门店')}</div>` +
+      `</div><div class="grid">${sec.items.map(it => card(it, !!c.best)).join('')}</div>`).join('') +
     `</section>`).join('');
   // The line above the menu is for a menu where at least one card opens.
   // The Chinese is composed (vocabulary v1.351).
-  const dtTip = paneHtml.includes(' has-dt')
-    ? `<div class="dt-tip">${bi('Tap any product to see its details.', '点击商品查看详情。')}</div>`
-    : '';
+  const dtTip = '';
   const popupUi = qrPopupBlock(qrMenuPopup.forMenu(cfg('popups.list', [])));
   const body = (groups.length
     ? `<div class="wrap">${rail}<div class="pane">` +
