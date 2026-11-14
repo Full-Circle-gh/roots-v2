@@ -539,6 +539,12 @@ const soldOut = (row) => /class="sold"/.test(row);
           assert.ok(body.includes(".cat-bn[data-bn]"), 'a tap has nothing to open the dish');
         });
       await withBanner(
+        { image_url: '/api/retail/media/12', target: 'product:' + P_SZ_SMALL, start_at: '', end_at: '' },
+        ({ body }) => {
+          assert.ok(body.includes(`data-bn="${P_SZ_SMALL}"`), 'a size of another card did not become a button');
+          assert.ok(body.includes('.add[data-add="\'+id+\'"]'), 'a tap on a size has no way back to its card');
+        });
+      await withBanner(
         { image_url: '/api/retail/media/12', target: 'promotions', start_at: '', end_at: '' },
         ({ body }) => {
           assert.ok(body.includes('class="cat-bn"'), 'the picture is missing');

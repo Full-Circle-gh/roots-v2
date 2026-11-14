@@ -2684,11 +2684,13 @@ const TOGGLE_SCRIPT =
   `shOpen(sh);body.scrollTop=0};` +
   `document.addEventListener('click',function(e){` +
   // §531 — a banner that names a dish on this menu opens that dish. The id is
-  // digits we wrote; a page link never becomes a button, so it cannot land here.
+  // digits we wrote. A size of a collapsed card is not the card's own
+  // data-open: it is that size's add button, which sits inside the card.
+  // A page link never becomes a button, so it cannot land here.
   `var bn=e.target.closest?e.target.closest('.cat-bn[data-bn]'):null;` +
   `if(bn){var id=bn.getAttribute('data-bn');` +
   `var bcard=document.querySelector('.it[data-open=\"'+id+'\"]');` +
-  `if(!bcard){var bt=document.querySelector('template[data-dt=\"'+id+'\"],template[data-op=\"'+id+'\"]');` +
+  `if(!bcard){var bt=document.querySelector('template[data-dt=\"'+id+'\"],template[data-op=\"'+id+'\"],.add[data-add=\"'+id+'\"]');` +
   `bcard=bt&&bt.closest?bt.closest('.it[data-open]'):null}` +
   `if(bcard)open(bcard);return}` +
   // A choice's picture in the option picker opens the same viewer.
