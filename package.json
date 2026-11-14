@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "main": "server.js",
   "scripts": {
+    "postinstall": "node scripts/install-git-hooks.js",
+    "sync": "node scripts/pull-from-github.js",
+    "setup:hooks": "node scripts/install-git-hooks.js",
     "start": "node server.js",
     "lint": "eslint routes lib middleware scripts server.js database.js public",
     "lint:fix": "eslint --fix routes lib middleware scripts server.js database.js public",

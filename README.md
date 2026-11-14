@@ -35,11 +35,18 @@ single SQLite database.
 ## Getting started
 
 ```bash
-npm install
+npm install        # also installs the post-commit hook (local commit → auto push)
+npm run sync       # before work: pull GitHub into your local copy
 npm start          # node server.js → http://localhost:4000
 npm run lint       # eslint
 npm run lint:fix
 ```
+
+**Local → GitHub (automatic):** edit on disk, `git commit` saves locally first; the
+post-commit hook then runs `git push` so GitHub catches up. If push fails (offline), the
+commit is still local — run `git push` later. Re-install hooks anytime with
+`npm run setup:hooks`. On Windows, `powershell -File scripts/work-start.ps1` runs
+`sync` + hook install in one step.
 
 Secrets are read from a local `.env` (gitignored — see `.gitignore` for the full
 no-commit list: `.env*`, `data/*.db`, PII migration files, `DEPLOY.md`). Ask a maintainer

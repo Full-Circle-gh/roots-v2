@@ -15,4 +15,8 @@
 # ship WITHOUT GitHub (outage, offline, CI down), run scripts/deploy-changed.sh
 # by hand — it re-ships HEAD through the same installer.
 root=$(git rev-parse --show-toplevel)
-bash "$root/scripts/auto-push.sh"
+if command -v node >/dev/null 2>&1; then
+  node "$root/scripts/auto-push.js"
+else
+  bash "$root/scripts/auto-push.sh"
+fi
