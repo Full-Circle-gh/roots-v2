@@ -22,7 +22,8 @@ const { logActivity } = require('../middleware/auth');
 // Shared lenient tool-argument recovery (relay can stringify / mis-escape a
 // tool_use input or a nested field). This module is the canonical home; ai.js
 // uses its own provider abstraction below but reuses these pure helpers.
-const { parseToolInput, escapeStrayJsonQuotes } = require('../lib/model-gateway');
+const modelGateway = require('../lib/model-gateway');
+const { parseToolInput, escapeStrayJsonQuotes, parseLooseJson } = modelGateway;
 const router = express.Router();
 
 // ─────────────────────────────────────────────────────────────────────
@@ -591,12 +592,113 @@ LANGUAGES: Only Chinese copy is provided. Fill the _cn fields from it, then WRIT
 LANGUAGES: Only Chinese copy is provided. Fill the _cn fields and leave every _en field as an empty string (""). Do not invent English — the operator will write it.`;
 }
 
+// The paste the operator can already see, divided on the headings it actually
+// contains. Used when the model call throws or comes back with nothing, so a
+// paste is never answered with "Smart paste failed" while the words are sitting
+// in the box. Their wording, not a draft: a paragraph stays a paragraph, and an
+// Ingredients / 配料 line becomes the ingredient chips.
+function _composePlain(s) {
+  return String(s || '').replace(/\*\*/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+function _composeSplitIngredients(text) {
+  const src = String(text || '');
+  if (!src.trim()) return { body: '', ingredients: '' };
+  const m = /\*{0,2}\s*(?:\bingredients?\b|配料|成分)\s*\*{0,2}\s*[:：]\s*\*{0,2}/i.exec(src);
+  if (!m) return { body: _composePlain(src), ingredients: '' };
+  return {
+    body: _composePlain(src.slice(0, m.index)),
+    ingredients: _composePlain(src.slice(m.index + m[0].length)),
+  };
+}
+function _composeIngredientNames(s) {
+  if (!s) return [];
+  const tidy = x => x.replace(/\s+/g, ' ').replace(/^[\s.*·•\-–—]+|[\s.*。．]+$/g, '').trim();
+  // A wrapped line ("black\ntea, ginger") is one list broken on the commas, not
+  // three names. A list with one entry per line and no commas is the other shape.
+  const byComma = s.split(/[,，、;；]/).map(tidy).filter(Boolean);
+  if (byComma.length > 1) return byComma.slice(0, 40);
+  const byLine = s.split(/\n/).map(tidy).filter(Boolean);
+  return (byLine.length > 1 ? byLine : byComma).slice(0, 40);
+}
+function fallbackBlocks(textEn, textCn) {
+  const en = _composeSplitIngredients(textEn);
+  const cn = _composeSplitIngredients(textCn);
+  const blocks = [];
+  if (en.body || cn.body) {
+    blocks.push({
+      type: 'hero_intro',
+      kicker_en: '', kicker_cn: '',
+      body_en: en.body, body_cn: cn.body,
+      highlight_en: '', highlight_cn: '',
+    });
+  }
+  const namesEn = _composeIngredientNames(en.ingredients);
+  const namesCn = _composeIngredientNames(cn.ingredients);
+  if (namesEn.length || namesCn.length) {
+    const n = Math.max(namesEn.length, namesCn.length);
+    const items = [];
+    for (let i = 0; i < n; i++) {
+      items.push({ name_en: namesEn[i] || '', name_cn: namesCn[i] || '', pct: '', lead: i === 0 });
+    }
+    blocks.push({ type: 'ingredients_chips', items });
+  }
+  return blocks;
+}
+
+// A 400 from a model that does not accept "thinking off", or a max_tokens
+// ceiling below the one we asked for, is a different request — not a dead end.
+// Returns the next request, or null when this error is not one of those two.
+function composeRetryArgs(err, args) {
+  const detail = String((err && (err._detail || err.message)) || '');
+  if (!(err && Number(err.status) === 400) || !args) return null;
+  if (args.thinking && /thinking/i.test(detail)) {
+    const next = { ...args };
+    delete next.thinking;
+    return next;
+  }
+  if (args.max_tokens > 8000 && /max_tokens/i.test(detail)) {
+    return { ...args, max_tokens: 8000 };
+  }
+  return null;
+}
+
+// DeepSeek stays on the old adapter: the gateway speaks one wire format, and
+// the mainland standby is the other. Everyone else goes through the gateway,
+// which is the door the rest of the product already uses — it reads
+// MODEL_API_KEY / MODEL_API_URL as well as the older ANTHROPIC_* names. Smart
+// paste was the one caller still looking only at the old names, so a box that
+// had moved its key or its proxy answered every paste with a failure while
+// the other AI buttons kept working.
+function composeConfigured(provider) {
+  if (provider === 'deepseek') return !!process.env.DEEPSEEK_API_KEY;
+  return modelGateway.isConfigured();
+}
+async function composeCall(args) {
+  if (pickProvider() === 'deepseek') return callLLM(args);
+  // Thinking spends the same budget as the tool call. On a model that thinks
+  // unless told not to, a short paste was cut off and reported as a failure.
+  // Models that reject "off" are retried without it.
+  let next = { ...args, thinking: { type: 'disabled' } };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await modelGateway.callModel(next);
+    } catch (e) {
+      const retry = composeRetryArgs(e, next);
+      if (!retry) throw e;
+      next = retry;
+    }
+  }
+  throw new Error('compose_retry_exhausted');
+}
+
 const composeBlocksHandler = async (req, res) => {
   const _provider = pickProvider();
-  if (!providerKey(_provider)) {
+  if (!composeConfigured(_provider)) {
     return res.status(503).json({
       error: 'AI not configured · AI 未配置',
-      detail: `Set ${_provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'DEEPSEEK_API_KEY'} in /root/roots-v2/.env then restart pm2.`,
+      detail: _provider === 'deepseek'
+        ? 'Set DEEPSEEK_API_KEY in /root/roots-v2/.env then restart pm2.'
+        : 'Set MODEL_API_KEY or ANTHROPIC_API_KEY in /root/roots-v2/.env then restart pm2.',
     });
   }
 
@@ -648,7 +750,7 @@ const composeBlocksHandler = async (req, res) => {
     // output tokens once expanded into paired blocks; 12k keeps the emit_blocks
     // tool call from truncating mid-JSON.
     const composeOnce = async (directive, userText, maxTok = 12000) => {
-      const result = await callLLM({
+      const result = await composeCall({
         max_tokens: maxTok,
         system: { static: composeSystem(shop), dynamic: directive },
         tools: [COMPOSE_TOOL],
@@ -666,7 +768,11 @@ const composeBlocksHandler = async (req, res) => {
         // Fallback: a provider returned JSON as text instead of a tool call.
         const txt = (result.content_blocks || []).filter(b => b.type === 'text').map(b => b.text || '').join('\n');
         const m = txt.match(/\{[\s\S]*\}/);
-        if (m) { try { const o = JSON.parse(m[0]); if (Array.isArray(o.blocks)) rawBlocks = o.blocks; } catch (e) {} }
+        if (m) {
+          const o = parseLooseJson(m[0]);
+          if (o && Array.isArray(o.blocks)) rawBlocks = o.blocks;
+          else if (o && o.blocks != null) rawBlocks = parseBlocksArg(o.blocks);
+        }
       }
       let blocks = rawBlocks.map(sanitizeComposedBlock).filter(b => b && composedBlockHasContent(b));
       // Repair the common "all-English blocks, then all-Chinese blocks" output
@@ -677,6 +783,12 @@ const composeBlocksHandler = async (req, res) => {
 
     const baseDirective = composeLangDirective(hasEn, hasCn, translate);
     let a = await composeOnce(baseDirective, userMsg);
+    // A cut-off reply with nothing parsed is the thinking-budget case: ask
+    // again with room, rather than telling the operator the paste was too long
+    // when it was a paragraph.
+    if (a.result.truncated && !a.blocks.length) {
+      a = await composeOnce(baseDirective, userMsg, 32000);
+    }
 
     // The model occasionally calls emit_blocks with an EMPTY list for a rich
     // paste (no truncation, just a bad pass). Self-correct: retry once telling
@@ -694,20 +806,11 @@ const composeBlocksHandler = async (req, res) => {
       a = await composeOnce(composeLangDirective(true, false, true), soloMsg);
     }
 
-    const { result, rawBlocks, blocks, hadToolUse } = a;
+    let { result, rawBlocks, blocks, hadToolUse } = a;
 
-    // The reply was cut off mid-output — the tool call is partial, so any blocks
-    // we did parse are unreliable. Surface this as its own error instead of the
-    // misleading "no sections built", which reads as "the model emitted nothing"
-    // and isn't retryable in the operator's mind.
     if (result.truncated) {
       console.warn('[compose-blocks] truncated reply (max_tokens hit)', {
         product: product.id || null, raw_count: rawBlocks.length, kept: blocks.length, usage: result.usage,
-      });
-      logActivity(req.user.id, req.user.username, 'ai_compose_blocks', 'product', product.id || null,
-        { count: blocks.length, truncated: true, translate, tokens: result.usage, provider: _provider }, req.ip);
-      return res.status(502).json({
-        error: 'The description was too long to build in one pass — shorten it a little, or design the page in the Product Page Editor · 描述过长,无法一次生成,请精简后重试或在商品页编辑器中设计',
       });
     }
     if (!blocks.length) {
@@ -718,13 +821,42 @@ const composeBlocksHandler = async (req, res) => {
         output_tokens: result.usage && result.usage.output_tokens,
         text_preview: (result.content_blocks || []).filter(b => b.type === 'text').map(b => (b.text || '').slice(0, 200)).join(' | ').slice(0, 400),
       });
+      blocks = fallbackBlocks(textEn || textLegacy, textCn)
+        .map(sanitizeComposedBlock).filter(b => b && composedBlockHasContent(b));
+    }
+    // Still nothing, and the reply was cut off: the old error, only when the
+    // paste itself could not be divided either. A parsed block is kept — a
+    // short list is a page the operator can review, and the old path threw
+    // that list away and showed "Smart paste failed".
+    if (result.truncated && !blocks.length) {
+      logActivity(req.user.id, req.user.username, 'ai_compose_blocks', 'product', product.id || null,
+        { count: 0, truncated: true, translate, tokens: result.usage, provider: _provider }, req.ip);
+      return res.status(502).json({
+        error: 'The description was too long to build in one pass — shorten it a little, or design the page in the Product Page Editor · 描述过长,无法一次生成,请精简后重试或在商品页编辑器中设计',
+      });
     }
     logActivity(req.user.id, req.user.username, 'ai_compose_blocks', 'product', product.id || null,
-      { count: blocks.length, translate, tokens: result.usage, provider: _provider }, req.ip);
+      { count: blocks.length, translate, tokens: result.usage, provider: _provider, truncated: !!result.truncated }, req.ip);
     res.json({ success: true, blocks, usage: result.usage, provider: _provider });
   } catch (e) {
-    if (e.code === 'no_key') return res.status(503).json({ error: e.message });
-    if (e.status)            return res.status(502).json({ error: e.message });
+    const fb = fallbackBlocks(textEn || textLegacy, textCn)
+      .map(sanitizeComposedBlock).filter(b => b && composedBlockHasContent(b));
+    if (fb.length) {
+      console.error('[compose-blocks] model call failed; divided the paste from its headings',
+        e && e.message, (e && e._detail) || '');
+      try {
+        logActivity(req.user.id, req.user.username, 'ai_compose_blocks', 'product', product.id || null,
+          { count: fb.length, fallback: true, translate, provider: _provider }, req.ip);
+      } catch (logErr) { /* the activity row is not the paste */ }
+      return res.json({ success: true, blocks: fb, provider: _provider });
+    }
+    if (e.code === 'no_key' || e.code === 'not_configured') {
+      return res.status(503).json({ error: 'AI not configured · AI 未配置' });
+    }
+    if (e.status) {
+      console.error('[compose-blocks]', e.message, e._detail || '');
+      return res.status(502).json({ error: e.message });
+    }
     res.status(500).json({ error: e.message });
   }
 };
