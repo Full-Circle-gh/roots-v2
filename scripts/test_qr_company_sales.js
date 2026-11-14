@@ -87,8 +87,8 @@ try {
 
   const menu = fs.readFileSync(path.join(__dirname, '../routes/shop-menu.js'), 'utf8');
   assert.ok(!menu.includes("id: 'best'"), 'top sellers section is not built');
-  assert.ok(!menu.includes('sales-scope'), 'the 30-day caption is not drawn');
-  assert.ok(!menu.includes('Last 30 days · All locations'));
+  assert.ok(menu.includes('sales-scope'), 'each section says the counts are the last 30 days');
+  assert.ok(menu.includes("bi('Last 30 days · All locations', '近30天 · 所有门店')"));
   assert.ok(menu.includes('shownUnits'));
   console.log('PASS — company-wide sales, refunds, dates, variants, tenant isolation, ranking, lift and seven languages');
 } finally { db.close(); other.close(); }
