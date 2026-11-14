@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.644
+# Tacet shared-core consolidation — decisions record, v4.645
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-14 · v4.645 — **§531 · THE QR MENU SHOWS A CATEGORY'S BANNER — ASH.** Ash set a banner on Coffee & Tea and the Ramada menu still had none. The picture was already saved. §297 had told the QR menu to ignore it. The same picture now sits at the top of that category, on the same days, and hides while a search is typed. A dish link opens that dish. A link to a mini-app page stays a picture. The web shop still ignores it. One amended hint (vocabulary v1.412). No schema change. No change to `.gitignore` or CI. See §531.
 
 2026-11-12 · v4.644 — **§528 AMENDED · THE LANGUAGE BUTTON WORKS AS SOON AS IT IS VISIBLE — ASH.** Live Chromium measured the Ramada button at 2.19 seconds and its handler at 5.52 seconds: a 3.33-second dead interval while the browser parsed the rest of the 11.4 MB product page. The language-panel listener now runs in the head; layout measurement, search, basket and product behavior remain at the end. The large document is a separate performance problem, but it can no longer hold this control inert. No new words, no schema change, no change to `.gitignore` or CI. See §528.
 
@@ -22005,10 +22007,14 @@ banner and not an ad wall:
    rebuilt every node from three named fields and PUT the whole tree, so it
    would have deleted every banner the first time anyone added a category from
    it. It now sends every node back whole.
-8. **Not changed:** the web shop, the QR menu (reads the same tree and ignores
-   the field), subcategories.
+8. **The web shop still ignores the field.** The QR menu did too, until §531.
+   Subcategories still have none.
 9. **Strings:** the category pane's labels, declared in the vocabulary
-   document (v1.209).
+   document (v1.209). The hint was amended when the QR menu started showing
+   the picture (v1.412).
+
+**2026-11-14 · AMENDED BY ASH.** The QR menu shows the banner. See §531. The
+web shop still ignores the field.
 
 ## §298 — A CATEGORY'S BANNER CAN BE EDITED FROM THE PHONE
 
@@ -34209,3 +34215,19 @@ One new column, `payment_reopened_at`. No new words. No change to `.gitignore` o
 5. **One order on a line opens that order.** More than one opens the delayed list.
 
 No new words. No schema change. No change to `.gitignore` or CI. The delivery block's own one-line footer still counts the whole set.
+
+## §531 — THE QR MENU SHOWS A CATEGORY'S BANNER
+
+**2026-11-14 · DECIDED BY ASH.** Ash set a banner on Coffee & Tea, published, and the Ramada menu still had none. The picture was saved on the category. §297 rule 8 had told the QR menu to read the same tree and ignore the field.
+
+**The rule.**
+
+1. **The same picture, at the top of that category.** One banner per top category, the one already set on Products → Categories. It is drawn first in the category, before the section headings, in the same fixed 5:2 box. A subcategory still has none.
+2. **The same days.** Inside its start and end, on China's day, both ends inclusive. Empty dates means it stays. Outside them it is not drawn.
+3. **Hidden while a search is typed.** Clearing the search puts it back.
+4. **A dish link opens that dish**, when the dish is on this menu. Picture only stays a picture. A link to a mini-app page (Promotions, Coupons, Membership, Shop) has nowhere to go on this menu, so it stays a picture too.
+5. **No dishes, no banner.** A category the menu is not showing — nothing listed, or hidden on the QR menu — does not grow a banner on its own.
+6. **The web shop still ignores it.** §297's exclusion of the web shop stands.
+7. **Publishing a product is a different switch.** The banner has no publish step of its own. Saving it on the category is enough. "Hidden — nothing published" is the mini app shop, and it does not hide this picture on the QR menu.
+
+One amended hint on the category pane (vocabulary v1.412). No schema change. No change to `.gitignore` or CI.

@@ -178,6 +178,15 @@ section('4 · the Categories screen\'s banner editor, run');
     vm.runInContext(src, ctx);
     return { ctx, dirty };
   };
+  it('the hint names the mini app and the QR menu, on both editors', () => {
+    const en = "on the QR menu. Hidden while a customer is searching.";
+    const cn = '宽幅图片,比例 5 : 2,显示在小程序「商品」页和二维码菜单该分类的顶部。顾客搜索时隐藏。';
+    assert.ok(CORE.includes(en) && CORE.includes(cn));
+    assert.ok(!CORE.includes('页该分类的顶部'), 'the old mini-app-only hint is still on the desktop pane');
+    const phone = read('public/m.html');
+    assert.ok(phone.includes(en) && phone.includes(cn));
+    assert.ok(!phone.includes('页该分类的顶部'), 'the old mini-app-only hint is still on the phone');
+  });
   it('no banner: the section offers "Add banner"', () => {
     const { ctx } = mk([{ name: 'A' }]);
     const html = ctx.catBannerHtml(ctx.catModel[0]);

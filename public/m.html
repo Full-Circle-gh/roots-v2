@@ -13835,8 +13835,8 @@ function catRow(n,onclick,subs){
 }
 /* §298 — A CATEGORY'S BANNER, ON THE PHONE. The same banner the desktop pane
    edits (§297, 01-core.js catBannerHtml): one wide 5:2 picture on a TOP
-   category, drawn first in its section on the mini app's Shop tab, with a tap
-   link and start / end days. It lives on the tree node, so saving it means
+   category, drawn first in its section on the mini app's Shop tab and on the
+   QR menu, with a tap link and start / end days. It lives on the tree node, so saving it means
    PUTting the whole tree — exactly what the desktop does. Every change saves
    at once (a phone has no "unsaved" to come back to). Same words as the
    desktop, same China-day status as the pop-ups. */
@@ -13870,7 +13870,7 @@ function catBannerCard(top){
   const b=top.banner;
   const canEdit=catBannerCanEdit(), canUp=catBannerCanUpload();
   const head=`<div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-secondary);padding:0 2px">${T('Banner (optional)','横幅(可选)')}</div>`;
-  const hint=`<div style="font-size:12.5px;line-height:1.5;color:var(--text-secondary);padding:0 2px">${T('A wide picture, 5 : 2, shown at the top of this category on the mini app\'s Shop tab. Hidden while a customer is searching.','宽幅图片,比例 5 : 2,显示在小程序「商品」页该分类的顶部。顾客搜索时隐藏。')}</div>`;
+  const hint=`<div style="font-size:12.5px;line-height:1.5;color:var(--text-secondary);padding:0 2px">${T('A wide picture, 5 : 2, shown at the top of this category on the mini app\'s Shop tab and on the QR menu. Hidden while a customer is searching.','宽幅图片,比例 5 : 2,显示在小程序「商品」页和二维码菜单该分类的顶部。顾客搜索时隐藏。')}</div>`;
   const busy=state.catBannerBusy;
   const err=state.catBannerErr?`<div style="font-size:13px;color:var(--brick-ink)">${state.catBannerErr}</div>`:'';
   if(!b||!b.image_url){

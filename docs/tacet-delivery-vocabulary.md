@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.412 · 2026-11-14 · THE CATEGORY BANNER HINT NAMES THE QR MENU — ONE PAIR AMENDED BY THE SESSION.** §531. The hint under Banner (optional) said the picture shows only on the mini app's Shop tab. It now also names the QR menu, because that menu draws the same picture. **AMENDED:** `A wide picture, 5 : 2, shown at the top of this category on the mini app's Shop tab and on the QR menu. Hidden while a customer is searching. · 宽幅图片,比例 5 : 2,显示在小程序「商品」页和二维码菜单该分类的顶部。顾客搜索时隐藏。` `二维码菜单` is the live name on the category pane (`二维码菜单已隐藏`). The phone copies the desktop hint, as §298 already required. **RETIRED** from this hint: `A wide picture, 5 : 2, shown at the top of this category on the mini app's Shop tab. Hidden while a customer is searching. · 宽幅图片,比例 5 : 2,显示在小程序「商品」页该分类的顶部。顾客搜索时隐藏。` Nothing else retired. Rules 1 to 7 unchanged.
+
 **v1.411 · 2026-11-12 · RUSSIAN JOINS THE QR MENU — NO NEW CHINESE.** §528 amendment. The language list gains `Русский`. Russian dish, category, description and option text is saved from the translation model like Spanish, Korean, Japanese and Arabic. The short interface labels and allergen words are written in `lib/qr-menu-i18n.js`; they are never sent to the model. `Language · 语言` and every English/Chinese source pair stay unchanged. The list now reads EN, 中, Español, 한국어, 日本語, العربية, Русский. Nothing retired. Rules 1 to 7 unchanged.
 
 **v1.410 · 2026-11-12 · THE QR MENU LANGUAGE LIST — ONE PAIR COMPOSED.** §528. The guest picks a language from the button where EN / 中 sits. **COMPOSED:** `Language · 语言`, the title of that list. `语言` is the word already inside `店面语言` and `添加第二语言`; the list needed the noun on its own. Rejected leaving the list untitled, and rejected `语言选择`, which adds a word the list does not need. The six names on the list are EN, 中, Español, 한국어, 日本語, العربية. EN and 中 are the toggle this page already used. Nothing retired. Rules 1 to 7 unchanged.
@@ -9815,7 +9817,7 @@ a picture.
 | shipped | built from |
 |---|---|
 | `Banner (optional) · 横幅(可选)` (section heading) | **composed.** `横幅` from the editor's live `Hero banner · 主图横幅` and `Video banner · 视频横幅`, the same thing: one wide picture; `(可选)` the editor's live suffix (`链接(可选)`) |
-| `A wide picture, 5 : 2, shown at the top of this category on the mini app's Shop tab. Hidden while a customer is searching. · 宽幅图片,比例 5 : 2,显示在小程序「商品」页该分类的顶部。顾客搜索时隐藏。` | **composed** |
+| `A wide picture, 5 : 2, shown at the top of this category on the mini app's Shop tab and on the QR menu. Hidden while a customer is searching. · 宽幅图片,比例 5 : 2,显示在小程序「商品」页和二维码菜单该分类的顶部。顾客搜索时隐藏。` | **amended, v1.412.** The first sentence named only the mini app. `二维码菜单` is this pane's own live name. |
 | `Add banner · 添加横幅` | **composed** on this pane's live `Add subcategory · 新增子分类` shape, with the editor's `添加` |
 | `Picture only · 仅图片` (link list: no link) | **composed** |
 | `Remove banner · 删除横幅` | **composed** on this pane's live `Remove category · 删除主分类` |
