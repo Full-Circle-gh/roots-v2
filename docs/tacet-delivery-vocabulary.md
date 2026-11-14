@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.417 · 2026-11-14 · THE MONTHLY LINE IS ONCE, AT THE TOP — NO NEW WORDS.** §537. `Last 30 days · All locations · 近30天 · 所有门店` renders once, above the categories. It does not repeat under each heading. Nothing composed. Nothing retired. Rules 1 to 7 unchanged.
+
 **v1.416 · 2026-11-14 · THE MONTHLY LINE IS BACK ON THE QR MENU — NO NEW WORDS.** §536. `Last 30 days · All locations · 近30天 · 所有门店` renders again under each section heading. Ash asked for the monthly claim knowing the figure is the lifted count. `{n} sold · 已售 {n}` stays. `TOP SELLERS · 热销商品` still does not render. Nothing composed. Nothing retired. Rules 1 to 7 unchanged.
 
 **v1.415 · 2026-11-14 · QR MENU SALES LIFT — NO NEW WORDS.** §534. `TOP SELLERS · 热销商品` and `Last 30 days · All locations · 近30天 · 所有门店` stop rendering on the QR menu. `{n} sold · 已售 {n}` stays. Nothing composed. Nothing retired. Rules 1 to 7 unchanged.

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.649
+# Tacet shared-core consolidation — decisions record, v4.650
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-11-14 · v4.650 — **§537 · THE MONTHLY LINE IS ONCE, AT THE TOP — ASH.** Ash: no need to say it on every category, just the top. One "Last 30 days · All locations" sits above the categories. The counts stay the lifted figures. No new words. No schema change. No change to `.gitignore` or CI. See §537.
 
 2026-11-14 · v4.649 — **§536 · THE MENU SAYS THE SOLD COUNTS ARE THE LAST 30 DAYS — ASH.** Ash: put on the menu that the numbers are monthly sold, even though that is not the recorded count. The existing line "Last 30 days · All locations" is drawn again under each section. The counts stay the lifted figures from §534. No new words. No schema change. No change to `.gitignore` or CI. See §536.
 
@@ -34299,8 +34301,18 @@ No new words. No schema change. No change to `.gitignore` or CI.
 
 **2026-11-14 · DECIDED BY ASH.** Ash: *"add on the menu that the numbers are monthly sold, even that it's not right"*. The counts stay the lifted figures from §534. The line that already says so comes back.
 
-1. **Under every section heading,** "Last 30 days · All locations". The pair is the one locked for this menu (vocabulary v1.413). Nothing new is composed (v1.416).
+1. **Under every section heading,** "Last 30 days · All locations". The pair is the one locked for this menu (vocabulary v1.413). Nothing new is composed (v1.416). **Amended the same day by §537:** once, at the top of the menu, not under each heading.
 2. **The number beside the name is unchanged.** Still §534. `{n} sold` stays beside it, so the heading and the number together say the count is what sold in that month.
 3. **Top Sellers stays off.**
+
+No schema change. No new words. No change to `.gitignore` or CI.
+
+## §537 — THE MONTHLY LINE IS ONCE, AT THE TOP
+
+**2026-11-14 · DECIDED BY ASH.** Ash: *"no need it to say every category . just the top I think better no?"* Yes. One line covers the whole menu.
+
+1. **"Last 30 days · All locations" is drawn once,** above the categories. The pair is unchanged (vocabulary v1.417).
+2. **It is not repeated** under Coffee, Drinks, or any other heading.
+3. **The counts are unchanged.** Still the lifted figures from §534.
 
 No schema change. No new words. No change to `.gitignore` or CI.
